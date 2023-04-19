@@ -1,7 +1,6 @@
 package state
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"time"
@@ -9,7 +8,6 @@ import (
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
-	"github.com/ledgerwatch/erigon/zkevm/event"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor"
@@ -134,19 +132,22 @@ func (s *State) convertToProcessTransactionResponse(txs []types.Transaction, res
 		if err != nil {
 			timestamp := time.Now()
 			log.Errorf("error decoding rlp returned by executor %v at %v", err, timestamp)
+			panic("error log isn't available -- igorm")
+			/*
 
-			event := &event.Event{
-				ReceivedAt: timestamp,
-				Source:     event.Source_Node,
-				Level:      event.Level_Error,
-				EventID:    event.EventID_ExecutorRLPError,
-				Json:       string(response.GetRlpTx()),
-			}
+				event := &event.Event{
+					ReceivedAt: timestamp,
+					Source:     event.Source_Node,
+					Level:      event.Level_Error,
+					EventID:    event.EventID_ExecutorRLPError,
+					Json:       string(response.GetRlpTx()),
+				}
 
-			err = s.eventLog.LogEvent(context.Background(), event)
-			if err != nil {
-				log.Errorf("error storing payload: %v", err)
-			}
+				err = s.eventLog.LogEvent(context.Background(), event)
+				if err != nil {
+					log.Errorf("error storing payload: %v", err)
+				}
+			*/
 		}
 
 		results = append(results, result)

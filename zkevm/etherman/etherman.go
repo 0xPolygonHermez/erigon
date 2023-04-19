@@ -18,7 +18,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
-	"github.com/ledgerwatch/erigon/zkevm/encoding"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/etherscan"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/ethgasstation"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/smartcontracts/matic"
@@ -515,6 +514,7 @@ func (etherMan *Client) sequenceBatches(opts bind.TransactOpts, sequences []ethm
 	return tx, err
 }
 
+/*
 // BuildTrustedVerifyBatchesTxData builds a []bytes to be sent to the PoE SC method TrustedVerifyBatches.
 func (etherMan *Client) BuildTrustedVerifyBatchesTxData(lastVerifiedBatch, newVerifiedBatch uint64, inputs *ethmanTypes.FinalProofInputs) (to *common.Address, data []byte, err error) {
 	opts, err := etherMan.generateRandomAuth()
@@ -558,6 +558,7 @@ func (etherMan *Client) BuildTrustedVerifyBatchesTxData(lastVerifiedBatch, newVe
 
 	return tx.To(), tx.Data(), nil
 }
+*/
 
 // GetSendSequenceFee get super/trusted sequencer fee
 func (etherMan *Client) GetSendSequenceFee(numBatches uint64) (*big.Int, error) {

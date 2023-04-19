@@ -1,5 +1,7 @@
 package types
 
+/*
+
 import "github.com/ledgerwatch/erigon/zkevm/aggregator/pb"
 
 // FinalProofInputs struct
@@ -8,3 +10,4 @@ type FinalProofInputs struct {
 	NewLocalExitRoot []byte
 	NewStateRoot     []byte
 }
+*/

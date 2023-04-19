@@ -3,14 +3,11 @@ package state
 import (
 	"context"
 	"math/big"
-	"sync"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zkevm/event"
 	"github.com/ledgerwatch/erigon/zkevm/merkletree"
-	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
 )
 
@@ -27,7 +24,6 @@ type State struct {
 	*PostgresStorage
 	executorClient pb.ExecutorServiceClient
 	tree           *merkletree.StateTree
-	eventLog       *event.EventLog
 
 	lastL2BlockSeen         types.Block
 	newL2BlockEvents        chan NewL2BlockEvent
@@ -35,11 +31,13 @@ type State struct {
 }
 
 // NewState creates a new State
-func NewState(cfg Config, storage *PostgresStorage, executorClient pb.ExecutorServiceClient, stateTree *merkletree.StateTree, eventLog *event.EventLog) *State {
-	var once sync.Once
-	once.Do(func() {
-		metrics.Register()
-	})
+func NewState(cfg Config, storage *PostgresStorage, executorClient pb.ExecutorServiceClient, stateTree *merkletree.StateTree) *State {
+	/*
+		var once sync.Once
+		once.Do(func() {
+			metrics.Register()
+		})
+	*/
 
 	state := &State{
 		cfg:                     cfg,

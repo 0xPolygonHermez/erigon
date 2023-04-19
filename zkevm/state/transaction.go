@@ -17,7 +17,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/params"
-	"github.com/ledgerwatch/erigon/trie"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/log"
@@ -116,6 +115,8 @@ func RlpFieldsToLegacyTx(fields [][]byte, v, r, s []byte) (tx *types.LegacyTx, e
 	}, nil
 }
 
+/*
+
 // StoreTransactions is used by the sequencer to add processed transactions into
 // an open batch. If the batch already has txs, the processedTxs must be a super
 // set of the existing ones, preserving order.
@@ -172,13 +173,13 @@ func (s *State) StoreTransactions(ctx context.Context, batchNumber uint64, proce
 			GasLimit:   s.cfg.MaxCumulativeGasUsed,
 			Time:       uint64(processingContext.Timestamp.Unix()),
 		}
-		transactions := []*types.Transaction{&processedTx.Tx}
+		transactions := []types.Transaction{processedTx.Tx}
 
 		receipt := generateReceipt(header.Number, processedTx)
 		receipts := []*types.Receipt{receipt}
 
 		// Create block to be able to calculate its hash
-		block := types.NewBlock(header, transactions, []*types.Header{}, receipts, &trie.StackTrie{})
+		block := types.NewBlock(header, transactions, []*types.Header{}, receipts, nil)
 		block.ReceivedAt = processingContext.Timestamp
 
 		receipt.BlockHash = block.Hash()
@@ -190,6 +191,7 @@ func (s *State) StoreTransactions(ctx context.Context, batchNumber uint64, proce
 	}
 	return nil
 }
+*/
 
 // DebugTransaction re-executes a tx to generate its trace
 func (s *State) DebugTransaction(ctx context.Context, transactionHash common.Hash, traceConfig TraceConfig, dbTx pgx.Tx) (*runtime.ExecutionResult, error) {
@@ -713,13 +715,13 @@ func DetermineProcessedTransactions(responses []*ProcessTransactionResponse) (
 }
 
 // StoreTransaction is used by the sequencer to add process a transaction
+/*
 func (s *State) StoreTransaction(ctx context.Context, batchNumber uint64, processedTx *ProcessTransactionResponse, coinbase common.Address, timestamp uint64, dbTx pgx.Tx) error {
 	if dbTx == nil {
 		return ErrDBTxNil
 	}
 
 	// Check if last batch is closed. Note that it's assumed that only the latest batch can be open
-	/*
 			isBatchClosed, err := s.PostgresStorage.IsBatchClosed(ctx, batchNumber, dbTx)
 			if err != nil {
 				return err
@@ -732,7 +734,6 @@ func (s *State) StoreTransaction(ctx context.Context, batchNumber uint64, proces
 		if err != nil {
 			return err
 		}
-	*/
 	// if the transaction has an intrinsic invalid tx error it means
 	// the transaction has not changed the state, so we don't store it
 	if executor.IsIntrinsicError(executor.RomErrorCode(processedTx.RomError)) {
@@ -771,6 +772,7 @@ func (s *State) StoreTransaction(ctx context.Context, batchNumber uint64, proces
 
 	return nil
 }
+*/
 
 // CheckSupersetBatchTransactions verifies that processedTransactions is a
 // superset of existingTxs and that the existing txs have the same order,
