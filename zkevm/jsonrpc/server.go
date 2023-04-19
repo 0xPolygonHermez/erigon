@@ -1,23 +1,5 @@
 package jsonrpc
 
-import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"time"
-
-	"github.com/didip/tollbooth/v6"
-	"github.com/gorilla/websocket"
-	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/metrics"
-	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
-	"github.com/ledgerwatch/erigon/zkevm/log"
-)
-
 const (
 	// APIEth represents the eth API prefix.
 	APIEth = "eth"
@@ -34,6 +16,8 @@ const (
 
 	wsBufferSizeLimitInBytes = 1024
 )
+
+/*
 
 // Server is an API backend to handle RPC requests
 type Server struct {
@@ -425,3 +409,5 @@ func combinedLog(r *http.Request, start time.Time, httpStatus, dataLen int) {
 		r.UserAgent(),
 	)
 }
+
+*/

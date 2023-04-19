@@ -8,11 +8,11 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zkevm/pool"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime"
 )
 
+/*
 // PoolInterface contains the methods required to interact with the tx pool.
 type PoolInterface interface {
 	AddTx(ctx context.Context, tx types.Transaction, ip string) error
@@ -23,6 +23,7 @@ type PoolInterface interface {
 	CountPendingTransactions(ctx context.Context) (uint64, error)
 	GetTxByHash(ctx context.Context, hash common.Hash) (*pool.Transaction, error)
 }
+*/
 
 // StateInterface gathers the methods required to interact with the state.
 type StateInterface interface {
