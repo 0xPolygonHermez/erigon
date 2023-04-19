@@ -1,6 +1,6 @@
 package fakevm
 
-import "github.com/ethereum/go-ethereum/core/vm"
+import "github.com/ledgerwatch/erigon/core/vm"
 
 // Config are the configuration options for the Interpreter
 type Config struct {

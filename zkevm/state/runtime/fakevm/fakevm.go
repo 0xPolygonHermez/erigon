@@ -3,8 +3,8 @@ package fakevm
 import (
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/params"
 )
 
 // MemoryItemSize is the memory item size.

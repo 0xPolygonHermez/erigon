@@ -13,9 +13,9 @@ import (
 	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation/tracers"
 	"github.com/dop251/goja"
 	"github.com/ledgerwatch/erigon/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ledgerwatch/erigon/common/hexutil"
+	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/crypto"
 )
 
 var assetTracers = make(map[string]string)
