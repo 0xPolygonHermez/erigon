@@ -105,44 +105,54 @@ func SpawnStageHeaders(
 		}
 		defer tx.Rollback()
 	}
-	if initialCycle && cfg.snapshots != nil && cfg.snapshots.Cfg().Enabled {
-		if err := cfg.hd.AddHeadersFromSnapshot(tx, cfg.snapshots.BlocksAvailable(), cfg.blockReader); err != nil {
-			return err
+
+	// iiii
+	// zkEVM
+
+	// iiii
+
+	return HeadersZK(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx)
+
+	/*
+		if initialCycle && cfg.snapshots != nil && cfg.snapshots.Cfg().Enabled {
+			if err := cfg.hd.AddHeadersFromSnapshot(tx, cfg.snapshots.BlocksAvailable(), cfg.blockReader); err != nil {
+				return err
+			}
 		}
-	}
 
-	var preProgress uint64
-	if s == nil {
-		preProgress = 0
-	} else {
-		preProgress = s.BlockNumber
-	}
-
-	notBor := cfg.chainConfig.Bor == nil
-
-	unsettledForkChoice, headHeight := cfg.hd.GetUnsettledForkChoice()
-	if notBor && unsettledForkChoice != nil { // some work left to do after unwind
-		return finishHandlingForkChoice(unsettledForkChoice, headHeight, s, tx, cfg, useExternalTx)
-	}
-
-	transitionedToPoS := cfg.chainConfig.TerminalTotalDifficultyPassed
-	if notBor && !transitionedToPoS {
-		var err error
-		transitionedToPoS, err = rawdb.Transitioned(tx, preProgress, cfg.chainConfig.TerminalTotalDifficulty)
-		if err != nil {
-			return err
+		var preProgress uint64
+		if s == nil {
+			preProgress = 0
+		} else {
+			preProgress = s.BlockNumber
 		}
+
+		notBor := cfg.chainConfig.Bor == nil
+
+		unsettledForkChoice, headHeight := cfg.hd.GetUnsettledForkChoice()
+		if notBor && unsettledForkChoice != nil { // some work left to do after unwind
+			return finishHandlingForkChoice(unsettledForkChoice, headHeight, s, tx, cfg, useExternalTx)
+		}
+
+		transitionedToPoS := cfg.chainConfig.TerminalTotalDifficultyPassed
+		if notBor && !transitionedToPoS {
+			var err error
+			transitionedToPoS, err = rawdb.Transitioned(tx, preProgress, cfg.chainConfig.TerminalTotalDifficulty)
+			if err != nil {
+				return err
+			}
+			if transitionedToPoS {
+				cfg.hd.SetFirstPoSHeight(preProgress)
+			}
+		}
+
 		if transitionedToPoS {
-			cfg.hd.SetFirstPoSHeight(preProgress)
+			libcommon.SafeClose(cfg.hd.QuitPoWMining)
+			return HeadersPOS(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx, preProgress)
+		} else {
+			return HeadersPOW(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx)
 		}
-	}
-
-	if transitionedToPoS {
-		libcommon.SafeClose(cfg.hd.QuitPoWMining)
-		return HeadersPOS(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx, preProgress)
-	} else {
-		return HeadersPOW(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx)
-	}
+	*/
 }
 
 // HeadersPOS processes Proof-of-Stake requests (newPayload, forkchoiceUpdated).
