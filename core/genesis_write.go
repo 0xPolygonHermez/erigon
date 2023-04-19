@@ -427,6 +427,16 @@ func ChiadoGenesisBlock() *types.Genesis {
 	}
 }
 
+func HermezMainnetGenesisBlock() *types.Genesis {
+	return &types.Genesis{
+		Config:     params.HermezMainnetChainConfig,
+		Timestamp:  0,
+		GasLimit:   0x0,
+		Difficulty: big.NewInt(0x0),
+		//Alloc:      readPrealloc("allocs/chiado.json"),
+	}
+}
+
 // Pre-calculated version of:
 //
 //	DevnetSignPrivateKey = crypto.HexToECDSA(sha256.Sum256([]byte("erigon devnet key")))
@@ -620,6 +630,8 @@ func GenesisBlockByChainName(chain string) *types.Genesis {
 		return GnosisGenesisBlock()
 	case networkname.ChiadoChainName:
 		return ChiadoGenesisBlock()
+	case networkname.HermezMainnetChainName:
+		return HermezMainnetGenesisBlock()
 	default:
 		return nil
 	}

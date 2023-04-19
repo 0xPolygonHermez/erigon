@@ -8,12 +8,12 @@ import (
 	"math/big"
 	"strings"
 
-	ethereum "github.com/ethereum/go-ethereum"
+	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/event"
+	"github.com/mandrigin/e1/core/types"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

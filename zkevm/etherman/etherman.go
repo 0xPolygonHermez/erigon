@@ -8,15 +8,12 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
+	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
-	"github.com/ledgerwatch/erigon/accounts/keystore"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
@@ -1085,48 +1082,17 @@ func (etherMan *Client) AddOrReplaceAuth(auth bind.TransactOpts) error {
 
 // LoadAuthFromKeyStore loads an authorization from a key store file
 func (etherMan *Client) LoadAuthFromKeyStore(path, password string) (*bind.TransactOpts, error) {
-	auth, err := newAuthFromKeystore(path, password, etherMan.cfg.L1ChainID)
-	if err != nil {
-		return nil, err
-	}
+	/*
+		auth, err := newAuthFromKeystore(path, password, etherMan.cfg.L1ChainID)
+		if err != nil {
+			return nil, err
+		}
 
-	log.Infof("loaded authorization for address: %v", auth.From.String())
-	etherMan.auth[auth.From] = auth
-	return &auth, nil
-}
-
-// newKeyFromKeystore creates an instance of a keystore key from a keystore file
-func newKeyFromKeystore(path, password string) (*keystore.Key, error) {
-	if path == "" && password == "" {
-		return nil, nil
-	}
-	keystoreEncrypted, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("decrypting key from: %v", path)
-	key, err := keystore.DecryptKey(keystoreEncrypted, password)
-	if err != nil {
-		return nil, err
-	}
-	return key, nil
-}
-
-// newAuthFromKeystore an authorization instance from a keystore file
-func newAuthFromKeystore(path, password string, chainID uint64) (bind.TransactOpts, error) {
-	log.Infof("reading key from: %v", path)
-	key, err := newKeyFromKeystore(path, password)
-	if err != nil {
-		return bind.TransactOpts{}, err
-	}
-	if key == nil {
-		return bind.TransactOpts{}, nil
-	}
-	auth, err := bind.NewKeyedTransactorWithChainID(key.PrivateKey, new(big.Int).SetUint64(chainID))
-	if err != nil {
-		return bind.TransactOpts{}, err
-	}
-	return *auth, nil
+		log.Infof("loaded authorization for address: %v", auth.From.String())
+		etherMan.auth[auth.From] = auth
+		return &auth, nil
+	*/
+	return nil, nil
 }
 
 // getAuthByAddress tries to get an authorization from the authorizations map

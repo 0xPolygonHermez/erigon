@@ -17,14 +17,17 @@ func HeadersZK(
 	test bool, // Set to true in tests, allows the stage to fail rather than wait indefinitely
 	useExternalTx bool,
 ) error {
-	var headerProgress uint64
 
-	zkSynchronizer, err := NewSynchronizer(true, nil, nil, nil, nil, nil, nil, nil)
-	if err != nil {
-		return err
-	}
+	/*
+		zkSynchronizer, err := NewSynchronizer(true, nil, nil, nil, nil, nil, nil, nil)
+		if err != nil {
+			return err
+		}
 
-	return zkSynchronizer.Sync(cfg, tx)
+		return zkSynchronizer.Sync(cfg, tx)
+	*/
+
+	panic("boom")
 
 	/*
 				cfg.hd.SetPOSSync(false)

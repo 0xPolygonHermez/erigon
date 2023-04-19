@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v4"
-	"github.com/ledgerwatch/erigon/zkevm/etherman"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
+	"github.com/mandrigin/e1/zkevm/etherman"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/common"

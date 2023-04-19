@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/trie"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/log"
@@ -167,7 +166,7 @@ func (s *State) SetGenesis(ctx context.Context, block Block, genesis Genesis, db
 	log.Info("Genesis root ", rootHex)
 
 	receipts := []*types.Receipt{}
-	l2Block := types.NewBlock(header, []*types.Transaction{}, []*types.Header{}, receipts, &trie.StackTrie{})
+	l2Block := types.NewBlock(header, []types.Transaction{}, []*types.Header{}, receipts, nil)
 	l2Block.ReceivedAt = block.ReceivedAt
 
 	return newRoot, s.AddL2Block(ctx, batch.BatchNumber, l2Block, receipts, dbTx)

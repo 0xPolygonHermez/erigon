@@ -27,6 +27,7 @@ import (
 	"math/bits"
 	"reflect"
 	"sync/atomic"
+	"time"
 
 	"github.com/gballet/go-verkle"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
@@ -614,6 +615,8 @@ type Block struct {
 	uncles       []*Header
 	transactions Transactions
 	withdrawals  []*Withdrawal
+
+	ReceivedAt time.Time
 
 	// caches
 	hash atomic.Value
