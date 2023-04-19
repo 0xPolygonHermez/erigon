@@ -333,59 +333,11 @@ var DefaultForwardOrder = UnwindOrder{
 type UnwindOrder []stages.SyncStage
 type PruneOrder []stages.SyncStage
 
-var DefaultUnwindOrder = UnwindOrder{
-	stages.Finish,
-	stages.TxLookup,
-	stages.LogIndex,
-	stages.StorageHistoryIndex,
-	stages.AccountHistoryIndex,
-	stages.CallTraces,
+var DefaultUnwindOrder = UnwindOrder{}
 
-	// Unwinding of IHashes needs to happen after unwinding HashState
-	stages.HashState,
-	stages.IntermediateHashes,
+var StateUnwindOrder = UnwindOrder{}
 
-	stages.Translation,
-	stages.Execution,
-	stages.Senders,
-
-	stages.Bodies,
-	stages.BlockHashes,
-	stages.Headers,
-}
-
-var StateUnwindOrder = UnwindOrder{
-	// Unwinding of IHashes needs to happen after unwinding HashState
-	stages.HashState,
-	stages.IntermediateHashes,
-	stages.Execution,
-	stages.Senders,
-	stages.Bodies,
-	stages.BlockHashes,
-	stages.Headers,
-}
-
-var DefaultPruneOrder = PruneOrder{
-	stages.Finish,
-	stages.Snapshots,
-	stages.TxLookup,
-	stages.LogIndex,
-	stages.StorageHistoryIndex,
-	stages.AccountHistoryIndex,
-	stages.CallTraces,
-
-	// Unwinding of IHashes needs to happen after unwinding HashState
-	stages.HashState,
-	stages.IntermediateHashes,
-
-	stages.Translation,
-	stages.Execution,
-	stages.Senders,
-
-	stages.Bodies,
-	stages.BlockHashes,
-	stages.Headers,
-}
+var DefaultPruneOrder = PruneOrder{}
 
 var MiningUnwindOrder = UnwindOrder{} // nothing to unwind in mining - because mining does not commit db changes
 var MiningPruneOrder = PruneOrder{}   // nothing to unwind in mining - because mining does not commit db changes

@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ledgerwatch/erigon-lib/common/dbg"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/pelletier/go-toml"
 	"github.com/urfave/cli/v2"
@@ -23,13 +22,15 @@ import (
 
 func main() {
 	defer func() {
-		panicResult := recover()
-		if panicResult == nil {
-			return
-		}
+		/*
+			panicResult := recover()
+			if panicResult == nil {
+				return
+			}
 
-		log.Error("catch panic", "err", panicResult, "stack", dbg.Stack())
-		os.Exit(1)
+			log.Error("catch panic", "err", panicResult, "stack", dbg.Stack())
+			os.Exit(1)
+		*/
 	}()
 
 	app := erigonapp.MakeApp(runErigon, erigoncli.DefaultFlags)

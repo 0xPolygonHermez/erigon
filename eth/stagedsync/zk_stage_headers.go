@@ -18,16 +18,7 @@ func HeadersZK(
 	useExternalTx bool,
 ) error {
 
-	/*
-		zkSynchronizer, err := NewSynchronizer(true, nil, nil, nil, nil, nil, nil, nil)
-		if err != nil {
-			return err
-		}
-
-		return zkSynchronizer.Sync(cfg, tx)
-	*/
-
-	panic("boom")
+	return cfg.zkSynchronizer.Sync(tx)
 
 	/*
 				cfg.hd.SetPOSSync(false)

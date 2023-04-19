@@ -32,6 +32,10 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 )
 
+type ZkSynchronizer interface {
+	Sync(kv.RwTx) error
+}
+
 // The number of blocks we should be able to re-org sub-second on commodity hardware.
 // See https://hackmd.io/TdJtNs0dS56q-In8h-ShSg
 const ShortPoSReorgThresholdBlocks = 10
@@ -48,10 +52,11 @@ type HeadersCfg struct {
 	noP2PDiscovery    bool
 	tmpdir            string
 
-	snapshots     *snapshotsync.RoSnapshots
-	blockReader   services.FullBlockReader
-	forkValidator *engineapi.ForkValidator
-	notifications *shards.Notifications
+	snapshots      *snapshotsync.RoSnapshots
+	blockReader    services.FullBlockReader
+	forkValidator  *engineapi.ForkValidator
+	notifications  *shards.Notifications
+	zkSynchronizer ZkSynchronizer
 }
 
 func StageHeadersCfg(
@@ -68,7 +73,9 @@ func StageHeadersCfg(
 	blockReader services.FullBlockReader,
 	tmpdir string,
 	notifications *shards.Notifications,
-	forkValidator *engineapi.ForkValidator) HeadersCfg {
+	forkValidator *engineapi.ForkValidator,
+	zkSynchronizer ZkSynchronizer,
+) HeadersCfg {
 	return HeadersCfg{
 		db:                db,
 		hd:                headerDownload,
@@ -84,6 +91,7 @@ func StageHeadersCfg(
 		blockReader:       blockReader,
 		forkValidator:     forkValidator,
 		notifications:     notifications,
+		zkSynchronizer:    zkSynchronizer,
 	}
 }
 

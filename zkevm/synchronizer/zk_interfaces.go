@@ -1,4 +1,4 @@
-package stagedsync
+package synchronizer
 
 import (
 	"context"

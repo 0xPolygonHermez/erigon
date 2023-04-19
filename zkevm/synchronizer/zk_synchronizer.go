@@ -1,4 +1,4 @@
-package stagedsync
+package synchronizer
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/ledgerwatch/erigon/zkevm/etherman"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
-	"github.com/mandrigin/e1/zkevm/etherman"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/common"
@@ -50,7 +50,6 @@ func NewSynchronizer(
 	pool poolInterface,
 	ethTxManager ethTxManager,
 	zkEVMClient zkEVMClientInterface,
-	genesis state.Genesis,
 	cfg Config) (*ClientSynchronizer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -63,7 +62,6 @@ func NewSynchronizer(
 		cancelCtx:          cancel,
 		ethTxManager:       ethTxManager,
 		zkEVMClient:        zkEVMClient,
-		genesis:            genesis,
 		cfg:                cfg,
 	}, nil
 }
@@ -72,7 +70,7 @@ var waitDuration = time.Duration(0)
 
 // Sync function will read the last state synced and will continue from that point.
 // Sync() will read blockchain events to detect rollup updates
-func (s *ClientSynchronizer) Sync(cfg HeadersCfg, tx kv.RwTx) error {
+func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 	// If there is no lastEthereumBlock means that sync from the beginning is necessary. If not, it continues from the retrieved ethereum block
 	// Get the latest synced block. If there is no block on db, use genesis block
 	log.Info("Sync started")

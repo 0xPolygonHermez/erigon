@@ -1,4 +1,4 @@
-package stagedsync
+package synchronizer
 
 import (
 	"github.com/ledgerwatch/erigon/zkevm/config/types"
