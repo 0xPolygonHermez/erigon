@@ -5,10 +5,10 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/state/metrics"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation"
 )
 
 // ProcessRequest represents the request of a batch process.

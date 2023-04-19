@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/log"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 // NewL2BlockEventHandler represent a func that will be called by the

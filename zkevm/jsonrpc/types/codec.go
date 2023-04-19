@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/0xPolygonHermez/zkevm-node/encoding"
-	"github.com/0xPolygonHermez/zkevm-node/hex"
 	"github.com/jackc/pgx/v4"
+	"github.com/ledgerwatch/erigon/zkevm/encoding"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
 )
 
 const (

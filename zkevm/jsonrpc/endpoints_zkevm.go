@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/0xPolygonHermez/zkevm-node/hex"
-	"github.com/0xPolygonHermez/zkevm-node/jsonrpc/types"
-	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/0xPolygonHermez/zkevm-node/state"
 	"github.com/jackc/pgx/v4"
 	ethTypes "github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
+	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/erigon/zkevm/state"
 )
 
 // ZKEVMEndpoints contains implementations for the "zkevm" RPC endpoints

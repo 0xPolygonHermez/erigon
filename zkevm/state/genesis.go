@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/0xPolygonHermez/zkevm-node/encoding"
-	"github.com/0xPolygonHermez/zkevm-node/hex"
-	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/0xPolygonHermez/zkevm-node/merkletree"
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/trie"
+	"github.com/ledgerwatch/erigon/zkevm/encoding"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/erigon/zkevm/merkletree"
 )
 
 // Genesis contains the information to populate state on creation

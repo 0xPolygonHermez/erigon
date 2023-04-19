@@ -5,10 +5,10 @@ import (
 	"math/big"
 	"strconv"
 
-	"github.com/0xPolygonHermez/zkevm-node/hex"
-	"github.com/0xPolygonHermez/zkevm-node/log"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 const (

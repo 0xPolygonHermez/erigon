@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor/pb"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
 )
 
 const (

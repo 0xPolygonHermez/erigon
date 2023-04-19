@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/hex"
-	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/0xPolygonHermez/zkevm-node/state/metrics"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor/pb"
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
 )
 
 const (

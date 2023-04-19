@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/0xPolygonHermez/zkevm-node/jsonrpc/types"
+	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
 )
 
 // Client defines typed wrappers for the zkEVM RPC API.

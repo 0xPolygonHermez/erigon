@@ -3,8 +3,8 @@ package etherman
 import (
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/etherman/smartcontracts/polygonzkevm"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/etherman/smartcontracts/polygonzkevm"
 )
 
 // Block struct

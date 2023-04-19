@@ -7,15 +7,15 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/fakevm"
-	jsassets "github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation/js/internal/tracers"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation/tracers"
 	"github.com/dop251/goja"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/crypto"
+	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/fakevm"
+	jsassets "github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation/js/internal/tracers"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation/tracers"
 )
 
 var assetTracers = make(map[string]string)

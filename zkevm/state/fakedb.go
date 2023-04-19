@@ -4,8 +4,8 @@ import (
 	"context"
 	"math/big"
 
-	"github.com/0xPolygonHermez/zkevm-node/log"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 // FakeDB is the implementation of the fakeevm.FakeDB interface

@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/0xPolygonHermez/zkevm-node/jsonrpc/types"
-	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/0xPolygonHermez/zkevm-node/state"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
 	ethTypes "github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
+	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/erigon/zkevm/state"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation"
 )
 
 // DebugEndpoints is the debug jsonrpc endpoint

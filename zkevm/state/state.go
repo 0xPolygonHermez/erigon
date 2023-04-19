@@ -5,13 +5,13 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/0xPolygonHermez/zkevm-node/event"
-	"github.com/0xPolygonHermez/zkevm-node/merkletree"
-	"github.com/0xPolygonHermez/zkevm-node/state/metrics"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor/pb"
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zkevm/event"
+	"github.com/ledgerwatch/erigon/zkevm/merkletree"
+	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
 )
 
 var (

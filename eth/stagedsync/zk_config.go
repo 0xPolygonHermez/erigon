@@ -1,7 +1,7 @@
 package stagedsync
 
 import (
-	"github.com/0xPolygonHermez/zkevm-node/config/types"
+	"github.com/ledgerwatch/erigon/zkevm/config/types"
 )
 
 // Config represents the configuration of the synchronizer

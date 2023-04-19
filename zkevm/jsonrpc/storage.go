@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/hex"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
 )
 
 // ErrNotFound represent a not found error.

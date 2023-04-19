@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation"
 )
 
 var (

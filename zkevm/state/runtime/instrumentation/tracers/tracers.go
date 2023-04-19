@@ -21,8 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/fakevm"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/fakevm"
 )
 
 // Context contains some contextual infos for a transaction execution that is not

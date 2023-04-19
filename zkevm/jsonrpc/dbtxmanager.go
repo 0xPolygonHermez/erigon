@@ -3,8 +3,8 @@ package jsonrpc
 import (
 	"context"
 
-	"github.com/0xPolygonHermez/zkevm-node/jsonrpc/types"
 	"github.com/jackc/pgx/v4"
+	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
 )
 
 type dbTxManager struct{}

@@ -6,16 +6,16 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/encoding"
-	"github.com/0xPolygonHermez/zkevm-node/event"
-	"github.com/0xPolygonHermez/zkevm-node/hex"
-	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor/pb"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/fakevm"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zkevm/encoding"
+	"github.com/ledgerwatch/erigon/zkevm/event"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/fakevm"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation"
 )
 
 // ConvertToCounters extracts ZKCounters from a ProcessBatchResponse

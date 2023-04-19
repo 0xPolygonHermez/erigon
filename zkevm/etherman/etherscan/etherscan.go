@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/0xPolygonHermez/zkevm-node/encoding"
+	"github.com/ledgerwatch/erigon/zkevm/encoding"
 )
 
 type etherscanResponse struct {

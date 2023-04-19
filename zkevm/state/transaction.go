@@ -10,16 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-node/encoding"
-	"github.com/0xPolygonHermez/zkevm-node/hex"
-	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/executor/pb"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/fakevm"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation/js"
-	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation/tracers"
 	"github.com/holiman/uint256"
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon/common"
@@ -28,6 +18,16 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/trie"
+	"github.com/ledgerwatch/erigon/zkevm/encoding"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/fakevm"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation/js"
+	"github.com/ledgerwatch/erigon/zkevm/state/runtime/instrumentation/tracers"
 )
 
 const (

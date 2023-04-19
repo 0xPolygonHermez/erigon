@@ -1,8 +1,8 @@
 package jsonrpc
 
 import (
-	"github.com/0xPolygonHermez/zkevm-node/jsonrpc/types"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
 )
 
 // TxPoolEndpoints is the txpool jsonrpc endpoint

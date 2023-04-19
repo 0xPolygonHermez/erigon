@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/0xPolygonHermez/zkevm-node/hex"
-	"github.com/0xPolygonHermez/zkevm-node/state"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

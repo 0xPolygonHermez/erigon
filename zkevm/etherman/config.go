@@ -1,8 +1,8 @@
 package etherman
 
 import (
-	"github.com/0xPolygonHermez/zkevm-node/etherman/etherscan"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zkevm/etherman/etherscan"
 )
 
 // Config represents the configuration of the etherman
