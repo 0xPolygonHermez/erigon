@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ledgerwatch/erigon/common"
 )
 
 var (

@@ -15,10 +15,10 @@ import (
 	"github.com/0xPolygonHermez/zkevm-node/log"
 	"github.com/0xPolygonHermez/zkevm-node/pool"
 	"github.com/0xPolygonHermez/zkevm-node/state"
-	"github.com/ethereum/go-ethereum/common"
-	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v4"
+	"github.com/ledgerwatch/erigon/common"
+	ethTypes "github.com/ledgerwatch/erigon/common"
 )
 
 // EthEndpoints contains implementations for the "eth" RPC endpoints

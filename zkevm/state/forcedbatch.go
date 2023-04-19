@@ -3,7 +3,7 @@ package state
 import (
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ledgerwatch/erigon/common"
 )
 
 // ForcedBatch represents a ForcedBatch

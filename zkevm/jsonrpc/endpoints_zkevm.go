@@ -9,8 +9,8 @@ import (
 	"github.com/0xPolygonHermez/zkevm-node/jsonrpc/types"
 	"github.com/0xPolygonHermez/zkevm-node/log"
 	"github.com/0xPolygonHermez/zkevm-node/state"
-	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/jackc/pgx/v4"
+	ethTypes "github.com/ledgerwatch/erigon/common"
 )
 
 // ZKEVMEndpoints contains implementations for the "zkevm" RPC endpoints

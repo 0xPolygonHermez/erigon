@@ -3,7 +3,7 @@ package instrumentation
 import (
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ledgerwatch/erigon/common"
 )
 
 // StructLog is emitted to the EVM each cycle and lists information about the current internal state

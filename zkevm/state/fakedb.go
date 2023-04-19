@@ -5,7 +5,7 @@ import (
 	"math/big"
 
 	"github.com/0xPolygonHermez/zkevm-node/log"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ledgerwatch/erigon/common"
 )
 
 // FakeDB is the implementation of the fakeevm.FakeDB interface

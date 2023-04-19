@@ -3,7 +3,7 @@ package fakevm
 import (
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ledgerwatch/erigon/common"
 )
 
 // FakeDB is the interface state access for the FakeEVM

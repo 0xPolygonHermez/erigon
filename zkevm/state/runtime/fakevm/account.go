@@ -1,6 +1,6 @@
 package fakevm
 
-import "github.com/ethereum/go-ethereum/common"
+import "github.com/ledgerwatch/erigon/common"
 
 // Account represents a fake EVM account.
 type Account struct {

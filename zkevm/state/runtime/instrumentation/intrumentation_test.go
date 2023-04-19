@@ -14,7 +14,7 @@ import (
 	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
 	"github.com/0xPolygonHermez/zkevm-node/state/tree"
 	"github.com/0xPolygonHermez/zkevm-node/test/dbutils"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ledgerwatch/erigon/common"
 	"github.com/stretchr/testify/require"
 )
 

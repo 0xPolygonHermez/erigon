@@ -22,7 +22,7 @@ import (
 	"errors"
 
 	"github.com/0xPolygonHermez/zkevm-node/state/runtime/fakevm"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ledgerwatch/erigon/common"
 )
 
 // Context contains some contextual infos for a transaction execution that is not

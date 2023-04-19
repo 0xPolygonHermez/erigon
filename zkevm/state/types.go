@@ -7,8 +7,8 @@ import (
 
 	"github.com/0xPolygonHermez/zkevm-node/state/metrics"
 	"github.com/0xPolygonHermez/zkevm-node/state/runtime/instrumentation"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ledgerwatch/erigon/common"
 )
 
 // ProcessRequest represents the request of a batch process.
