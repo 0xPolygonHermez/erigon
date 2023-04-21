@@ -7,8 +7,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v4"
-	"github.com/ledgerwatch/erigon/common"
-	ethTypes "github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon-lib/common"
+	ethTypes "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 	"github.com/ledgerwatch/erigon/zkevm/state"

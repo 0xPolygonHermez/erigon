@@ -16,8 +16,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
 	"github.com/ledgerwatch/erigon/rlp"

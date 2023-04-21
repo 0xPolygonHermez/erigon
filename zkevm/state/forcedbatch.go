@@ -3,7 +3,7 @@ package state
 import (
 	"time"
 
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon-lib/common"
 )
 
 // ForcedBatch represents a ForcedBatch

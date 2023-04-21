@@ -5,7 +5,7 @@ import (
 	"math/big"
 
 	poseidon "github.com/iden3/go-iden3-crypto/goldenposeidon"
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon-lib/common"
 )
 
 // Key stores key of the leaf
