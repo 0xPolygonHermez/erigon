@@ -3,8 +3,9 @@ package fakevm
 import (
 	"sync/atomic"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/core/vm"
-	"github.com/ledgerwatch/erigon/params"
+	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 )
 
 // MemoryItemSize is the memory item size.
@@ -13,16 +14,17 @@ const MemoryItemSize int = 32
 // FakeEVM represents the fake EVM.
 type FakeEVM struct {
 	// Context provides auxiliary blockchain related information
-	Context vm.BlockContext
-	vm.TxContext
+	Context evmtypes.BlockContext
+	evmtypes.TxContext
 	// StateDB gives access to the underlying state
 	StateDB FakeDB
 	// chainConfig contains information about the current chain
-	chainConfig *params.ChainConfig
+	chainConfig *chain.Config
 	// chain rules contains the chain rules for the current epoch
-	chainRules params.Rules
+	chainRules *chain.Rules
 	// virtual machine configuration options used to initialise the
-	// evm.
+	// global (to this context) ethereum virtual machine
+	// used throughout the execution of the tx.
 	Config Config
 	// abort is used to abort the EVM calling operations
 	// NOTE: must be set atomically
@@ -32,13 +34,13 @@ type FakeEVM struct {
 // NewFakeEVM returns a new EVM. The returned EVM is not thread safe and should
 // only ever be used *once*.
 // func NewFakeEVM(blockCtx vm.BlockContext, txCtx vm.TxContext, statedb runtime.FakeDB, chainConfig *params.ChainConfig, config Config) *FakeEVM {
-func NewFakeEVM(blockCtx vm.BlockContext, txCtx vm.TxContext, chainConfig *params.ChainConfig, config Config) *FakeEVM {
+func NewFakeEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, chainConfig *chain.Config, config Config) *FakeEVM {
 	evm := &FakeEVM{
 		Context:     blockCtx,
 		TxContext:   txCtx,
 		Config:      config,
 		chainConfig: chainConfig,
-		chainRules:  chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Random != nil, blockCtx.Time),
+		chainRules:  chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time),
 	}
 	return evm
 }
@@ -55,7 +57,7 @@ func (evm *FakeEVM) Cancel() {
 }
 
 // ChainConfig returns the environment's chain configuration
-func (evm *FakeEVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }
+func (evm *FakeEVM) ChainConfig() *chain.Config { return evm.chainConfig }
 
 // ScopeContext contains the things that are per-call, such as stack and memory,
 // but not transients like pc and gas
