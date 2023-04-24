@@ -238,7 +238,7 @@ func (s *State) ExecuteBatch(ctx context.Context, batch Batch, updateMerkleTree 
 		return nil, err
 	} else if processBatchResponse != nil && processBatchResponse.Error != executor.EXECUTOR_ERROR_NO_ERROR {
 		err = executor.ExecutorErr(processBatchResponse.Error)
-		s.eventLog.LogExecutorError(ctx, processBatchResponse.Error, processBatchRequest)
+		//s.eventLog.LogExecutorError(ctx, processBatchResponse.Error, processBatchRequest)
 	}
 
 	return processBatchResponse, err
@@ -324,7 +324,7 @@ func (s *State) sendBatchRequestToExecutor(ctx context.Context, processBatchRequ
 		log.Errorf("Error s.executorClient.ProcessBatch response: %v", res)
 	} else if res.Error != executor.EXECUTOR_ERROR_NO_ERROR {
 		err = executor.ExecutorErr(res.Error)
-		s.eventLog.LogExecutorError(ctx, res.Error, processBatchRequest)
+		//s.eventLog.LogExecutorError(ctx, res.Error, processBatchRequest)
 	}
 	elapsed := time.Since(now)
 	if caller != metrics.DiscardCallerLabel {
@@ -423,11 +423,13 @@ func (s *State) ProcessAndStoreClosedBatch(ctx context.Context, processingCtx Pr
 	}
 
 	if len(processedBatch.Responses) > 0 {
+		/* III NOT NEEDED
 		// Store processed txs into the batch
 		err = s.StoreTransactions(ctx, processingCtx.BatchNumber, processedBatch.Responses, dbTx)
 		if err != nil {
 			return common.Hash{}, err
 		}
+		*/
 	}
 
 	// Close batch

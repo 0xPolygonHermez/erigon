@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	ericommon "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
@@ -128,7 +129,7 @@ func (s *State) convertToProcessTransactionResponse(txs []types.Transaction, res
 		result.CallTrace = convertToExecutorTrace(response.CallTrace)
 		result.Tx = txs[i]
 
-		_, err = DecodeTx(common.Bytes2Hex(response.GetRlpTx()))
+		_, err = DecodeTx(ericommon.Bytes2Hex(response.GetRlpTx()))
 		if err != nil {
 			timestamp := time.Now()
 			log.Errorf("error decoding rlp returned by executor %v at %v", err, timestamp)
@@ -153,7 +154,7 @@ func (s *State) convertToProcessTransactionResponse(txs []types.Transaction, res
 		results = append(results, result)
 
 		log.Debugf("ProcessTransactionResponse[TxHash]: %v", result.TxHash)
-		log.Debugf("ProcessTransactionResponse[Nonce]: %v", result.Tx.Nonce())
+		log.Debugf("ProcessTransactionResponse[Nonce]: %v", result.Tx.GetNonce())
 		log.Debugf("ProcessTransactionResponse[StateRoot]: %v", result.StateRoot.String())
 		log.Debugf("ProcessTransactionResponse[Error]: %v", result.RomError)
 		log.Debugf("ProcessTransactionResponse[GasUsed]: %v", result.GasUsed)

@@ -25,7 +25,7 @@ func EncodeTransactions(txs []types.Transaction) ([]byte, error) {
 		v, r, s := tx.RawSignatureValues()
 		sign := 1 - (v.Uint64() & 1)
 
-		nonce, gasPrice, gas, to, value, data, chainID := tx.Nonce(), tx.GasPrice(), tx.Gas(), tx.To(), tx.Value(), tx.Data(), tx.ChainId()
+		nonce, gasPrice, gas, to, value, data, chainID := tx.GetNonce(), tx.GetPrice(), tx.GetGas(), tx.GetTo(), tx.GetValue(), tx.GetData(), tx.GetChainID()
 		log.Debug(nonce, " ", gasPrice, " ", gas, " ", to, " ", value, " ", len(data), " ", chainID)
 
 		rlpFieldsToEncode := []interface{}{
@@ -37,7 +37,7 @@ func EncodeTransactions(txs []types.Transaction) ([]byte, error) {
 			data,
 		}
 
-		if tx.ChainId().Uint64() > 0 {
+		if tx.GetChainID().Uint64() > 0 {
 			rlpFieldsToEncode = append(rlpFieldsToEncode, chainID)
 			rlpFieldsToEncode = append(rlpFieldsToEncode, uint(0))
 			rlpFieldsToEncode = append(rlpFieldsToEncode, uint(0))
@@ -49,8 +49,8 @@ func EncodeTransactions(txs []types.Transaction) ([]byte, error) {
 		}
 
 		newV := new(big.Int).Add(big.NewInt(ether155V), big.NewInt(int64(sign)))
-		newRPadded := fmt.Sprintf("%064s", r.Text(hex.Base))
-		newSPadded := fmt.Sprintf("%064s", s.Text(hex.Base))
+		newRPadded := fmt.Sprintf("%064s", r.String())
+		newSPadded := fmt.Sprintf("%064s", s.String())
 		newVPadded := fmt.Sprintf("%02s", newV.Text(hex.Base))
 		txData, err := hex.DecodeString(hex.EncodeToString(txCodedRlp) + newRPadded + newSPadded + newVPadded)
 		if err != nil {
@@ -77,7 +77,7 @@ func EncodeUnsignedTransaction(tx types.Transaction, chainID uint64, forcedNonce
 
 	sign := 1 - (v.Uint64() & 1)
 
-	nonce, gasPrice, gas, to, value, data, chainID := tx.Nonce(), tx.GasPrice(), tx.Gas(), tx.To(), tx.Value(), tx.Data(), chainID //nolint:gomnd
+	nonce, gasPrice, gas, to, value, data, chainID := tx.GetNonce(), tx.GetPrice(), tx.GetGas(), tx.GetTo(), tx.GetValue(), tx.GetData(), chainID
 	log.Debug(nonce, " ", gasPrice, " ", gas, " ", to, " ", value, " ", len(data), " ", chainID)
 
 	if forcedNonce != nil {
@@ -177,7 +177,7 @@ func DecodeTxs(txsData []byte) ([]types.Transaction, []byte, error) {
 			return []types.Transaction{}, txsData, err
 		}
 
-		tx := types.NewTx(legacyTx)
+		tx := types.NewTransaction(legacyTx)
 		txs = append(txs, *tx)
 	}
 	return txs, txsData, nil
