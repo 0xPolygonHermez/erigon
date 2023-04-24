@@ -1382,70 +1382,72 @@ func scanLogs(rows pgx.Rows) ([]*types.Log, error) {
 
 // AddL2Block adds a new L2 block to the State Store
 func (p *PostgresStorage) AddL2Block(ctx context.Context, batchNumber uint64, l2Block *types.Block, receipts []*types.Receipt, dbTx pgx.Tx) error {
-	e := p.getExecQuerier(dbTx)
+	/*
+	   	e := p.getExecQuerier(dbTx)
 
-	const addTransactionSQL = "INSERT INTO state.transaction (hash, encoded, decoded, l2_block_num) VALUES($1, $2, $3, $4)"
-	const addL2BlockSQL = `
-        INSERT INTO state.l2block (block_num, block_hash, header, uncles, parent_hash, state_root, received_at, batch_num, created_at)
-                           VALUES (       $1,         $2,     $3,     $4,          $5,         $6,          $7,        $8,         $9)`
+	   	const addTransactionSQL = "INSERT INTO state.transaction (hash, encoded, decoded, l2_block_num) VALUES($1, $2, $3, $4)"
+	   	const addL2BlockSQL = `
+	           INSERT INTO state.l2block (block_num, block_hash, header, uncles, parent_hash, state_root, received_at, batch_num, created_at)
+	                              VALUES (       $1,         $2,     $3,     $4,          $5,         $6,          $7,        $8,         $9)`
 
-	var header = "{}"
-	if l2Block.Header() != nil {
-		headerBytes, err := json.Marshal(l2Block.Header())
-		if err != nil {
-			return err
-		}
-		header = string(headerBytes)
-	}
+	   	var header = "{}"
+	   	if l2Block.Header() != nil {
+	   		headerBytes, err := json.Marshal(l2Block.Header())
+	   		if err != nil {
+	   			return err
+	   		}
+	   		header = string(headerBytes)
+	   	}
 
-	var uncles = "[]"
-	if l2Block.Uncles() != nil {
-		unclesBytes, err := json.Marshal(l2Block.Uncles())
-		if err != nil {
-			return err
-		}
-		uncles = string(unclesBytes)
-	}
+	   	var uncles = "[]"
+	   	if l2Block.Uncles() != nil {
+	   		unclesBytes, err := json.Marshal(l2Block.Uncles())
+	   		if err != nil {
+	   			return err
+	   		}
+	   		uncles = string(unclesBytes)
+	   	}
 
-	if _, err := e.Exec(ctx, addL2BlockSQL,
-		l2Block.Number().Uint64(), l2Block.Hash().String(), header, uncles,
-		l2Block.ParentHash().String(), l2Block.Root().String(),
-		l2Block.ReceivedAt, batchNumber, time.Now().UTC()); err != nil {
-		return err
-	}
+	   	if _, err := e.Exec(ctx, addL2BlockSQL,
+	   		l2Block.Number().Uint64(), l2Block.Hash().String(), header, uncles,
+	   		l2Block.ParentHash().String(), l2Block.Root().String(),
+	   		l2Block.ReceivedAt, batchNumber, time.Now().UTC()); err != nil {
+	   		return err
+	   	}
 
-	for _, tx := range l2Block.Transactions() {
-		binary, err := tx.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		encoded := hex.EncodeToHex(binary)
+	   	for _, tx := range l2Block.Transactions() {
+	   		binary, err := tx.MarshalBinary()
+	   		if err != nil {
+	   			return err
+	   		}
+	   		encoded := hex.EncodeToHex(binary)
 
-		binary, err = tx.MarshalJSON()
-		if err != nil {
-			return err
-		}
-		decoded := string(binary)
-		_, err = e.Exec(ctx, addTransactionSQL, tx.Hash().String(), encoded, decoded, l2Block.Number().Uint64())
-		if err != nil {
-			return err
-		}
-	}
+	   		binary, err = tx.MarshalJSON()
+	   		if err != nil {
+	   			return err
+	   		}
+	   		decoded := string(binary)
+	   		_, err = e.Exec(ctx, addTransactionSQL, tx.Hash().String(), encoded, decoded, l2Block.Number().Uint64())
+	   		if err != nil {
+	   			return err
+	   		}
+	   	}
 
-	for _, receipt := range receipts {
-		err := p.AddReceipt(ctx, receipt, dbTx)
-		if err != nil {
-			return err
-		}
+	   	for _, receipt := range receipts {
+	   		err := p.AddReceipt(ctx, receipt, dbTx)
+	   		if err != nil {
+	   			return err
+	   		}
 
-		for _, log := range receipt.Logs {
-			err := p.AddLog(ctx, log, dbTx)
-			if err != nil {
-				return err
-			}
-		}
-	}
+	   		for _, log := range receipt.Logs {
+	   			err := p.AddLog(ctx, log, dbTx)
+	   			if err != nil {
+	   				return err
+	   			}
+	   		}
+	   	}
 
+	*/
 	return nil
 }
 

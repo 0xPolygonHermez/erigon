@@ -177,24 +177,27 @@ func DecodeTxs(txsData []byte) ([]types.Transaction, []byte, error) {
 			return []types.Transaction{}, txsData, err
 		}
 
-		tx := types.NewTransaction(legacyTx)
-		txs = append(txs, *tx)
+		txs = append(txs, legacyTx)
 	}
 	return txs, txsData, nil
 }
 
 // DecodeTx decodes a string rlp tx representation into a types.Transaction instance
-func DecodeTx(encodedTx string) (*types.Transaction, error) {
-	b, err := hex.DecodeHex(encodedTx)
+func DecodeTx(encodedTx string) (types.Transaction, error) {
+	_, err := hex.DecodeHex(encodedTx)
 	if err != nil {
 		return nil, err
 	}
 
-	tx := new(types.Transaction)
-	if err := tx.UnmarshalBinary(b); err != nil {
-		return nil, err
-	}
-	return tx, nil
+	panic("III: use decodeRLP here if needed")
+
+	/*
+		tx := new(types.LegacyTx)
+		if err := tx.UnmarshalBinary(b); err != nil {
+			return nil, err
+		}
+		return tx, nil
+	*/
 }
 
 func generateReceipt(blockNumber *big.Int, processedTx *ProcessTransactionResponse) *types.Receipt {
