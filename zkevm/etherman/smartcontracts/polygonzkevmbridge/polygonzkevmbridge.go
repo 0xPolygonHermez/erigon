@@ -44,7 +44,7 @@ var PolygonzkevmbridgeABI = PolygonzkevmbridgeMetaData.ABI
 var PolygonzkevmbridgeBin = PolygonzkevmbridgeMetaData.Bin
 
 // DeployPolygonzkevmbridge deploys a new Ethereum contract, binding an instance of Polygonzkevmbridge to it.
-func DeployPolygonzkevmbridge(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, *types.Transaction, *Polygonzkevmbridge, error) {
+func DeployPolygonzkevmbridge(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, types.Transaction, *Polygonzkevmbridge, error) {
 	parsed, err := PolygonzkevmbridgeMetaData.GetAbi()
 	if err != nil {
 		return common.Address{}, nil, nil, err
@@ -174,12 +174,12 @@ func (_Polygonzkevmbridge *PolygonzkevmbridgeRaw) Call(opts *bind.CallOpts, resu
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Polygonzkevmbridge *PolygonzkevmbridgeRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.PolygonzkevmbridgeTransactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Polygonzkevmbridge *PolygonzkevmbridgeRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.PolygonzkevmbridgeTransactor.contract.Transact(opts, method, params...)
 }
 
@@ -193,12 +193,12 @@ func (_Polygonzkevmbridge *PolygonzkevmbridgeCallerRaw) Call(opts *bind.CallOpts
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.contract.Transact(opts, method, params...)
 }
 
@@ -684,168 +684,168 @@ func (_Polygonzkevmbridge *PolygonzkevmbridgeCallerSession) WrappedTokenToTokenI
 // ActivateEmergencyState is a paid mutator transaction binding the contract method 0x2072f6c5.
 //
 // Solidity: function activateEmergencyState() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) ActivateEmergencyState(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) ActivateEmergencyState(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "activateEmergencyState")
 }
 
 // ActivateEmergencyState is a paid mutator transaction binding the contract method 0x2072f6c5.
 //
 // Solidity: function activateEmergencyState() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) ActivateEmergencyState() (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) ActivateEmergencyState() (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.ActivateEmergencyState(&_Polygonzkevmbridge.TransactOpts)
 }
 
 // ActivateEmergencyState is a paid mutator transaction binding the contract method 0x2072f6c5.
 //
 // Solidity: function activateEmergencyState() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) ActivateEmergencyState() (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) ActivateEmergencyState() (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.ActivateEmergencyState(&_Polygonzkevmbridge.TransactOpts)
 }
 
 // BridgeAsset is a paid mutator transaction binding the contract method 0xcd586579.
 //
 // Solidity: function bridgeAsset(uint32 destinationNetwork, address destinationAddress, uint256 amount, address token, bool forceUpdateGlobalExitRoot, bytes permitData) payable returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) BridgeAsset(opts *bind.TransactOpts, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, token common.Address, forceUpdateGlobalExitRoot bool, permitData []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) BridgeAsset(opts *bind.TransactOpts, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, token common.Address, forceUpdateGlobalExitRoot bool, permitData []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "bridgeAsset", destinationNetwork, destinationAddress, amount, token, forceUpdateGlobalExitRoot, permitData)
 }
 
 // BridgeAsset is a paid mutator transaction binding the contract method 0xcd586579.
 //
 // Solidity: function bridgeAsset(uint32 destinationNetwork, address destinationAddress, uint256 amount, address token, bool forceUpdateGlobalExitRoot, bytes permitData) payable returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) BridgeAsset(destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, token common.Address, forceUpdateGlobalExitRoot bool, permitData []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) BridgeAsset(destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, token common.Address, forceUpdateGlobalExitRoot bool, permitData []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.BridgeAsset(&_Polygonzkevmbridge.TransactOpts, destinationNetwork, destinationAddress, amount, token, forceUpdateGlobalExitRoot, permitData)
 }
 
 // BridgeAsset is a paid mutator transaction binding the contract method 0xcd586579.
 //
 // Solidity: function bridgeAsset(uint32 destinationNetwork, address destinationAddress, uint256 amount, address token, bool forceUpdateGlobalExitRoot, bytes permitData) payable returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) BridgeAsset(destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, token common.Address, forceUpdateGlobalExitRoot bool, permitData []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) BridgeAsset(destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, token common.Address, forceUpdateGlobalExitRoot bool, permitData []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.BridgeAsset(&_Polygonzkevmbridge.TransactOpts, destinationNetwork, destinationAddress, amount, token, forceUpdateGlobalExitRoot, permitData)
 }
 
 // BridgeMessage is a paid mutator transaction binding the contract method 0x240ff378.
 //
 // Solidity: function bridgeMessage(uint32 destinationNetwork, address destinationAddress, bool forceUpdateGlobalExitRoot, bytes metadata) payable returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) BridgeMessage(opts *bind.TransactOpts, destinationNetwork uint32, destinationAddress common.Address, forceUpdateGlobalExitRoot bool, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) BridgeMessage(opts *bind.TransactOpts, destinationNetwork uint32, destinationAddress common.Address, forceUpdateGlobalExitRoot bool, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "bridgeMessage", destinationNetwork, destinationAddress, forceUpdateGlobalExitRoot, metadata)
 }
 
 // BridgeMessage is a paid mutator transaction binding the contract method 0x240ff378.
 //
 // Solidity: function bridgeMessage(uint32 destinationNetwork, address destinationAddress, bool forceUpdateGlobalExitRoot, bytes metadata) payable returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) BridgeMessage(destinationNetwork uint32, destinationAddress common.Address, forceUpdateGlobalExitRoot bool, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) BridgeMessage(destinationNetwork uint32, destinationAddress common.Address, forceUpdateGlobalExitRoot bool, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.BridgeMessage(&_Polygonzkevmbridge.TransactOpts, destinationNetwork, destinationAddress, forceUpdateGlobalExitRoot, metadata)
 }
 
 // BridgeMessage is a paid mutator transaction binding the contract method 0x240ff378.
 //
 // Solidity: function bridgeMessage(uint32 destinationNetwork, address destinationAddress, bool forceUpdateGlobalExitRoot, bytes metadata) payable returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) BridgeMessage(destinationNetwork uint32, destinationAddress common.Address, forceUpdateGlobalExitRoot bool, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) BridgeMessage(destinationNetwork uint32, destinationAddress common.Address, forceUpdateGlobalExitRoot bool, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.BridgeMessage(&_Polygonzkevmbridge.TransactOpts, destinationNetwork, destinationAddress, forceUpdateGlobalExitRoot, metadata)
 }
 
 // ClaimAsset is a paid mutator transaction binding the contract method 0x2cffd02e.
 //
 // Solidity: function claimAsset(bytes32[32] smtProof, uint32 index, bytes32 mainnetExitRoot, bytes32 rollupExitRoot, uint32 originNetwork, address originTokenAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) ClaimAsset(opts *bind.TransactOpts, smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originTokenAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) ClaimAsset(opts *bind.TransactOpts, smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originTokenAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "claimAsset", smtProof, index, mainnetExitRoot, rollupExitRoot, originNetwork, originTokenAddress, destinationNetwork, destinationAddress, amount, metadata)
 }
 
 // ClaimAsset is a paid mutator transaction binding the contract method 0x2cffd02e.
 //
 // Solidity: function claimAsset(bytes32[32] smtProof, uint32 index, bytes32 mainnetExitRoot, bytes32 rollupExitRoot, uint32 originNetwork, address originTokenAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) ClaimAsset(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originTokenAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) ClaimAsset(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originTokenAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.ClaimAsset(&_Polygonzkevmbridge.TransactOpts, smtProof, index, mainnetExitRoot, rollupExitRoot, originNetwork, originTokenAddress, destinationNetwork, destinationAddress, amount, metadata)
 }
 
 // ClaimAsset is a paid mutator transaction binding the contract method 0x2cffd02e.
 //
 // Solidity: function claimAsset(bytes32[32] smtProof, uint32 index, bytes32 mainnetExitRoot, bytes32 rollupExitRoot, uint32 originNetwork, address originTokenAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) ClaimAsset(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originTokenAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) ClaimAsset(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originTokenAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.ClaimAsset(&_Polygonzkevmbridge.TransactOpts, smtProof, index, mainnetExitRoot, rollupExitRoot, originNetwork, originTokenAddress, destinationNetwork, destinationAddress, amount, metadata)
 }
 
 // ClaimMessage is a paid mutator transaction binding the contract method 0x2d2c9d94.
 //
 // Solidity: function claimMessage(bytes32[32] smtProof, uint32 index, bytes32 mainnetExitRoot, bytes32 rollupExitRoot, uint32 originNetwork, address originAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) ClaimMessage(opts *bind.TransactOpts, smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) ClaimMessage(opts *bind.TransactOpts, smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "claimMessage", smtProof, index, mainnetExitRoot, rollupExitRoot, originNetwork, originAddress, destinationNetwork, destinationAddress, amount, metadata)
 }
 
 // ClaimMessage is a paid mutator transaction binding the contract method 0x2d2c9d94.
 //
 // Solidity: function claimMessage(bytes32[32] smtProof, uint32 index, bytes32 mainnetExitRoot, bytes32 rollupExitRoot, uint32 originNetwork, address originAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) ClaimMessage(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) ClaimMessage(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.ClaimMessage(&_Polygonzkevmbridge.TransactOpts, smtProof, index, mainnetExitRoot, rollupExitRoot, originNetwork, originAddress, destinationNetwork, destinationAddress, amount, metadata)
 }
 
 // ClaimMessage is a paid mutator transaction binding the contract method 0x2d2c9d94.
 //
 // Solidity: function claimMessage(bytes32[32] smtProof, uint32 index, bytes32 mainnetExitRoot, bytes32 rollupExitRoot, uint32 originNetwork, address originAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) ClaimMessage(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) ClaimMessage(smtProof [32][32]byte, index uint32, mainnetExitRoot [32]byte, rollupExitRoot [32]byte, originNetwork uint32, originAddress common.Address, destinationNetwork uint32, destinationAddress common.Address, amount *big.Int, metadata []byte) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.ClaimMessage(&_Polygonzkevmbridge.TransactOpts, smtProof, index, mainnetExitRoot, rollupExitRoot, originNetwork, originAddress, destinationNetwork, destinationAddress, amount, metadata)
 }
 
 // DeactivateEmergencyState is a paid mutator transaction binding the contract method 0xdbc16976.
 //
 // Solidity: function deactivateEmergencyState() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) DeactivateEmergencyState(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) DeactivateEmergencyState(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "deactivateEmergencyState")
 }
 
 // DeactivateEmergencyState is a paid mutator transaction binding the contract method 0xdbc16976.
 //
 // Solidity: function deactivateEmergencyState() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) DeactivateEmergencyState() (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) DeactivateEmergencyState() (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.DeactivateEmergencyState(&_Polygonzkevmbridge.TransactOpts)
 }
 
 // DeactivateEmergencyState is a paid mutator transaction binding the contract method 0xdbc16976.
 //
 // Solidity: function deactivateEmergencyState() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) DeactivateEmergencyState() (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) DeactivateEmergencyState() (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.DeactivateEmergencyState(&_Polygonzkevmbridge.TransactOpts)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0x647c576c.
 //
 // Solidity: function initialize(uint32 _networkID, address _globalExitRootManager, address _polygonZkEVMaddress) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) Initialize(opts *bind.TransactOpts, _networkID uint32, _globalExitRootManager common.Address, _polygonZkEVMaddress common.Address) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) Initialize(opts *bind.TransactOpts, _networkID uint32, _globalExitRootManager common.Address, _polygonZkEVMaddress common.Address) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "initialize", _networkID, _globalExitRootManager, _polygonZkEVMaddress)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0x647c576c.
 //
 // Solidity: function initialize(uint32 _networkID, address _globalExitRootManager, address _polygonZkEVMaddress) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) Initialize(_networkID uint32, _globalExitRootManager common.Address, _polygonZkEVMaddress common.Address) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) Initialize(_networkID uint32, _globalExitRootManager common.Address, _polygonZkEVMaddress common.Address) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.Initialize(&_Polygonzkevmbridge.TransactOpts, _networkID, _globalExitRootManager, _polygonZkEVMaddress)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0x647c576c.
 //
 // Solidity: function initialize(uint32 _networkID, address _globalExitRootManager, address _polygonZkEVMaddress) returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) Initialize(_networkID uint32, _globalExitRootManager common.Address, _polygonZkEVMaddress common.Address) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) Initialize(_networkID uint32, _globalExitRootManager common.Address, _polygonZkEVMaddress common.Address) (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.Initialize(&_Polygonzkevmbridge.TransactOpts, _networkID, _globalExitRootManager, _polygonZkEVMaddress)
 }
 
 // UpdateGlobalExitRoot is a paid mutator transaction binding the contract method 0x79e2cf97.
 //
 // Solidity: function updateGlobalExitRoot() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) UpdateGlobalExitRoot(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactor) UpdateGlobalExitRoot(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevmbridge.contract.Transact(opts, "updateGlobalExitRoot")
 }
 
 // UpdateGlobalExitRoot is a paid mutator transaction binding the contract method 0x79e2cf97.
 //
 // Solidity: function updateGlobalExitRoot() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) UpdateGlobalExitRoot() (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeSession) UpdateGlobalExitRoot() (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.UpdateGlobalExitRoot(&_Polygonzkevmbridge.TransactOpts)
 }
 
 // UpdateGlobalExitRoot is a paid mutator transaction binding the contract method 0x79e2cf97.
 //
 // Solidity: function updateGlobalExitRoot() returns()
-func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) UpdateGlobalExitRoot() (*types.Transaction, error) {
+func (_Polygonzkevmbridge *PolygonzkevmbridgeTransactorSession) UpdateGlobalExitRoot() (types.Transaction, error) {
 	return _Polygonzkevmbridge.Contract.UpdateGlobalExitRoot(&_Polygonzkevmbridge.TransactOpts)
 }
 

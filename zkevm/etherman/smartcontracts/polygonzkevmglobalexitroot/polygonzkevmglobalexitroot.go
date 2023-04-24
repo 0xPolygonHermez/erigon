@@ -44,7 +44,7 @@ var PolygonzkevmglobalexitrootABI = PolygonzkevmglobalexitrootMetaData.ABI
 var PolygonzkevmglobalexitrootBin = PolygonzkevmglobalexitrootMetaData.Bin
 
 // DeployPolygonzkevmglobalexitroot deploys a new Ethereum contract, binding an instance of Polygonzkevmglobalexitroot to it.
-func DeployPolygonzkevmglobalexitroot(auth *bind.TransactOpts, backend bind.ContractBackend, _rollupAddress common.Address, _bridgeAddress common.Address) (common.Address, *types.Transaction, *Polygonzkevmglobalexitroot, error) {
+func DeployPolygonzkevmglobalexitroot(auth *bind.TransactOpts, backend bind.ContractBackend, _rollupAddress common.Address, _bridgeAddress common.Address) (common.Address, types.Transaction, *Polygonzkevmglobalexitroot, error) {
 	parsed, err := PolygonzkevmglobalexitrootMetaData.GetAbi()
 	if err != nil {
 		return common.Address{}, nil, nil, err
@@ -174,12 +174,12 @@ func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootRaw) Call(opts *bin
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevmglobalexitroot.Contract.PolygonzkevmglobalexitrootTransactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Polygonzkevmglobalexitroot.Contract.PolygonzkevmglobalexitrootTransactor.contract.Transact(opts, method, params...)
 }
 
@@ -193,12 +193,12 @@ func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootCallerRaw) Call(opt
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevmglobalexitroot.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Polygonzkevmglobalexitroot.Contract.contract.Transact(opts, method, params...)
 }
 
@@ -391,21 +391,21 @@ func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootCallerSession) Roll
 // UpdateExitRoot is a paid mutator transaction binding the contract method 0x33d6247d.
 //
 // Solidity: function updateExitRoot(bytes32 newRoot) returns()
-func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactor) UpdateExitRoot(opts *bind.TransactOpts, newRoot [32]byte) (*types.Transaction, error) {
+func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactor) UpdateExitRoot(opts *bind.TransactOpts, newRoot [32]byte) (types.Transaction, error) {
 	return _Polygonzkevmglobalexitroot.contract.Transact(opts, "updateExitRoot", newRoot)
 }
 
 // UpdateExitRoot is a paid mutator transaction binding the contract method 0x33d6247d.
 //
 // Solidity: function updateExitRoot(bytes32 newRoot) returns()
-func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootSession) UpdateExitRoot(newRoot [32]byte) (*types.Transaction, error) {
+func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootSession) UpdateExitRoot(newRoot [32]byte) (types.Transaction, error) {
 	return _Polygonzkevmglobalexitroot.Contract.UpdateExitRoot(&_Polygonzkevmglobalexitroot.TransactOpts, newRoot)
 }
 
 // UpdateExitRoot is a paid mutator transaction binding the contract method 0x33d6247d.
 //
 // Solidity: function updateExitRoot(bytes32 newRoot) returns()
-func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactorSession) UpdateExitRoot(newRoot [32]byte) (*types.Transaction, error) {
+func (_Polygonzkevmglobalexitroot *PolygonzkevmglobalexitrootTransactorSession) UpdateExitRoot(newRoot [32]byte) (types.Transaction, error) {
 	return _Polygonzkevmglobalexitroot.Contract.UpdateExitRoot(&_Polygonzkevmglobalexitroot.TransactOpts, newRoot)
 }
 

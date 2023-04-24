@@ -1122,7 +1122,7 @@ func (p *PostgresStorage) GetL2BlockByNumber(ctx context.Context, blockNumber ui
 
 	transactions, err := p.GetTxsByBlockNumber(ctx, header.Number.Uint64(), dbTx)
 	if errors.Is(err, pgx.ErrNoRows) {
-		transactions = []*types.Transaction{}
+		transactions = []types.Transaction{}
 	} else if err != nil {
 		return nil, err
 	}
@@ -1144,7 +1144,7 @@ func (p *PostgresStorage) GetLastL2BlockCreatedAt(ctx context.Context, dbTx pgx.
 }
 
 // GetTransactionByHash gets a transaction accordingly to the provided transaction hash
-func (p *PostgresStorage) GetTransactionByHash(ctx context.Context, transactionHash common.Hash, dbTx pgx.Tx) (*types.Transaction, error) {
+func (p *PostgresStorage) GetTransactionByHash(ctx context.Context, transactionHash common.Hash, dbTx pgx.Tx) (types.Transaction, error) {
 	var encoded string
 	const getTransactionByHashSQL = "SELECT transaction.encoded FROM state.transaction WHERE hash = $1"
 
@@ -1231,7 +1231,7 @@ func (p *PostgresStorage) GetTransactionReceipt(ctx context.Context, transaction
 
 // GetTransactionByL2BlockHashAndIndex gets a transaction accordingly to the block hash and transaction index provided.
 // since we only have a single transaction per l2 block, any index different from 0 will return a not found result
-func (p *PostgresStorage) GetTransactionByL2BlockHashAndIndex(ctx context.Context, blockHash common.Hash, index uint64, dbTx pgx.Tx) (*types.Transaction, error) {
+func (p *PostgresStorage) GetTransactionByL2BlockHashAndIndex(ctx context.Context, blockHash common.Hash, index uint64, dbTx pgx.Tx) (types.Transaction, error) {
 	var encoded string
 	q := p.getExecQuerier(dbTx)
 	const query = `
@@ -1260,7 +1260,7 @@ func (p *PostgresStorage) GetTransactionByL2BlockHashAndIndex(ctx context.Contex
 
 // GetTransactionByL2BlockNumberAndIndex gets a transaction accordingly to the block number and transaction index provided.
 // since we only have a single transaction per l2 block, any index different from 0 will return a not found result
-func (p *PostgresStorage) GetTransactionByL2BlockNumberAndIndex(ctx context.Context, blockNumber uint64, index uint64, dbTx pgx.Tx) (*types.Transaction, error) {
+func (p *PostgresStorage) GetTransactionByL2BlockNumberAndIndex(ctx context.Context, blockNumber uint64, index uint64, dbTx pgx.Tx) (types.Transaction, error) {
 	var encoded string
 	const getTransactionByL2BlockNumberAndIndexSQL = "SELECT t.encoded FROM state.transaction t WHERE t.l2_block_num = $1 AND 0 = $2"
 
@@ -1532,7 +1532,7 @@ func (p *PostgresStorage) GetLastL2Block(ctx context.Context, dbTx pgx.Tx) (*typ
 
 	transactions, err := p.GetTxsByBlockNumber(ctx, header.Number.Uint64(), dbTx)
 	if errors.Is(err, pgx.ErrNoRows) {
-		transactions = []*types.Transaction{}
+		transactions = []types.Transaction{}
 	} else if err != nil {
 		return nil, err
 	}
@@ -1634,7 +1634,7 @@ func (p *PostgresStorage) GetL2BlockByHash(ctx context.Context, hash common.Hash
 
 	transactions, err := p.GetTxsByBlockNumber(ctx, header.Number.Uint64(), dbTx)
 	if errors.Is(err, pgx.ErrNoRows) {
-		transactions = []*types.Transaction{}
+		transactions = []types.Transaction{}
 	} else if err != nil {
 		return nil, err
 	}
@@ -1645,7 +1645,7 @@ func (p *PostgresStorage) GetL2BlockByHash(ctx context.Context, hash common.Hash
 }
 
 // GetTxsByBlockNumber returns all the txs in a given block
-func (p *PostgresStorage) GetTxsByBlockNumber(ctx context.Context, blockNumber uint64, dbTx pgx.Tx) ([]*types.Transaction, error) {
+func (p *PostgresStorage) GetTxsByBlockNumber(ctx context.Context, blockNumber uint64, dbTx pgx.Tx) ([]types.Transaction, error) {
 	const getTxsByBlockNumSQL = "SELECT encoded FROM state.transaction WHERE l2_block_num = $1"
 
 	q := p.getExecQuerier(dbTx)
@@ -1659,7 +1659,7 @@ func (p *PostgresStorage) GetTxsByBlockNumber(ctx context.Context, blockNumber u
 
 	defer rows.Close()
 
-	txs := make([]*types.Transaction, 0, len(rows.RawValues()))
+	txs := make([]types.Transaction, 0, len(rows.RawValues()))
 	var encoded string
 	for rows.Next() {
 		if err = rows.Scan(&encoded); err != nil {
@@ -1677,7 +1677,7 @@ func (p *PostgresStorage) GetTxsByBlockNumber(ctx context.Context, blockNumber u
 }
 
 // GetTxsByBatchNumber returns all the txs in a given batch
-func (p *PostgresStorage) GetTxsByBatchNumber(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) ([]*types.Transaction, error) {
+func (p *PostgresStorage) GetTxsByBatchNumber(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) ([]types.Transaction, error) {
 	q := p.getExecQuerier(dbTx)
 
 	const getTxsByBatchNumSQL = `
@@ -1697,7 +1697,7 @@ func (p *PostgresStorage) GetTxsByBatchNumber(ctx context.Context, batchNumber u
 
 	defer rows.Close()
 
-	txs := make([]*types.Transaction, 0, len(rows.RawValues()))
+	txs := make([]types.Transaction, 0, len(rows.RawValues()))
 	var encoded string
 	for rows.Next() {
 		if err = rows.Scan(&encoded); err != nil {
@@ -2316,7 +2316,7 @@ func (p *PostgresStorage) GetForkIDTrustedReorgCount(ctx context.Context, forkID
 }
 
 // GetReorgedTransactions returns the transactions that were reorged
-func (p *PostgresStorage) GetReorgedTransactions(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) ([]*types.Transaction, error) {
+func (p *PostgresStorage) GetReorgedTransactions(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) ([]types.Transaction, error) {
 	const getReorgedTransactionsSql = "SELECT encoded FROM state.transaction t INNER JOIN state.l2block b ON t.l2_block_num = b.block_num WHERE b.batch_num >= $1 ORDER BY l2_block_num ASC"
 	e := p.getExecQuerier(dbTx)
 	rows, err := e.Query(ctx, getReorgedTransactionsSql, batchNumber)
@@ -2325,7 +2325,7 @@ func (p *PostgresStorage) GetReorgedTransactions(ctx context.Context, batchNumbe
 	}
 	defer rows.Close()
 
-	txs := make([]*types.Transaction, 0, len(rows.RawValues()))
+	txs := make([]types.Transaction, 0, len(rows.RawValues()))
 
 	for rows.Next() {
 		if rows.Err() != nil {

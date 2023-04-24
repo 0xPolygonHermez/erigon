@@ -44,7 +44,7 @@ var MockverifierABI = MockverifierMetaData.ABI
 var MockverifierBin = MockverifierMetaData.Bin
 
 // DeployMockverifier deploys a new Ethereum contract, binding an instance of Mockverifier to it.
-func DeployMockverifier(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, *types.Transaction, *Mockverifier, error) {
+func DeployMockverifier(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, types.Transaction, *Mockverifier, error) {
 	parsed, err := MockverifierMetaData.GetAbi()
 	if err != nil {
 		return common.Address{}, nil, nil, err
@@ -174,12 +174,12 @@ func (_Mockverifier *MockverifierRaw) Call(opts *bind.CallOpts, result *[]interf
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Mockverifier *MockverifierRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Mockverifier *MockverifierRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Mockverifier.Contract.MockverifierTransactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Mockverifier *MockverifierRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Mockverifier *MockverifierRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Mockverifier.Contract.MockverifierTransactor.contract.Transact(opts, method, params...)
 }
 
@@ -193,12 +193,12 @@ func (_Mockverifier *MockverifierCallerRaw) Call(opts *bind.CallOpts, result *[]
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Mockverifier *MockverifierTransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Mockverifier *MockverifierTransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Mockverifier.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Mockverifier *MockverifierTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Mockverifier *MockverifierTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Mockverifier.Contract.contract.Transact(opts, method, params...)
 }
 
