@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	ethereum "github.com/ledgerwatch/erigon"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
-	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/event"
 )
@@ -68,7 +68,7 @@ var PolygonzkevmABI = PolygonzkevmMetaData.ABI
 var PolygonzkevmBin = PolygonzkevmMetaData.Bin
 
 // DeployPolygonzkevm deploys a new Ethereum contract, binding an instance of Polygonzkevm to it.
-func DeployPolygonzkevm(auth *bind.TransactOpts, backend bind.ContractBackend, _globalExitRootManager common.Address, _matic common.Address, _rollupVerifier common.Address, _bridgeAddress common.Address, _chainID uint64, _forkID uint64) (common.Address, *types.Transaction, *Polygonzkevm, error) {
+func DeployPolygonzkevm(auth *bind.TransactOpts, backend bind.ContractBackend, _globalExitRootManager common.Address, _matic common.Address, _rollupVerifier common.Address, _bridgeAddress common.Address, _chainID uint64, _forkID uint64) (common.Address, types.Transaction, *Polygonzkevm, error) {
 	parsed, err := PolygonzkevmMetaData.GetAbi()
 	if err != nil {
 		return common.Address{}, nil, nil, err
@@ -198,12 +198,12 @@ func (_Polygonzkevm *PolygonzkevmRaw) Call(opts *bind.CallOpts, result *[]interf
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Polygonzkevm *PolygonzkevmRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.PolygonzkevmTransactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Polygonzkevm *PolygonzkevmRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.PolygonzkevmTransactor.contract.Transact(opts, method, params...)
 }
 
@@ -217,12 +217,12 @@ func (_Polygonzkevm *PolygonzkevmCallerRaw) Call(opts *bind.CallOpts, result *[]
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Polygonzkevm *PolygonzkevmTransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Polygonzkevm *PolygonzkevmTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.contract.Transact(opts, method, params...)
 }
 
@@ -1450,504 +1450,504 @@ func (_Polygonzkevm *PolygonzkevmCallerSession) VerifyBatchTimeTarget() (uint64,
 // AcceptAdminRole is a paid mutator transaction binding the contract method 0x8c3d7301.
 //
 // Solidity: function acceptAdminRole() returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) AcceptAdminRole(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) AcceptAdminRole(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "acceptAdminRole")
 }
 
 // AcceptAdminRole is a paid mutator transaction binding the contract method 0x8c3d7301.
 //
 // Solidity: function acceptAdminRole() returns()
-func (_Polygonzkevm *PolygonzkevmSession) AcceptAdminRole() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) AcceptAdminRole() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.AcceptAdminRole(&_Polygonzkevm.TransactOpts)
 }
 
 // AcceptAdminRole is a paid mutator transaction binding the contract method 0x8c3d7301.
 //
 // Solidity: function acceptAdminRole() returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) AcceptAdminRole() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) AcceptAdminRole() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.AcceptAdminRole(&_Polygonzkevm.TransactOpts)
 }
 
 // ActivateEmergencyState is a paid mutator transaction binding the contract method 0x7215541a.
 //
 // Solidity: function activateEmergencyState(uint64 sequencedBatchNum) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) ActivateEmergencyState(opts *bind.TransactOpts, sequencedBatchNum uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) ActivateEmergencyState(opts *bind.TransactOpts, sequencedBatchNum uint64) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "activateEmergencyState", sequencedBatchNum)
 }
 
 // ActivateEmergencyState is a paid mutator transaction binding the contract method 0x7215541a.
 //
 // Solidity: function activateEmergencyState(uint64 sequencedBatchNum) returns()
-func (_Polygonzkevm *PolygonzkevmSession) ActivateEmergencyState(sequencedBatchNum uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) ActivateEmergencyState(sequencedBatchNum uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ActivateEmergencyState(&_Polygonzkevm.TransactOpts, sequencedBatchNum)
 }
 
 // ActivateEmergencyState is a paid mutator transaction binding the contract method 0x7215541a.
 //
 // Solidity: function activateEmergencyState(uint64 sequencedBatchNum) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) ActivateEmergencyState(sequencedBatchNum uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) ActivateEmergencyState(sequencedBatchNum uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ActivateEmergencyState(&_Polygonzkevm.TransactOpts, sequencedBatchNum)
 }
 
 // ActivateForceBatches is a paid mutator transaction binding the contract method 0x5ec91958.
 //
 // Solidity: function activateForceBatches() returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) ActivateForceBatches(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) ActivateForceBatches(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "activateForceBatches")
 }
 
 // ActivateForceBatches is a paid mutator transaction binding the contract method 0x5ec91958.
 //
 // Solidity: function activateForceBatches() returns()
-func (_Polygonzkevm *PolygonzkevmSession) ActivateForceBatches() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) ActivateForceBatches() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ActivateForceBatches(&_Polygonzkevm.TransactOpts)
 }
 
 // ActivateForceBatches is a paid mutator transaction binding the contract method 0x5ec91958.
 //
 // Solidity: function activateForceBatches() returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) ActivateForceBatches() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) ActivateForceBatches() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ActivateForceBatches(&_Polygonzkevm.TransactOpts)
 }
 
 // ConsolidatePendingState is a paid mutator transaction binding the contract method 0x4a910e6a.
 //
 // Solidity: function consolidatePendingState(uint64 pendingStateNum) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) ConsolidatePendingState(opts *bind.TransactOpts, pendingStateNum uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) ConsolidatePendingState(opts *bind.TransactOpts, pendingStateNum uint64) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "consolidatePendingState", pendingStateNum)
 }
 
 // ConsolidatePendingState is a paid mutator transaction binding the contract method 0x4a910e6a.
 //
 // Solidity: function consolidatePendingState(uint64 pendingStateNum) returns()
-func (_Polygonzkevm *PolygonzkevmSession) ConsolidatePendingState(pendingStateNum uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) ConsolidatePendingState(pendingStateNum uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ConsolidatePendingState(&_Polygonzkevm.TransactOpts, pendingStateNum)
 }
 
 // ConsolidatePendingState is a paid mutator transaction binding the contract method 0x4a910e6a.
 //
 // Solidity: function consolidatePendingState(uint64 pendingStateNum) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) ConsolidatePendingState(pendingStateNum uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) ConsolidatePendingState(pendingStateNum uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ConsolidatePendingState(&_Polygonzkevm.TransactOpts, pendingStateNum)
 }
 
 // DeactivateEmergencyState is a paid mutator transaction binding the contract method 0xdbc16976.
 //
 // Solidity: function deactivateEmergencyState() returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) DeactivateEmergencyState(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) DeactivateEmergencyState(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "deactivateEmergencyState")
 }
 
 // DeactivateEmergencyState is a paid mutator transaction binding the contract method 0xdbc16976.
 //
 // Solidity: function deactivateEmergencyState() returns()
-func (_Polygonzkevm *PolygonzkevmSession) DeactivateEmergencyState() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) DeactivateEmergencyState() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.DeactivateEmergencyState(&_Polygonzkevm.TransactOpts)
 }
 
 // DeactivateEmergencyState is a paid mutator transaction binding the contract method 0xdbc16976.
 //
 // Solidity: function deactivateEmergencyState() returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) DeactivateEmergencyState() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) DeactivateEmergencyState() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.DeactivateEmergencyState(&_Polygonzkevm.TransactOpts)
 }
 
 // ForceBatch is a paid mutator transaction binding the contract method 0xeaeb077b.
 //
 // Solidity: function forceBatch(bytes transactions, uint256 maticAmount) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) ForceBatch(opts *bind.TransactOpts, transactions []byte, maticAmount *big.Int) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) ForceBatch(opts *bind.TransactOpts, transactions []byte, maticAmount *big.Int) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "forceBatch", transactions, maticAmount)
 }
 
 // ForceBatch is a paid mutator transaction binding the contract method 0xeaeb077b.
 //
 // Solidity: function forceBatch(bytes transactions, uint256 maticAmount) returns()
-func (_Polygonzkevm *PolygonzkevmSession) ForceBatch(transactions []byte, maticAmount *big.Int) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) ForceBatch(transactions []byte, maticAmount *big.Int) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ForceBatch(&_Polygonzkevm.TransactOpts, transactions, maticAmount)
 }
 
 // ForceBatch is a paid mutator transaction binding the contract method 0xeaeb077b.
 //
 // Solidity: function forceBatch(bytes transactions, uint256 maticAmount) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) ForceBatch(transactions []byte, maticAmount *big.Int) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) ForceBatch(transactions []byte, maticAmount *big.Int) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ForceBatch(&_Polygonzkevm.TransactOpts, transactions, maticAmount)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0xd2e129f9.
 //
 // Solidity: function initialize((address,address,uint64,address,uint64) initializePackedParameters, bytes32 genesisRoot, string _trustedSequencerURL, string _networkName, string _version) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) Initialize(opts *bind.TransactOpts, initializePackedParameters PolygonZkEVMInitializePackedParameters, genesisRoot [32]byte, _trustedSequencerURL string, _networkName string, _version string) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) Initialize(opts *bind.TransactOpts, initializePackedParameters PolygonZkEVMInitializePackedParameters, genesisRoot [32]byte, _trustedSequencerURL string, _networkName string, _version string) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "initialize", initializePackedParameters, genesisRoot, _trustedSequencerURL, _networkName, _version)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0xd2e129f9.
 //
 // Solidity: function initialize((address,address,uint64,address,uint64) initializePackedParameters, bytes32 genesisRoot, string _trustedSequencerURL, string _networkName, string _version) returns()
-func (_Polygonzkevm *PolygonzkevmSession) Initialize(initializePackedParameters PolygonZkEVMInitializePackedParameters, genesisRoot [32]byte, _trustedSequencerURL string, _networkName string, _version string) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) Initialize(initializePackedParameters PolygonZkEVMInitializePackedParameters, genesisRoot [32]byte, _trustedSequencerURL string, _networkName string, _version string) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.Initialize(&_Polygonzkevm.TransactOpts, initializePackedParameters, genesisRoot, _trustedSequencerURL, _networkName, _version)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0xd2e129f9.
 //
 // Solidity: function initialize((address,address,uint64,address,uint64) initializePackedParameters, bytes32 genesisRoot, string _trustedSequencerURL, string _networkName, string _version) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) Initialize(initializePackedParameters PolygonZkEVMInitializePackedParameters, genesisRoot [32]byte, _trustedSequencerURL string, _networkName string, _version string) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) Initialize(initializePackedParameters PolygonZkEVMInitializePackedParameters, genesisRoot [32]byte, _trustedSequencerURL string, _networkName string, _version string) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.Initialize(&_Polygonzkevm.TransactOpts, initializePackedParameters, genesisRoot, _trustedSequencerURL, _networkName, _version)
 }
 
 // OverridePendingState is a paid mutator transaction binding the contract method 0xe6ad707e.
 //
 // Solidity: function overridePendingState(uint64 initPendingStateNum, uint64 finalPendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) OverridePendingState(opts *bind.TransactOpts, initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) OverridePendingState(opts *bind.TransactOpts, initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "overridePendingState", initPendingStateNum, finalPendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // OverridePendingState is a paid mutator transaction binding the contract method 0xe6ad707e.
 //
 // Solidity: function overridePendingState(uint64 initPendingStateNum, uint64 finalPendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmSession) OverridePendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) OverridePendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.OverridePendingState(&_Polygonzkevm.TransactOpts, initPendingStateNum, finalPendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // OverridePendingState is a paid mutator transaction binding the contract method 0xe6ad707e.
 //
 // Solidity: function overridePendingState(uint64 initPendingStateNum, uint64 finalPendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) OverridePendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) OverridePendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.OverridePendingState(&_Polygonzkevm.TransactOpts, initPendingStateNum, finalPendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // ProveNonDeterministicPendingState is a paid mutator transaction binding the contract method 0x0808270c.
 //
 // Solidity: function proveNonDeterministicPendingState(uint64 initPendingStateNum, uint64 finalPendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) ProveNonDeterministicPendingState(opts *bind.TransactOpts, initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) ProveNonDeterministicPendingState(opts *bind.TransactOpts, initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "proveNonDeterministicPendingState", initPendingStateNum, finalPendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // ProveNonDeterministicPendingState is a paid mutator transaction binding the contract method 0x0808270c.
 //
 // Solidity: function proveNonDeterministicPendingState(uint64 initPendingStateNum, uint64 finalPendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmSession) ProveNonDeterministicPendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) ProveNonDeterministicPendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ProveNonDeterministicPendingState(&_Polygonzkevm.TransactOpts, initPendingStateNum, finalPendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // ProveNonDeterministicPendingState is a paid mutator transaction binding the contract method 0x0808270c.
 //
 // Solidity: function proveNonDeterministicPendingState(uint64 initPendingStateNum, uint64 finalPendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) ProveNonDeterministicPendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) ProveNonDeterministicPendingState(initPendingStateNum uint64, finalPendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.ProveNonDeterministicPendingState(&_Polygonzkevm.TransactOpts, initPendingStateNum, finalPendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
 //
 // Solidity: function renounceOwnership() returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) RenounceOwnership(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) RenounceOwnership(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "renounceOwnership")
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
 //
 // Solidity: function renounceOwnership() returns()
-func (_Polygonzkevm *PolygonzkevmSession) RenounceOwnership() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) RenounceOwnership() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.RenounceOwnership(&_Polygonzkevm.TransactOpts)
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
 //
 // Solidity: function renounceOwnership() returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) RenounceOwnership() (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) RenounceOwnership() (types.Transaction, error) {
 	return _Polygonzkevm.Contract.RenounceOwnership(&_Polygonzkevm.TransactOpts)
 }
 
 // SequenceBatches is a paid mutator transaction binding the contract method 0x5e9145c9.
 //
 // Solidity: function sequenceBatches((bytes,bytes32,uint64,uint64)[] batches, address l2Coinbase) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SequenceBatches(opts *bind.TransactOpts, batches []PolygonZkEVMBatchData, l2Coinbase common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SequenceBatches(opts *bind.TransactOpts, batches []PolygonZkEVMBatchData, l2Coinbase common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "sequenceBatches", batches, l2Coinbase)
 }
 
 // SequenceBatches is a paid mutator transaction binding the contract method 0x5e9145c9.
 //
 // Solidity: function sequenceBatches((bytes,bytes32,uint64,uint64)[] batches, address l2Coinbase) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SequenceBatches(batches []PolygonZkEVMBatchData, l2Coinbase common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SequenceBatches(batches []PolygonZkEVMBatchData, l2Coinbase common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SequenceBatches(&_Polygonzkevm.TransactOpts, batches, l2Coinbase)
 }
 
 // SequenceBatches is a paid mutator transaction binding the contract method 0x5e9145c9.
 //
 // Solidity: function sequenceBatches((bytes,bytes32,uint64,uint64)[] batches, address l2Coinbase) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SequenceBatches(batches []PolygonZkEVMBatchData, l2Coinbase common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SequenceBatches(batches []PolygonZkEVMBatchData, l2Coinbase common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SequenceBatches(&_Polygonzkevm.TransactOpts, batches, l2Coinbase)
 }
 
 // SequenceForceBatches is a paid mutator transaction binding the contract method 0xd8d1091b.
 //
 // Solidity: function sequenceForceBatches((bytes,bytes32,uint64)[] batches) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SequenceForceBatches(opts *bind.TransactOpts, batches []PolygonZkEVMForcedBatchData) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SequenceForceBatches(opts *bind.TransactOpts, batches []PolygonZkEVMForcedBatchData) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "sequenceForceBatches", batches)
 }
 
 // SequenceForceBatches is a paid mutator transaction binding the contract method 0xd8d1091b.
 //
 // Solidity: function sequenceForceBatches((bytes,bytes32,uint64)[] batches) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SequenceForceBatches(batches []PolygonZkEVMForcedBatchData) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SequenceForceBatches(batches []PolygonZkEVMForcedBatchData) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SequenceForceBatches(&_Polygonzkevm.TransactOpts, batches)
 }
 
 // SequenceForceBatches is a paid mutator transaction binding the contract method 0xd8d1091b.
 //
 // Solidity: function sequenceForceBatches((bytes,bytes32,uint64)[] batches) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SequenceForceBatches(batches []PolygonZkEVMForcedBatchData) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SequenceForceBatches(batches []PolygonZkEVMForcedBatchData) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SequenceForceBatches(&_Polygonzkevm.TransactOpts, batches)
 }
 
 // SetForceBatchTimeout is a paid mutator transaction binding the contract method 0x4e487706.
 //
 // Solidity: function setForceBatchTimeout(uint64 newforceBatchTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetForceBatchTimeout(opts *bind.TransactOpts, newforceBatchTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetForceBatchTimeout(opts *bind.TransactOpts, newforceBatchTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setForceBatchTimeout", newforceBatchTimeout)
 }
 
 // SetForceBatchTimeout is a paid mutator transaction binding the contract method 0x4e487706.
 //
 // Solidity: function setForceBatchTimeout(uint64 newforceBatchTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetForceBatchTimeout(newforceBatchTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetForceBatchTimeout(newforceBatchTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetForceBatchTimeout(&_Polygonzkevm.TransactOpts, newforceBatchTimeout)
 }
 
 // SetForceBatchTimeout is a paid mutator transaction binding the contract method 0x4e487706.
 //
 // Solidity: function setForceBatchTimeout(uint64 newforceBatchTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetForceBatchTimeout(newforceBatchTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetForceBatchTimeout(newforceBatchTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetForceBatchTimeout(&_Polygonzkevm.TransactOpts, newforceBatchTimeout)
 }
 
 // SetMultiplierBatchFee is a paid mutator transaction binding the contract method 0x1816b7e5.
 //
 // Solidity: function setMultiplierBatchFee(uint16 newMultiplierBatchFee) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetMultiplierBatchFee(opts *bind.TransactOpts, newMultiplierBatchFee uint16) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetMultiplierBatchFee(opts *bind.TransactOpts, newMultiplierBatchFee uint16) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setMultiplierBatchFee", newMultiplierBatchFee)
 }
 
 // SetMultiplierBatchFee is a paid mutator transaction binding the contract method 0x1816b7e5.
 //
 // Solidity: function setMultiplierBatchFee(uint16 newMultiplierBatchFee) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetMultiplierBatchFee(newMultiplierBatchFee uint16) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetMultiplierBatchFee(newMultiplierBatchFee uint16) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetMultiplierBatchFee(&_Polygonzkevm.TransactOpts, newMultiplierBatchFee)
 }
 
 // SetMultiplierBatchFee is a paid mutator transaction binding the contract method 0x1816b7e5.
 //
 // Solidity: function setMultiplierBatchFee(uint16 newMultiplierBatchFee) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetMultiplierBatchFee(newMultiplierBatchFee uint16) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetMultiplierBatchFee(newMultiplierBatchFee uint16) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetMultiplierBatchFee(&_Polygonzkevm.TransactOpts, newMultiplierBatchFee)
 }
 
 // SetPendingStateTimeout is a paid mutator transaction binding the contract method 0x9c9f3dfe.
 //
 // Solidity: function setPendingStateTimeout(uint64 newPendingStateTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetPendingStateTimeout(opts *bind.TransactOpts, newPendingStateTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetPendingStateTimeout(opts *bind.TransactOpts, newPendingStateTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setPendingStateTimeout", newPendingStateTimeout)
 }
 
 // SetPendingStateTimeout is a paid mutator transaction binding the contract method 0x9c9f3dfe.
 //
 // Solidity: function setPendingStateTimeout(uint64 newPendingStateTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetPendingStateTimeout(newPendingStateTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetPendingStateTimeout(newPendingStateTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetPendingStateTimeout(&_Polygonzkevm.TransactOpts, newPendingStateTimeout)
 }
 
 // SetPendingStateTimeout is a paid mutator transaction binding the contract method 0x9c9f3dfe.
 //
 // Solidity: function setPendingStateTimeout(uint64 newPendingStateTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetPendingStateTimeout(newPendingStateTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetPendingStateTimeout(newPendingStateTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetPendingStateTimeout(&_Polygonzkevm.TransactOpts, newPendingStateTimeout)
 }
 
 // SetTrustedAggregator is a paid mutator transaction binding the contract method 0xf14916d6.
 //
 // Solidity: function setTrustedAggregator(address newTrustedAggregator) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedAggregator(opts *bind.TransactOpts, newTrustedAggregator common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedAggregator(opts *bind.TransactOpts, newTrustedAggregator common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setTrustedAggregator", newTrustedAggregator)
 }
 
 // SetTrustedAggregator is a paid mutator transaction binding the contract method 0xf14916d6.
 //
 // Solidity: function setTrustedAggregator(address newTrustedAggregator) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetTrustedAggregator(newTrustedAggregator common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetTrustedAggregator(newTrustedAggregator common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedAggregator(&_Polygonzkevm.TransactOpts, newTrustedAggregator)
 }
 
 // SetTrustedAggregator is a paid mutator transaction binding the contract method 0xf14916d6.
 //
 // Solidity: function setTrustedAggregator(address newTrustedAggregator) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedAggregator(newTrustedAggregator common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedAggregator(newTrustedAggregator common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedAggregator(&_Polygonzkevm.TransactOpts, newTrustedAggregator)
 }
 
 // SetTrustedAggregatorTimeout is a paid mutator transaction binding the contract method 0x394218e9.
 //
 // Solidity: function setTrustedAggregatorTimeout(uint64 newTrustedAggregatorTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedAggregatorTimeout(opts *bind.TransactOpts, newTrustedAggregatorTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedAggregatorTimeout(opts *bind.TransactOpts, newTrustedAggregatorTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setTrustedAggregatorTimeout", newTrustedAggregatorTimeout)
 }
 
 // SetTrustedAggregatorTimeout is a paid mutator transaction binding the contract method 0x394218e9.
 //
 // Solidity: function setTrustedAggregatorTimeout(uint64 newTrustedAggregatorTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetTrustedAggregatorTimeout(newTrustedAggregatorTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetTrustedAggregatorTimeout(newTrustedAggregatorTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedAggregatorTimeout(&_Polygonzkevm.TransactOpts, newTrustedAggregatorTimeout)
 }
 
 // SetTrustedAggregatorTimeout is a paid mutator transaction binding the contract method 0x394218e9.
 //
 // Solidity: function setTrustedAggregatorTimeout(uint64 newTrustedAggregatorTimeout) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedAggregatorTimeout(newTrustedAggregatorTimeout uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedAggregatorTimeout(newTrustedAggregatorTimeout uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedAggregatorTimeout(&_Polygonzkevm.TransactOpts, newTrustedAggregatorTimeout)
 }
 
 // SetTrustedSequencer is a paid mutator transaction binding the contract method 0x6ff512cc.
 //
 // Solidity: function setTrustedSequencer(address newTrustedSequencer) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedSequencer(opts *bind.TransactOpts, newTrustedSequencer common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedSequencer(opts *bind.TransactOpts, newTrustedSequencer common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setTrustedSequencer", newTrustedSequencer)
 }
 
 // SetTrustedSequencer is a paid mutator transaction binding the contract method 0x6ff512cc.
 //
 // Solidity: function setTrustedSequencer(address newTrustedSequencer) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetTrustedSequencer(newTrustedSequencer common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetTrustedSequencer(newTrustedSequencer common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedSequencer(&_Polygonzkevm.TransactOpts, newTrustedSequencer)
 }
 
 // SetTrustedSequencer is a paid mutator transaction binding the contract method 0x6ff512cc.
 //
 // Solidity: function setTrustedSequencer(address newTrustedSequencer) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedSequencer(newTrustedSequencer common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedSequencer(newTrustedSequencer common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedSequencer(&_Polygonzkevm.TransactOpts, newTrustedSequencer)
 }
 
 // SetTrustedSequencerURL is a paid mutator transaction binding the contract method 0xc89e42df.
 //
 // Solidity: function setTrustedSequencerURL(string newTrustedSequencerURL) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedSequencerURL(opts *bind.TransactOpts, newTrustedSequencerURL string) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetTrustedSequencerURL(opts *bind.TransactOpts, newTrustedSequencerURL string) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setTrustedSequencerURL", newTrustedSequencerURL)
 }
 
 // SetTrustedSequencerURL is a paid mutator transaction binding the contract method 0xc89e42df.
 //
 // Solidity: function setTrustedSequencerURL(string newTrustedSequencerURL) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetTrustedSequencerURL(newTrustedSequencerURL string) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetTrustedSequencerURL(newTrustedSequencerURL string) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedSequencerURL(&_Polygonzkevm.TransactOpts, newTrustedSequencerURL)
 }
 
 // SetTrustedSequencerURL is a paid mutator transaction binding the contract method 0xc89e42df.
 //
 // Solidity: function setTrustedSequencerURL(string newTrustedSequencerURL) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedSequencerURL(newTrustedSequencerURL string) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetTrustedSequencerURL(newTrustedSequencerURL string) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetTrustedSequencerURL(&_Polygonzkevm.TransactOpts, newTrustedSequencerURL)
 }
 
 // SetVerifyBatchTimeTarget is a paid mutator transaction binding the contract method 0xa066215c.
 //
 // Solidity: function setVerifyBatchTimeTarget(uint64 newVerifyBatchTimeTarget) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) SetVerifyBatchTimeTarget(opts *bind.TransactOpts, newVerifyBatchTimeTarget uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) SetVerifyBatchTimeTarget(opts *bind.TransactOpts, newVerifyBatchTimeTarget uint64) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "setVerifyBatchTimeTarget", newVerifyBatchTimeTarget)
 }
 
 // SetVerifyBatchTimeTarget is a paid mutator transaction binding the contract method 0xa066215c.
 //
 // Solidity: function setVerifyBatchTimeTarget(uint64 newVerifyBatchTimeTarget) returns()
-func (_Polygonzkevm *PolygonzkevmSession) SetVerifyBatchTimeTarget(newVerifyBatchTimeTarget uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) SetVerifyBatchTimeTarget(newVerifyBatchTimeTarget uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetVerifyBatchTimeTarget(&_Polygonzkevm.TransactOpts, newVerifyBatchTimeTarget)
 }
 
 // SetVerifyBatchTimeTarget is a paid mutator transaction binding the contract method 0xa066215c.
 //
 // Solidity: function setVerifyBatchTimeTarget(uint64 newVerifyBatchTimeTarget) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) SetVerifyBatchTimeTarget(newVerifyBatchTimeTarget uint64) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) SetVerifyBatchTimeTarget(newVerifyBatchTimeTarget uint64) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.SetVerifyBatchTimeTarget(&_Polygonzkevm.TransactOpts, newVerifyBatchTimeTarget)
 }
 
 // TransferAdminRole is a paid mutator transaction binding the contract method 0xada8f919.
 //
 // Solidity: function transferAdminRole(address newPendingAdmin) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) TransferAdminRole(opts *bind.TransactOpts, newPendingAdmin common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) TransferAdminRole(opts *bind.TransactOpts, newPendingAdmin common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "transferAdminRole", newPendingAdmin)
 }
 
 // TransferAdminRole is a paid mutator transaction binding the contract method 0xada8f919.
 //
 // Solidity: function transferAdminRole(address newPendingAdmin) returns()
-func (_Polygonzkevm *PolygonzkevmSession) TransferAdminRole(newPendingAdmin common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) TransferAdminRole(newPendingAdmin common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.TransferAdminRole(&_Polygonzkevm.TransactOpts, newPendingAdmin)
 }
 
 // TransferAdminRole is a paid mutator transaction binding the contract method 0xada8f919.
 //
 // Solidity: function transferAdminRole(address newPendingAdmin) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) TransferAdminRole(newPendingAdmin common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) TransferAdminRole(newPendingAdmin common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.TransferAdminRole(&_Polygonzkevm.TransactOpts, newPendingAdmin)
 }
 
 // TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
 //
 // Solidity: function transferOwnership(address newOwner) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) TransferOwnership(opts *bind.TransactOpts, newOwner common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) TransferOwnership(opts *bind.TransactOpts, newOwner common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "transferOwnership", newOwner)
 }
 
 // TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
 //
 // Solidity: function transferOwnership(address newOwner) returns()
-func (_Polygonzkevm *PolygonzkevmSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) TransferOwnership(newOwner common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.TransferOwnership(&_Polygonzkevm.TransactOpts, newOwner)
 }
 
 // TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
 //
 // Solidity: function transferOwnership(address newOwner) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) TransferOwnership(newOwner common.Address) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.TransferOwnership(&_Polygonzkevm.TransactOpts, newOwner)
 }
 
 // VerifyBatches is a paid mutator transaction binding the contract method 0x4fd70464.
 //
 // Solidity: function verifyBatches(uint64 pendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) VerifyBatches(opts *bind.TransactOpts, pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) VerifyBatches(opts *bind.TransactOpts, pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "verifyBatches", pendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // VerifyBatches is a paid mutator transaction binding the contract method 0x4fd70464.
 //
 // Solidity: function verifyBatches(uint64 pendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmSession) VerifyBatches(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) VerifyBatches(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.VerifyBatches(&_Polygonzkevm.TransactOpts, pendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // VerifyBatches is a paid mutator transaction binding the contract method 0x4fd70464.
 //
 // Solidity: function verifyBatches(uint64 pendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) VerifyBatches(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) VerifyBatches(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.VerifyBatches(&_Polygonzkevm.TransactOpts, pendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // VerifyBatchesTrustedAggregator is a paid mutator transaction binding the contract method 0xa50a164b.
 //
 // Solidity: function verifyBatchesTrustedAggregator(uint64 pendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactor) VerifyBatchesTrustedAggregator(opts *bind.TransactOpts, pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactor) VerifyBatchesTrustedAggregator(opts *bind.TransactOpts, pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.contract.Transact(opts, "verifyBatchesTrustedAggregator", pendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // VerifyBatchesTrustedAggregator is a paid mutator transaction binding the contract method 0xa50a164b.
 //
 // Solidity: function verifyBatchesTrustedAggregator(uint64 pendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmSession) VerifyBatchesTrustedAggregator(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmSession) VerifyBatchesTrustedAggregator(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.VerifyBatchesTrustedAggregator(&_Polygonzkevm.TransactOpts, pendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 
 // VerifyBatchesTrustedAggregator is a paid mutator transaction binding the contract method 0xa50a164b.
 //
 // Solidity: function verifyBatchesTrustedAggregator(uint64 pendingStateNum, uint64 initNumBatch, uint64 finalNewBatch, bytes32 newLocalExitRoot, bytes32 newStateRoot, bytes proof) returns()
-func (_Polygonzkevm *PolygonzkevmTransactorSession) VerifyBatchesTrustedAggregator(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (*types.Transaction, error) {
+func (_Polygonzkevm *PolygonzkevmTransactorSession) VerifyBatchesTrustedAggregator(pendingStateNum uint64, initNumBatch uint64, finalNewBatch uint64, newLocalExitRoot [32]byte, newStateRoot [32]byte, proof []byte) (types.Transaction, error) {
 	return _Polygonzkevm.Contract.VerifyBatchesTrustedAggregator(&_Polygonzkevm.TransactOpts, pendingStateNum, initNumBatch, finalNewBatch, newLocalExitRoot, newStateRoot, proof)
 }
 

@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	ethereum "github.com/ledgerwatch/erigon"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
-	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/event"
 )
@@ -44,7 +44,7 @@ var MaticABI = MaticMetaData.ABI
 var MaticBin = MaticMetaData.Bin
 
 // DeployMatic deploys a new Ethereum contract, binding an instance of Matic to it.
-func DeployMatic(auth *bind.TransactOpts, backend bind.ContractBackend, name string, symbol string, decimals uint8, totalSupply *big.Int) (common.Address, *types.Transaction, *Matic, error) {
+func DeployMatic(auth *bind.TransactOpts, backend bind.ContractBackend, name string, symbol string, decimals uint8, totalSupply *big.Int) (common.Address, types.Transaction, *Matic, error) {
 	parsed, err := MaticMetaData.GetAbi()
 	if err != nil {
 		return common.Address{}, nil, nil, err
@@ -174,12 +174,12 @@ func (_Matic *MaticRaw) Call(opts *bind.CallOpts, result *[]interface{}, method 
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Matic *MaticRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Matic *MaticRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Matic.Contract.MaticTransactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Matic *MaticRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Matic *MaticRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Matic.Contract.MaticTransactor.contract.Transact(opts, method, params...)
 }
 
@@ -193,12 +193,12 @@ func (_Matic *MaticCallerRaw) Call(opts *bind.CallOpts, result *[]interface{}, m
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Matic *MaticTransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Matic *MaticTransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Matic.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Matic *MaticTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Matic *MaticTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Matic.Contract.contract.Transact(opts, method, params...)
 }
 
@@ -453,189 +453,189 @@ func (_Matic *MaticCallerSession) TotalSupply() (*big.Int, error) {
 // AddPauser is a paid mutator transaction binding the contract method 0x82dc1ec4.
 //
 // Solidity: function addPauser(address account) returns()
-func (_Matic *MaticTransactor) AddPauser(opts *bind.TransactOpts, account common.Address) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) AddPauser(opts *bind.TransactOpts, account common.Address) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "addPauser", account)
 }
 
 // AddPauser is a paid mutator transaction binding the contract method 0x82dc1ec4.
 //
 // Solidity: function addPauser(address account) returns()
-func (_Matic *MaticSession) AddPauser(account common.Address) (*types.Transaction, error) {
+func (_Matic *MaticSession) AddPauser(account common.Address) (types.Transaction, error) {
 	return _Matic.Contract.AddPauser(&_Matic.TransactOpts, account)
 }
 
 // AddPauser is a paid mutator transaction binding the contract method 0x82dc1ec4.
 //
 // Solidity: function addPauser(address account) returns()
-func (_Matic *MaticTransactorSession) AddPauser(account common.Address) (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) AddPauser(account common.Address) (types.Transaction, error) {
 	return _Matic.Contract.AddPauser(&_Matic.TransactOpts, account)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 value) returns(bool)
-func (_Matic *MaticTransactor) Approve(opts *bind.TransactOpts, spender common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) Approve(opts *bind.TransactOpts, spender common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "approve", spender, value)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 value) returns(bool)
-func (_Matic *MaticSession) Approve(spender common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticSession) Approve(spender common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.Approve(&_Matic.TransactOpts, spender, value)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 value) returns(bool)
-func (_Matic *MaticTransactorSession) Approve(spender common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) Approve(spender common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.Approve(&_Matic.TransactOpts, spender, value)
 }
 
 // DecreaseAllowance is a paid mutator transaction binding the contract method 0xa457c2d7.
 //
 // Solidity: function decreaseAllowance(address spender, uint256 subtractedValue) returns(bool success)
-func (_Matic *MaticTransactor) DecreaseAllowance(opts *bind.TransactOpts, spender common.Address, subtractedValue *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) DecreaseAllowance(opts *bind.TransactOpts, spender common.Address, subtractedValue *big.Int) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "decreaseAllowance", spender, subtractedValue)
 }
 
 // DecreaseAllowance is a paid mutator transaction binding the contract method 0xa457c2d7.
 //
 // Solidity: function decreaseAllowance(address spender, uint256 subtractedValue) returns(bool success)
-func (_Matic *MaticSession) DecreaseAllowance(spender common.Address, subtractedValue *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticSession) DecreaseAllowance(spender common.Address, subtractedValue *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.DecreaseAllowance(&_Matic.TransactOpts, spender, subtractedValue)
 }
 
 // DecreaseAllowance is a paid mutator transaction binding the contract method 0xa457c2d7.
 //
 // Solidity: function decreaseAllowance(address spender, uint256 subtractedValue) returns(bool success)
-func (_Matic *MaticTransactorSession) DecreaseAllowance(spender common.Address, subtractedValue *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) DecreaseAllowance(spender common.Address, subtractedValue *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.DecreaseAllowance(&_Matic.TransactOpts, spender, subtractedValue)
 }
 
 // IncreaseAllowance is a paid mutator transaction binding the contract method 0x39509351.
 //
 // Solidity: function increaseAllowance(address spender, uint256 addedValue) returns(bool success)
-func (_Matic *MaticTransactor) IncreaseAllowance(opts *bind.TransactOpts, spender common.Address, addedValue *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) IncreaseAllowance(opts *bind.TransactOpts, spender common.Address, addedValue *big.Int) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "increaseAllowance", spender, addedValue)
 }
 
 // IncreaseAllowance is a paid mutator transaction binding the contract method 0x39509351.
 //
 // Solidity: function increaseAllowance(address spender, uint256 addedValue) returns(bool success)
-func (_Matic *MaticSession) IncreaseAllowance(spender common.Address, addedValue *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticSession) IncreaseAllowance(spender common.Address, addedValue *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.IncreaseAllowance(&_Matic.TransactOpts, spender, addedValue)
 }
 
 // IncreaseAllowance is a paid mutator transaction binding the contract method 0x39509351.
 //
 // Solidity: function increaseAllowance(address spender, uint256 addedValue) returns(bool success)
-func (_Matic *MaticTransactorSession) IncreaseAllowance(spender common.Address, addedValue *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) IncreaseAllowance(spender common.Address, addedValue *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.IncreaseAllowance(&_Matic.TransactOpts, spender, addedValue)
 }
 
 // Pause is a paid mutator transaction binding the contract method 0x8456cb59.
 //
 // Solidity: function pause() returns()
-func (_Matic *MaticTransactor) Pause(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) Pause(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "pause")
 }
 
 // Pause is a paid mutator transaction binding the contract method 0x8456cb59.
 //
 // Solidity: function pause() returns()
-func (_Matic *MaticSession) Pause() (*types.Transaction, error) {
+func (_Matic *MaticSession) Pause() (types.Transaction, error) {
 	return _Matic.Contract.Pause(&_Matic.TransactOpts)
 }
 
 // Pause is a paid mutator transaction binding the contract method 0x8456cb59.
 //
 // Solidity: function pause() returns()
-func (_Matic *MaticTransactorSession) Pause() (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) Pause() (types.Transaction, error) {
 	return _Matic.Contract.Pause(&_Matic.TransactOpts)
 }
 
 // RenouncePauser is a paid mutator transaction binding the contract method 0x6ef8d66d.
 //
 // Solidity: function renouncePauser() returns()
-func (_Matic *MaticTransactor) RenouncePauser(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) RenouncePauser(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "renouncePauser")
 }
 
 // RenouncePauser is a paid mutator transaction binding the contract method 0x6ef8d66d.
 //
 // Solidity: function renouncePauser() returns()
-func (_Matic *MaticSession) RenouncePauser() (*types.Transaction, error) {
+func (_Matic *MaticSession) RenouncePauser() (types.Transaction, error) {
 	return _Matic.Contract.RenouncePauser(&_Matic.TransactOpts)
 }
 
 // RenouncePauser is a paid mutator transaction binding the contract method 0x6ef8d66d.
 //
 // Solidity: function renouncePauser() returns()
-func (_Matic *MaticTransactorSession) RenouncePauser() (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) RenouncePauser() (types.Transaction, error) {
 	return _Matic.Contract.RenouncePauser(&_Matic.TransactOpts)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address to, uint256 value) returns(bool)
-func (_Matic *MaticTransactor) Transfer(opts *bind.TransactOpts, to common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) Transfer(opts *bind.TransactOpts, to common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "transfer", to, value)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address to, uint256 value) returns(bool)
-func (_Matic *MaticSession) Transfer(to common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticSession) Transfer(to common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.Transfer(&_Matic.TransactOpts, to, value)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address to, uint256 value) returns(bool)
-func (_Matic *MaticTransactorSession) Transfer(to common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) Transfer(to common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.Transfer(&_Matic.TransactOpts, to, value)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address from, address to, uint256 value) returns(bool)
-func (_Matic *MaticTransactor) TransferFrom(opts *bind.TransactOpts, from common.Address, to common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) TransferFrom(opts *bind.TransactOpts, from common.Address, to common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "transferFrom", from, to, value)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address from, address to, uint256 value) returns(bool)
-func (_Matic *MaticSession) TransferFrom(from common.Address, to common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticSession) TransferFrom(from common.Address, to common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.TransferFrom(&_Matic.TransactOpts, from, to, value)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address from, address to, uint256 value) returns(bool)
-func (_Matic *MaticTransactorSession) TransferFrom(from common.Address, to common.Address, value *big.Int) (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) TransferFrom(from common.Address, to common.Address, value *big.Int) (types.Transaction, error) {
 	return _Matic.Contract.TransferFrom(&_Matic.TransactOpts, from, to, value)
 }
 
 // Unpause is a paid mutator transaction binding the contract method 0x3f4ba83a.
 //
 // Solidity: function unpause() returns()
-func (_Matic *MaticTransactor) Unpause(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Matic *MaticTransactor) Unpause(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Matic.contract.Transact(opts, "unpause")
 }
 
 // Unpause is a paid mutator transaction binding the contract method 0x3f4ba83a.
 //
 // Solidity: function unpause() returns()
-func (_Matic *MaticSession) Unpause() (*types.Transaction, error) {
+func (_Matic *MaticSession) Unpause() (types.Transaction, error) {
 	return _Matic.Contract.Unpause(&_Matic.TransactOpts)
 }
 
 // Unpause is a paid mutator transaction binding the contract method 0x3f4ba83a.
 //
 // Solidity: function unpause() returns()
-func (_Matic *MaticTransactorSession) Unpause() (*types.Transaction, error) {
+func (_Matic *MaticTransactorSession) Unpause() (types.Transaction, error) {
 	return _Matic.Contract.Unpause(&_Matic.TransactOpts)
 }
 
