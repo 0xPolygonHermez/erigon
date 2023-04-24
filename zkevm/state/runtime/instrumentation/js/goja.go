@@ -9,7 +9,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/common/hexutil"
+	ericommon "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/zkevm/log"
@@ -211,9 +211,9 @@ func (t *jsTracer) CaptureStart(env *fakevm.FakeEVM, from common.Address, to com
 		return
 	}
 	t.ctx["value"] = valueBig
-	t.ctx["block"] = t.vm.ToValue(env.Context.BlockNumber.Uint64())
+	t.ctx["block"] = t.vm.ToValue(env.Context.BlockNumber)
 	// Update list of precompiles based on current block
-	rules := env.ChainConfig().Rules(env.Context.BlockNumber, env.Context.Random != nil, env.Context.Time)
+	rules := env.ChainConfig().Rules(env.Context.BlockNumber, env.Context.Time)
 	t.activePrecompiles = vm.ActivePrecompiles(rules)
 	t.ctx["intrinsicGas"] = t.vm.ToValue(t.gasLimit - gas)
 }
@@ -276,7 +276,7 @@ func (t *jsTracer) CaptureEnter(typ vm.OpCode, from common.Address, to common.Ad
 	t.frame.typ = typ.String()
 	t.frame.from = from
 	t.frame.to = to
-	t.frame.input = common.CopyBytes(input)
+	t.frame.input = ericommon.CopyBytes(input)
 	t.frame.gas = uint(gas)
 	t.frame.value = nil
 	if value != nil {
@@ -296,7 +296,7 @@ func (t *jsTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 	}
 
 	t.frameResult.gasUsed = uint(gasUsed)
-	t.frameResult.output = common.CopyBytes(output)
+	t.frameResult.output = ericommon.CopyBytes(output)
 	t.frameResult.err = err
 
 	if _, err := t.exit(t.obj, t.frameResultValue); err != nil {
@@ -348,7 +348,7 @@ func (t *jsTracer) setBuiltinFunctions() {
 			vm.Interrupt(err)
 			return ""
 		}
-		return hexutil.Encode(b)
+		return fmt.Sprintf("0x%x", b)
 	})
 	if err != nil {
 		log.Error(err)
@@ -418,7 +418,7 @@ func (t *jsTracer) setBuiltinFunctions() {
 			vm.Interrupt(err)
 			return nil
 		}
-		code = common.CopyBytes(code)
+		code = ericommon.CopyBytes(code)
 		codeHash := crypto.Keccak256(code)
 		b := crypto.CreateAddress2(addr, common.HexToHash(salt), codeHash).Bytes()
 		res, err := t.toBuf(vm, b)

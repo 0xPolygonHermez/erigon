@@ -6,7 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ledgerwatch/erigon-lib/common"
+	ericommon "github.com/ledgerwatch/erigon/common"
+
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 )
 
@@ -97,7 +98,7 @@ func DecodeBigIntHexOrDecimal(s string) (*big.Int, error) {
 	if strings.HasPrefix(s, "0x") { // nolint
 		// Value in hex format
 		s = s[2:]
-		r = new(big.Int).SetBytes(common.Hex2Bytes(s))
+		r = new(big.Int).SetBytes(ericommon.Hex2Bytes(s))
 	} else {
 		// Value in decimal format
 		value, ok := new(big.Int).SetString(s, Base10)
