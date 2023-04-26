@@ -663,7 +663,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
 
-	zkSynchronizer, err := synchronizer.NewSynchronizer(true, nil, nil, nil, nil, nil, synchronizer.Config{})
+	zkSynchronizer, err := synchronizer.NewSynchronizer(
+		true, /*isTrustedSequencer*/
+		nil,  //etherMan           ethermanInterface
+		nil,  //state              stateInterface
+		nil,  //zkEVMClient        zkEVMClientInterface
+		synchronizer.Config{},
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -34,8 +34,6 @@ type ClientSynchronizer struct {
 	isTrustedSequencer bool
 	etherMan           ethermanInterface
 	state              stateInterface
-	pool               poolInterface
-	ethTxManager       ethTxManager
 	zkEVMClient        zkEVMClientInterface
 	ctx                context.Context
 	cancelCtx          context.CancelFunc
@@ -47,8 +45,6 @@ func NewSynchronizer(
 	isTrustedSequencer bool,
 	ethMan ethermanInterface,
 	st stateInterface,
-	pool poolInterface,
-	ethTxManager ethTxManager,
 	zkEVMClient zkEVMClientInterface,
 	cfg Config) (*ClientSynchronizer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -57,10 +53,8 @@ func NewSynchronizer(
 		isTrustedSequencer: isTrustedSequencer,
 		state:              st,
 		etherMan:           ethMan,
-		pool:               pool,
 		ctx:                ctx,
 		cancelCtx:          cancel,
-		ethTxManager:       ethTxManager,
 		zkEVMClient:        zkEVMClient,
 		cfg:                cfg,
 	}, nil
@@ -179,19 +173,22 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 // This function syncs the node from a specific block to the latest
 func (s *ClientSynchronizer) syncBlocks(lastEthBlockSynced *state.Block) (*state.Block, error) {
 	// This function will read events fromBlockNum to latestEthBlock. Check reorg to be sure that everything is ok.
-	block, err := s.checkReorg(lastEthBlockSynced)
-	if err != nil {
-		log.Errorf("error checking reorgs. Retrying... Err: %v", err)
-		return lastEthBlockSynced, fmt.Errorf("error checking reorgs")
-	}
-	if block != nil {
-		err = s.resetState(block.BlockNumber)
+	/*
+		iii: no reorgs in the PoC
+		block, err := s.checkReorg(lastEthBlockSynced)
 		if err != nil {
-			log.Errorf("error resetting the state to a previous block. Retrying... Err: %v", err)
-			return lastEthBlockSynced, fmt.Errorf("error resetting the state to a previous block")
+			log.Errorf("error checking reorgs. Retrying... Err: %v", err)
+			return lastEthBlockSynced, fmt.Errorf("error checking reorgs")
 		}
-		return block, nil
-	}
+		if block != nil {
+			err = s.resetState(block.BlockNumber)
+			if err != nil {
+				log.Errorf("error resetting the state to a previous block. Retrying... Err: %v", err)
+				return lastEthBlockSynced, fmt.Errorf("error resetting the state to a previous block")
+			}
+			return block, nil
+		}
+	*/
 
 	// Call the blockchain to retrieve data
 	header, err := s.etherMan.HeaderByNumber(s.ctx, nil)
@@ -401,6 +398,9 @@ func (s *ClientSynchronizer) processBlockRange(blocks []etherman.Block, order ma
 }
 
 // This function allows reset the state until an specific ethereum block
+/*
+iii: no reset functionality in PoC
+
 func (s *ClientSynchronizer) resetState(blockNumber uint64) error {
 	log.Debug("Reverting synchronization to block: ", blockNumber)
 	dbTx, err := s.state.BeginStateTransaction(s.ctx)
@@ -441,6 +441,7 @@ func (s *ClientSynchronizer) resetState(blockNumber uint64) error {
 
 	return nil
 }
+*/
 
 /*
 This function will check if there is a reorg.
@@ -776,45 +777,49 @@ func (s *ClientSynchronizer) processSequenceBatches(sequencedBatches []etherman.
 		}
 
 		// Call the check trusted state method to compare trusted and virtual state
+		// iii: question: returns "true" in case reorg is needed
 		status := s.checkTrustedState(batch, tBatch, newRoot, dbTx)
 		if status {
-			// Reorg Pool
-			err := s.reorgPool(dbTx)
-			if err != nil {
-				rollbackErr := dbTx.Rollback(s.ctx)
-				if rollbackErr != nil {
-					log.Errorf("error rolling back state. BatchNumber: %d, BlockNumber: %d, rollbackErr: %s, error : %v", tBatch.BatchNumber, blockNumber, rollbackErr.Error(), err)
-					return rollbackErr
+			panic("should not reorg, not in PoC")
+			/*
+				// Reorg Pool
+				// err := s.reorgPool(dbTx)
+				if err != nil {
+					rollbackErr := dbTx.Rollback(s.ctx)
+					if rollbackErr != nil {
+						log.Errorf("error rolling back state. BatchNumber: %d, BlockNumber: %d, rollbackErr: %s, error : %v", tBatch.BatchNumber, blockNumber, rollbackErr.Error(), err)
+						return rollbackErr
+					}
+					log.Errorf("error: %v. BatchNumber: %d, BlockNumber: %d", err, tBatch.BatchNumber, blockNumber)
+					return err
 				}
-				log.Errorf("error: %v. BatchNumber: %d, BlockNumber: %d", err, tBatch.BatchNumber, blockNumber)
-				return err
-			}
 
-			// Reset trusted state
-			previousBatchNumber := batch.BatchNumber - 1
-			log.Warnf("Trusted reorg detected, discarding batches until batchNum %d", previousBatchNumber)
-			err = s.state.ResetTrustedState(s.ctx, previousBatchNumber, dbTx) // This method has to reset the forced batches deleting the batchNumber for higher batchNumbers
-			if err != nil {
-				log.Errorf("error resetting trusted state. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
-				rollbackErr := dbTx.Rollback(s.ctx)
-				if rollbackErr != nil {
-					log.Errorf("error rolling back state. BatchNumber: %d, BlockNumber: %d, rollbackErr: %s, error : %v", batch.BatchNumber, blockNumber, rollbackErr.Error(), err)
-					return rollbackErr
+				// Reset trusted state
+				previousBatchNumber := batch.BatchNumber - 1
+				log.Warnf("Trusted reorg detected, discarding batches until batchNum %d", previousBatchNumber)
+				err = s.state.ResetTrustedState(s.ctx, previousBatchNumber, dbTx) // This method has to reset the forced batches deleting the batchNumber for higher batchNumbers
+				if err != nil {
+					log.Errorf("error resetting trusted state. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
+					rollbackErr := dbTx.Rollback(s.ctx)
+					if rollbackErr != nil {
+						log.Errorf("error rolling back state. BatchNumber: %d, BlockNumber: %d, rollbackErr: %s, error : %v", batch.BatchNumber, blockNumber, rollbackErr.Error(), err)
+						return rollbackErr
+					}
+					log.Errorf("error resetting trusted state. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
+					return err
 				}
-				log.Errorf("error resetting trusted state. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
-				return err
-			}
-			_, err = s.state.ProcessAndStoreClosedBatch(s.ctx, processCtx, batch.BatchL2Data, dbTx, metrics.SynchronizerCallerLabel)
-			if err != nil {
-				log.Errorf("error storing trustedBatch. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
-				rollbackErr := dbTx.Rollback(s.ctx)
-				if rollbackErr != nil {
-					log.Errorf("error rolling back state. BatchNumber: %d, BlockNumber: %d, rollbackErr: %s, error : %v", batch.BatchNumber, blockNumber, rollbackErr.Error(), err)
-					return rollbackErr
+				_, err = s.state.ProcessAndStoreClosedBatch(s.ctx, processCtx, batch.BatchL2Data, dbTx, metrics.SynchronizerCallerLabel)
+				if err != nil {
+					log.Errorf("error storing trustedBatch. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
+					rollbackErr := dbTx.Rollback(s.ctx)
+					if rollbackErr != nil {
+						log.Errorf("error rolling back state. BatchNumber: %d, BlockNumber: %d, rollbackErr: %s, error : %v", batch.BatchNumber, blockNumber, rollbackErr.Error(), err)
+						return rollbackErr
+					}
+					log.Errorf("error storing batch. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
+					return err
 				}
-				log.Errorf("error storing batch. BatchNumber: %d, BlockNumber: %d, error: %v", batch.BatchNumber, blockNumber, err)
-				return err
-			}
+			*/
 		}
 
 		// Store virtualBatch
@@ -1173,6 +1178,9 @@ func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx
 	return nil
 }
 
+/*
+iii : no support for reorgs for PoC
+
 func (s *ClientSynchronizer) reorgPool(dbTx pgx.Tx) error {
 	latestBatchNum, err := s.etherMan.GetLatestBatchNumber()
 	if err != nil {
@@ -1209,3 +1217,4 @@ func (s *ClientSynchronizer) reorgPool(dbTx pgx.Tx) error {
 	}
 	return nil
 }
+*/
