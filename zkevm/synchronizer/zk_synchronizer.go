@@ -18,6 +18,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	ericommon "github.com/ledgerwatch/erigon/common"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
@@ -38,7 +39,6 @@ type ClientSynchronizer struct {
 	zkEVMClient        zkEVMClientInterface
 	ctx                context.Context
 	cancelCtx          context.CancelFunc
-	genesis            state.Genesis
 	cfg                Config
 }
 
@@ -84,52 +84,58 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 		// need genesis update
 	}
 
-	lastEthBlockSynced, err := s.state.GetLastBlock(s.ctx, dbTx)
+	lastEthBlockSynced, err := s.state.GetLastBlock(s.ctx, nil)
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotSynchronized) {
-			log.Info("State is empty, verifying genesis block")
-			valid, err := s.etherMan.VerifyGenBlockNumber(s.ctx, s.cfg.GenBlockNumber)
-			if err != nil {
-				log.Error("error checking genesis block number. Error: ", err)
-				return err
-			} else if !valid {
-				log.Error("genesis Block number configured is not valid. It is required the block number where the PolygonZkEVM smc was deployed")
-				return fmt.Errorf("genesis Block number configured is not valid. It is required the block number where the PolygonZkEVM smc was deployed")
-			}
-			log.Info("Setting genesis block")
-			header, err := s.etherMan.HeaderByNumber(s.ctx, big.NewInt(0).SetUint64(s.cfg.GenBlockNumber))
-			if err != nil {
-				log.Fatal("error getting l1 block header for block ", s.cfg.GenBlockNumber, " : ", err)
-			}
-			lastEthBlockSynced = &state.Block{
-				BlockNumber: header.Number.Uint64(),
-				BlockHash:   header.Hash(),
-				ParentHash:  header.ParentHash,
-				ReceivedAt:  time.Unix(int64(header.Time), 0),
-			}
-			newRoot, err := s.state.SetGenesis(s.ctx, *lastEthBlockSynced, s.genesis, dbTx)
-			if err != nil {
-				log.Fatal("error setting genesis: ", err)
-			}
-			var root common.Hash
-			root.SetBytes(newRoot)
-			if root != s.genesis.Root {
-				log.Fatal("Calculated newRoot should be ", s.genesis.Root, " instead of ", root)
-			}
-			log.Debug("Genesis root matches!")
+			/*
+				III -- done standard Erigon way
+				log.Info("State is empty, verifying genesis block")
+				valid, err := s.etherMan.VerifyGenBlockNumber(s.ctx, s.cfg.GenBlockNumber)
+				if err != nil {
+					log.Error("error checking genesis block number. Error: ", err)
+					return err
+				} else if !valid {
+					log.Error("genesis Block number configured is not valid. It is required the block number where the PolygonZkEVM smc was deployed")
+					return fmt.Errorf("genesis Block number configured is not valid. It is required the block number where the PolygonZkEVM smc was deployed")
+				}
+				log.Info("Setting genesis block")
+				header, err := s.etherMan.HeaderByNumber(s.ctx, big.NewInt(0).SetUint64(s.cfg.GenBlockNumber))
+				if err != nil {
+					log.Fatal("error getting l1 block header for block ", s.cfg.GenBlockNumber, " : ", err)
+				}
+				lastEthBlockSynced = &state.Block{
+					BlockNumber: header.Number.Uint64(),
+					BlockHash:   header.Hash(),
+					ParentHash:  header.ParentHash,
+					ReceivedAt:  time.Unix(int64(header.Time), 0),
+				}
+				newRoot, err := s.state.SetGenesis(s.ctx, *lastEthBlockSynced, s.genesis, dbTx)
+				if err != nil {
+					log.Fatal("error setting genesis: ", err)
+				}
+				var root common.Hash
+				root.SetBytes(newRoot)
+				if root != s.genesis.Root {
+					log.Fatal("Calculated newRoot should be ", s.genesis.Root, " instead of ", root)
+				}
+				log.Debug("Genesis root matches!")
+			*/
 		} else {
 			log.Fatal("unexpected error getting the latest ethereum block. Error: ", err)
 		}
 	}
-	if err := dbTx.Commit(s.ctx); err != nil {
-		log.Errorf("error committing dbTx, err: %v", err)
-		rollbackErr := dbTx.Rollback(s.ctx)
-		if rollbackErr != nil {
-			log.Fatalf("error rolling back state. RollbackErr: %s, err: %v",
-				rollbackErr.Error(), err)
+	/*
+		iiii --- will be removed
+		if err := dbTx.Commit(s.ctx); err != nil {
+			log.Errorf("error committing dbTx, err: %v", err)
+			rollbackErr := dbTx.Rollback(s.ctx)
+			if rollbackErr != nil {
+				log.Fatalf("error rolling back state. RollbackErr: %s, err: %v",
+					rollbackErr.Error(), err)
+			}
+			log.Fatalf("error committing dbTx, err: %v", err)
 		}
-		log.Fatalf("error committing dbTx, err: %v", err)
-	}
+	*/
 
 	for {
 		select {
@@ -687,7 +693,7 @@ func (s *ClientSynchronizer) processSequenceBatches(sequencedBatches []etherman.
 			}
 			if uint64(forcedBatches[0].ForcedAt.Unix()) != sbatch.MinForcedTimestamp ||
 				forcedBatches[0].GlobalExitRoot != sbatch.GlobalExitRoot ||
-				common.Bytes2Hex(forcedBatches[0].RawTxsData) != common.Bytes2Hex(sbatch.Transactions) {
+				ericommon.Bytes2Hex(forcedBatches[0].RawTxsData) != ericommon.Bytes2Hex(sbatch.Transactions) {
 				log.Warnf("ForcedBatch stored: %+v", forcedBatches)
 				log.Warnf("ForcedBatch sequenced received: %+v", sbatch)
 				log.Errorf("error: forcedBatch received doesn't match with the next expected forcedBatch stored in db. Expected: %+v, Synced: %+v", forcedBatches, sbatch)
@@ -896,7 +902,7 @@ func (s *ClientSynchronizer) processSequenceForceBatch(sequenceForceBatch []ethe
 	for i, fbatch := range sequenceForceBatch {
 		if uint64(forcedBatches[i].ForcedAt.Unix()) != fbatch.MinForcedTimestamp ||
 			forcedBatches[i].GlobalExitRoot != fbatch.GlobalExitRoot ||
-			common.Bytes2Hex(forcedBatches[i].RawTxsData) != common.Bytes2Hex(fbatch.Transactions) {
+			ericommon.Bytes2Hex(forcedBatches[i].RawTxsData) != ericommon.Bytes2Hex(fbatch.Transactions) {
 			log.Warnf("ForcedBatch stored: %+v", forcedBatches)
 			log.Warnf("ForcedBatch sequenced received: %+v", fbatch)
 			log.Errorf("error: forcedBatch received doesn't match with the next expected forcedBatch stored in db. Expected: %+v, Synced: %+v", forcedBatches[i], fbatch)
@@ -1080,7 +1086,7 @@ func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx
 	txs := []ethTypes.Transaction{}
 	for _, transaction := range trustedBatch.Transactions {
 		tx := transaction.Tx.CoreTx()
-		txs = append(txs, *tx)
+		txs = append(txs, tx)
 	}
 	trustedBatchL2Data, err := state.EncodeTransactions(txs)
 	if err != nil {
@@ -1194,7 +1200,7 @@ func (s *ClientSynchronizer) reorgPool(dbTx pgx.Tx) error {
 	for _, tx := range txs {
 		// Insert tx in WIP status to avoid the sequencer to grab them before it gets restarted
 		// When the sequencer restarts, it will update the status to pending non-wip
-		err = s.pool.StoreTx(s.ctx, *tx, "", true)
+		err = s.pool.StoreTx(s.ctx, tx, "", true)
 		if err != nil {
 			log.Errorf("error storing tx into the pool again. TxHash: %s. BatchNumber: %d, error: %v", tx.Hash().String(), batchNumber, err)
 			return err
