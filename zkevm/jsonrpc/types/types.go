@@ -10,9 +10,12 @@ import (
 
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon-lib/common"
+	ericommon "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/state"
+
+	"github.com/holiman/uint256"
 )
 
 // ArgUint64 helps to marshal uint64 values provided in the RPC requests
@@ -189,7 +192,7 @@ type TxArgs struct {
 }
 
 // ToTransaction transforms txnArgs into a Transaction
-func (args *TxArgs) ToTransaction(ctx context.Context, st StateInterface, maxCumulativeGasUsed uint64, root common.Hash, defaultSenderAddress common.Address, dbTx pgx.Tx) (common.Address, *types.Transaction, error) {
+func (args *TxArgs) ToTransaction(ctx context.Context, st StateInterface, maxCumulativeGasUsed uint64, root common.Hash, defaultSenderAddress common.Address, dbTx pgx.Tx) (common.Address, types.Transaction, error) {
 	sender := defaultSenderAddress
 	nonce := uint64(0)
 	if args.From != nil && *args.From != state.ZeroAddress {
@@ -225,16 +228,24 @@ func (args *TxArgs) ToTransaction(ctx context.Context, st StateInterface, maxCum
 		gas = uint64(*args.Gas)
 	}
 
-	tx := types.NewTx(&types.LegacyTx{
-		Nonce:    nonce,
-		To:       args.To,
-		Value:    value,
-		Gas:      gas,
-		GasPrice: gasPrice,
-		Data:     data,
-	})
+	tx := &types.LegacyTx{
+		types.CommonTx{
+			Nonce: nonce,
+			To:    args.To,
+			Value: b2i(value),
+			Gas:   gas,
+			Data:  data,
+		},
+		b2i(gasPrice),
+	}
 
 	return sender, tx, nil
+}
+
+func b2i(s *big.Int) *uint256.Int {
+	iii := &uint256.Int{}
+	iii.SetBytes(s.Bytes())
+	return iii
 }
 
 // Block structure
@@ -266,7 +277,7 @@ func NewBlock(b *types.Block, fullTx bool) *Block {
 	h := b.Header()
 
 	n := big.NewInt(0).SetUint64(h.Nonce.Uint64())
-	nonce := common.LeftPadBytes(n.Bytes(), 8) //nolint:gomnd
+	nonce := ericommon.LeftPadBytes(n.Bytes(), 8) //nolint:gomnd
 
 	var difficulty uint64
 	if h.Difficulty != nil {
@@ -302,7 +313,7 @@ func NewBlock(b *types.Block, fullTx bool) *Block {
 		if fullTx {
 			blockHash := b.Hash()
 			txIndex := uint64(idx)
-			tx := NewTransaction(*txn, b.Number(), &blockHash, &txIndex)
+			tx := NewTransaction(txn, b.Number(), &blockHash, &txIndex)
 			res.Transactions = append(
 				res.Transactions,
 				TransactionOrHash{Tx: tx},
@@ -438,18 +449,20 @@ type Transaction struct {
 }
 
 // CoreTx returns a geth core type Transaction
-func (t Transaction) CoreTx() *types.Transaction {
-	return types.NewTx(&types.LegacyTx{
-		Nonce:    uint64(t.Nonce),
-		GasPrice: (*big.Int)(&t.GasPrice),
-		Gas:      uint64(t.Gas),
-		To:       t.To,
-		Value:    (*big.Int)(&t.Value),
-		Data:     t.Input,
-		V:        (*big.Int)(&t.V),
-		R:        (*big.Int)(&t.R),
-		S:        (*big.Int)(&t.S),
-	})
+func (t Transaction) CoreTx() types.Transaction {
+	return &types.LegacyTx{
+		types.CommonTx{
+			Nonce: uint64(t.Nonce),
+			Gas:   uint64(t.Gas),
+			To:    t.To,
+			Value: b2i((*big.Int)(&t.Value)),
+			Data:  t.Input,
+			V:     *(b2i((*big.Int)(&t.V))),
+			R:     *(b2i((*big.Int)(&t.R))),
+			S:     *(b2i((*big.Int)(&t.S))),
+		},
+		b2i((*big.Int)(&t.GasPrice)),
+	}
 }
 
 // NewTransaction creates a transaction instance
@@ -464,18 +477,18 @@ func NewTransaction(
 	from, _ := state.GetSender(t)
 
 	res := &Transaction{
-		Nonce:    ArgUint64(t.Nonce()),
-		GasPrice: ArgBig(*t.GasPrice()),
-		Gas:      ArgUint64(t.Gas()),
-		To:       t.To(),
-		Value:    ArgBig(*t.Value()),
-		Input:    t.Data(),
-		V:        ArgBig(*v),
-		R:        ArgBig(*r),
-		S:        ArgBig(*s),
+		Nonce:    ArgUint64(t.GetNonce()),
+		GasPrice: ArgBig(*(t.GetPrice().ToBig())),
+		Gas:      ArgUint64(t.GetGas()),
+		To:       t.GetTo(),
+		Value:    ArgBig(*(t.GetValue().ToBig())),
+		Input:    t.GetData(),
+		V:        ArgBig(*(v.ToBig())),
+		R:        ArgBig(*(r.ToBig())),
+		S:        ArgBig(*(s.ToBig())),
 		Hash:     t.Hash(),
 		From:     from,
-		ChainID:  ArgBig(*t.ChainId()),
+		ChainID:  ArgBig(*(t.GetChainID().ToBig())),
 		Type:     ArgUint64(t.Type()),
 	}
 
@@ -514,7 +527,7 @@ type Receipt struct {
 
 // NewReceipt creates a new Receipt instance
 func NewReceipt(tx types.Transaction, r *types.Receipt) (Receipt, error) {
-	to := tx.To()
+	to := tx.GetTo()
 	logs := r.Logs
 	if logs == nil {
 		logs = []*types.Log{}
