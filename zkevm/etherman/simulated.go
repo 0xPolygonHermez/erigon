@@ -9,7 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind/backends"
-	"github.com/ledgerwatch/erigon/core"
+	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/smartcontracts/matic"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/smartcontracts/mockverifier"
@@ -28,7 +28,7 @@ func NewSimulatedEtherman(cfg Config, auth *bind.TransactOpts) (etherman *Client
 	// 10000000 ETH in wei
 	balance, _ := new(big.Int).SetString("10000000000000000000000000", 10) //nolint:gomnd
 	address := auth.From
-	genesisAlloc := map[common.Address]core.GenesisAccount{
+	genesisAlloc := map[common.Address]types.GenesisAccount{
 		address: {
 			Balance: balance,
 		},
