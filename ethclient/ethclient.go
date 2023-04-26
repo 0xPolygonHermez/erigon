@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 
@@ -236,6 +235,7 @@ func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx t
 	return json.tx, json.BlockNumber == nil, nil
 }
 
+/*
 // TransactionSender returns the sender address of the given transaction. The transaction
 // must be known to the remote node and included in the blockchain at the given block and
 // index. The sender is the one derived by the protocol at the time of inclusion.
@@ -262,6 +262,7 @@ func (ec *Client) TransactionSender(ctx context.Context, tx types.Transaction, b
 	}
 	return meta.From, nil
 }
+*/
 
 // TransactionCount returns the total number of transactions in the given block.
 func (ec *Client) TransactionCount(ctx context.Context, blockHash common.Hash) (uint, error) {
@@ -534,6 +535,7 @@ type feeHistoryResultMarshaling struct {
 	GasUsedRatio []float64        `json:"gasUsedRatio"`
 }
 
+/*
 // FeeHistory retrieves the fee market history.
 func (ec *Client) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
 	var res feeHistoryResultMarshaling
@@ -558,6 +560,7 @@ func (ec *Client) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *
 		GasUsedRatio: res.GasUsedRatio,
 	}, nil
 }
+*/
 
 // EstimateGas tries to estimate the gas needed to execute a specific transaction based on
 // the current pending state of the backend blockchain. There is no guarantee that this is
@@ -653,22 +656,10 @@ func (p *rpcProgress) toSyncProgress() *ethereum.SyncProgress {
 		return nil
 	}
 	return &ethereum.SyncProgress{
-		StartingBlock:       uint64(p.StartingBlock),
-		CurrentBlock:        uint64(p.CurrentBlock),
-		HighestBlock:        uint64(p.HighestBlock),
-		PulledStates:        uint64(p.PulledStates),
-		KnownStates:         uint64(p.KnownStates),
-		SyncedAccounts:      uint64(p.SyncedAccounts),
-		SyncedAccountBytes:  uint64(p.SyncedAccountBytes),
-		SyncedBytecodes:     uint64(p.SyncedBytecodes),
-		SyncedBytecodeBytes: uint64(p.SyncedBytecodeBytes),
-		SyncedStorage:       uint64(p.SyncedStorage),
-		SyncedStorageBytes:  uint64(p.SyncedStorageBytes),
-		HealedTrienodes:     uint64(p.HealedTrienodes),
-		HealedTrienodeBytes: uint64(p.HealedTrienodeBytes),
-		HealedBytecodes:     uint64(p.HealedBytecodes),
-		HealedBytecodeBytes: uint64(p.HealedBytecodeBytes),
-		HealingTrienodes:    uint64(p.HealingTrienodes),
-		HealingBytecode:     uint64(p.HealingBytecode),
+		StartingBlock: uint64(p.StartingBlock),
+		CurrentBlock:  uint64(p.CurrentBlock),
+		HighestBlock:  uint64(p.HighestBlock),
+		PulledStates:  uint64(p.PulledStates),
+		KnownStates:   uint64(p.KnownStates),
 	}
 }
