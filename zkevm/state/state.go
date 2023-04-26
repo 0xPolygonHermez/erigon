@@ -44,7 +44,6 @@ func NewState(cfg Config, storage *PostgresStorage, executorClient pb.ExecutorSe
 		PostgresStorage:         storage,
 		executorClient:          executorClient,
 		tree:                    stateTree,
-		eventLog:                eventLog,
 		newL2BlockEvents:        make(chan NewL2BlockEvent),
 		newL2BlockEventHandlers: []NewL2BlockEventHandler{},
 	}

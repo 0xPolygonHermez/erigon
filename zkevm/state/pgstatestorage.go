@@ -864,7 +864,7 @@ func (p *PostgresStorage) GetTransactionsByBatchNumber(ctx context.Context, batc
 		if err != nil {
 			return nil, err
 		}
-		txs = append(txs, *tx)
+		txs = append(txs, tx)
 	}
 	return
 }
