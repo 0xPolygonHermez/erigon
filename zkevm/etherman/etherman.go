@@ -19,6 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
+	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/etherscan"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/ethgasstation"
 	"github.com/ledgerwatch/erigon/zkevm/etherman/smartcontracts/matic"
@@ -593,7 +594,10 @@ func (etherMan *Client) forcedBatchEvent(ctx context.Context, vLog types.Log, bl
 	} else if isPending {
 		return fmt.Errorf("error: tx is still pending. TxHash: %s", tx.Hash().String())
 	}
-	msg, err := tx.AsMessage(types.NewLondonSigner(tx.GetChainID()), big.NewInt(0))
+
+	signer := types.MakeSigner(params.HermezMainnetChainConfig, 0)
+
+	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.HermezMainnetChainConfig.Rules(0, 0))
 	if err != nil {
 		return err
 	}
@@ -660,7 +664,9 @@ func (etherMan *Client) sequencedBatchesEvent(ctx context.Context, vLog types.Lo
 	} else if isPending {
 		return fmt.Errorf("error tx is still pending. TxHash: %s", tx.Hash().String())
 	}
-	msg, err := tx.AsMessage(types.NewLondonSigner(tx.GetChainID()), big.NewInt(0))
+
+	signer := types.MakeSigner(params.HermezMainnetChainConfig, 0)
+	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.HermezMainnetChainConfig.Rules(0, 0))
 	if err != nil {
 		return err
 	}
@@ -785,7 +791,8 @@ func (etherMan *Client) forceSequencedBatchesEvent(ctx context.Context, vLog typ
 	} else if isPending {
 		return fmt.Errorf("error: tx is still pending. TxHash: %s", tx.Hash().String())
 	}
-	msg, err := tx.AsMessage(types.NewLondonSigner(tx.GetChainID()), big.NewInt(0))
+	signer := types.MakeSigner(params.HermezMainnetChainConfig, 0)
+	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.HermezMainnetChainConfig.Rules(0, 0))
 	if err != nil {
 		return err
 	}
