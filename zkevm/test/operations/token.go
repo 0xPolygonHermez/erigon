@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	ethereum "github.com/ledgerwatch/erigon"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
-	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/event"
 )
@@ -46,7 +46,7 @@ var TokenFuncSigs = map[string]string{
 var TokenBin = "0x608060405234801561001057600080fd5b506040805180820190915260088082526723a3902a37b5b2b760c11b602090920191825261004091600091610099565b5060408051808201909152600280825261474760f01b602090920191825261006a91600191610099565b506002805460ff191660041790556509184e72a000600355600680546001600160a01b0319163317905561016d565b8280546100a590610132565b90600052602060002090601f0160209004810192826100c7576000855561010d565b82601f106100e057805160ff191683800117855561010d565b8280016001018555821561010d579182015b8281111561010d5782518255916020019190600101906100f2565b5061011992915061011d565b5090565b5b80821115610119576000815560010161011e565b600181811c9082168061014657607f821691505b6020821081141561016757634e487b7160e01b600052602260045260246000fd5b50919050565b6106ce8061017c6000396000f3fe608060405234801561001057600080fd5b506004361061009e5760003560e01c806370a082311161006657806370a082311461011e5780638da5cb5b1461013157806395d89b411461015c578063a9059cbb14610164578063dd62ed3e146101775761009e565b806306fdde03146100a3578063095ea7b3146100c157806318160ddd146100e457806323b872dd146100f6578063313ce56714610109575b600080fd5b6100ab6101b0565b6040516100b891906105c5565b60405180910390f35b6100d46100cf36600461059c565b610242565b60405190151581526020016100b8565b6003545b6040519081526020016100b8565b6100d4610104366004610561565b6102bc565b60025460405160ff90911681526020016100b8565b6100e861012c366004610515565b6103ba565b600654610144906001600160a01b031681565b6040516001600160a01b0390911681526020016100b8565b6100ab6103d9565b6100d461017236600461059c565b6103e8565b6100e861018536600461052f565b6001600160a01b03918216600090815260056020908152604080832093909416825291909152205490565b6060600080546101bf90610647565b80601f01602080910402602001604051908101604052809291908181526020018280546101eb90610647565b80156102385780601f1061020d57610100808354040283529160200191610238565b820191906000526020600020905b81548152906001019060200180831161021b57829003601f168201915b5050505050905090565b60006001600160a01b03831661025757600080fd5b3360008181526005602090815260408083206001600160a01b03881680855290835292819020869055518581529192917f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a350600192915050565b6001600160a01b0383166000908152600460205260408120546102df9083610494565b6001600160a01b03851660009081526004602090815260408083209390935560058152828220338352905220546103169083610494565b6001600160a01b03808616600090815260056020908152604080832033845282528083209490945591861681526004909152205461035490836104c5565b6001600160a01b0380851660008181526004602052604090819020939093559151908616907fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef906103a89086815260200190565b60405180910390a35060019392505050565b6001600160a01b0381166000908152600460205260409020545b919050565b6060600180546101bf90610647565b60006001600160a01b0383166103fd57600080fd5b336000908152600460205260409020546104179083610494565b33600090815260046020526040808220929092556001600160a01b0385168152205461044390836104c5565b6001600160a01b0384166000818152600460205260409081902092909255905133907fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef906102ab9086815260200190565b6000828211156104b457634e487b7160e01b600052600160045260246000fd5b6104be8284610630565b9392505050565b6000806104d28385610618565b90508381101580156104e45750828110155b6104be57634e487b7160e01b600052600160045260246000fd5b80356001600160a01b03811681146103d457600080fd5b600060208284031215610526578081fd5b6104be826104fe565b60008060408385031215610541578081fd5b61054a836104fe565b9150610558602084016104fe565b90509250929050565b600080600060608486031215610575578081fd5b61057e846104fe565b925061058c602085016104fe565b9150604084013590509250925092565b600080604083850312156105ae578182fd5b6105b7836104fe565b946020939093013593505050565b6000602080835283518082850152825b818110156105f1578581018301518582016040015282016105d5565b818111156106025783604083870101525b50601f01601f1916929092016040019392505050565b6000821982111561062b5761062b610682565b500190565b60008282101561064257610642610682565b500390565b600181811c9082168061065b57607f821691505b6020821081141561067c57634e487b7160e01b600052602260045260246000fd5b50919050565b634e487b7160e01b600052601160045260246000fdfea2646970667358221220ff69242f787e1347db384790ace3139e056e947b2ff1b360282e654fbdbc9f0464736f6c63430008030033"
 
 // DeployToken deploys a new Ethereum contract, binding an instance of Token to it.
-func DeployToken(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, *types.Transaction, *Token, error) {
+func DeployToken(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, types.Transaction, *Token, error) {
 	parsed, err := abi.JSON(strings.NewReader(TokenABI))
 	if err != nil {
 		return common.Address{}, nil, nil, err
@@ -173,12 +173,12 @@ func (_Token *TokenRaw) Call(opts *bind.CallOpts, result *[]interface{}, method 
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Token *TokenRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Token *TokenRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Token.Contract.TokenTransactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Token *TokenRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Token *TokenRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Token.Contract.TokenTransactor.contract.Transact(opts, method, params...)
 }
 
@@ -192,12 +192,12 @@ func (_Token *TokenCallerRaw) Call(opts *bind.CallOpts, result *[]interface{}, m
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_Token *TokenTransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_Token *TokenTransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _Token.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_Token *TokenTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_Token *TokenTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _Token.Contract.contract.Transact(opts, method, params...)
 }
 
@@ -421,63 +421,63 @@ func (_Token *TokenCallerSession) TotalSupply() (*big.Int, error) {
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 tokens) returns(bool success)
-func (_Token *TokenTransactor) Approve(opts *bind.TransactOpts, spender common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenTransactor) Approve(opts *bind.TransactOpts, spender common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.contract.Transact(opts, "approve", spender, tokens)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 tokens) returns(bool success)
-func (_Token *TokenSession) Approve(spender common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenSession) Approve(spender common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.Contract.Approve(&_Token.TransactOpts, spender, tokens)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 tokens) returns(bool success)
-func (_Token *TokenTransactorSession) Approve(spender common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenTransactorSession) Approve(spender common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.Contract.Approve(&_Token.TransactOpts, spender, tokens)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address to, uint256 tokens) returns(bool success)
-func (_Token *TokenTransactor) Transfer(opts *bind.TransactOpts, to common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenTransactor) Transfer(opts *bind.TransactOpts, to common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.contract.Transact(opts, "transfer", to, tokens)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address to, uint256 tokens) returns(bool success)
-func (_Token *TokenSession) Transfer(to common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenSession) Transfer(to common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.Contract.Transfer(&_Token.TransactOpts, to, tokens)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address to, uint256 tokens) returns(bool success)
-func (_Token *TokenTransactorSession) Transfer(to common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenTransactorSession) Transfer(to common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.Contract.Transfer(&_Token.TransactOpts, to, tokens)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address from, address to, uint256 tokens) returns(bool success)
-func (_Token *TokenTransactor) TransferFrom(opts *bind.TransactOpts, from common.Address, to common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenTransactor) TransferFrom(opts *bind.TransactOpts, from common.Address, to common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.contract.Transact(opts, "transferFrom", from, to, tokens)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address from, address to, uint256 tokens) returns(bool success)
-func (_Token *TokenSession) TransferFrom(from common.Address, to common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenSession) TransferFrom(from common.Address, to common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.Contract.TransferFrom(&_Token.TransactOpts, from, to, tokens)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address from, address to, uint256 tokens) returns(bool success)
-func (_Token *TokenTransactorSession) TransferFrom(from common.Address, to common.Address, tokens *big.Int) (*types.Transaction, error) {
+func (_Token *TokenTransactorSession) TransferFrom(from common.Address, to common.Address, tokens *big.Int) (types.Transaction, error) {
 	return _Token.Contract.TransferFrom(&_Token.TransactOpts, from, to, tokens)
 }
 
@@ -916,12 +916,12 @@ func (_IERC20 *IERC20Raw) Call(opts *bind.CallOpts, result *[]interface{}, metho
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_IERC20 *IERC20Raw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_IERC20 *IERC20Raw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _IERC20.Contract.IERC20Transactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_IERC20 *IERC20Raw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_IERC20 *IERC20Raw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _IERC20.Contract.IERC20Transactor.contract.Transact(opts, method, params...)
 }
 
@@ -935,12 +935,12 @@ func (_IERC20 *IERC20CallerRaw) Call(opts *bind.CallOpts, result *[]interface{},
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_IERC20 *IERC20TransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_IERC20 *IERC20TransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _IERC20.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_IERC20 *IERC20TransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_IERC20 *IERC20TransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _IERC20.Contract.contract.Transact(opts, method, params...)
 }
 
@@ -1040,63 +1040,63 @@ func (_IERC20 *IERC20CallerSession) TotalSupply() (*big.Int, error) {
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 amount) returns(bool)
-func (_IERC20 *IERC20Transactor) Approve(opts *bind.TransactOpts, spender common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20Transactor) Approve(opts *bind.TransactOpts, spender common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.contract.Transact(opts, "approve", spender, amount)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 amount) returns(bool)
-func (_IERC20 *IERC20Session) Approve(spender common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20Session) Approve(spender common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.Contract.Approve(&_IERC20.TransactOpts, spender, amount)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address spender, uint256 amount) returns(bool)
-func (_IERC20 *IERC20TransactorSession) Approve(spender common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20TransactorSession) Approve(spender common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.Contract.Approve(&_IERC20.TransactOpts, spender, amount)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address recipient, uint256 amount) returns(bool)
-func (_IERC20 *IERC20Transactor) Transfer(opts *bind.TransactOpts, recipient common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20Transactor) Transfer(opts *bind.TransactOpts, recipient common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.contract.Transact(opts, "transfer", recipient, amount)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address recipient, uint256 amount) returns(bool)
-func (_IERC20 *IERC20Session) Transfer(recipient common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20Session) Transfer(recipient common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.Contract.Transfer(&_IERC20.TransactOpts, recipient, amount)
 }
 
 // Transfer is a paid mutator transaction binding the contract method 0xa9059cbb.
 //
 // Solidity: function transfer(address recipient, uint256 amount) returns(bool)
-func (_IERC20 *IERC20TransactorSession) Transfer(recipient common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20TransactorSession) Transfer(recipient common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.Contract.Transfer(&_IERC20.TransactOpts, recipient, amount)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address sender, address recipient, uint256 amount) returns(bool)
-func (_IERC20 *IERC20Transactor) TransferFrom(opts *bind.TransactOpts, sender common.Address, recipient common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20Transactor) TransferFrom(opts *bind.TransactOpts, sender common.Address, recipient common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.contract.Transact(opts, "transferFrom", sender, recipient, amount)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address sender, address recipient, uint256 amount) returns(bool)
-func (_IERC20 *IERC20Session) TransferFrom(sender common.Address, recipient common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20Session) TransferFrom(sender common.Address, recipient common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.Contract.TransferFrom(&_IERC20.TransactOpts, sender, recipient, amount)
 }
 
 // TransferFrom is a paid mutator transaction binding the contract method 0x23b872dd.
 //
 // Solidity: function transferFrom(address sender, address recipient, uint256 amount) returns(bool)
-func (_IERC20 *IERC20TransactorSession) TransferFrom(sender common.Address, recipient common.Address, amount *big.Int) (*types.Transaction, error) {
+func (_IERC20 *IERC20TransactorSession) TransferFrom(sender common.Address, recipient common.Address, amount *big.Int) (types.Transaction, error) {
 	return _IERC20.Contract.TransferFrom(&_IERC20.TransactOpts, sender, recipient, amount)
 }
 
@@ -1415,7 +1415,7 @@ const SafeMathABI = "[]"
 var SafeMathBin = "0x6080604052348015600f57600080fd5b50603f80601d6000396000f3fe6080604052600080fdfea26469706673582212201282718f570db149dfb48d08e0555fe1d3355b171753b48e6ba5d4a8c6e2d80e64736f6c63430008030033"
 
 // DeploySafeMath deploys a new Ethereum contract, binding an instance of SafeMath to it.
-func DeploySafeMath(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, *types.Transaction, *SafeMath, error) {
+func DeploySafeMath(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, types.Transaction, *SafeMath, error) {
 	parsed, err := abi.JSON(strings.NewReader(SafeMathABI))
 	if err != nil {
 		return common.Address{}, nil, nil, err
@@ -1542,12 +1542,12 @@ func (_SafeMath *SafeMathRaw) Call(opts *bind.CallOpts, result *[]interface{}, m
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_SafeMath *SafeMathRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_SafeMath *SafeMathRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _SafeMath.Contract.SafeMathTransactor.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_SafeMath *SafeMathRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_SafeMath *SafeMathRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _SafeMath.Contract.SafeMathTransactor.contract.Transact(opts, method, params...)
 }
 
@@ -1561,11 +1561,11 @@ func (_SafeMath *SafeMathCallerRaw) Call(opts *bind.CallOpts, result *[]interfac
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
 // its default method if one is available.
-func (_SafeMath *SafeMathTransactorRaw) Transfer(opts *bind.TransactOpts) (*types.Transaction, error) {
+func (_SafeMath *SafeMathTransactorRaw) Transfer(opts *bind.TransactOpts) (types.Transaction, error) {
 	return _SafeMath.Contract.contract.Transfer(opts)
 }
 
 // Transact invokes the (paid) contract method with params as input values.
-func (_SafeMath *SafeMathTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (*types.Transaction, error) {
+func (_SafeMath *SafeMathTransactorRaw) Transact(opts *bind.TransactOpts, method string, params ...interface{}) (types.Transaction, error) {
 	return _SafeMath.Contract.contract.Transact(opts, method, params...)
 }

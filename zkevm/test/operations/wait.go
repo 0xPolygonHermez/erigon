@@ -14,7 +14,6 @@ import (
 	"time"
 
 	ethereum "github.com/ledgerwatch/erigon"
-	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
@@ -78,7 +77,7 @@ type ethClienter interface {
 }
 
 // WaitTxToBeMined waits until a tx has been mined or the given timeout expires.
-func WaitTxToBeMined(parentCtx context.Context, client ethClienter, tx *types.Transaction, timeout time.Duration) error {
+func WaitTxToBeMined(parentCtx context.Context, client ethClienter, tx types.Transaction, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 	receipt, err := bind.WaitMined(ctx, client, tx)
@@ -94,46 +93,49 @@ func WaitTxToBeMined(parentCtx context.Context, client ethClienter, tx *types.Tr
 		if reasonErr != nil {
 			reason = reasonErr.Error()
 		}
-		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.Gas())
+		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.GetGas())
 	}
 	log.Debug("Transaction successfully mined: ", tx.Hash())
 	return nil
 }
 
 // RevertReason returns the revert reason for a tx that has a receipt with failed status
-func RevertReason(ctx context.Context, c ethClienter, tx *types.Transaction, blockNumber *big.Int) (string, error) {
+func RevertReason(ctx context.Context, c ethClienter, tx types.Transaction, blockNumber *big.Int) (string, error) {
 	if tx == nil {
 		return "", nil
 	}
 
-	from, err := types.Sender(types.NewEIP155Signer(tx.ChainId()), tx)
-	if err != nil {
-		signer := types.LatestSignerForChainID(tx.ChainId())
-		from, err = types.Sender(signer, tx)
+	panic("iii: fix later")
+	/*
+		from, err := types.Sender(types.NewEIP155Signer(tx.ChainId()), tx)
+		if err != nil {
+			signer := types.LatestSignerForChainID(tx.ChainId())
+			from, err = types.Sender(signer, tx)
+			if err != nil {
+				return "", err
+			}
+		}
+		msg := ethereum.CallMsg{
+			From: from,
+			To:   tx.GetTo(),
+			Gas:  tx.GetGas(),
+
+			Value: tx.GetValue(),
+			Data:  tx.GetData(),
+		}
+		hex, err := c.CallContract(ctx, msg, blockNumber)
 		if err != nil {
 			return "", err
 		}
-	}
-	msg := ethereum.CallMsg{
-		From: from,
-		To:   tx.To(),
-		Gas:  tx.Gas(),
 
-		Value: tx.Value(),
-		Data:  tx.Data(),
-	}
-	hex, err := c.CallContract(ctx, msg, blockNumber)
-	if err != nil {
-		return "", err
-	}
+		unpackedMsg, err := abi.UnpackRevert(hex)
+		if err != nil {
+			log.Warnf("failed to get the revert message for tx %v: %v", tx.Hash(), err)
+			return "", errors.New("execution reverted")
+		}
 
-	unpackedMsg, err := abi.UnpackRevert(hex)
-	if err != nil {
-		log.Warnf("failed to get the revert message for tx %v: %v", tx.Hash(), err)
-		return "", errors.New("execution reverted")
-	}
-
-	return unpackedMsg, nil
+		return unpackedMsg, nil
+	*/
 }
 
 // WaitGRPCHealthy waits for a gRPC endpoint to be responding according to the

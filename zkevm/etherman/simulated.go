@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"testing"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
@@ -33,7 +34,7 @@ func NewSimulatedEtherman(cfg Config, auth *bind.TransactOpts) (etherman *Client
 		},
 	}
 	blockGasLimit := uint64(999999999999999999) //nolint:gomnd
-	client := backends.NewSimulatedBackend(genesisAlloc, blockGasLimit)
+	client := backends.NewSimulatedBackend(&testing.T{}, genesisAlloc, blockGasLimit)
 
 	// Deploy contracts
 	const maticDecimalPlaces = 18

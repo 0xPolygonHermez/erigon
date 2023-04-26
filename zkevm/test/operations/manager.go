@@ -1,6 +1,9 @@
 package operations
 
-/*
+import (
+	"time"
+)
+
 const (
 	cmdFolder = "test"
 )
@@ -24,6 +27,8 @@ const (
 	DefaultTimeoutTxToBeMined = 1 * time.Minute
 )
 
+/*
+
 var (
 	stateDBCfg = dbutils.NewStateConfigFromEnv()
 	poolDBCfg  = dbutils.NewPoolConfigFromEnv()
@@ -33,6 +38,7 @@ var (
 	executorConfig   = executor.Config{URI: executorURI}
 	merkleTreeConfig = merkletree.Config{URI: merkleTreeURI}
 )
+
 
 // SequencerConfig is the configuration for the sequencer operations.
 type SequencerConfig struct {

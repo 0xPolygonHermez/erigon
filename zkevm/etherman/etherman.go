@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/holiman/uint256"
 	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi"
@@ -444,7 +445,7 @@ func (etherMan *Client) updateGlobalExitRootEvent(ctx context.Context, vLog type
 }
 
 // WaitTxToBeMined waits for an L1 tx to be mined. It will return error if the tx is reverted or timeout is exceeded
-func (etherMan *Client) WaitTxToBeMined(ctx context.Context, tx *types.Transaction, timeout time.Duration) (bool, error) {
+func (etherMan *Client) WaitTxToBeMined(ctx context.Context, tx types.Transaction, timeout time.Duration) (bool, error) {
 	err := operations.WaitTxToBeMined(ctx, etherMan.EthClient, tx, timeout)
 	if errors.Is(err, context.DeadlineExceeded) {
 		return false, nil
@@ -456,7 +457,7 @@ func (etherMan *Client) WaitTxToBeMined(ctx context.Context, tx *types.Transacti
 }
 
 // EstimateGasSequenceBatches estimates gas for sending batches
-func (etherMan *Client) EstimateGasSequenceBatches(sender common.Address, sequences []ethmanTypes.Sequence) (*types.Transaction, error) {
+func (etherMan *Client) EstimateGasSequenceBatches(sender common.Address, sequences []ethmanTypes.Sequence) (types.Transaction, error) {
 	opts, err := etherMan.getAuthByAddress(sender)
 	if err == ErrNotFound {
 		return nil, ErrPrivateKeyNotFound
@@ -488,10 +489,10 @@ func (etherMan *Client) BuildSequenceBatchesTxData(sender common.Address, sequen
 		return nil, nil, err
 	}
 
-	return tx.To(), tx.Data(), nil
+	return tx.GetTo(), tx.GetData(), nil
 }
 
-func (etherMan *Client) sequenceBatches(opts bind.TransactOpts, sequences []ethmanTypes.Sequence) (*types.Transaction, error) {
+func (etherMan *Client) sequenceBatches(opts bind.TransactOpts, sequences []ethmanTypes.Sequence) (types.Transaction, error) {
 	var batches []polygonzkevm.PolygonZkEVMBatchData
 	for _, seq := range sequences {
 		batch := polygonzkevm.PolygonZkEVMBatchData{
@@ -592,12 +593,12 @@ func (etherMan *Client) forcedBatchEvent(ctx context.Context, vLog types.Log, bl
 	} else if isPending {
 		return fmt.Errorf("error: tx is still pending. TxHash: %s", tx.Hash().String())
 	}
-	msg, err := tx.AsMessage(types.NewLondonSigner(tx.ChainId()), big.NewInt(0))
+	msg, err := tx.AsMessage(types.NewLondonSigner(tx.GetChainID()), big.NewInt(0))
 	if err != nil {
 		return err
 	}
 	if fb.Sequencer == msg.From() {
-		txData := tx.Data()
+		txData := tx.GetData()
 		// Extract coded txs.
 		// Load contract ABI
 		abi, err := abi.JSON(strings.NewReader(polygonzkevm.PolygonzkevmABI))
@@ -659,11 +660,11 @@ func (etherMan *Client) sequencedBatchesEvent(ctx context.Context, vLog types.Lo
 	} else if isPending {
 		return fmt.Errorf("error tx is still pending. TxHash: %s", tx.Hash().String())
 	}
-	msg, err := tx.AsMessage(types.NewLondonSigner(tx.ChainId()), big.NewInt(0))
+	msg, err := tx.AsMessage(types.NewLondonSigner(tx.GetChainID()), big.NewInt(0))
 	if err != nil {
 		return err
 	}
-	sequences, err := decodeSequences(tx.Data(), sb.NumBatch, msg.From(), vLog.TxHash, msg.Nonce())
+	sequences, err := decodeSequences(tx.GetData(), sb.NumBatch, msg.From(), vLog.TxHash, msg.Nonce())
 	if err != nil {
 		return fmt.Errorf("error decoding the sequences: %v", err)
 	}
@@ -784,7 +785,7 @@ func (etherMan *Client) forceSequencedBatchesEvent(ctx context.Context, vLog typ
 	} else if isPending {
 		return fmt.Errorf("error: tx is still pending. TxHash: %s", tx.Hash().String())
 	}
-	msg, err := tx.AsMessage(types.NewLondonSigner(tx.ChainId()), big.NewInt(0))
+	msg, err := tx.AsMessage(types.NewLondonSigner(tx.GetChainID()), big.NewInt(0))
 	if err != nil {
 		return err
 	}
@@ -792,7 +793,7 @@ func (etherMan *Client) forceSequencedBatchesEvent(ctx context.Context, vLog typ
 	if err != nil {
 		return fmt.Errorf("error getting hashParent. BlockNumber: %d. Error: %w", vLog.BlockNumber, err)
 	}
-	sequencedForceBatch, err := decodeSequencedForceBatches(tx.Data(), fsb.NumBatch, msg.From(), vLog.TxHash, fullBlock, msg.Nonce())
+	sequencedForceBatch, err := decodeSequencedForceBatches(tx.GetData(), fsb.NumBatch, msg.From(), vLog.TxHash, fullBlock, msg.Nonce())
 	if err != nil {
 		return err
 	}
@@ -932,7 +933,7 @@ func (etherMan *Client) GetLatestVerifiedBatchNum() (uint64, error) {
 }
 
 // GetTx function get ethereum tx
-func (etherMan *Client) GetTx(ctx context.Context, txHash common.Hash) (*types.Transaction, bool, error) {
+func (etherMan *Client) GetTx(ctx context.Context, txHash common.Hash) (types.Transaction, bool, error) {
 	return etherMan.EthClient.TransactionByHash(ctx, txHash)
 }
 
@@ -942,7 +943,7 @@ func (etherMan *Client) GetTxReceipt(ctx context.Context, txHash common.Hash) (*
 }
 
 // ApproveMatic function allow to approve tokens in matic smc
-func (etherMan *Client) ApproveMatic(ctx context.Context, account common.Address, maticAmount *big.Int, to common.Address) (*types.Transaction, error) {
+func (etherMan *Client) ApproveMatic(ctx context.Context, account common.Address, maticAmount *big.Int, to common.Address) (types.Transaction, error) {
 	opts, err := etherMan.getAuthByAddress(account)
 	if err == ErrNotFound {
 		return nil, errors.New("can't find account private key to sign tx")
@@ -1000,7 +1001,7 @@ func (etherMan *Client) GetL1GasPrice(ctx context.Context) *big.Int {
 }
 
 // SendTx sends a tx to L1
-func (etherMan *Client) SendTx(ctx context.Context, tx *types.Transaction) error {
+func (etherMan *Client) SendTx(ctx context.Context, tx types.Transaction) error {
 	return etherMan.EthClient.SendTransaction(ctx, tx)
 }
 
@@ -1018,12 +1019,18 @@ func (etherMan *Client) SuggestedGasPrice(ctx context.Context) (*big.Int, error)
 	return suggestedGasPrice, nil
 }
 
+func b2i(s *big.Int) *uint256.Int {
+	iii := &uint256.Int{}
+	iii.SetBytes(s.Bytes())
+	return iii
+}
+
 // EstimateGas returns the estimated gas for the tx
 func (etherMan *Client) EstimateGas(ctx context.Context, from common.Address, to *common.Address, value *big.Int, data []byte) (uint64, error) {
 	return etherMan.EthClient.EstimateGas(ctx, ethereum.CallMsg{
 		From:  from,
 		To:    to,
-		Value: value,
+		Value: b2i(value),
 		Data:  data,
 	})
 }
@@ -1041,7 +1048,7 @@ func (etherMan *Client) CheckTxWasMined(ctx context.Context, txHash common.Hash)
 }
 
 // SignTx tries to sign a transaction accordingly to the provided sender
-func (etherMan *Client) SignTx(ctx context.Context, sender common.Address, tx *types.Transaction) (*types.Transaction, error) {
+func (etherMan *Client) SignTx(ctx context.Context, sender common.Address, tx types.Transaction) (types.Transaction, error) {
 	auth, err := etherMan.getAuthByAddress(sender)
 	if err == ErrNotFound {
 		return nil, ErrPrivateKeyNotFound
@@ -1054,7 +1061,7 @@ func (etherMan *Client) SignTx(ctx context.Context, sender common.Address, tx *t
 }
 
 // GetRevertMessage tries to get a revert message of a transaction
-func (etherMan *Client) GetRevertMessage(ctx context.Context, tx *types.Transaction) (string, error) {
+func (etherMan *Client) GetRevertMessage(ctx context.Context, tx types.Transaction) (string, error) {
 	if tx == nil {
 		return "", nil
 	}
