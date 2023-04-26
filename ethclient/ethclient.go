@@ -18,6 +18,7 @@
 package ethclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -169,7 +170,7 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 		}
 	}
 	// Fill the sender cache of transactions in the block.
-	txs := make([]*types.Transaction, len(body.Transactions))
+	txs := make([]types.Transaction, len(body.Transactions))
 	for i, tx := range body.Transactions {
 		if tx.From != nil {
 			setSenderFromServer(tx.tx, *tx.From, body.Hash)
@@ -201,7 +202,7 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.H
 }
 
 type rpcTransaction struct {
-	tx *types.Transaction
+	tx types.Transaction
 	txExtraInfo
 }
 
@@ -219,7 +220,7 @@ func (tx *rpcTransaction) UnmarshalJSON(msg []byte) error {
 }
 
 // TransactionByHash returns the transaction with the given hash.
-func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx *types.Transaction, isPending bool, err error) {
+func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx types.Transaction, isPending bool, err error) {
 	var json *rpcTransaction
 	err = ec.c.CallContext(ctx, &json, "eth_getTransactionByHash", hash)
 	if err != nil {
@@ -241,7 +242,7 @@ func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx *
 //
 // There is a fast-path for transactions retrieved by TransactionByHash and
 // TransactionInBlock. Getting their sender address can be done without an RPC interaction.
-func (ec *Client) TransactionSender(ctx context.Context, tx *types.Transaction, block common.Hash, index uint) (common.Address, error) {
+func (ec *Client) TransactionSender(ctx context.Context, tx types.Transaction, block common.Hash, index uint) (common.Address, error) {
 	// Try to load the address from the cache.
 	sender, err := types.Sender(&senderFromServer{blockhash: block}, tx)
 	if err == nil {
@@ -270,7 +271,7 @@ func (ec *Client) TransactionCount(ctx context.Context, blockHash common.Hash) (
 }
 
 // TransactionInBlock returns a single transaction at index in the given block.
-func (ec *Client) TransactionInBlock(ctx context.Context, blockHash common.Hash, index uint) (*types.Transaction, error) {
+func (ec *Client) TransactionInBlock(ctx context.Context, blockHash common.Hash, index uint) (types.Transaction, error) {
 	var json *rpcTransaction
 	err := ec.c.CallContext(ctx, &json, "eth_getTransactionByBlockHashAndIndex", blockHash, hexutil.Uint64(index))
 	if err != nil {
@@ -575,8 +576,10 @@ func (ec *Client) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64
 //
 // If the transaction was a contract creation use the TransactionReceipt method to get the
 // contract address after the transaction has been mined.
-func (ec *Client) SendTransaction(ctx context.Context, tx *types.Transaction) error {
-	data, err := tx.MarshalBinary()
+func (ec *Client) SendTransaction(ctx context.Context, tx types.Transaction) error {
+	var data []byte
+	writer := bytes.NewBuffer(data)
+	err := tx.MarshalBinary(writer)
 	if err != nil {
 		return err
 	}
@@ -611,13 +614,13 @@ func toCallArg(msg ethereum.CallMsg) interface{} {
 		arg["data"] = hexutil.Bytes(msg.Data)
 	}
 	if msg.Value != nil {
-		arg["value"] = (*hexutil.Big)(msg.Value)
+		arg["value"] = (*hexutil.Big)(msg.Value.ToBig())
 	}
 	if msg.Gas != 0 {
 		arg["gas"] = hexutil.Uint64(msg.Gas)
 	}
 	if msg.GasPrice != nil {
-		arg["gasPrice"] = (*hexutil.Big)(msg.GasPrice)
+		arg["gasPrice"] = (*hexutil.Big)(msg.GasPrice.ToBig())
 	}
 	return arg
 }
