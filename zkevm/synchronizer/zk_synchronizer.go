@@ -339,7 +339,9 @@ func (s *ClientSynchronizer) processBlockRange(blocks []etherman.Block, order ma
 			ReceivedAt:  blocks[i].ReceivedAt,
 		}
 		// Add block information
+		// iii: TODO: here!
 		err = s.state.AddBlock(s.ctx, &b, dbTx)
+
 		if err != nil {
 			log.Errorf("error storing block. BlockNumber: %d, error: %v", blocks[i].BlockNumber, err)
 			rollbackErr := dbTx.Rollback(s.ctx)
