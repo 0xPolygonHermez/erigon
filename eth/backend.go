@@ -107,6 +107,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync/snap"
 	stages2 "github.com/ledgerwatch/erigon/turbo/stages"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
+	"github.com/ledgerwatch/erigon/zkevm/etherman"
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -663,11 +664,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
 
+	etherMan := newEtherMan()
+
 	zkSynchronizer, err := synchronizer.NewSynchronizer(
-		true, /*isTrustedSequencer*/
-		nil,  //etherMan           ethermanInterface
-		nil,  //state              stateInterface
-		nil,  //zkEVMClient        zkEVMClientInterface
+		true,     /*isTrustedSequencer*/
+		etherMan, //etherMan           ethermanInterface
+		nil,      //state              stateInterface
+		nil,      //zkEVMClient        zkEVMClientInterface
 		synchronizer.Config{},
 	)
 	if err != nil {
@@ -680,6 +683,35 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	return backend, nil
 }
+
+// creates an EtherMan instance with default parameters
+func newEtherMan() *etherman.Client {
+	// return defaults here
+	em, err := etherman.NewClient(etherman.Config{
+		URL:       "https://rpc.eth.gateway.fm",
+		L1ChainID: 1,
+		/*
+					URL       string `mapstructure:"URL"`
+			L1ChainID uint64 `mapstructure:"L1ChainID"`
+
+			PoEAddr                   common.Address `mapstructure:"PoEAddr"`
+			MaticAddr                 common.Address `mapstructure:"MaticAddr"`
+			GlobalExitRootManagerAddr common.Address `mapstructure:"GlobalExitRootManagerAddr"`
+
+			PrivateKeyPath     string `mapstructure:"PrivateKeyPath"`
+			PrivateKeyPassword string `mapstructure:"PrivateKeyPassword"`
+
+			MultiGasProvider bool `mapstructure:"MultiGasProvider"`
+			Etherscan        etherscan.Config
+		*/
+	})
+	//panic on error
+	if err != nil {
+		panic(err)
+	}
+	return em
+}
+
 func (backend *Ethereum) Init(stack *node.Node, config *ethconfig.Config) error {
 	ethBackendRPC, miningRPC, stateDiffClient := backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient
 	blockReader := backend.blockReader
