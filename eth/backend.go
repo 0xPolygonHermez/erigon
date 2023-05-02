@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon/zkevm/adapter"
 	"github.com/ledgerwatch/erigon/zkevm/synchronizer"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
@@ -667,10 +668,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	etherMan := newEtherMan()
 
 	zkSynchronizer, err := synchronizer.NewSynchronizer(
-		true,     /*isTrustedSequencer*/
-		etherMan, //etherMan           ethermanInterface
-		nil,      //state              stateInterface
-		nil,      //zkEVMClient        zkEVMClientInterface
+		true,                      /*isTrustedSequencer*/
+		etherMan,                  //etherMan           ethermanInterface
+		adapter.NewStateAdapter(), //state              stateInterface
+		nil,                       //zkEVMClient        zkEVMClientInterface
 		synchronizer.Config{},
 	)
 	if err != nil {

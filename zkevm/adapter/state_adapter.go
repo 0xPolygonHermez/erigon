@@ -3,11 +3,13 @@ package adapter
 import (
 	"context"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
+
+	ethTypes "github.com/ledgerwatch/erigon/core/types"
 )
 
 // write me an adapter mock for stateInterface from zk_synchronizer.go
@@ -44,122 +46,122 @@ type stateInterface interface {
 	BeginStateTransaction(ctx context.Context) (pgx.Tx, error)
 }
 
-type stateInterfaceMock struct{}
+type StateInterfaceAdapter struct{}
 
-var _ stateInterface = (*stateInterfaceMock)(nil)
+var _ stateInterface = (*StateInterfaceAdapter)(nil)
 
-func NewStateInterfaceMock() stateInterface {
-	return &stateInterfaceMock{}
+func NewStateAdapter() stateInterface {
+	return &StateInterfaceAdapter{}
 }
 
-func (m *stateInterfaceMock) GetLastBlock(ctx context.Context, dbTx pgx.Tx) (*state.Block, error) {
+func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx pgx.Tx) (*state.Block, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddBlock(ctx context.Context, block *state.Block, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddBlock(ctx context.Context, block *state.Block, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetPreviousBlock(ctx context.Context, offset uint64, dbTx pgx.Tx) (*state.Block, error) {
+func (m *StateInterfaceAdapter) GetPreviousBlock(ctx context.Context, offset uint64, dbTx pgx.Tx) (*state.Block, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetLastBatchNumber(ctx context.Context, dbTx pgx.Tx) (uint64, error) {
+func (m *StateInterfaceAdapter) GetLastBatchNumber(ctx context.Context, dbTx pgx.Tx) (uint64, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) (*state.Batch, error) {
+func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) (*state.Batch, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetNextForcedBatches(ctx context.Context, nextForcedBatches int, dbTx pgx.Tx) ([]state.ForcedBatch, error) {
+func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextForcedBatches int, dbTx pgx.Tx) ([]state.ForcedBatch, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) ProcessAndStoreClosedBatch(ctx context.Context, processingCtx state.ProcessingContext, encodedTxs []byte, dbTx pgx.Tx, caller metrics.CallerLabel) (common.Hash, error) {
+func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, processingCtx state.ProcessingContext, encodedTxs []byte, dbTx pgx.Tx, caller metrics.CallerLabel) (common.Hash, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) OpenBatch(ctx context.Context, processingContext state.ProcessingContext, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) OpenBatch(ctx context.Context, processingContext state.ProcessingContext, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) CloseBatch(ctx context.Context, receipt state.ProcessingReceipt, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) CloseBatch(ctx context.Context, receipt state.ProcessingReceipt, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) ProcessSequencerBatch(ctx context.Context, batchNumber uint64, batchL2Data []byte, caller metrics.CallerLabel, dbTx pgx.Tx) (*state.ProcessBatchResponse, error) {
+func (m *StateInterfaceAdapter) ProcessSequencerBatch(ctx context.Context, batchNumber uint64, batchL2Data []byte, caller metrics.CallerLabel, dbTx pgx.Tx) (*state.ProcessBatchResponse, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) StoreTransactions(ctx context.Context, batchNum uint64, processedTxs []*state.ProcessTransactionResponse, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) StoreTransactions(ctx context.Context, batchNum uint64, processedTxs []*state.ProcessTransactionResponse, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetStateRootByBatchNumber(ctx context.Context, batchNum uint64, dbTx pgx.Tx) (common.Hash, error) {
+func (m *StateInterfaceAdapter) GetStateRootByBatchNumber(ctx context.Context, batchNum uint64, dbTx pgx.Tx) (common.Hash, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) ExecuteBatch(ctx context.Context, batch state.Batch, updateMerkleTree bool, dbTx pgx.Tx) (*pb.ProcessBatchResponse, error) {
+func (m *StateInterfaceAdapter) ExecuteBatch(ctx context.Context, batch state.Batch, updateMerkleTree bool, dbTx pgx.Tx) (*pb.ProcessBatchResponse, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetLastVerifiedBatch(ctx context.Context, dbTx pgx.Tx) (*state.VerifiedBatch, error) {
+func (m *StateInterfaceAdapter) GetLastVerifiedBatch(ctx context.Context, dbTx pgx.Tx) (*state.VerifiedBatch, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetLastVirtualBatchNum(ctx context.Context, dbTx pgx.Tx) (uint64, error) {
+func (m *StateInterfaceAdapter) GetLastVirtualBatchNum(ctx context.Context, dbTx pgx.Tx) (uint64, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddSequence(ctx context.Context, sequence state.Sequence, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddSequence(ctx context.Context, sequence state.Sequence, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddAccumulatedInputHash(ctx context.Context, batchNum uint64, accInputHash common.Hash, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddAccumulatedInputHash(ctx context.Context, batchNum uint64, accInputHash common.Hash, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) AddTrustedReorg(ctx context.Context, trustedReorg *state.TrustedReorg, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) AddTrustedReorg(ctx context.Context, trustedReorg *state.TrustedReorg, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetReorgedTransactions(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) ([]ethTypes.Transaction, error) {
+func (m *StateInterfaceAdapter) GetReorgedTransactions(ctx context.Context, batchNumber uint64, dbTx pgx.Tx) ([]ethTypes.Transaction, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) ResetForkID(ctx context.Context, batchNumber, forkID uint64, version string, dbTx pgx.Tx) error {
+func (m *StateInterfaceAdapter) ResetForkID(ctx context.Context, batchNumber, forkID uint64, version string, dbTx pgx.Tx) error {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) GetForkIDTrustedReorgCount(ctx context.Context, forkID uint64, version string, dbTx pgx.Tx) (uint64, error) {
+func (m *StateInterfaceAdapter) GetForkIDTrustedReorgCount(ctx context.Context, forkID uint64, version string, dbTx pgx.Tx) (uint64, error) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) UpdateForkIDIntervals(intervals []state.ForkIDInterval) {
+func (m *StateInterfaceAdapter) UpdateForkIDIntervals(intervals []state.ForkIDInterval) {
 	panic("implement me")
 }
 
-func (m *stateInterfaceMock) BeginStateTransaction(ctx context.Context) (pgx.Tx, error) {
+func (m *StateInterfaceAdapter) BeginStateTransaction(ctx context.Context) (pgx.Tx, error) {
 	panic("implement me")
 }
