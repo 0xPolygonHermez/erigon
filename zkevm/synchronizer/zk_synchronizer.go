@@ -111,7 +111,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 				if root != s.genesis.Root {
 					log.Fatal("Calculated newRoot should be ", s.genesis.Root, " instead of ", root)
 				}
-				log.Debug("Genesis root matches!")
+				log.Info("Genesis root matches!")
 			*/
 		} else {
 			log.Fatal("unexpected error getting the latest ethereum block. Error: ", err)
@@ -226,7 +226,7 @@ func (s *ClientSynchronizer) syncBlocks(lastEthBlockSynced *state.Block) (*state
 				ReceivedAt:  blocks[len(blocks)-1].ReceivedAt,
 			}
 			for i := range blocks {
-				log.Debug("Position: ", i, ". BlockNumber: ", blocks[i].BlockNumber, ". BlockHash: ", blocks[i].BlockHash)
+				log.Info("Position: ", i, ". BlockNumber: ", blocks[i].BlockNumber, ". BlockHash: ", blocks[i].BlockHash)
 			}
 		}
 		fromBlock = toBlock + 1
@@ -258,7 +258,7 @@ func (s *ClientSynchronizer) syncBlocks(lastEthBlockSynced *state.Block) (*state
 				ReceivedAt:  time.Unix(int64(fb.Time()), 0),
 			}
 			lastEthBlockSynced = &block
-			log.Debug("Storing empty block. BlockNumber: ", b.BlockNumber, ". BlockHash: ", b.BlockHash)
+			log.Info("Storing empty block. BlockNumber: ", b.BlockNumber, ". BlockHash: ", b.BlockHash)
 		}
 	}
 
@@ -280,8 +280,8 @@ func (s *ClientSynchronizer) syncTrustedState(latestSyncedBatch uint64) error {
 		return err
 	}
 
-	log.Debug("lastTrustedStateBatchNumber ", lastTrustedStateBatchNumber)
-	log.Debug("latestSyncedBatch ", latestSyncedBatch)
+	log.Info("lastTrustedStateBatchNumber ", lastTrustedStateBatchNumber)
+	log.Info("latestSyncedBatch ", latestSyncedBatch)
 	if lastTrustedStateBatchNumber < latestSyncedBatch {
 		return nil
 	}
@@ -407,7 +407,7 @@ func (s *ClientSynchronizer) processBlockRange(blocks []etherman.Block, order ma
 iii: no reset functionality in PoC
 
 func (s *ClientSynchronizer) resetState(blockNumber uint64) error {
-	log.Debug("Reverting synchronization to block: ", blockNumber)
+	log.Info("Reverting synchronization to block: ", blockNumber)
 	dbTx, err := s.state.BeginStateTransaction(s.ctx)
 	if err != nil {
 		log.Error("error starting a db transaction to reset the state. Error: ", err)
@@ -474,14 +474,14 @@ func (s *ClientSynchronizer) checkReorg(latestBlock *state.Block) (*state.Block,
 		}
 		// Compare hashes
 		if (block.Hash() != latestBlock.BlockHash || block.ParentHash() != latestBlock.ParentHash) && latestBlock.BlockNumber > s.cfg.GenBlockNumber {
-			log.Debug("[checkReorg function] => latestBlockNumber: ", latestBlock.BlockNumber)
-			log.Debug("[checkReorg function] => latestBlockHash: ", latestBlock.BlockHash)
-			log.Debug("[checkReorg function] => latestBlockHashParent: ", latestBlock.ParentHash)
-			log.Debug("[checkReorg function] => BlockNumber: ", latestBlock.BlockNumber, block.NumberU64())
-			log.Debug("[checkReorg function] => BlockHash: ", block.Hash())
-			log.Debug("[checkReorg function] => BlockHashParent: ", block.ParentHash())
+			log.Info("[checkReorg function] => latestBlockNumber: ", latestBlock.BlockNumber)
+			log.Info("[checkReorg function] => latestBlockHash: ", latestBlock.BlockHash)
+			log.Info("[checkReorg function] => latestBlockHashParent: ", latestBlock.ParentHash)
+			log.Info("[checkReorg function] => BlockNumber: ", latestBlock.BlockNumber, block.NumberU64())
+			log.Info("[checkReorg function] => BlockHash: ", block.Hash())
+			log.Info("[checkReorg function] => BlockHashParent: ", block.ParentHash())
 			depth++
-			log.Debug("REORG: Looking for the latest correct ethereum block. Depth: ", depth)
+			log.Info("REORG: Looking for the latest correct ethereum block. Depth: ", depth)
 			// Reorg detected. Getting previous block
 			dbTx, err := s.state.BeginStateTransaction(s.ctx)
 			if err != nil {
@@ -513,7 +513,7 @@ func (s *ClientSynchronizer) checkReorg(latestBlock *state.Block) (*state.Block,
 		}
 	}
 	if latestEthBlockSynced.BlockHash != latestBlock.BlockHash {
-		log.Debug("Reorg detected in block: ", latestEthBlockSynced.BlockNumber)
+		log.Info("Reorg detected in block: ", latestEthBlockSynced.BlockNumber)
 		return latestBlock, nil
 	}
 	return nil, nil
@@ -605,7 +605,7 @@ func (s *ClientSynchronizer) processForkID(forkID etherman.ForkID, blockNumber u
 	}
 
 	// If forkID affects to a batch from the past. State must be reseted.
-	log.Debugf("ForkID: %d, Reverting synchronization to batch: %d", forkID.ForkID, forkID.BatchNumber+1)
+	log.Infof("ForkID: %d, Reverting synchronization to batch: %d", forkID.ForkID, forkID.BatchNumber+1)
 	count, err := s.state.GetForkIDTrustedReorgCount(s.ctx, forkID.ForkID, forkID.Version, dbTx)
 	if err != nil {
 		log.Error("error getting ForkIDTrustedReorg. Error: ", err)
@@ -690,7 +690,7 @@ func (s *ClientSynchronizer) processSequenceBatches(sequencedBatches []etherman.
 		}
 		// ForcedBatch must be processed
 		if sbatch.MinForcedTimestamp > 0 { // If this is true means that the batch is forced
-			log.Debug("FORCED BATCH SEQUENCED!")
+			log.Info("FORCED BATCH SEQUENCED!")
 			// Read forcedBatches from db
 			forcedBatches, err := s.state.GetNextForcedBatches(s.ctx, 1, dbTx)
 			if err != nil {
@@ -748,7 +748,7 @@ func (s *ClientSynchronizer) processSequenceBatches(sequencedBatches []etherman.
 		tBatch, err := s.state.GetBatchByNumber(s.ctx, batch.BatchNumber, dbTx)
 		if err != nil {
 			if errors.Is(err, state.ErrNotFound) || errors.Is(err, state.ErrStateNotSynchronized) {
-				log.Debugf("BatchNumber: %d, not found in trusted state. Storing it...", batch.BatchNumber)
+				log.Infof("BatchNumber: %d, not found in trusted state. Storing it...", batch.BatchNumber)
 				// If it is not found, store batch
 				newStateRoot, err := s.state.ProcessAndStoreClosedBatch(s.ctx, processCtx, batch.BatchL2Data, dbTx, metrics.SynchronizerCallerLabel)
 				if err != nil {
@@ -1152,7 +1152,7 @@ func (s *ClientSynchronizer) processTrustedVerifyBatches(lastVerifiedBatch ether
 }
 
 func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx kv.RwTx) error {
-	log.Debugf("processing trusted batch: %v", trustedBatch.Number)
+	log.Infof("processing trusted batch: %v", trustedBatch.Number)
 	txs := []ethTypes.Transaction{}
 	for _, transaction := range trustedBatch.Transactions {
 		tx := transaction.Tx.CoreTx()
@@ -1181,7 +1181,7 @@ func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx
 
 		if matchNumber && matchGER && matchLER && matchSR &&
 			matchCoinbase && matchTimestamp && matchL2Data {
-			log.Debugf("batch %v already synchronized", trustedBatch.Number)
+			log.Infof("batch %v already synchronized", trustedBatch.Number)
 			return nil
 		}
 		log.Infof("batch %v needs to be updated", trustedBatch.Number)
@@ -1189,14 +1189,14 @@ func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx
 		log.Infof("batch %v needs to be synchronized", trustedBatch.Number)
 	}
 
-	log.Debugf("resetting trusted state from batch %v", trustedBatch.Number)
+	log.Infof("resetting trusted state from batch %v", trustedBatch.Number)
 	previousBatchNumber := trustedBatch.Number - 1
 	if err := s.state.ResetTrustedState(s.ctx, uint64(previousBatchNumber), dbTx); err != nil {
 		log.Errorf("failed to reset trusted state", trustedBatch.Number)
 		return err
 	}
 
-	log.Debugf("opening batch %v", trustedBatch.Number)
+	log.Infof("opening batch %v", trustedBatch.Number)
 	processCtx := state.ProcessingContext{
 		BatchNumber:    uint64(trustedBatch.Number),
 		Coinbase:       common.HexToAddress(trustedBatch.Coinbase.String()),
@@ -1208,7 +1208,7 @@ func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx
 		return err
 	}
 
-	log.Debugf("processing sequencer for batch %v", trustedBatch.Number)
+	log.Infof("processing sequencer for batch %v", trustedBatch.Number)
 
 	processBatchResp, err := s.state.ProcessSequencerBatch(s.ctx, uint64(trustedBatch.Number), trustedBatchL2Data, metrics.SynchronizerCallerLabel, dbTx)
 	if err != nil {
@@ -1216,13 +1216,13 @@ func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx
 		return err
 	}
 
-	log.Debugf("storing transactions for batch %v", trustedBatch.Number)
+	log.Infof("storing transactions for batch %v", trustedBatch.Number)
 	if err = s.state.StoreTransactions(s.ctx, uint64(trustedBatch.Number), processBatchResp.Responses, dbTx); err != nil {
 		log.Errorf("failed to store transactions for batch: %d", trustedBatch.Number)
 		return err
 	}
 
-	log.Debug("trustedBatch.StateRoot ", trustedBatch.StateRoot)
+	log.Info("trustedBatch.StateRoot ", trustedBatch.StateRoot)
 	isBatchClosed := trustedBatch.StateRoot.String() != state.ZeroHash.String()
 	if isBatchClosed {
 		receipt := state.ProcessingReceipt{
@@ -1232,7 +1232,7 @@ func (s *ClientSynchronizer) processTrustedBatch(trustedBatch *types.Batch, dbTx
 			BatchL2Data:   trustedBatchL2Data,
 			AccInputHash:  trustedBatch.AccInputHash,
 		}
-		log.Debugf("closing batch %v", trustedBatch.Number)
+		log.Infof("closing batch %v", trustedBatch.Number)
 		if err := s.state.CloseBatch(s.ctx, receipt, dbTx); err != nil {
 			log.Errorf("error closing batch %d", trustedBatch.Number)
 			return err
@@ -1259,7 +1259,7 @@ func (s *ClientSynchronizer) reorgPool(dbTx kv.RwTx) error {
 		log.Errorf("error getting txs from trusted state. BatchNumber: %d, error: %v", batchNumber, err)
 		return err
 	}
-	log.Debug("Reorged transactions: ", txs)
+	log.Info("Reorged transactions: ", txs)
 
 	// Remove txs from the pool
 	err = s.pool.DeleteReorgedTransactions(s.ctx, txs)
@@ -1267,7 +1267,7 @@ func (s *ClientSynchronizer) reorgPool(dbTx kv.RwTx) error {
 		log.Errorf("error deleting txs from the pool. BatchNumber: %d, error: %v", batchNumber, err)
 		return err
 	}
-	log.Debug("Delete reorged transactions")
+	log.Info("Delete reorged transactions")
 
 	// Add txs to the pool
 	for _, tx := range txs {
@@ -1278,7 +1278,7 @@ func (s *ClientSynchronizer) reorgPool(dbTx kv.RwTx) error {
 			log.Errorf("error storing tx into the pool again. TxHash: %s. BatchNumber: %d, error: %v", tx.Hash().String(), batchNumber, err)
 			return err
 		}
-		log.Debug("Reorged transactions inserted in the pool: ", tx.Hash())
+		log.Info("Reorged transactions inserted in the pool: ", tx.Hash())
 	}
 	return nil
 }
