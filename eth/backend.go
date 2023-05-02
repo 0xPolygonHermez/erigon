@@ -688,22 +688,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 func newEtherMan() *etherman.Client {
 	// return defaults here
 	em, err := etherman.NewClient(etherman.Config{
-		URL:       "https://rpc.eth.gateway.fm",
-		L1ChainID: 1,
-		/*
-					URL       string `mapstructure:"URL"`
-			L1ChainID uint64 `mapstructure:"L1ChainID"`
-
-			PoEAddr                   common.Address `mapstructure:"PoEAddr"`
-			MaticAddr                 common.Address `mapstructure:"MaticAddr"`
-			GlobalExitRootManagerAddr common.Address `mapstructure:"GlobalExitRootManagerAddr"`
-
-			PrivateKeyPath     string `mapstructure:"PrivateKeyPath"`
-			PrivateKeyPassword string `mapstructure:"PrivateKeyPassword"`
-
-			MultiGasProvider bool `mapstructure:"MultiGasProvider"`
-			Etherscan        etherscan.Config
-		*/
+		URL:                       "https://rpc.eth.gateway.fm",
+		L1ChainID:                 1,
+		PoEAddr:                   libcommon.HexToAddress("0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"),
+		MaticAddr:                 libcommon.HexToAddress("0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0"),
+		GlobalExitRootManagerAddr: libcommon.HexToAddress("0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb"),
 	})
 	//panic on error
 	if err != nil {
