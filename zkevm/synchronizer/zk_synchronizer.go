@@ -136,6 +136,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 			return nil
 		case <-time.After(waitDuration):
 			//Sync L1Blocks
+			fmt.Println("IIII lastBlockSynced: ", lastEthBlockSynced.BlockNumber)
 			if lastEthBlockSynced, err = s.syncBlocks(lastEthBlockSynced); err != nil {
 				log.Warn("error syncing blocks: ", err)
 				lastEthBlockSynced, err = s.state.GetLastBlock(s.ctx, nil)
