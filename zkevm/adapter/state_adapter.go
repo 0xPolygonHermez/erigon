@@ -5,6 +5,8 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
@@ -55,7 +57,24 @@ func NewStateAdapter() stateInterface {
 }
 
 func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) (*state.Block, error) {
-	panic("implement me")
+	blockHeight, err := stages.GetStageProgress(dbTx, stages.Bodies)
+	if err != nil {
+		return nil, err
+	}
+	canonicalHash, err := rawdb.ReadCanonicalHash(dbTx, blockHeight)
+	if err != nil {
+		return nil, err
+	}
+	block, _, err := rawdb.ReadBlockWithSenders(dbTx, canonicalHash, blockHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	return &state.Block{
+		BlockNumber: block.Header().Number.Uint64(),
+		BlockHash:   canonicalHash,
+		ParentHash:  block.Header().ParentHash,
+	}, nil
 }
 
 func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx kv.RwTx) error {
