@@ -78,109 +78,109 @@ func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) 
 }
 
 func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddGlobalExitRoot: implement me")
 }
 
 func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddForcedBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddBlock: implement me")
 }
 
 func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddVirtualBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetPreviousBlock(ctx context.Context, offset uint64, dbTx kv.RwTx) (*state.Block, error) {
-	panic("implement me")
+	panic("GetPreviousBlock: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetLastBatchNumber(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
-	panic("implement me")
+	panic("GetLastBatchNumber: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error) {
-	panic("implement me")
+	panic("GetBatchByNumber: implement me")
 }
 
 func (m *StateInterfaceAdapter) ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("ResetTrustedState: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextForcedBatches int, dbTx kv.RwTx) ([]state.ForcedBatch, error) {
-	panic("implement me")
+	panic("GetNextForcedBatches: implement me")
 }
 
 func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddVerifiedBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, processingCtx state.ProcessingContext, encodedTxs []byte, dbTx kv.RwTx, caller metrics.CallerLabel) (common.Hash, error) {
-	panic("implement me")
+	panic("ProcessAndStoreClosedBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) OpenBatch(ctx context.Context, processingContext state.ProcessingContext, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("OpenBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) CloseBatch(ctx context.Context, receipt state.ProcessingReceipt, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("CloseBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) ProcessSequencerBatch(ctx context.Context, batchNumber uint64, batchL2Data []byte, caller metrics.CallerLabel, dbTx kv.RwTx) (*state.ProcessBatchResponse, error) {
-	panic("implement me")
+	panic("ProcessSequencerBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) StoreTransactions(ctx context.Context, batchNum uint64, processedTxs []*state.ProcessTransactionResponse, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("StoreTransactions: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetStateRootByBatchNumber(ctx context.Context, batchNum uint64, dbTx kv.RwTx) (common.Hash, error) {
-	panic("implement me")
+	panic("GetStateRootByBatchNumber: implement me")
 }
 
 func (m *StateInterfaceAdapter) ExecuteBatch(ctx context.Context, batch state.Batch, updateMerkleTree bool, dbTx kv.RwTx) (*pb.ProcessBatchResponse, error) {
-	panic("implement me")
+	panic("ExecuteBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetLastVerifiedBatch(ctx context.Context, dbTx kv.RwTx) (*state.VerifiedBatch, error) {
-	panic("implement me")
+	panic("GetLastVerifiedBatch: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetLastVirtualBatchNum(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
-	panic("implement me")
+	panic("GetLastVirtualBatchNum: implement me")
 }
 
 func (m *StateInterfaceAdapter) AddSequence(ctx context.Context, sequence state.Sequence, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddSequence: implement me")
 }
 
 func (m *StateInterfaceAdapter) AddAccumulatedInputHash(ctx context.Context, batchNum uint64, accInputHash common.Hash, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddAccumulatedInputHash: implement me")
 }
 
 func (m *StateInterfaceAdapter) AddTrustedReorg(ctx context.Context, trustedReorg *state.TrustedReorg, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("AddTrustedReorg: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetReorgedTransactions(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) ([]ethTypes.Transaction, error) {
-	panic("implement me")
+	panic("GetReorgedTransactions: implement me")
 }
 
 func (m *StateInterfaceAdapter) ResetForkID(ctx context.Context, batchNumber, forkID uint64, version string, dbTx kv.RwTx) error {
-	panic("implement me")
+	panic("ResetForkID: implement me")
 }
 
 func (m *StateInterfaceAdapter) GetForkIDTrustedReorgCount(ctx context.Context, forkID uint64, version string, dbTx kv.RwTx) (uint64, error) {
-	panic("implement me")
+	panic("GetForkIDTrustedReorgCount: implement me")
 }
 
 func (m *StateInterfaceAdapter) UpdateForkIDIntervals(intervals []state.ForkIDInterval) {
-	panic("implement me")
+	panic("UpdateForkIDIntervals: implement me")
 }
 
 func (m *StateInterfaceAdapter) BeginStateTransaction(ctx context.Context) (kv.RwTx, error) {
-	panic("implement me")
+	panic("BeginStateTransaction: implement me")
 }
