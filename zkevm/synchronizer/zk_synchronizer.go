@@ -137,7 +137,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 		case <-time.After(waitDuration):
 			//Sync L1Blocks
 			fmt.Println("IIII lastBlockSynced: ", lastEthBlockSynced.BlockNumber)
-			if lastEthBlockSynced, err = s.syncBlocks(lastEthBlockSynced); err != nil {
+			if lastEthBlockSynced, err = s.syncBlocks(tx, lastEthBlockSynced); err != nil {
 				log.Warn("error syncing blocks: ", err)
 				lastEthBlockSynced, err = s.state.GetLastBlock(s.ctx, nil)
 				if err != nil {
@@ -171,7 +171,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 }
 
 // This function syncs the node from a specific block to the latest
-func (s *ClientSynchronizer) syncBlocks(lastEthBlockSynced *state.Block) (*state.Block, error) {
+func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.Block) (*state.Block, error) {
 	// This function will read events fromBlockNum to latestEthBlock. Check reorg to be sure that everything is ok.
 	/*
 		iii: no reorgs in the PoC
@@ -198,6 +198,11 @@ func (s *ClientSynchronizer) syncBlocks(lastEthBlockSynced *state.Block) (*state
 	lastKnownBlock := header.Number
 
 	var fromBlock uint64
+	/*
+		if lastEthBlockSynced.BlockNumber < 16896700 {
+			fromBlock = 16896700
+		}
+	*/
 	if lastEthBlockSynced.BlockNumber > 0 {
 		fromBlock = lastEthBlockSynced.BlockNumber + 1
 	}
@@ -213,12 +218,16 @@ func (s *ClientSynchronizer) syncBlocks(lastEthBlockSynced *state.Block) (*state
 		// array index where this value is.
 		blocks, order, err := s.etherMan.GetRollupInfoByBlockRange(s.ctx, fromBlock, &toBlock)
 		if err != nil {
+			fmt.Println("IIII getRollupInfoByBlockRange error: ", err)
 			return lastEthBlockSynced, err
 		}
-		err = s.processBlockRange(blocks, order)
+		fmt.Println("IIII getRollupInfoByBlockRange success: ", len(blocks))
+		err = s.processBlockRange(dbTx, blocks, order)
 		if err != nil {
+			fmt.Println("IIII processBlockRange error: ", err)
 			return lastEthBlockSynced, err
 		}
+		fmt.Println("IIII processBlockRange success: ", len(blocks))
 		if len(blocks) > 0 {
 			lastEthBlockSynced = &state.Block{
 				BlockNumber: blocks[len(blocks)-1].BlockNumber,
@@ -240,15 +249,17 @@ func (s *ClientSynchronizer) syncBlocks(lastEthBlockSynced *state.Block) (*state
 			// Store the latest block of the block range. Get block info and process the block
 			fb, err := s.etherMan.EthBlockByNumber(s.ctx, toBlock)
 			if err != nil {
+				fmt.Println("IIII ethBlockByNumber error: ", err)
 				return lastEthBlockSynced, err
 			}
+			fmt.Println("IIII ethBlockByNumber success: ")
 			b := etherman.Block{
 				BlockNumber: fb.NumberU64(),
 				BlockHash:   fb.Hash(),
 				ParentHash:  fb.ParentHash(),
 				ReceivedAt:  time.Unix(int64(fb.Time()), 0),
 			}
-			err = s.processBlockRange([]etherman.Block{b}, order)
+			err = s.processBlockRange(dbTx, []etherman.Block{b}, order)
 			if err != nil {
 				return lastEthBlockSynced, err
 			}
@@ -325,15 +336,9 @@ func (s *ClientSynchronizer) syncTrustedState(latestSyncedBatch uint64) error {
 	return nil
 }
 
-func (s *ClientSynchronizer) processBlockRange(blocks []etherman.Block, order map[common.Hash][]etherman.Order) error {
+func (s *ClientSynchronizer) processBlockRange(dbTx kv.RwTx, blocks []etherman.Block, order map[common.Hash][]etherman.Order) error {
 	// New info has to be included into the db using the state
 	for i := range blocks {
-		// Begin db transaction
-		dbTx, err := s.state.BeginStateTransaction(s.ctx)
-		if err != nil {
-			log.Errorf("error creating db transaction to store block. BlockNumber: %d, error: %v", blocks[i].BlockNumber, err)
-			return err
-		}
 		b := state.Block{
 			BlockNumber: blocks[i].BlockNumber,
 			BlockHash:   blocks[i].BlockHash,
@@ -342,7 +347,7 @@ func (s *ClientSynchronizer) processBlockRange(blocks []etherman.Block, order ma
 		}
 		// Add block information
 		// iii: TODO: here!
-		err = s.state.AddBlock(s.ctx, &b, dbTx)
+		err := s.state.AddBlock(s.ctx, &b, dbTx)
 
 		if err != nil {
 			log.Errorf("error storing block. BlockNumber: %d, error: %v", blocks[i].BlockNumber, err)

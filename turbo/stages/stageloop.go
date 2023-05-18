@@ -127,11 +127,13 @@ func StageLoop(
 func StageLoopStep(ctx context.Context, chainConfig *chain.Config, db kv.RwDB, sync *stagedsync.Sync, notifications *shards.Notifications, initialCycle bool,
 	updateHead func(ctx context.Context, headHeight uint64, headTime uint64, hash libcommon.Hash, td *uint256.Int),
 ) (headBlockHash libcommon.Hash, err error) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			err = fmt.Errorf("%+v, trace: %s", rec, dbg.Stack())
-		}
-	}() // avoid crash because Erigon's core does many things
+	/*
+		defer func() {
+			if rec := recover(); rec != nil {
+				err = fmt.Errorf("%+v, trace: %s", rec, dbg.Stack())
+			}
+		}() // avoid crash because Erigon's core does many things
+	*/
 
 	var finishProgressBefore uint64
 	if err := db.View(ctx, func(tx kv.Tx) error {

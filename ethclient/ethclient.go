@@ -21,8 +21,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 
 	"github.com/holiman/uint256"
 	ethereum "github.com/ledgerwatch/erigon"
@@ -129,6 +131,7 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 	}
 
 	var body rpcBlock
+	fmt.Println("IIII raw", string(raw))
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return nil, err
 	}
@@ -172,10 +175,7 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 	// Fill the sender cache of transactions in the block.
 	txs := make([]types.Transaction, len(body.Transactions))
 	for i, tx := range body.Transactions {
-		if tx.From != nil {
-			setSenderFromServer(tx.tx, *tx.From, body.Hash)
-		}
-		txs[i] = tx.tx
+		txs[i] = tx.Tx()
 	}
 	return types.NewBlockWithHeader(head).WithBody(txs, uncles).WithWithdrawals(body.Withdrawals), nil
 }
@@ -201,23 +201,148 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.H
 	return head, err
 }
 
-type rpcTransaction struct {
-	tx types.Transaction
-	txExtraInfo
+type BigInt struct {
+	*big.Int
 }
 
-type txExtraInfo struct {
-	BlockNumber *string         `json:"blockNumber,omitempty"`
-	BlockHash   *common.Hash    `json:"blockHash,omitempty"`
-	From        *common.Address `json:"from,omitempty"`
-}
-
-func (tx *rpcTransaction) UnmarshalJSON(msg []byte) error {
-	if err := json.Unmarshal(msg, &tx.tx); err != nil {
+func (bi *BigInt) UnmarshalJSON(data []byte) error {
+	if bi.Int == nil {
+		bi.Int = new(big.Int)
+	}
+	// Remove quotes
+	unquotedData, err := strconv.Unquote(string(data))
+	if err != nil {
 		return err
 	}
-	return json.Unmarshal(msg, &tx.txExtraInfo)
+
+	if unquotedData[0] == '0' && unquotedData[1] == 'x' {
+		unquotedData = unquotedData[2:]
+	}
+	fmt.Println("IIII unmarshaling unquotedData", unquotedData)
+	// big.Int SetString method expects a base; 16 is used here because the data is hexadecimal
+	_, success := bi.SetString(unquotedData, 16)
+	if !success {
+		return errors.New("failed to convert string to big.Int")
+	}
+	return nil
 }
+
+// ToInt method returns the big.Int value as an uint256.Int
+func (bi *BigInt) ToInt() *uint256.Int {
+	newInt := &uint256.Int{}
+	newInt.SetBytes(bi.Bytes())
+	return newInt
+}
+
+type Int int
+
+func (i *Int) UnmarshalJSON(data []byte) error {
+	unquotedData, err := strconv.Unquote(string(data))
+	if err != nil {
+		return err
+	}
+
+	if unquotedData[0] == '0' && unquotedData[1] == 'x' {
+		unquotedData = unquotedData[2:]
+	}
+
+	value, err := strconv.ParseInt(unquotedData, 16, 64)
+	if err != nil {
+		return err
+	}
+	*i = Int(value)
+	return nil
+}
+
+type rpcTransaction struct {
+	BlockNumber      *string         `json:"blockNumber,omitempty"`
+	BlockHash        *common.Hash    `json:"blockHash,omitempty"`
+	From             *common.Address `json:"from,omitempty"`
+	Gas              *BigInt         `json:"gas,omitempty"`
+	GasPrice         *BigInt         `json:"gasPrice,omitempty"`
+	Hash             *string         `json:"hash,omitempty"`
+	Input            *string         `json:"input,omitempty"`
+	Nonce            *BigInt         `json:"nonce,omitempty"`
+	R                *string         `json:"r,omitempty"`
+	S                *string         `json:"s,omitempty"`
+	To               *common.Address `json:"to,omitempty"`
+	TransactionIndex *Int            `json:"transactionIndex,omitempty"`
+	Type             *Int            `json:"type,omitempty"`
+	V                *string         `json:"v,omitempty"`
+	Value            *BigInt         `json:"value,omitempty"`
+}
+
+// Hex2Bytes converts a hex string to a byte slice.
+func Hex2Bytes(hexR *string) []byte {
+	if hexR == nil {
+		return nil
+	}
+	hex := *hexR
+	if len(hex) == 0 {
+		return nil
+	}
+	if len(hex)%2 != 0 {
+		hex = "0" + hex
+	}
+	b, err := hexutil.Decode(hex)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// Tx return types.Transaction from rpcTransaction
+func (tx *rpcTransaction) Tx() types.Transaction {
+	if tx == nil {
+		return nil
+	}
+
+	if tx.Type == nil {
+		panic("transaction type is nil")
+	}
+
+	if *tx.Type == 0x0 /*legacy*/ {
+		if tx.To == nil {
+			return types.NewContractCreation(
+				tx.Nonce.Uint64(),
+				tx.Value.ToInt(),
+				tx.Gas.Uint64(),
+				tx.GasPrice.ToInt(),
+				Hex2Bytes(tx.Input),
+			)
+		}
+		return types.NewTransaction(
+			tx.Nonce.Uint64(),
+			*tx.To,
+			tx.Value.ToInt(),
+			tx.Gas.Uint64(),
+			tx.GasPrice.ToInt(),
+			Hex2Bytes(tx.Input),
+		)
+	}
+
+	panic(fmt.Sprintf("unknown transaction type: %v", *tx.Type))
+}
+
+/*
+{
+   "blockHash": "0x0090e430b7a7429ee3d8b64d899e58c93b6560f7d8167d57fe1ad9618d82d4bf",
+   "blockNumber": "0xbbaf",
+   "from": "0xc759dc67e0c3816fdc56a2f5bb29920fc07e767d",
+   "gas": "0x55f0",
+   "gasPrice": "0xcd247221f",
+   "hash": "0x69b06b4fd1d723e1baf2fce55a39d9f4532fbd0301f73db2c1790a427d14ae19",
+   "input": "0x454e444d31394d3552",
+   "nonce": "0x3",
+   "r": "0x8a4eb65cb1afc9159b77bff7a02c0c0d605f78141ca4501d2333c43a17d82e31",
+   "s": "0x3158d9fb01983b0ea2aca244af5c32a512b3bdc3cc6cd1ed3ac4a2230a6654b8",
+   "to": "0x2910543af39aba0cd09dbb2d50200b3e800a63d2",
+   "transactionIndex": "0x0",
+   "type": "0x0",
+   "v": "0x1c",
+   "value": "0x56bc75e2d63100000"
+   }
+*/
 
 // TransactionByHash returns the transaction with the given hash.
 func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx types.Transaction, isPending bool, err error) {
@@ -227,13 +352,10 @@ func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx t
 		return nil, false, err
 	} else if json == nil {
 		return nil, false, ethereum.NotFound
-	} else if _, r, _ := json.tx.RawSignatureValues(); r == nil {
+	} else if _, r, _ := json.Tx().RawSignatureValues(); r == nil {
 		return nil, false, fmt.Errorf("server returned transaction without signature")
 	}
-	if json.From != nil && json.BlockHash != nil {
-		setSenderFromServer(json.tx, *json.From, *json.BlockHash)
-	}
-	return json.tx, json.BlockNumber == nil, nil
+	return json.Tx(), json.BlockNumber == nil, nil
 }
 
 /*
@@ -281,13 +403,10 @@ func (ec *Client) TransactionInBlock(ctx context.Context, blockHash common.Hash,
 	}
 	if json == nil {
 		return nil, ethereum.NotFound
-	} else if _, r, _ := json.tx.RawSignatureValues(); r == nil {
+	} else if _, r, _ := json.Tx().RawSignatureValues(); r == nil {
 		return nil, fmt.Errorf("server returned transaction without signature")
 	}
-	if json.From != nil && json.BlockHash != nil {
-		setSenderFromServer(json.tx, *json.From, *json.BlockHash)
-	}
-	return json.tx, err
+	return json.Tx(), err
 }
 
 // TransactionReceipt returns the receipt of a transaction by transaction hash.

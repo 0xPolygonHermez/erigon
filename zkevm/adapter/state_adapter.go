@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -86,7 +87,8 @@ func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch 
 }
 
 func (m *StateInterfaceAdapter) AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error {
-	panic("AddBlock: implement me")
+	fmt.Println("IIII state.AddBlock -- no-op", block.BlockNumber)
+	return nil
 }
 
 func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx kv.RwTx) error {

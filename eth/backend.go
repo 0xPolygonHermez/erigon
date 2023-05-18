@@ -673,7 +673,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		etherMan,                  //etherMan           ethermanInterface
 		adapter.NewStateAdapter(), //state              stateInterface
 		client.NewClient("https://rpc.polygon-zkevm.gateway.fm"), //zkEVMClient        zkEVMClientInterface
-		synchronizer.Config{},
+		synchronizer.Config{SyncChunkSize: 1000, GenBlockNumber: 16896721},
 	)
 	if err != nil {
 		return nil, err
