@@ -281,7 +281,6 @@ func (etherMan *Client) readEvents(ctx context.Context, query ethereum.FilterQue
 	var blocks []Block
 	blocksOrder := make(map[common.Hash][]Order)
 	for _, vLog := range logs {
-		fmt.Println("IIII: processEvents")
 		err := etherMan.processEvent(ctx, vLog, &blocks, &blocksOrder)
 		if err != nil {
 			log.Warnf("error processing event. Retrying... Error: %s. vLog: %+v", err.Error(), vLog)

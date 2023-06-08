@@ -68,7 +68,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 	// Get the latest synced block. If there is no block on db, use genesis block
 	log.Info("Sync started")
 
-	highestInDb, err := stages.GetStageProgress(tx, stages.Headers)
+	highestInDb, err := stages.GetStageProgress(tx, stages.L1Blocks)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,6 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 			return nil
 		case <-time.After(waitDuration):
 			//Sync L1Blocks
-			fmt.Println("IIII lastBlockSynced: ", lastEthBlockSynced.BlockNumber)
 			if lastEthBlockSynced, err = s.syncBlocks(tx, lastEthBlockSynced); err != nil {
 				log.Warn("error syncing blocks: ", err)
 				lastEthBlockSynced, err = s.state.GetLastBlock(s.ctx, nil)
@@ -227,7 +226,6 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 			fmt.Println("IIII processBlockRange error: ", err)
 			return lastEthBlockSynced, err
 		}
-		fmt.Println("IIII processBlockRange success: ", len(blocks))
 		if len(blocks) > 0 {
 			lastEthBlockSynced = &state.Block{
 				BlockNumber: blocks[len(blocks)-1].BlockNumber,

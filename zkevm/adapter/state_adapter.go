@@ -62,8 +62,8 @@ func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) 
 		return nil, err
 	}
 
-	if blockHeight < 15000000 {
-		blockHeight = 15000000
+	if blockHeight < 16800000 {
+		blockHeight = 16800000
 	}
 
 	// we just need this to make sure from which block to begin parsing in case of restart

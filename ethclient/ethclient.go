@@ -131,7 +131,6 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 	}
 
 	var body rpcBlock
-	fmt.Println("IIII raw", string(raw))
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return nil, err
 	}
@@ -218,7 +217,6 @@ func (bi *BigInt) UnmarshalJSON(data []byte) error {
 	if unquotedData[0] == '0' && unquotedData[1] == 'x' {
 		unquotedData = unquotedData[2:]
 	}
-	fmt.Println("IIII unmarshaling unquotedData", unquotedData)
 	// big.Int SetString method expects a base; 16 is used here because the data is hexadecimal
 	_, success := bi.SetString(unquotedData, 16)
 	if !success {
