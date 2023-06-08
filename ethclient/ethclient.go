@@ -301,24 +301,35 @@ func (tx *rpcTransaction) Tx() types.Transaction {
 		panic("transaction type is nil")
 	}
 
-	if *tx.Type == 0x0 /*legacy*/ {
-		if tx.To == nil {
-			return types.NewContractCreation(
-				tx.Nonce.Uint64(),
-				tx.Value.ToInt(),
-				tx.Gas.Uint64(),
-				tx.GasPrice.ToInt(),
-				Hex2Bytes(tx.Input),
-			)
-		}
-		return types.NewTransaction(
+	var legacy *types.LegacyTx
+	if tx.To == nil {
+		legacy = types.NewContractCreation(
 			tx.Nonce.Uint64(),
-			*tx.To,
 			tx.Value.ToInt(),
 			tx.Gas.Uint64(),
 			tx.GasPrice.ToInt(),
 			Hex2Bytes(tx.Input),
 		)
+	}
+	legacy = types.NewTransaction(
+		tx.Nonce.Uint64(),
+		*tx.To,
+		tx.Value.ToInt(),
+		tx.Gas.Uint64(),
+		tx.GasPrice.ToInt(),
+		Hex2Bytes(tx.Input),
+	)
+
+	if *tx.Type == 0x0 /*legacy*/ {
+		return legacy
+	}
+
+	if *tx.Type == 0x1 /*dynamic*/ {
+		return &types.DynamicFeeTransaction{CommonTx: legacy.CommonTx}
+	}
+
+	if *tx.Type == 0x2 /*access list*/ {
+		return &types.AccessListTx{LegacyTx: *legacy}
 	}
 
 	panic(fmt.Sprintf("unknown transaction type: %v", *tx.Type))
