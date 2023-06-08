@@ -58,6 +58,9 @@ var (
 
 )
 
+// "renaming" it here to minimize diff
+var L1Blocks SyncStage = Headers
+
 var AllStages = []SyncStage{
 	Snapshots,
 	Headers,

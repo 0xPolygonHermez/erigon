@@ -6,7 +6,6 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
@@ -58,24 +57,13 @@ func NewStateAdapter() stateInterface {
 }
 
 func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) (*state.Block, error) {
-	blockHeight, err := stages.GetStageProgress(dbTx, stages.Bodies)
-	if err != nil {
-		return nil, err
-	}
-	canonicalHash, err := rawdb.ReadCanonicalHash(dbTx, blockHeight)
-	if err != nil {
-		return nil, err
-	}
-	block, _, err := rawdb.ReadBlockWithSenders(dbTx, canonicalHash, blockHeight)
+	blockHeight, err := stages.GetStageProgress(dbTx, stages.L1Blocks)
 	if err != nil {
 		return nil, err
 	}
 
-	return &state.Block{
-		BlockNumber: block.Header().Number.Uint64(),
-		BlockHash:   canonicalHash,
-		ParentHash:  block.Header().ParentHash,
-	}, nil
+	// we just need this to make sure from which block to begin parsing in case of restart
+	return &state.Block{BlockNumber: blockHeight}, nil
 }
 
 func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx kv.RwTx) error {
@@ -87,7 +75,8 @@ func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch 
 }
 
 func (m *StateInterfaceAdapter) AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error {
-	fmt.Println("IIII state.AddBlock -- no-op", block.BlockNumber)
+	fmt.Printf("AddBlock, saving ETH progress block: %d\n", block.BlockNumber)
+	stages.SaveStageProgress(dbTx, stages.L1Blocks, block.BlockNumber)
 	return nil
 }
 
