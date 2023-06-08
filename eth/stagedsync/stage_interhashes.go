@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"math/bits"
 	"sync/atomic"
 
@@ -17,9 +18,14 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
 	"github.com/ledgerwatch/erigon-lib/kv/temporal/historyv2"
 	"github.com/ledgerwatch/erigon-lib/state"
-	"github.com/ledgerwatch/erigon/core/state/temporal"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
+
+	state2 "github.com/ledgerwatch/erigon/core/state"
+
+	"github.com/ledgerwatch/erigon/core/state/temporal"
+	db2 "github.com/revitteth/smt/v2/pkg/db"
+	"github.com/revitteth/smt/v2/pkg/smt"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
@@ -147,6 +153,40 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 	return root, err
 }
 
+func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as [][]byte, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address) (*big.Int, error) {
+
+	// store the account balance and nonce
+	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance.ToBig(), big.NewInt(int64(a.Nonce))) // TODO: fix for overflow
+	if err != nil {
+		return nil, err
+	}
+
+	// store the contract bytecode
+	cc, err := psr.ReadAccountCode(addr, inc, a.CodeHash)
+	if err != nil {
+		return nil, err
+	}
+	if len(cc) > 0 {
+		r, err = smt.SetContractBytecode(addr.String(), s, r, string(cc))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// parse the storage into map[string]string by splitting the storage hex into two 32 bit values
+	sm := make(map[string]string)
+	for _, v := range as {
+		key := "0x" + string(v[:len(v)-2])
+		val := "0x" + string(v[len(v)-2:])
+		sm[key] = val
+	}
+
+	// store the account storage
+	r, err = smt.SetContractStorage(addr.String(), s, r, sm)
+
+	return r, nil
+}
+
 func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, ctx context.Context) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
@@ -157,31 +197,67 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	clean2 := kv.ReadAhead(ctx, cfg.db, &atomic.Bool{}, kv.HashedStorage, nil, math.MaxUint32)
 	defer clean2()
 
-	accTrieCollector := etl.NewCollector(logPrefix, cfg.tmpDir, etl.NewSortableBuffer(etl.BufferOptimalSize))
-	defer accTrieCollector.Close()
-	accTrieCollectorFunc := accountTrieCollector(accTrieCollector)
-
-	stTrieCollector := etl.NewCollector(logPrefix, cfg.tmpDir, etl.NewSortableBuffer(etl.BufferOptimalSize))
-	defer stTrieCollector.Close()
-	stTrieCollectorFunc := storageTrieCollector(stTrieCollector)
-
-	loader := trie.NewFlatDBTrieLoader(logPrefix, trie.NewRetainList(0), accTrieCollectorFunc, stTrieCollectorFunc, false)
-	hash, err := loader.CalcTrieRoot(db, ctx.Done())
+	c, err := db.Cursor(kv.PlainState)
 	if err != nil {
 		return trie.EmptyRoot, err
 	}
 
+	memdb := db2.NewMemDb()
+	smt := smt.NewSMT(memdb)
+
+	var a *accounts.Account
+	var addr libcommon.Address
+	var as [][]byte
+	var inc uint64
+
+	var root = big.NewInt(0)
+	var hash libcommon.Hash
+	psr := state2.NewPlainStateReader(db)
+
+	for k, acc, err := c.Next(); err != nil && acc != nil; k, acc, err = c.Next() {
+
+		// if key length is 20, we're looking at an address
+		if len(k) == 20 {
+			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
+				root, err = processAccount(smt, root, a, as, inc, psr, addr)
+				if err != nil {
+					return trie.EmptyRoot, err
+				}
+			}
+
+			if err = a.DecodeForStorage(acc); err != nil {
+				// TODO: not an account?
+				as = as[:0]
+				continue
+			}
+			inc = a.Incarnation
+			// empty storage of previous account
+			as = as[:0]
+		} else { // otherwise we're reading storage\
+			var curInc uint64
+			addr, curInc = dbutils.PlainParseStoragePrefix(k)
+			if inc != curInc {
+				continue
+			}
+
+			// account storage & contract code
+			as = append(as, acc)
+		}
+	}
+
+	// process the final account
+	root, err = processAccount(smt, root, a, as, inc, psr, addr)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
+
+	hash = libcommon.BigToHash(root)
+
 	if cfg.checkRoot && hash != expectedRootHash {
+		log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
 		return hash, nil
 	}
 	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
-
-	if err := accTrieCollector.Load(db, kv.TrieOfAccounts, etl.IdentityLoadFunc, etl.TransformArgs{Quit: ctx.Done()}); err != nil {
-		return trie.EmptyRoot, err
-	}
-	if err := stTrieCollector.Load(db, kv.TrieOfStorage, etl.IdentityLoadFunc, etl.TransformArgs{Quit: ctx.Done()}); err != nil {
-		return trie.EmptyRoot, err
-	}
 	return hash, nil
 }
 

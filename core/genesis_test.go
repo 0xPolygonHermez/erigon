@@ -9,10 +9,11 @@ import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
-	"github.com/ledgerwatch/erigon/core"
-	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ledgerwatch/erigon/core"
+	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -41,6 +42,17 @@ func TestGenesisBlockHashes(t *testing.T) {
 	}
 }
 
+func TestHermezBlockRoots(t *testing.T) {
+	require := require.New(t)
+	var err error
+
+	block, _, err := core.GenesisToBlock(core.HermezMainnetGenesisBlock(), "")
+	require.NoError(err)
+	if block.Root() != params.HermezMainnetGenesisHash {
+		t.Errorf("wrong Hermez Mainnet genesis state root, got %v, want %v", block.Root(), params.HermezMainnetGenesisHash)
+	}
+}
+
 func TestGenesisBlockRoots(t *testing.T) {
 	require := require.New(t)
 	var err error
@@ -66,6 +78,12 @@ func TestGenesisBlockRoots(t *testing.T) {
 	}
 	if block.Hash() != params.ChiadoGenesisHash {
 		t.Errorf("wrong Chiado genesis hash, got %v, want %v", block.Hash(), params.ChiadoGenesisHash)
+	}
+
+	block, _, err = core.GenesisToBlock(core.HermezMainnetGenesisBlock(), "")
+	require.NoError(err)
+	if block.Root() != params.HermezMainnetGenesisHash {
+		t.Errorf("wrong Hermez Mainnet genesis state root, got %v, want %v", block.Root(), params.HermezMainnetGenesisHash)
 	}
 }
 

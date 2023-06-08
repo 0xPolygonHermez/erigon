@@ -1,0 +1,6 @@
+datadir : '/Volumes/2TB/datadirs/hermez'
+chain : "hermez-mainnet"
+http : true
+private.api.addr : "localhost:9090"
+
+http.api : ["eth","debug","net"]

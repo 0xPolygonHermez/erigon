@@ -32,6 +32,9 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
+	"github.com/ledgerwatch/log/v3"
+	"golang.org/x/exp/slices"
+
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
@@ -43,9 +46,9 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/params/networkname"
-	"github.com/ledgerwatch/erigon/turbo/trie"
-	"github.com/ledgerwatch/log/v3"
-	"golang.org/x/exp/slices"
+	"github.com/ledgerwatch/erigon/zkevm/hex"
+	db2 "github.com/revitteth/smt/v2/pkg/db"
+	"github.com/revitteth/smt/v2/pkg/smt"
 )
 
 // CommitGenesisBlock writes or updates the genesis block in db.
@@ -433,7 +436,7 @@ func HermezMainnetGenesisBlock() *types.Genesis {
 		Timestamp:  0,
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
-		//Alloc:      readPrealloc("allocs/chiado.json"),
+		Alloc:      readPrealloc("allocs/hermez.json"),
 	}
 }
 
@@ -462,6 +465,38 @@ func DeveloperGenesisBlock(period uint64, faucet libcommon.Address) *types.Genes
 
 var genesisTmpDB kv.RwDB
 var genesisDBLock sync.Mutex
+
+func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr libcommon.Address) (*big.Int, error) {
+
+	if root == nil {
+		root = big.NewInt(0)
+	}
+
+	// store the account balance and nonce
+	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance, big.NewInt(int64(a.Nonce))) // TODO: fix for overflow
+	if err != nil {
+		return nil, err
+	}
+
+	if len(a.Code) > 0 {
+		xs := hex.EncodeToString(a.Code)
+		r, err = smt.SetContractBytecode(addr.String(), s, r, xs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// parse the storage into map[string]string by splitting the storage hex into two 32 bit values
+	sm := make(map[string]string)
+	for k, v := range a.Storage {
+		sm[k.String()] = v.String()
+	}
+
+	// store the account storage
+	r, err = smt.SetContractStorage(addr.String(), s, r, sm)
+
+	return r, nil
+}
 
 // ToBlock creates the genesis block and writes state of a genesis specification
 // to the given database (or discards it if nil).
@@ -536,6 +571,11 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 			statedb.CreateAccount(libcommon.Address{}, false)
 		}
 
+		// use SMT
+		db := db2.NewMemDb()
+		s := smt.NewSMT(db)
+		var ro *big.Int
+
 		keys := sortedAllocKeys(g.Alloc)
 		for _, key := range keys {
 			addr := libcommon.BytesToAddress([]byte(key))
@@ -548,6 +588,7 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 			statedb.AddBalance(addr, balance)
 			statedb.SetCode(addr, account.Code)
 			statedb.SetNonce(addr, account.Nonce)
+
 			for key, value := range account.Storage {
 				key := key
 				val := uint256.NewInt(0).SetBytes(value.Bytes())
@@ -563,13 +604,21 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 			if len(account.Code) > 0 || len(account.Storage) > 0 || len(account.Constructor) > 0 {
 				statedb.SetIncarnation(addr, state.FirstContractIncarnation)
 			}
+
+			ro, err = processAccount(s, ro, &account, addr)
+			if err != nil {
+				return
+			}
 		}
 		if err = statedb.FinalizeTx(&chain.Rules{}, w); err != nil {
 			return
 		}
-		if root, err = trie.CalcRoot("genesis", tx); err != nil {
-			return
-		}
+
+		//if root, err = trie.CalcRoot("genesis", tx); err != nil {
+		//	return
+		//}
+
+		root = libcommon.BigToHash(ro)
 	}()
 	wg.Wait()
 	if err != nil {
