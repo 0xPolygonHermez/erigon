@@ -62,8 +62,9 @@ func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) 
 		return nil, err
 	}
 
-	if blockHeight < 16800000 {
-		blockHeight = 16800000
+	// makes no sense to process blocks before the deployment of the smart contract
+	if blockHeight < 16896700 {
+		blockHeight = 16896700
 	}
 
 	// we just need this to make sure from which block to begin parsing in case of restart
@@ -93,7 +94,7 @@ func (m *StateInterfaceAdapter) GetPreviousBlock(ctx context.Context, offset uin
 }
 
 func (m *StateInterfaceAdapter) GetLastBatchNumber(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
-	panic("GetLastBatchNumber: implement me")
+	return stages.GetStageProgress(dbTx, stages.Batches)
 }
 
 func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error) {
@@ -169,7 +170,8 @@ func (m *StateInterfaceAdapter) ResetForkID(ctx context.Context, batchNumber, fo
 }
 
 func (m *StateInterfaceAdapter) GetForkIDTrustedReorgCount(ctx context.Context, forkID uint64, version string, dbTx kv.RwTx) (uint64, error) {
-	panic("GetForkIDTrustedReorgCount: implement me")
+	// just pretendint its okay
+	return 1, nil
 }
 
 func (m *StateInterfaceAdapter) UpdateForkIDIntervals(intervals []state.ForkIDInterval) {

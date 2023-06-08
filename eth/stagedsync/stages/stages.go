@@ -58,8 +58,10 @@ var (
 
 )
 
+// "overrides" for zkEVM
 // "renaming" it here to minimize diff
 var L1Blocks SyncStage = Headers
+var Batches SyncStage = Bodies
 
 var AllStages = []SyncStage{
 	Snapshots,

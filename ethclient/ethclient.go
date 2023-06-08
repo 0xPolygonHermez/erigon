@@ -280,7 +280,7 @@ func Hex2Bytes(hexR *string) []byte {
 		return nil
 	}
 	if len(hex)%2 != 0 {
-		hex = "0" + hex
+		hex = "0x0" + hex[2:]
 	}
 	b, err := hexutil.Decode(hex)
 	if err != nil {
@@ -319,6 +319,13 @@ func (tx *rpcTransaction) Tx() types.Transaction {
 		)
 	}
 
+	if tx.V != nil && tx.R != nil && tx.S != nil {
+		// parse signature raw values V, R, S from local hex strings
+		legacy.V = Hex2Int256(*tx.V)
+		legacy.R = Hex2Int256(*tx.R)
+		legacy.S = Hex2Int256(*tx.S)
+	}
+
 	if *tx.Type == 0x0 /*legacy*/ {
 		return legacy
 	}
@@ -332,6 +339,16 @@ func (tx *rpcTransaction) Tx() types.Transaction {
 	}
 
 	panic(fmt.Sprintf("unknown transaction type: %v", *tx.Type))
+}
+
+// Hex2Int256 converts a hex string to a uint256.Int.
+func Hex2Int256(hex string) uint256.Int {
+	b := Hex2Bytes(&hex)
+	i := uint256.NewInt(0).SetBytes(b)
+	if i == nil {
+		panic("failed to convert hex to uint256.Int")
+	}
+	return *i
 }
 
 /*
