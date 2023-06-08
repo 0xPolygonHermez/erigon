@@ -310,15 +310,16 @@ func (tx *rpcTransaction) Tx() types.Transaction {
 			tx.GasPrice.ToInt(),
 			Hex2Bytes(tx.Input),
 		)
+	} else {
+		legacy = types.NewTransaction(
+			tx.Nonce.Uint64(),
+			*tx.To,
+			tx.Value.ToInt(),
+			tx.Gas.Uint64(),
+			tx.GasPrice.ToInt(),
+			Hex2Bytes(tx.Input),
+		)
 	}
-	legacy = types.NewTransaction(
-		tx.Nonce.Uint64(),
-		*tx.To,
-		tx.Value.ToInt(),
-		tx.Gas.Uint64(),
-		tx.GasPrice.ToInt(),
-		Hex2Bytes(tx.Input),
-	)
 
 	if *tx.Type == 0x0 /*legacy*/ {
 		return legacy
