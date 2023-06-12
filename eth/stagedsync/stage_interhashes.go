@@ -21,6 +21,8 @@ import (
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
 
+	"github.com/ledgerwatch/erigon/core/types"
+
 	state2 "github.com/ledgerwatch/erigon/core/state"
 
 	"github.com/ledgerwatch/erigon/core/state/temporal"
@@ -30,7 +32,6 @@ import (
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
@@ -77,6 +78,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		defer tx.Rollback()
 	}
 
+	// max: we have to have executed in order to be able to do interhashes (see execution!)
 	to, err := s.ExecutionAt(tx)
 	if err != nil {
 		return trie.EmptyRoot, err
@@ -197,6 +199,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	clean2 := kv.ReadAhead(ctx, cfg.db, &atomic.Bool{}, kv.HashedStorage, nil, math.MaxUint32)
 	defer clean2()
 
+	// [zkEVM] - read back the stored transactions and process with SMT
 	c, err := db.Cursor(kv.PlainState)
 	if err != nil {
 		return trie.EmptyRoot, err
@@ -214,7 +217,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	var hash libcommon.Hash
 	psr := state2.NewPlainStateReader(db)
 
-	for k, acc, err := c.Next(); err != nil && acc != nil; k, acc, err = c.Next() {
+	for k, acc, err := c.First(); err == nil; k, acc, err = c.Next() {
 
 		// if key length is 20, we're looking at an address
 		if len(k) == 20 {

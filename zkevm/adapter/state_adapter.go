@@ -3,9 +3,12 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+
+	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
@@ -48,7 +51,20 @@ type stateInterface interface {
 	BeginStateTransaction(ctx context.Context) (kv.RwTx, error)
 }
 
-type StateInterfaceAdapter struct{}
+var headerHashes = map[uint64]common.Hash{}
+
+type batchdb struct {
+	verifiedBatches map[uint64]*state.VerifiedBatch
+	batches         map[uint64]*state.Batch
+}
+
+var bdb = &batchdb{
+	verifiedBatches: map[uint64]*state.VerifiedBatch{},
+	batches:         map[uint64]*state.Batch{},
+}
+
+type StateInterfaceAdapter struct {
+}
 
 var _ stateInterface = (*StateInterfaceAdapter)(nil)
 
@@ -72,7 +88,8 @@ func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) 
 }
 
 func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx kv.RwTx) error {
-	panic("AddGlobalExitRoot: implement me")
+	// TODO: [max] no-op for now
+	return nil
 }
 
 func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error {
@@ -81,12 +98,13 @@ func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch 
 
 func (m *StateInterfaceAdapter) AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error {
 	fmt.Printf("AddBlock, saving ETH progress block: %d\n", block.BlockNumber)
-	stages.SaveStageProgress(dbTx, stages.L1Blocks, block.BlockNumber)
-	return nil
+
+	return stages.SaveStageProgress(dbTx, stages.L1Blocks, block.BlockNumber)
 }
 
 func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx kv.RwTx) error {
-	panic("AddVirtualBatch: implement me")
+	// [zkevm] - store in temp in mem db for debugging
+	return nil
 }
 
 func (m *StateInterfaceAdapter) GetPreviousBlock(ctx context.Context, offset uint64, dbTx kv.RwTx) (*state.Block, error) {
@@ -94,11 +112,15 @@ func (m *StateInterfaceAdapter) GetPreviousBlock(ctx context.Context, offset uin
 }
 
 func (m *StateInterfaceAdapter) GetLastBatchNumber(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
-	return stages.GetStageProgress(dbTx, stages.Batches)
+	return stages.GetStageProgress(dbTx, stages.Bodies)
 }
 
 func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error) {
-	panic("GetBatchByNumber: implement me")
+	b, ok := bdb.batches[batchNumber]
+	if !ok {
+		return nil, state.ErrNotFound
+	}
+	return b, nil
 }
 
 func (m *StateInterfaceAdapter) ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) error {
@@ -110,11 +132,58 @@ func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextFo
 }
 
 func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx kv.RwTx) error {
-	panic("AddVerifiedBatch: implement me")
+	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d\n", verifiedBatch.BatchNumber)
+
+	header, err := WriteHeaderToDb(dbTx, verifiedBatch)
+	if err != nil {
+		return err
+	}
+	headerHashes[verifiedBatch.BatchNumber] = header.Hash()
+
+	bdb.verifiedBatches[verifiedBatch.BatchNumber] = verifiedBatch
+
+	vb := bdb.batches[verifiedBatch.BatchNumber]
+	if vb == nil {
+		fmt.Println("SAVING WITHOUT HEADER!!!!")
+	}
+	err = WriteBodyToDb(dbTx, vb, header.Hash())
+	if err != nil {
+		return err
+	}
+
+	err = stages.SaveStageProgress(dbTx, stages.Headers, verifiedBatch.BatchNumber)
+	if err != nil {
+		return err
+	}
+
+	err = stages.SaveStageProgress(dbTx, stages.Bodies, verifiedBatch.BatchNumber)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, processingCtx state.ProcessingContext, encodedTxs []byte, dbTx kv.RwTx, caller metrics.CallerLabel) (common.Hash, error) {
-	panic("ProcessAndStoreClosedBatch: implement me")
+	txs, _, err := state.DecodeTxs(encodedTxs)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	bdb.batches[processingCtx.BatchNumber] = &state.Batch{
+		BatchNumber:    processingCtx.BatchNumber,
+		Coinbase:       processingCtx.Coinbase,
+		BatchL2Data:    encodedTxs,
+		StateRoot:      common.Hash{},
+		LocalExitRoot:  common.Hash{},
+		AccInputHash:   common.Hash{},
+		Timestamp:      processingCtx.Timestamp,
+		Transactions:   txs,
+		GlobalExitRoot: processingCtx.GlobalExitRoot,
+		ForcedBatchNum: processingCtx.ForcedBatchNum,
+	}
+
+	return headerHashes[processingCtx.BatchNumber], nil
 }
 
 func (m *StateInterfaceAdapter) OpenBatch(ctx context.Context, processingContext state.ProcessingContext, dbTx kv.RwTx) error {
@@ -130,7 +199,9 @@ func (m *StateInterfaceAdapter) ProcessSequencerBatch(ctx context.Context, batch
 }
 
 func (m *StateInterfaceAdapter) StoreTransactions(ctx context.Context, batchNum uint64, processedTxs []*state.ProcessTransactionResponse, dbTx kv.RwTx) error {
-	panic("StoreTransactions: implement me")
+	// TODO [zkevm] max - make a noop for now
+
+	return nil
 }
 
 func (m *StateInterfaceAdapter) GetStateRootByBatchNumber(ctx context.Context, batchNum uint64, dbTx kv.RwTx) (common.Hash, error) {
@@ -138,11 +209,51 @@ func (m *StateInterfaceAdapter) GetStateRootByBatchNumber(ctx context.Context, b
 }
 
 func (m *StateInterfaceAdapter) ExecuteBatch(ctx context.Context, batch state.Batch, updateMerkleTree bool, dbTx kv.RwTx) (*pb.ProcessBatchResponse, error) {
-	panic("ExecuteBatch: implement me")
+	// TODO [zkevm] this isn't implemented for PoC
+
+	pbr := &pb.ProcessBatchResponse{
+		NewStateRoot:        batch.StateRoot.Bytes(),
+		NewAccInputHash:     batch.AccInputHash.Bytes(),
+		NewLocalExitRoot:    batch.LocalExitRoot.Bytes(),
+		NewBatchNum:         batch.BatchNumber,
+		CntKeccakHashes:     0,
+		CntPoseidonHashes:   0,
+		CntPoseidonPaddings: 0,
+		CntMemAligns:        0,
+		CntArithmetics:      0,
+		CntBinaries:         0,
+		CntSteps:            0,
+		CumulativeGasUsed:   0,
+		Responses:           nil,
+		Error:               0,
+		ReadWriteAddresses:  nil,
+	}
+
+	return pbr, nil
 }
 
 func (m *StateInterfaceAdapter) GetLastVerifiedBatch(ctx context.Context, dbTx kv.RwTx) (*state.VerifiedBatch, error) {
-	panic("GetLastVerifiedBatch: implement me")
+	var maxKey uint64
+	for k := range bdb.verifiedBatches {
+		if k > maxKey {
+			maxKey = k
+		}
+	}
+
+	vb, ok := bdb.verifiedBatches[maxKey]
+	if !ok {
+		// return an empty zero batch
+		return &state.VerifiedBatch{
+			BlockNumber: 0,
+			BatchNumber: 0,
+			Aggregator:  common.Address{},
+			TxHash:      common.Hash{},
+			StateRoot:   common.Hash{},
+			IsTrusted:   false,
+		}, nil
+	}
+
+	return vb, nil
 }
 
 func (m *StateInterfaceAdapter) GetLastVirtualBatchNum(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
@@ -150,11 +261,13 @@ func (m *StateInterfaceAdapter) GetLastVirtualBatchNum(ctx context.Context, dbTx
 }
 
 func (m *StateInterfaceAdapter) AddSequence(ctx context.Context, sequence state.Sequence, dbTx kv.RwTx) error {
-	panic("AddSequence: implement me")
+	// TODO [max]: maybe we should do something here
+	return nil
 }
 
 func (m *StateInterfaceAdapter) AddAccumulatedInputHash(ctx context.Context, batchNum uint64, accInputHash common.Hash, dbTx kv.RwTx) error {
-	panic("AddAccumulatedInputHash: implement me")
+	//panic("AddAccumulatedInputHash: implement me")
+	return nil
 }
 
 func (m *StateInterfaceAdapter) AddTrustedReorg(ctx context.Context, trustedReorg *state.TrustedReorg, dbTx kv.RwTx) error {
@@ -180,4 +293,36 @@ func (m *StateInterfaceAdapter) UpdateForkIDIntervals(intervals []state.ForkIDIn
 
 func (m *StateInterfaceAdapter) BeginStateTransaction(ctx context.Context) (kv.RwTx, error) {
 	panic("BeginStateTransaction: implement me")
+}
+
+func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch) (*ethTypes.Header, error) {
+	if dbTx == nil {
+		return nil, fmt.Errorf("dbTx is nil")
+	}
+
+	// erigon block number is l2 batch number
+	blockNo := new(big.Int).SetUint64(vb.BatchNumber)
+
+	h := &ethTypes.Header{
+		Root:       vb.StateRoot,
+		TxHash:     vb.TxHash,
+		Difficulty: big.NewInt(0),
+		Number:     blockNo,
+	}
+	rawdb.WriteHeader(dbTx, h)
+	rawdb.WriteCanonicalHash(dbTx, h.Hash(), blockNo.Uint64())
+	return h, nil
+}
+
+func WriteBodyToDb(dbTx kv.RwTx, batch *state.Batch, hh common.Hash) error {
+	if dbTx == nil {
+		return fmt.Errorf("dbTx is nil")
+	}
+
+	b := &ethTypes.Body{
+		Transactions: batch.Transactions,
+	}
+
+	// writes txs to EthTx (canonical table)
+	return rawdb.WriteBody(dbTx, hh, batch.BatchNumber, b)
 }

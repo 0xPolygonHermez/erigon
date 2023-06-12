@@ -32,14 +32,15 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon/zkevm/adapter"
-	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	"github.com/ledgerwatch/erigon/zkevm/synchronizer"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/ledgerwatch/erigon/zkevm/adapter"
+	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
+	"github.com/ledgerwatch/erigon/zkevm/synchronizer"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"

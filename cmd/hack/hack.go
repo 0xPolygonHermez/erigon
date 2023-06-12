@@ -311,16 +311,16 @@ func dumpStorage() {
 	}
 }
 
-func printBucket(chaindata string) {
+func printBucket(chaindata, bucket string) {
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
-	f, err := os.Create("bucket.txt")
+	f, err := os.Create(fmt.Sprintf("bucket-%s.txt", bucket))
 	tool.Check(err)
 	defer f.Close()
 	fb := bufio.NewWriter(f)
 	defer fb.Flush()
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(kv.StorageHistory)
+		c, err := tx.Cursor(bucket)
 		if err != nil {
 			return err
 		}
@@ -328,11 +328,34 @@ func printBucket(chaindata string) {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(fb, "%x %x\n", k, v)
+			fmt.Fprintf(fb, "%s\n", formatBucketKVPair(k, v, bucket))
 		}
 		return nil
 	}); err != nil {
 		panic(err)
+	}
+}
+
+func formatBucketKVPair(k, v []byte, bucket string) string {
+	// switch statement on bucket (found in tables.go)
+	switch bucket {
+	case "Batches":
+	case kv.SyncStageProgress:
+		val := binary.BigEndian.Uint64(v)
+		return fmt.Sprintf("%s %d", string(k), val)
+
+	default:
+		return fmt.Sprintf("%x %x", k, v)
+	}
+	return ""
+}
+
+func printBuckets(chaindata, buckets string) {
+	if buckets == "" {
+		buckets = kv.EthTx
+	}
+	for _, b := range strings.Split(buckets, ",") {
+		printBucket(chaindata, b)
 	}
 }
 
@@ -1418,7 +1441,10 @@ func main() {
 		printCurrentBlockNumber(*chaindata)
 
 	case "bucket":
-		printBucket(*chaindata)
+		printBucket(*chaindata, kv.EthTx)
+
+	case "buckets":
+		printBuckets(*chaindata, *bucket)
 
 	case "slice":
 		dbSlice(*chaindata, *bucket, common.FromHex(*hash))

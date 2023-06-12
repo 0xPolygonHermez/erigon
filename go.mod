@@ -20,7 +20,7 @@ require (
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/torrent v1.48.1-0.20230219022425-e8971ea0f1bf
 	github.com/benesch/cgosymbolizer v0.0.0-20190515212042-bec6fe6e597b
-	github.com/btcsuite/btcd/btcec/v2 v2.1.3
+	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/c2h5oh/datasize v0.0.0-20220606134207-859f65c6625b
 	github.com/consensys/gnark-crypto v0.9.0
 	github.com/crate-crypto/go-ipa v0.0.0-20221111143132-9aa5d42120bc
@@ -29,7 +29,7 @@ require (
 	github.com/deckarep/golang-set v1.8.0
 	github.com/deckarep/golang-set/v2 v2.3.0
 	github.com/docker/docker v20.10.17+incompatible
-	github.com/dop251/goja v0.0.0-20220405120441-9037c2b61cbf
+	github.com/dop251/goja v0.0.0-20230122112309-96b1610dd4f7
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/emicklei/dot v1.0.0
 	github.com/emirpasic/gods v1.18.1
@@ -63,7 +63,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pelletier/go-toml/v2 v2.0.7
 	github.com/pion/stun v0.4.0
-	github.com/prometheus/client_golang v1.14.0
+	github.com/prometheus/client_golang v1.15.1
 	github.com/protolambda/eth2-shuffle v1.1.0
 	github.com/protolambda/ztyp v0.2.2
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20210809151128-385d8c5e3fb7
@@ -73,23 +73,23 @@ require (
 	github.com/shirou/gopsutil/v3 v3.23.2
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.3
 	github.com/thomaso-mirodin/intmath v0.0.0-20160323211736-5dc6d854e46e
 	github.com/tidwall/btree v1.6.0
 	github.com/ugorji/go/codec v1.1.13
 	github.com/ugorji/go/codec/codecgen v1.1.13
-	github.com/urfave/cli/v2 v2.25.1
+	github.com/urfave/cli/v2 v2.25.3
 	github.com/valyala/fastjson v1.6.4
 	github.com/vektah/gqlparser/v2 v2.5.1
 	github.com/xsleonard/go-merkle v1.1.0
 	go.uber.org/zap v1.24.0
-	golang.org/x/crypto v0.8.0
+	golang.org/x/crypto v0.9.0
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
-	golang.org/x/net v0.9.0
-	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.7.0
+	golang.org/x/net v0.10.0
+	golang.org/x/sync v0.2.0
+	golang.org/x/sys v0.8.0
 	golang.org/x/time v0.3.0
-	google.golang.org/grpc v1.54.0
+	google.golang.org/grpc v1.55.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
@@ -101,6 +101,7 @@ require (
 
 require (
 	crawshaw.io/sqlite v0.3.3-0.20220618202545-d1964889ea3c // indirect
+	github.com/0xPolygonHermez/zkevm-node v0.1.2 // indirect
 	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/ajwerner/btree v0.0.0-20211221152037-f427b3e689c0 // indirect
 	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect
@@ -132,13 +133,13 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
-	github.com/dlclark/regexp2 v1.4.1-0.20201116162257-a2a8dda75c91 // indirect
+	github.com/dlclark/regexp2 v1.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
-	github.com/fsnotify/fsnotify v1.5.4 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/garslo/gogen v0.0.0-20170307003452-d6ebae628c7c // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -153,7 +154,7 @@ require (
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20220405231054-a1ae3e4bba26 // indirect
-	github.com/iden3/go-iden3-crypto v0.0.14 // indirect
+	github.com/iden3/go-iden3-crypto v0.0.15 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/ipfs/go-cid v0.3.2 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
@@ -230,8 +231,8 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/prometheus/client_model v0.3.0 // indirect
-	github.com/prometheus/common v0.39.0 // indirect
+	github.com/prometheus/client_model v0.4.0 // indirect
+	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/qtls-go1-19 v0.2.1 // indirect
@@ -240,7 +241,7 @@ require (
 	github.com/quic-go/webtransport-go v0.5.2 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rogpeppe/go-internal v1.9.0 // indirect
+	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect

@@ -38,6 +38,7 @@ type Batch struct {
 // ProcessingContext is the necessary data that a batch needs to provide to the runtime,
 // without the historical state data (processing receipt from previous batch)
 type ProcessingContext struct {
+	L1BlockNumber  uint64
 	BatchNumber    uint64
 	Coinbase       common.Address
 	Timestamp      time.Time

@@ -89,7 +89,7 @@ func TestGenesisBlockRoots(t *testing.T) {
 
 func TestCommitGenesisIdempotency(t *testing.T) {
 	_, tx := memdb.NewTestTx(t)
-	genesis := core.GenesisBlockByChainName(networkname.MainnetChainName)
+	genesis := core.GenesisBlockByChainName(networkname.HermezMainnetChainName)
 	_, _, err := core.WriteGenesisBlock(tx, genesis, nil, "")
 	require.NoError(t, err)
 	seq, err := tx.ReadSequence(kv.EthTx)

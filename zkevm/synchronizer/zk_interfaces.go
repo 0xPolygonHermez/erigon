@@ -6,6 +6,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
