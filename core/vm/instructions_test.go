@@ -21,12 +21,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"testing"
 
+	types2 "github.com/ledgerwatch/erigon-lib/types"
+
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	types2 "github.com/ledgerwatch/erigon-lib/types"
 
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
@@ -235,29 +237,28 @@ func TestAddMod(t *testing.T) {
 	}
 }
 
-func TestExtCodeHashV2(t *testing.T) {
+func TestDifficultyV2(t *testing.T) {
 	var (
 		env            = NewEVM(evmtypes.BlockContext{}, evmtypes.TxContext{}, TestIntraBlockState{}, params.TestChainConfig, Config{})
 		stack          = stack.New()
 		evmInterpreter = NewEVMInterpreter(env, env.Config())
 		pc             = uint64(0)
 	)
+
+	zeroInt := new(big.Int).SetUint64(0)
+	v, _ := uint256.FromBig(zeroInt)
+
 	tests := []struct {
-		address  string
-		expected libcommon.Hash
+		expected *uint256.Int
 	}{
-		{"0000000000000000000000000000000000000000000000000000000000000000",
-			libcommon.HexToHash("0xtest"),
-		}, {"000000000000000000000000000000000000000000000000000000000fffffff",
-			libcommon.HexToHash("0xtest"),
+		{
+			expected: v,
 		},
 	}
 
 	for i, test := range tests {
-		address := new(uint256.Int).SetBytes(common.Hex2Bytes(test.address))
 		expected := new(uint256.Int).SetBytes(test.expected.Bytes())
-		stack.Push(address)
-		opExtCodeHashV2(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
+		opDifficultyV2(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
 		actual := stack.Pop()
 		if actual.Cmp(expected) != 0 {
 			t.Errorf("Testcase %d, expected  %x, got %x", i, expected, actual)

@@ -18,6 +18,7 @@ package vm
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
@@ -523,6 +524,13 @@ func opDifficulty(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 			return nil, fmt.Errorf("interpreter.evm.Context.Difficulty higher than 2^256-1")
 		}
 	}
+	scope.Stack.Push(v)
+	return nil, nil
+}
+
+func opDifficultyV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	zeroInt := new(big.Int).SetUint64(0)
+	v, _ := uint256.FromBig(zeroInt)
 	scope.Stack.Push(v)
 	return nil, nil
 }
