@@ -495,6 +495,19 @@ func opBlockhash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	return nil, nil
 }
 
+func opBlockhashV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	num := scope.Stack.Peek()
+	num64, overflow := num.Uint64WithOverflow()
+	if overflow {
+		num.Clear()
+		return nil, nil
+	}
+
+	num.SetBytes(interpreter.evm.Context().GetHash(num64).Bytes())
+
+	return nil, nil
+}
+
 func opCoinbase(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	scope.Stack.Push(new(uint256.Int).SetBytes(interpreter.evm.Context().Coinbase.Bytes()))
 	return nil, nil
