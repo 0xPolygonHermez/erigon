@@ -382,6 +382,7 @@ var opCodeToString = map[OpCode]string{
 	REVERT:       "REVERT",
 	INVALID:      "INVALID",
 	SELFDESTRUCT: "SELFDESTRUCT",
+	SENDALL:      "SENDALL",
 }
 
 func (op OpCode) String() string {
