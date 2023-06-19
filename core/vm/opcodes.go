@@ -210,6 +210,7 @@ const (
 	DELEGATECALL
 	CREATE2
 	STATICCALL   OpCode = 0xfa
+	SENDALL      OpCode = 0xfb
 	REVERT       OpCode = 0xfd
 	INVALID      OpCode = 0xfe
 	SELFDESTRUCT OpCode = 0xff
@@ -538,6 +539,7 @@ var stringToOp = map[string]OpCode{
 	"REVERT":         REVERT,
 	"INVALID":        INVALID,
 	"SELFDESTRUCT":   SELFDESTRUCT,
+	"SENDALL":        SENDALL,
 }
 
 // StringToOp finds the opcode whose name is stored in `str`.
