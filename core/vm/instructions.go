@@ -458,6 +458,15 @@ func opExtCodeHash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 	return nil, nil
 }
 
+func opExtCodeHashV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	slot := scope.Stack.Peek()
+	address := libcommon.Address(slot.Bytes20())
+
+	slot.SetBytes(interpreter.evm.IntraBlockState().GetCodeHash(address).Bytes())
+
+	return nil, nil
+}
+
 func opGasprice(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	scope.Stack.Push(interpreter.evm.TxContext().GasPrice)
 	return nil, nil
