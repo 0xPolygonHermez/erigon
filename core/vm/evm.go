@@ -402,7 +402,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	}
 
 	// Reject code starting with 0xEF if EIP-3541 is enabled.
-	if err == nil && evm.chainRules.IsLondon && len(ret) >= 1 && ret[0] == 0xEF {
+	if err == nil && len(ret) >= 1 && ret[0] == 0xEF {
 		err = ErrInvalidCode
 	}
 	// if the contract creation ran successfully and no errors were returned
