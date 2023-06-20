@@ -525,6 +525,16 @@ func opNumber(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	return nil, nil
 }
 
+func opNumberV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	txCount, err := interpreter.evm.IntraBlockState().GetTxCount()
+	if err != nil {
+		return nil, err
+	}
+	v := new(uint256.Int).SetUint64(txCount)
+	scope.Stack.Push(v)
+	return nil, nil
+}
+
 func opDifficulty(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	var v *uint256.Int
 	if interpreter.evm.Context().PrevRanDao != nil {

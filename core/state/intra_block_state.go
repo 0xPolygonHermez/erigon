@@ -242,6 +242,10 @@ func (sdb *IntraBlockState) GetCodeSize(addr libcommon.Address) int {
 	return l
 }
 
+func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
+	return sdb.stateReader.GetTxCount()
+}
+
 // DESCRIBED: docs/programmers_guide/guide.md#address---identifier-of-an-account
 func (sdb *IntraBlockState) GetCodeHash(addr libcommon.Address) libcommon.Hash {
 	stateObject := sdb.getStateObject(addr)
