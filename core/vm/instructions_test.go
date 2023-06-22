@@ -29,7 +29,6 @@ import (
 
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	types2 "github.com/ledgerwatch/erigon-lib/types"
 
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
@@ -238,12 +237,13 @@ func TestAddMod(t *testing.T) {
 	}
 }
 func TestBlockhashV2(t *testing.T) {
+
 	gethashFn := func(bn uint64) libcommon.Hash {
 		return libcommon.BigToHash(new(big.Int).SetUint64(bn))
 	}
 
 	var (
-		env            = NewEVM(evmtypes.BlockContext{GetHash: gethashFn}, evmtypes.TxContext{}, nil, params.TestChainConfig, Config{})
+		env            = NewEVM(evmtypes.BlockContext{GetHash: gethashFn}, evmtypes.TxContext{}, TestIntraBlockState{}, params.TestChainConfig, Config{})
 		stack          = stack.New()
 		evmInterpreter = NewEVMInterpreter(env, env.Config())
 		pc             = uint64(0)
@@ -283,7 +283,7 @@ func TestBlockhashV2(t *testing.T) {
 
 func TestDifficultyV2(t *testing.T) {
 	var (
-		env            = NewEVM(evmtypes.BlockContext{}, evmtypes.TxContext{}, TestIntraBlockState{}, params.TestChainConfig, Config{})
+		env            = NewEVM(evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, params.TestChainConfig, Config{})
 		stack          = stack.New()
 		evmInterpreter = NewEVMInterpreter(env, env.Config())
 		pc             = uint64(0)
@@ -766,6 +766,7 @@ func TestCreate2Addreses(t *testing.T) {
 type TestIntraBlockState struct{}
 
 func (ibs TestIntraBlockState) CreateAccount(libcommon.Address, bool) {}
+func (ibs TestIntraBlockState) GetTxCount() (uint64, error)           { return 0, nil }
 
 func (ibs TestIntraBlockState) SubBalance(libcommon.Address, *uint256.Int) {}
 func (ibs TestIntraBlockState) AddBalance(libcommon.Address, *uint256.Int) {}
