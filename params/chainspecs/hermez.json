@@ -1,6 +1,6 @@
 {
   "ChainName": "mainnet",
-  "chainId": 1,
+  "chainId": 1101,
   "consensus": "ethash",
   "homesteadBlock": 0,
   "daoForkBlock": 0,

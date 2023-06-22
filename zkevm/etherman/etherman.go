@@ -665,8 +665,8 @@ func (etherMan *Client) sequencedBatchesEvent(ctx context.Context, vLog types.Lo
 		return fmt.Errorf("error tx is still pending. TxHash: %s", tx.Hash().String())
 	}
 
-	signer := types.MakeSigner(params.HermezMainnetChainConfig, 0)
-	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.HermezMainnetChainConfig.Rules(0, 0))
+	signer := types.MakeSigner(params.MainnetChainConfig, 0)
+	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.MainnetChainConfig.Rules(0, 0))
 	if err != nil {
 		return err
 	}
