@@ -86,6 +86,20 @@ func validateAndFillMaxStack(jt *JumpTable) {
 func newRohanInstructionSet() JumpTable {
 	instructionSet := newBerlinInstructionSet()
 
+	instructionSet[SELFDESTRUCT] = &operation{
+		execute:     opSendAll,
+		constantGas: GasFastestStep,
+		numPop:      2,
+		numPush:     1,
+	}
+
+	instructionSet[SENDALL] = &operation{
+		execute:     opSendAll,
+		constantGas: GasFastestStep,
+		numPop:      2,
+		numPush:     1,
+	}
+
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }
