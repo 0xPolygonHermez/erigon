@@ -100,6 +100,13 @@ func newRohanInstructionSet() JumpTable {
 		numPush:     1,
 	}
 
+	instructionSet[BLOCKHASH] = &operation{
+		execute:     opBlockhashV2,
+		constantGas: GasExtStep,
+		numPop:      1,
+		numPush:     1,
+	}
+
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }
