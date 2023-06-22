@@ -124,6 +124,9 @@ func copyJumpTable(jt *JumpTable) *JumpTable {
 func NewEVMInterpreter(evm VMInterpreter, cfg Config) *EVMInterpreter {
 	var jt *JumpTable
 	switch {
+	// to add our own IsRohan chain rule, we would need to fork or code or chain.Config
+	// that is why we hard code it here for POC
+	// our fork extends berlin anyways and starts from block 1
 	case evm.ChainRules().IsBerlin:
 		jt = &rohanInstructionSet
 	case evm.ChainRules().IsIstanbul:
