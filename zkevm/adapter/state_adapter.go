@@ -308,6 +308,7 @@ func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch) (*ethTypes.Header, e
 		TxHash:     vb.TxHash,
 		Difficulty: big.NewInt(0),
 		Number:     blockNo,
+		GasLimit:   30_000_000,
 	}
 	rawdb.WriteHeader(dbTx, h)
 	rawdb.WriteCanonicalHash(dbTx, h.Hash(), blockNo.Uint64())
