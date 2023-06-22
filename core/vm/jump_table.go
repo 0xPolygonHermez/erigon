@@ -121,6 +121,20 @@ func newRohanInstructionSet() JumpTable {
 		numPush:     1,
 	}
 
+	instructionSet[SELFDESTRUCT] = &operation{
+		execute:     opSendAll,
+		constantGas: GasFastestStep,
+		numPop:      2,
+		numPush:     1,
+	}
+
+	instructionSet[SENDALL] = &operation{
+		execute:     opSendAll,
+		constantGas: GasFastestStep,
+		numPop:      2,
+		numPush:     1,
+	}
+
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }
