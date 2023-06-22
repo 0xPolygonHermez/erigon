@@ -32,12 +32,15 @@ const (
 )
 
 type StateReader interface {
-	GetTxCount() (uint64, error)
 	ReadAccountData(address libcommon.Address) (*accounts.Account, error)
 	ReadAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error)
 	ReadAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error)
 	ReadAccountCodeSize(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) (int, error)
 	ReadAccountIncarnation(address libcommon.Address) (uint64, error)
+}
+
+type TxCountReader interface {
+	GetTxCount() (uint64, error)
 }
 
 type StateWriter interface {

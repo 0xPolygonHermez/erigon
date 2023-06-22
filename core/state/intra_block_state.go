@@ -18,6 +18,7 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -243,7 +244,11 @@ func (sdb *IntraBlockState) GetCodeSize(addr libcommon.Address) int {
 }
 
 func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
-	return sdb.stateReader.GetTxCount()
+	counter, ok := sdb.stateReader.(TxCountReader)
+	if !ok {
+		return 0, errors.New("state reader does not support GetTxCount")
+	}
+	return counter.GetTxCount()
 }
 
 // DESCRIBED: docs/programmers_guide/guide.md#address---identifier-of-an-account
