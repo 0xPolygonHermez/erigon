@@ -29,6 +29,7 @@ import (
 
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	types2 "github.com/ledgerwatch/erigon-lib/types"
 
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
@@ -305,6 +306,36 @@ func TestDifficultyV2(t *testing.T) {
 		opDifficultyV2(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
 		actual := stack.Pop()
 
+		if actual.Cmp(expected) != 0 {
+			t.Errorf("Testcase %d, expected  %x, got %x", i, expected, actual)
+		}
+	}
+}
+
+func TestExtCodeHashV2(t *testing.T) {
+	var (
+		env            = NewEVM(evmtypes.BlockContext{}, evmtypes.TxContext{}, TestIntraBlockState{}, params.TestChainConfig, Config{})
+		stack          = stack.New()
+		evmInterpreter = NewEVMInterpreter(env, env.Config())
+		pc             = uint64(0)
+	)
+	tests := []struct {
+		address  string
+		expected libcommon.Hash
+	}{
+		{"0000000000000000000000000000000000000000000000000000000000000000",
+			libcommon.HexToHash("0xtest"),
+		}, {"000000000000000000000000000000000000000000000000000000000fffffff",
+			libcommon.HexToHash("0xtest"),
+		},
+	}
+
+	for i, test := range tests {
+		address := new(uint256.Int).SetBytes(common.Hex2Bytes(test.address))
+		expected := new(uint256.Int).SetBytes(test.expected.Bytes())
+		stack.Push(address)
+		opExtCodeHashV2(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
+		actual := stack.Pop()
 		if actual.Cmp(expected) != 0 {
 			t.Errorf("Testcase %d, expected  %x, got %x", i, expected, actual)
 		}

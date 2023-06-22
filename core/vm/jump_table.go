@@ -114,6 +114,13 @@ func newRohanInstructionSet() JumpTable {
 		numPush:     1,
 	}
 
+	instructionSet[EXTCODEHASH] = &operation{
+		execute:     opExtCodeHashV2,
+		constantGas: params.ExtcodeHashGasConstantinople,
+		numPop:      1,
+		numPush:     1,
+	}
+
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }
