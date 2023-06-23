@@ -131,7 +131,7 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 	psw := state2.NewPlainStateWriter(dbTx, dbTx, exitRoot.BlockNumber)
 	// I don't know what 'original' is just yet
 	fmt.Printf("addr %x key: %x newVal: %v\n", addr, gerp, exitUint256)
-	err := psw.WriteAccountStorage(addr, uint64(0), &gerp, oldUint256, exitUint256)
+	err := psw.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256)
 	if err != nil {
 		return err
 	}

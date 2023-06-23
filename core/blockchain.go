@@ -152,7 +152,8 @@ func ExecuteBlockEphemerally(
 		return nil, fmt.Errorf("mismatched receipt headers for block %d (%s != %s)", block.NumberU64(), receiptSha.Hex(), block.ReceiptHash().Hex())
 	}
 
-	if !vmConfig.StatelessExec && *usedGas != header.GasUsed {
+	// in zkEVM we don't have headers to check GasUsed against
+	if !vmConfig.StatelessExec && *usedGas != header.GasUsed && header.GasUsed > 0 {
 		return nil, fmt.Errorf("gas used by execution: %d, in header: %d", *usedGas, header.GasUsed)
 	}
 
