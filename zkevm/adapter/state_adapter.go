@@ -350,6 +350,8 @@ func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch) (*ethTypes.Header, e
 	// erigon block number is l2 batch number
 	blockNo := new(big.Int).SetUint64(vb.BatchNumber)
 
+	fmt.Println(vb.StateRoot)
+
 	h := &ethTypes.Header{
 		Root:       vb.StateRoot,
 		TxHash:     vb.TxHash,

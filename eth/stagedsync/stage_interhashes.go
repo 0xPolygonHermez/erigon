@@ -155,7 +155,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 	return root, err
 }
 
-func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as [][]byte, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address) (*big.Int, error) {
+func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address) (*big.Int, error) {
 
 	// store the account balance and nonce
 	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance.ToBig(), big.NewInt(int64(a.Nonce))) // TODO: fix for overflow
@@ -169,22 +169,17 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as [][]byte,
 		return nil, err
 	}
 	if len(cc) > 0 {
-		r, err = smt.SetContractBytecode(addr.String(), s, r, string(cc))
+		hexcc := fmt.Sprintf("0x%x", cc)
+		r, err = smt.SetContractBytecode(addr.String(), s, r, hexcc)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// parse the storage into map[string]string by splitting the storage hex into two 32 bit values
-	sm := make(map[string]string)
-	for _, v := range as {
-		key := "0x" + string(v[:len(v)-2])
-		val := "0x" + string(v[len(v)-2:])
-		sm[key] = val
+	if len(as) > 0 {
+		// store the account storage
+		r, err = smt.SetContractStorage(addr.String(), s, r, as)
 	}
-
-	// store the account storage
-	r, err = smt.SetContractStorage(addr.String(), s, r, sm)
 
 	return r, nil
 }
@@ -210,16 +205,14 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 
 	var a *accounts.Account
 	var addr libcommon.Address
-	var as [][]byte
+	var as map[string]string
 	var inc uint64
 
 	var root = big.NewInt(0)
 	var hash libcommon.Hash
 	psr := state2.NewPlainStateReader(db)
 
-	for k, acc, err := c.First(); err == nil; k, acc, err = c.Next() {
-
-		// if key length is 20, we're looking at an address
+	for k, acc, err := c.First(); err == nil && k != nil; k, acc, err = c.Next() {
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
 				root, err = processAccount(smt, root, a, as, inc, psr, addr)
@@ -228,23 +221,23 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 				}
 			}
 
+			a = &accounts.Account{}
+
 			if err = a.DecodeForStorage(acc); err != nil {
 				// TODO: not an account?
-				as = as[:0]
+				as = make(map[string]string)
 				continue
 			}
 			inc = a.Incarnation
 			// empty storage of previous account
-			as = as[:0]
-		} else { // otherwise we're reading storage\
-			var curInc uint64
-			addr, curInc = dbutils.PlainParseStoragePrefix(k)
-			if inc != curInc {
-				continue
+			as = make(map[string]string)
+		} else { // otherwise we're reading storage
+			_, incarnation, key := dbutils.PlainParseCompositeStorageKey(k)
+			if incarnation != inc {
+				continue // take current account incarnation storage only
 			}
 
-			// account storage & contract code
-			as = append(as, acc)
+			as[fmt.Sprintf("0x%032x", key)] = fmt.Sprintf("0x%032x", acc)
 		}
 	}
 
