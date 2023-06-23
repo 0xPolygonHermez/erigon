@@ -21,9 +21,8 @@ import (
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
 
-	"github.com/ledgerwatch/erigon/core/types"
-
 	state2 "github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/types"
 
 	"github.com/ledgerwatch/erigon/core/state/temporal"
 	db2 "github.com/revitteth/smt/v2/pkg/db"
@@ -228,6 +227,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 				as = make(map[string]string)
 				continue
 			}
+			addr = libcommon.BytesToAddress(k)
 			inc = a.Incarnation
 			// empty storage of previous account
 			as = make(map[string]string)
