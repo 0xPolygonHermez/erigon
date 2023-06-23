@@ -11,9 +11,9 @@ import (
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	state2 "github.com/ledgerwatch/erigon/core/state"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	state2 "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
@@ -59,13 +59,17 @@ type stateInterface interface {
 	BeginStateTransaction(ctx context.Context) (kv.RwTx, error)
 }
 
+// gdb is a database of global exit roots
+var gdb = map[common.Hash]common.Hash{}
+
 type StateInterfaceAdapter struct {
+	currentBatchNumber int64
 }
 
 var _ stateInterface = (*StateInterfaceAdapter)(nil)
 
 func NewStateAdapter() stateInterface {
-	return &StateInterfaceAdapter{}
+	return &StateInterfaceAdapter{currentBatchNumber: 1}
 }
 
 const GLOBAL_EXIT_ROOT_STORAGE_POS = 0
@@ -94,6 +98,8 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 		return nil
 	}
 
+	fmt.Printf("AddGlobalExitRoot: ger: %x\n", exitRoot.GlobalExitRoot[:])
+
 	// convert GLOBAL_EXIT_ROOT_STORAGE_POS to 32 bytes
 	gerb := make([]byte, 32)
 	binary.BigEndian.PutUint64(gerb, GLOBAL_EXIT_ROOT_STORAGE_POS)
@@ -102,9 +108,17 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 	rootPlusStorage := append(exitRoot.GlobalExitRoot[:], gerb...)
 
 	globalExitRootPos := keccak256.Hash(rootPlusStorage)
+
+	gdb[exitRoot.GlobalExitRoot] = common.BytesToHash(globalExitRootPos)
+
+	return nil
+
+}
+
+func (m *StateInterfaceAdapter) writeGlobalExitRootToState(dbTx kv.RwTx, globalExitRootPos common.Hash, value common.Hash, timestamp int64, blockNumber uint64) error {
 	addr := common.HexToAddress(ADDRESS_GLOBAL_EXIT_ROOT_MANAGER_L2)
 
-	exitBig := exitRoot.GlobalExitRoot.Big()
+	exitBig := big.NewInt(timestamp)
 	exitUint256, overflow := uint256.FromBig(exitBig)
 	if overflow {
 		return errors.New("AddGlobalExitRoot: overflow")
@@ -119,15 +133,10 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 	gerp := common.BytesToHash(globalExitRootPos[:])
 
 	// get a db state writer
-	psw := state2.NewPlainStateWriter(dbTx, dbTx, exitRoot.BlockNumber)
+	psw := state2.NewPlainStateWriter(dbTx, dbTx, blockNumber)
 	// I don't know what 'original' is just yet
-	fmt.Printf("addr %x key: %x newVal: %v\n", addr, gerp, exitUint256)
-	err := psw.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	fmt.Printf("writeGlobalExitRoot addr %x key: %x newVal: %x\n", addr, gerp, exitUint256)
+	return psw.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256)
 }
 
 func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error {
@@ -182,7 +191,7 @@ func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextFo
 }
 
 func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx kv.RwTx) error {
-	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d\n", verifiedBatch.BatchNumber)
+	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
 	header, err := WriteHeaderToDb(dbTx, verifiedBatch)
 	if err != nil {
@@ -248,6 +257,14 @@ func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, 
 		Transactions:   txs,
 		GlobalExitRoot: processingCtx.GlobalExitRoot,
 		ForcedBatchNum: processingCtx.ForcedBatchNum,
+	}
+
+	gerp, ok := gdb[processingCtx.GlobalExitRoot]
+	if ok {
+		err = m.writeGlobalExitRootToState(dbTx, gerp, processingCtx.GlobalExitRoot, processingCtx.Timestamp.Unix(), processingCtx.L1BlockNumber)
+		if err != nil {
+			return common.Hash{}, err
+		}
 	}
 
 	// serialize and store batch
