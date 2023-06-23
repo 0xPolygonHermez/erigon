@@ -2,13 +2,18 @@ package adapter
 
 import (
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/big"
 
+	"github.com/holiman/uint256"
+	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	state2 "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
@@ -72,6 +77,9 @@ func NewStateAdapter() stateInterface {
 	return &StateInterfaceAdapter{}
 }
 
+const GLOBAL_EXIT_ROOT_STORAGE_POS = 0
+const ADDRESS_GLOBAL_EXIT_ROOT_MANAGER_L2 = "0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA"
+
 func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) (*state.Block, error) {
 	blockHeight, err := stages.GetStageProgress(dbTx, stages.L1Blocks)
 	if err != nil {
@@ -88,7 +96,46 @@ func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) 
 }
 
 func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx kv.RwTx) error {
-	// TODO: [max] no-op for now
+	// we should store these, so we can process exits in the bridge contract - this is a rough translation of the JS implementation
+
+	if exitRoot == nil {
+		fmt.Println("AddGlobalExitRoot: nil exit root")
+		return nil
+	}
+
+	// convert GLOBAL_EXIT_ROOT_STORAGE_POS to 32 bytes
+	gerb := make([]byte, 32)
+	binary.BigEndian.PutUint64(gerb, GLOBAL_EXIT_ROOT_STORAGE_POS)
+
+	// concat global exit root and global_exit_root_storage_pos
+	rootPlusStorage := append(exitRoot.GlobalExitRoot[:], gerb...)
+
+	globalExitRootPos := keccak256.Hash(rootPlusStorage)
+	addr := common.HexToAddress(ADDRESS_GLOBAL_EXIT_ROOT_MANAGER_L2)
+
+	exitBig := exitRoot.GlobalExitRoot.Big()
+	exitUint256, overflow := uint256.FromBig(exitBig)
+	if overflow {
+		return errors.New("AddGlobalExitRoot: overflow")
+	}
+
+	old := common.Hash{}.Big()
+	oldUint256, overflow := uint256.FromBig(old)
+	if overflow {
+		return errors.New("AddGlobalExitRoot: overflow")
+	}
+
+	gerp := common.BytesToHash(globalExitRootPos[:])
+
+	// get a db state writer
+	psw := state2.NewPlainStateWriter(dbTx, dbTx, exitRoot.BlockNumber)
+	// I don't know what 'original' is just yet
+	fmt.Printf("addr %x key: %x newVal: %v\n", addr, gerp, exitUint256)
+	err := psw.WriteAccountStorage(addr, uint64(0), &gerp, oldUint256, exitUint256)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
