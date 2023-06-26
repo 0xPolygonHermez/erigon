@@ -249,6 +249,10 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 
 	hash = libcommon.BigToHash(root)
 
+	// TODO [zkevm] - max - remove printing of roots
+	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
+	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
+
 	if cfg.checkRoot && hash != expectedRootHash {
 		log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
 		return hash, nil
