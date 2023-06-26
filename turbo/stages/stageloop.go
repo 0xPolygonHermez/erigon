@@ -80,6 +80,28 @@ func StageLoop(
 	defer close(waitForDone)
 	initialCycle := true
 
+	// TODO [zkevm] - table creation: move to erigon lib
+	trw, err := db.BeginRw(ctx)
+	if err != nil {
+		log.Error("Failed to start transaction to add new zkevm batch tables", "err", err)
+		return
+	}
+	defer trw.Rollback()
+	err = trw.CreateBucket("HermezBatch")
+	if err != nil {
+		log.Error("Failed to create ZkBatch bucket", "err", err)
+		return
+	}
+	err = trw.CreateBucket("HermezVerifiedBatch")
+	if err != nil {
+		log.Error("Failed to create ZkVerifiedBatch bucket", "err", err)
+		return
+	}
+	if err := trw.Commit(); err != nil {
+		log.Error("Failed to commit transaction to add new zkevm batch tables", "err", err)
+		return
+	}
+
 	for {
 		start := time.Now()
 

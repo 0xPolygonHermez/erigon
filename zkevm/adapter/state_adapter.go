@@ -22,6 +22,9 @@ import (
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 )
 
+const HermezBatch = "HermezBatch"
+const HermezVerifiedBatch = "HermezVerifiedBatch"
+
 // write me an adapter mock for stateInterface from zk_synchronizer.go
 // Interface
 type stateInterface interface {
@@ -54,18 +57,6 @@ type stateInterface interface {
 	UpdateForkIDIntervals(intervals []state.ForkIDInterval)
 
 	BeginStateTransaction(ctx context.Context) (kv.RwTx, error)
-}
-
-var headerHashes = map[uint64]common.Hash{}
-
-type batchdb struct {
-	verifiedBatches map[uint64]*state.VerifiedBatch
-	batches         map[uint64]*state.Batch
-}
-
-var bdb = &batchdb{
-	verifiedBatches: map[uint64]*state.VerifiedBatch{},
-	batches:         map[uint64]*state.Batch{},
 }
 
 type StateInterfaceAdapter struct {
@@ -163,11 +154,23 @@ func (m *StateInterfaceAdapter) GetLastBatchNumber(ctx context.Context, dbTx kv.
 }
 
 func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error) {
-	b, ok := bdb.batches[batchNumber]
-	if !ok {
+
+	batch := &state.Batch{}
+	b, err := dbTx.GetOne(HermezBatch, UintBytes(batchNumber))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(b) == 0 {
 		return nil, state.ErrNotFound
 	}
-	return b, nil
+
+	err = batch.UnmarshalJSON(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return batch, err
 }
 
 func (m *StateInterfaceAdapter) ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) error {
@@ -185,15 +188,32 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	if err != nil {
 		return err
 	}
-	headerHashes[verifiedBatch.BatchNumber] = header.Hash()
 
-	bdb.verifiedBatches[verifiedBatch.BatchNumber] = verifiedBatch
-
-	vb := bdb.batches[verifiedBatch.BatchNumber]
-	if vb == nil {
-		fmt.Println("SAVING WITHOUT HEADER!!!!")
+	vbJson, err := verifiedBatch.ToJSON()
+	if err != nil {
+		return err
 	}
-	err = WriteBodyToDb(dbTx, vb, header.Hash())
+
+	err = dbTx.Put(HermezVerifiedBatch, UintBytes(verifiedBatch.BatchNumber), []byte(vbJson))
+	if err != nil {
+		return err
+	}
+
+	seqval, err := dbTx.IncrementSequence(HermezVerifiedBatch, 1)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("AddVerifiedBatch: seqval", seqval)
+	fmt.Println("AddVerifiedBatch: batch number", verifiedBatch.BatchNumber)
+
+	// Get the matching batch (body) for the verified batch (header)
+	batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)
+	if err != nil {
+		return err
+	}
+
+	err = WriteBodyToDb(dbTx, batch, header.Hash())
 	if err != nil {
 		return err
 	}
@@ -217,7 +237,7 @@ func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, 
 		return common.Hash{}, err
 	}
 
-	bdb.batches[processingCtx.BatchNumber] = &state.Batch{
+	batch := &state.Batch{
 		BatchNumber:    processingCtx.BatchNumber,
 		Coinbase:       processingCtx.Coinbase,
 		BatchL2Data:    encodedTxs,
@@ -230,7 +250,26 @@ func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, 
 		ForcedBatchNum: processingCtx.ForcedBatchNum,
 	}
 
-	return headerHashes[processingCtx.BatchNumber], nil
+	// serialize and store batch
+	batchJson, err := batch.ToJSON()
+	if err != nil {
+		return common.Hash{}, err
+	}
+	err = dbTx.Put(HermezBatch, UintBytes(processingCtx.BatchNumber), []byte(batchJson))
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	// increment sequence so we can easily get 'highest batch'
+	seqval, err := dbTx.IncrementSequence(HermezBatch, 1)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	fmt.Println("ProcessAndStoreClosedBatch: seqval", seqval)
+	fmt.Println("ProcessAndStoreClosedBatch: batch number", processingCtx.BatchNumber)
+
+	return common.Hash{}, nil
 }
 
 func (m *StateInterfaceAdapter) OpenBatch(ctx context.Context, processingContext state.ProcessingContext, dbTx kv.RwTx) error {
@@ -280,15 +319,14 @@ func (m *StateInterfaceAdapter) ExecuteBatch(ctx context.Context, batch state.Ba
 }
 
 func (m *StateInterfaceAdapter) GetLastVerifiedBatch(ctx context.Context, dbTx kv.RwTx) (*state.VerifiedBatch, error) {
-	var maxKey uint64
-	for k := range bdb.verifiedBatches {
-		if k > maxKey {
-			maxKey = k
-		}
+
+	maxKey, err := dbTx.ReadSequence(HermezVerifiedBatch)
+	if err != nil {
+		return nil, err
 	}
 
-	vb, ok := bdb.verifiedBatches[maxKey]
-	if !ok {
+	vb, err := dbTx.GetOne(HermezVerifiedBatch, UintBytes(maxKey))
+	if err != nil || len(vb) == 0 {
 		// return an empty zero batch
 		return &state.VerifiedBatch{
 			BlockNumber: 0,
@@ -300,7 +338,13 @@ func (m *StateInterfaceAdapter) GetLastVerifiedBatch(ctx context.Context, dbTx k
 		}, nil
 	}
 
-	return vb, nil
+	verifiedBatch := &state.VerifiedBatch{}
+	err = verifiedBatch.FromJSON(vb)
+	if err != nil {
+		return nil, err
+	}
+
+	return verifiedBatch, nil
 }
 
 func (m *StateInterfaceAdapter) GetLastVirtualBatchNum(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
@@ -375,4 +419,10 @@ func WriteBodyToDb(dbTx kv.RwTx, batch *state.Batch, hh common.Hash) error {
 
 	// writes txs to EthTx (canonical table)
 	return rawdb.WriteBody(dbTx, hh, batch.BatchNumber, b)
+}
+
+func UintBytes(no uint64) []byte {
+	noBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(noBytes, no)
+	return noBytes
 }

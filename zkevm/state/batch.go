@@ -2,12 +2,14 @@ package state
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/ledgerwatch/erigon-lib/common"
+
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/log"
@@ -79,6 +81,60 @@ type VirtualBatch struct {
 type Sequence struct {
 	FromBatchNumber uint64
 	ToBatchNumber   uint64
+}
+
+func (b *Batch) ToJSON() (string, error) {
+	data, err := json.Marshal(b)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (b *Batch) UnmarshalJSON(data []byte) error {
+	type batchAux Batch
+
+	var helper struct {
+		Transactions []json.RawMessage `json:"Transactions"`
+		batchAux
+	}
+
+	if err := json.Unmarshal(data, &helper); err != nil {
+		return err
+	}
+
+	for _, raw := range helper.Transactions {
+		var tx types.LegacyTx
+		if err := json.Unmarshal(raw, &tx); err != nil {
+			return err
+		}
+		b.Transactions = append(b.Transactions, &tx)
+	}
+
+	// Assign the other fields
+	b.BatchNumber = helper.batchAux.BatchNumber
+	b.Coinbase = helper.batchAux.Coinbase
+	b.BatchL2Data = helper.batchAux.BatchL2Data
+	b.StateRoot = helper.batchAux.StateRoot
+	b.LocalExitRoot = helper.batchAux.LocalExitRoot
+	b.AccInputHash = helper.batchAux.AccInputHash
+	b.Timestamp = helper.batchAux.Timestamp
+	b.GlobalExitRoot = helper.batchAux.GlobalExitRoot
+	b.ForcedBatchNum = helper.batchAux.ForcedBatchNum
+
+	return nil
+}
+
+func (v *VerifiedBatch) ToJSON() (string, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (v *VerifiedBatch) FromJSON(b []byte) error {
+	return json.Unmarshal(b, v)
 }
 
 // OpenBatch adds a new batch into the state, with the necessary data to start processing transactions within it.
