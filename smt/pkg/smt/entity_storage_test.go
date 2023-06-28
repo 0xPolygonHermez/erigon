@@ -100,6 +100,8 @@ func runGenesisTest(tb testing.TB, filename string) {
 		base = 16
 	}
 
+	smt.PrintTree()
+
 	expected, _ := new(big.Int).SetString(root, base)
 	fmt.Println("Expected root: ", genesis.Root)
 	fmt.Println("Actual root: ", fmt.Sprintf("0x%x", tmpRoot))

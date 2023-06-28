@@ -3,8 +3,11 @@ package smt
 import (
 	"math/big"
 
+	"encoding/json"
+	"fmt"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"strings"
 )
 
 type DB interface {
@@ -15,6 +18,7 @@ type DB interface {
 type DebuggableDB interface {
 	DB
 	PrintDb()
+	GetDb() map[string][]string
 }
 
 type SMT struct {
@@ -396,4 +400,35 @@ func (s *SMT) PrintDb() {
 	if debugDB, ok := s.Db.(DebuggableDB); ok {
 		debugDB.PrintDb()
 	}
+}
+
+func (s *SMT) PrintTree() {
+	if debugDB, ok := s.Db.(DebuggableDB); ok {
+		data := debugDB.GetDb()
+		str, err := json.Marshal(data)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(string(str))
+	}
+}
+
+func removeNonValueNodes(data map[string][]string) map[string][]string {
+	valueNodes := make(map[string][]string)
+	for k, v := range data {
+		isValue := true
+		for _, val := range v[0:8] {
+			// remove hex prefix
+			valStr := strings.TrimPrefix(val, "0x")
+			if len(valStr)*4 > 32 {
+				isValue = false
+				break
+			}
+		}
+
+		if isValue {
+			valueNodes[k] = v[0:8]
+		}
+	}
+	return valueNodes
 }

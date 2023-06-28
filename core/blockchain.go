@@ -29,6 +29,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -76,8 +77,11 @@ func ExecuteBlockEphemerally(
 	chainConfig *chain.Config, vmConfig *vm.Config,
 	blockHashFunc func(n uint64) libcommon.Hash,
 	engine consensus.Engine, block *types.Block,
-	stateReader state.StateReader, stateWriter state.WriterWithChangeSets,
-	chainReader consensus.ChainHeaderReader, getTracer func(txIndex int, txHash libcommon.Hash) (vm.EVMLogger, error),
+	stateReader state.StateReader,
+	stateWriter state.WriterWithChangeSets,
+	chainReader consensus.ChainHeaderReader,
+	getTracer func(txIndex int, txHash libcommon.Hash) (vm.EVMLogger, error),
+	dbTx kv.RwTx,
 ) (*EphemeralExecResult, error) {
 
 	defer BlockExecutionTimer.UpdateDuration(time.Now())
@@ -115,6 +119,10 @@ func ExecuteBlockEphemerally(
 	noop := state.NewNoopWriter()
 	//fmt.Printf("====txs processing start: %d====\n", block.NumberU64())
 	for i, tx := range block.Transactions() {
+		if i > 0 {
+			break
+		}
+		fmt.Printf("====txs processing start: %d-%d====\n", block.NumberU64(), i)
 		ibs.Prepare(tx.Hash(), block.Hash(), i)
 		writeTrace := false
 		if vmConfig.Debug && vmConfig.Tracer == nil {
@@ -127,6 +135,9 @@ func ExecuteBlockEphemerally(
 		}
 
 		gp.Reset(block.GasLimit())
+		// [zkevm] - set tx for reading all of plainstate - a better option is to implement something in stateReader
+		ibs.SetReadTx(dbTx)
+
 		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas)
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {

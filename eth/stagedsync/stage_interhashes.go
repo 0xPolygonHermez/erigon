@@ -28,6 +28,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/state/temporal"
 
+	"encoding/json"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -154,10 +155,26 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 	return root, err
 }
 
+// TODO [zkevm] remove debugging struct
+type MyStruct struct {
+	Storage map[string]string
+	Balance *big.Int
+	Nonce   *big.Int
+}
+
+var collection = make(map[libcommon.Address]MyStruct)
+
 func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address) (*big.Int, error) {
 
+	fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
+	collection[addr] = MyStruct{
+		Storage: as,
+		Balance: a.Balance.ToBig(),
+		Nonce:   new(big.Int).SetUint64(a.Nonce),
+	}
+
 	// store the account balance and nonce
-	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance.ToBig(), big.NewInt(int64(a.Nonce))) // TODO: fix for overflow
+	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance.ToBig(), new(big.Int).SetUint64(a.Nonce))
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +228,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	var hash libcommon.Hash
 	psr := state2.NewPlainStateReader(db)
 
-	for k, acc, err := c.First(); err == nil && k != nil; k, acc, err = c.Next() {
+	for k, acc, err := c.First(); err == nil && acc != nil; k, acc, err = c.Next() {
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
 				root, err = processAccount(smt, root, a, as, inc, psr, addr)
@@ -247,7 +264,35 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 		return trie.EmptyRoot, err
 	}
 
+	// [zkEVM] - FAKE SCALABLE
+	//a = &accounts.Account{
+	//	Initialised: false,
+	//	Nonce:       0,
+	//	Balance:     uint256.Int{},
+	//	Root:        libcommon.Hash{},
+	//	CodeHash:    libcommon.Hash{},
+	//	Incarnation: 0,
+	//}
+	//addr = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	//as = make(map[string]string)
+	//as["0xcc69885fda6bcc1a4ace058b4a62bf5e179ea78fd58a1ccd71c22cc9b688792f"] = "0x07483d2b55eb8bb44f617a4de963497fab3fafed5c2b49af975fd73246a5df46"
+	//as["0x0"] = "0x0000000000000000000000000000000000000000000000000000000000000001"
+	//inc = 0
+	//root, err = processAccount(smt, root, a, as, inc, psr, addr)
+	//if err != nil {
+	//	return trie.EmptyRoot, err
+	//}
+
+	jsonData, err := json.MarshalIndent(collection, "", "    ")
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+	fmt.Println(string(jsonData))
+
 	hash = libcommon.BigToHash(root)
+
+	// TODO [zkevm] - max - remove printing of SMT
+	smt.PrintTree()
 
 	// TODO [zkevm] - max - remove printing of roots
 	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())

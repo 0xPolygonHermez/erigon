@@ -173,7 +173,7 @@ func executeBlock(
 	} else {
 		// for zkEVM no receipts
 		vmConfig.NoReceipts = true
-		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer)
+		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx)
 	}
 	if err != nil {
 		return err
@@ -423,6 +423,9 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
+		if blockNum > 2 {
+			break
+		}
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}

@@ -23,14 +23,22 @@ import (
 	"sort"
 
 	"github.com/holiman/uint256"
+	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
+	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
+	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"math/big"
+	"strings"
 )
 
 type revision struct {
@@ -84,6 +92,8 @@ type IntraBlockState struct {
 	trace          bool
 	accessList     *accessList
 	balanceInc     map[libcommon.Address]*BalanceIncrease // Map of balance increases (without first reading the account)
+
+	readTx kv.RwTx
 }
 
 // Create a new state from a given trie
@@ -98,6 +108,10 @@ func New(stateReader StateReader) *IntraBlockState {
 		accessList:        newAccessList(),
 		balanceInc:        map[libcommon.Address]*BalanceIncrease{},
 	}
+}
+
+func (sdb *IntraBlockState) SetReadTx(tx kv.RwTx) {
+	sdb.readTx = tx
 }
 
 func (sdb *IntraBlockState) SetTrace(trace bool) {
@@ -642,6 +656,7 @@ func (sdb *IntraBlockState) FinalizeTx(chainRules *chain.Rules, stateWriter Stat
 
 		sdb.stateObjectsDirty[addr] = struct{}{}
 	}
+
 	// Invalidate journal because reverting across transactions is not allowed.
 	sdb.clearJournalAndRefund()
 	return nil
@@ -785,4 +800,218 @@ func (sdb *IntraBlockState) AddressInAccessList(addr libcommon.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (sdb *IntraBlockState) SlotInAccessList(addr libcommon.Address, slot libcommon.Hash) (addressPresent bool, slotPresent bool) {
 	return sdb.accessList.Contains(addr, slot)
+}
+
+func (sdb *IntraBlockState) SMTScalableStorageSet() error {
+	// create an SMT
+	smtDB := db2.NewMemDb()
+	s := smt.NewSMT(smtDB)
+
+	addr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	sl0 := libcommon.HexToHash("0x0")
+
+	txNum := uint256.NewInt(0)
+	sdb.GetState(addr, &sl0, txNum)
+	txNum = txNum.Add(txNum, uint256.NewInt(1))
+
+	// create account if not exists
+	sdb.CreateAccount(addr, false)
+
+	// set incremented tx num in state
+	sdb.SetState(addr, &sl0, *txNum)
+
+	fs, err := getFullState(sdb)
+	if err != nil {
+		return err
+	}
+
+	// now process all the accounts as we would normally, same as in stage_interhashes
+	var root = big.NewInt(0)
+
+	for addr, so := range fs {
+		inc, err := sdb.stateReader.ReadAccountIncarnation(addr)
+		if err != nil {
+			return err
+		}
+
+		as := map[string]string{}
+		for k, v := range so.originStorage {
+			as[k.Hex()] = v.Hex()
+		}
+		// overwrite origin storage with dirty values
+		for k, v := range so.dirtyStorage {
+			as[k.Hex()] = v.Hex()
+		}
+
+		root, err = processAccount(s, root, &so.data, as, inc, sdb, addr)
+		if err != nil {
+			return err
+		}
+	}
+
+	//jsonData, err := json.MarshalIndent(collection, "", "    ")
+	//if err != nil {
+	//	fmt.Printf("error: %v\n", err)
+	//}
+	//fmt.Println(string(jsonData))
+
+	// create mapping with keccak256(txnum,1) -> smt root
+	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+	rootU256 := uint256.NewInt(0).SetBytes(root.Bytes())
+
+	// set mapping of keccak256(txnum,1) -> smt root
+	sdb.SetState(addr, &mkh, *rootU256)
+
+	return nil
+}
+
+func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, error) {
+	// we need to iterate plainstate, if we find something in ibs and it is dirty - then we should use that
+	// if it exists in dirty ibs but not in plainstate - we should add it
+
+	c, err := ibs.readTx.Cursor(kv.PlainState)
+	if err != nil {
+		return nil, err
+	}
+
+	// state collection (db + dirty from tx)
+	psCombined := make(map[libcommon.Address]*stateObject)
+
+	// loop vars - collect existing state from DB
+	var a *accounts.Account
+	var addr libcommon.Address
+	var as map[string]string
+	var inc uint64
+
+	for k, acc, err := c.First(); err == nil && acc != nil; k, acc, err = c.Next() {
+		if len(k) == 20 {
+			if a != nil {
+				// add to psCombined as a new stateObject - nothing should be dirty here this is existing DB state
+				so := newObject(ibs, addr, a, a)
+				// iterate account storage into originStorage
+				for ks, vs := range as {
+					kh := libcommon.HexToHash(ks)
+					vu, err := uint256.FromHex(trimHexString(vs))
+					if err != nil {
+						return nil, err
+					}
+					so.originStorage[kh] = *vu
+				}
+				psCombined[addr] = so
+			}
+
+			a = &accounts.Account{}
+
+			if err = a.DecodeForStorage(acc); err != nil {
+				// TODO: not an account?
+				as = make(map[string]string)
+				continue
+			}
+			addr = libcommon.BytesToAddress(k)
+			inc = a.Incarnation
+			// empty storage of previous account
+			as = make(map[string]string)
+		} else { // otherwise we're reading storage
+			_, incarnation, key := dbutils.PlainParseCompositeStorageKey(k)
+			if incarnation != inc {
+				continue // take current account incarnation storage only
+			}
+
+			as[fmt.Sprintf("0x%032x", key)] = fmt.Sprintf("0x%032x", acc)
+		}
+	}
+
+	// add final account to psCombined as a stateObject
+	so := newObject(ibs, addr, a, a)
+	// iterate account storage into originStorage
+	for ks, vs := range as {
+		kh := libcommon.HexToHash(ks)
+		vu, err := uint256.FromHex(trimHexString(vs))
+		if err != nil {
+			return nil, err
+		}
+		so.originStorage[kh] = *vu
+	}
+	psCombined[addr] = so
+
+	// overwrite/augment db state with state objects in ibs
+	// the complex bit here is that the ibs may not have had to load all storage slots, so we should account for this
+	// by adding the dirty storage (which will contain new and updated slots)
+	// we should also add completely new objects
+	for da, dso := range ibs.stateObjects {
+		if psCombined[da] == nil {
+			psCombined[da] = dso
+		}
+		if psCombined[da].dirtyStorage != nil {
+			psCombined[da].dirtyStorage = dso.dirtyStorage
+		}
+
+		// if the data of the account is in the IBS we should use it (for updated nonce, balance)
+		psCombined[da].data = dso.data
+	}
+
+	return psCombined, nil
+}
+
+// TODO [zkevm] remove debugging struct
+type MyStruct struct {
+	Storage map[string]string
+	Balance *big.Int
+	Nonce   *big.Int
+}
+
+var collection = make(map[libcommon.Address]MyStruct)
+
+func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, inc uint64, ibs *IntraBlockState, addr libcommon.Address) (*big.Int, error) {
+
+	fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
+	collection[addr] = MyStruct{
+		Storage: as,
+		Balance: a.Balance.ToBig(),
+		Nonce:   new(big.Int).SetUint64(a.Nonce),
+	}
+
+	// store the account balance and nonce
+	nonce := new(big.Int).SetUint64(a.Nonce)
+	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance.ToBig(), nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	// store the contract bytecode
+	cc, err := ibs.stateReader.ReadAccountCode(addr, inc, a.CodeHash)
+	if err != nil {
+		return nil, err
+	}
+	if len(cc) > 0 {
+		hexcc := fmt.Sprintf("0x%x", cc)
+		r, err = smt.SetContractBytecode(addr.String(), s, r, hexcc)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(as) > 0 {
+		// store the account storage
+		r, err = smt.SetContractStorage(addr.String(), s, r, as)
+	}
+
+	return r, nil
+}
+
+func trimHexString(s string) string {
+	if strings.HasPrefix(s, "0x") {
+		s = s[2:]
+	}
+
+	for i := 0; i < len(s); i++ {
+		if s[i] != '0' {
+			return "0x" + s[i:]
+		}
+	}
+
+	return "0x0"
 }

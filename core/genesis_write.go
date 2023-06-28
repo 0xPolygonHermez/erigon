@@ -482,7 +482,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr lib
 	}
 
 	// store the account balance and nonce
-	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance, big.NewInt(int64(a.Nonce))) // TODO: fix for overflow
+	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance, new(big.Int).SetUint64(a.Nonce))
 	if err != nil {
 		return nil, err
 	}

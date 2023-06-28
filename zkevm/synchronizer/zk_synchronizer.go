@@ -160,6 +160,17 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 				continue
 			}
 
+			if latestSyncedBatch >= 2 {
+				log.Info("L1 state fully synchronized")
+				err = s.syncTrustedState(latestSyncedBatch)
+				if err != nil {
+					log.Warn("error syncing trusted state. Error: ", err)
+					continue
+				}
+				waitDuration = s.cfg.SyncInterval.Duration
+				return nil
+			}
+
 			if latestSyncedBatch >= latestSequencedBatchNumber {
 				log.Info("L1 state fully synchronized")
 				err = s.syncTrustedState(latestSyncedBatch)
@@ -200,12 +211,12 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 	}
 	lastKnownBlock := header.Number
 
+	// BREAK
+	if lastEthBlockSynced.BlockNumber > 16918695 {
+		return lastEthBlockSynced, nil
+	}
+
 	var fromBlock uint64
-	/*
-		if lastEthBlockSynced.BlockNumber < 16896700 {
-			fromBlock = 16896700
-		}
-	*/
 	if lastEthBlockSynced.BlockNumber > 0 {
 		fromBlock = lastEthBlockSynced.BlockNumber + 1
 	}
@@ -243,6 +254,10 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 			}
 		}
 		fromBlock = toBlock + 1
+
+		if fromBlock > 16918695 {
+			break
+		}
 
 		if lastKnownBlock.Cmp(new(big.Int).SetUint64(toBlock)) < 1 {
 			waitDuration = s.cfg.SyncInterval.Duration

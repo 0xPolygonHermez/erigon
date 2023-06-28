@@ -43,3 +43,7 @@ func (m *MemDb) PrintDb() {
 		println(k, v)
 	}
 }
+
+func (m *MemDb) GetDb() map[string][]string {
+	return m.Db
+}

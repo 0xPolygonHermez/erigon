@@ -193,6 +193,10 @@ func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextFo
 func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx kv.RwTx) error {
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
+	if verifiedBatch.BatchNumber > 2 {
+		return nil
+	}
+
 	header, err := WriteHeaderToDb(dbTx, verifiedBatch)
 	if err != nil {
 		return err
@@ -227,6 +231,15 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 		return err
 	}
 
+	// write the global exit root to state
+	gerp, ok := gdb[batch.GlobalExitRoot]
+	if ok {
+		err = m.writeGlobalExitRootToState(dbTx, gerp, batch.GlobalExitRoot, batch.Timestamp.Unix(), verifiedBatch.BlockNumber)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = stages.SaveStageProgress(dbTx, stages.Headers, verifiedBatch.BatchNumber)
 	if err != nil {
 		return err
@@ -257,14 +270,6 @@ func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, 
 		Transactions:   txs,
 		GlobalExitRoot: processingCtx.GlobalExitRoot,
 		ForcedBatchNum: processingCtx.ForcedBatchNum,
-	}
-
-	gerp, ok := gdb[processingCtx.GlobalExitRoot]
-	if ok {
-		err = m.writeGlobalExitRootToState(dbTx, gerp, processingCtx.GlobalExitRoot, processingCtx.Timestamp.Unix(), processingCtx.L1BlockNumber)
-		if err != nil {
-			return common.Hash{}, err
-		}
 	}
 
 	// serialize and store batch

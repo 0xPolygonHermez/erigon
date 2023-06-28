@@ -62,6 +62,13 @@ func applyTransaction(config *chain.Config, engine consensus.EngineReader, gp *G
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// calculate the SMT state root
+	err = ibs.SMTScalableStorageSet()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// Update the state with pending changes
 	if err = ibs.FinalizeTx(rules, stateWriter); err != nil {
 		return nil, nil, err

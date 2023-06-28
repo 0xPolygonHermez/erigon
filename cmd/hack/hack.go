@@ -339,10 +339,12 @@ func printBucket(chaindata, bucket string) {
 func formatBucketKVPair(k, v []byte, bucket string) string {
 	// switch statement on bucket (found in tables.go)
 	switch bucket {
-	case "Batches":
 	case kv.SyncStageProgress:
 		val := binary.BigEndian.Uint64(v)
 		return fmt.Sprintf("%s %d", string(k), val)
+
+	case kv.Sequence:
+		return fmt.Sprintf("%s %x", k, v)
 
 	default:
 		return fmt.Sprintf("%x %x", k, v)

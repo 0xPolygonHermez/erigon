@@ -307,7 +307,7 @@ func Main(ctx *cli.Context) error {
 	// redirects to the ethash engine based on the block number
 	engine := serenity.New(&ethash.FakeEthash{})
 
-	result, err := core.ExecuteBlockEphemerally(chainConfig, &vmConfig, getHash, engine, block, reader, writer, nil, getTracer)
+	result, err := core.ExecuteBlockEphemerally(chainConfig, &vmConfig, getHash, engine, block, reader, writer, nil, getTracer, tx)
 
 	if hashError != nil {
 		return NewError(ErrorMissingBlockhash, fmt.Errorf("blockhash error: %v", err))
