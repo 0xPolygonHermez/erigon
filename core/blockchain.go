@@ -126,6 +126,7 @@ func ExecuteBlockEphemerally(
 			writeTrace = true
 		}
 
+		gp.Reset(block.GasLimit())
 		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas)
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
@@ -237,6 +238,7 @@ func ExecuteBlockEphemerallyBor(
 			vmConfig.Tracer = tracer
 			writeTrace = true
 		}
+		gp.Reset(block.GasLimit())
 
 		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas)
 		if writeTrace {
