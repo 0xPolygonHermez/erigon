@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/0xPolygonHermez/zkevm-node/test/testutils"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
-	"github.com/ledgerwatch/erigon/zkevm/test/testutils"
 	"github.com/stretchr/testify/require"
 )
 

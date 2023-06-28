@@ -9,7 +9,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	pool "github.com/ledgerwatch/erigon/zkevm/pool"
+	pool "github.com/0xPolygonHermez/zkevm-node/pool"
 
 	time "time"
 

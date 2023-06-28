@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/revitteth/smt/v2/pkg/utils"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
 type Address struct {

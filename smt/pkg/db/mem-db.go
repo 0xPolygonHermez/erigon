@@ -1,8 +1,6 @@
 package db
 
-import (
-	"github.com/revitteth/smt/v2/pkg/utils"
-)
+import "github.com/ledgerwatch/erigon/smt/pkg/utils"
 
 type MemDb struct {
 	Db map[string][]string

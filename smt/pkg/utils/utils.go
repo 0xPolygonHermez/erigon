@@ -514,7 +514,17 @@ func HashContractBytecode(bc string) (string, error) {
 			}
 		}
 
-		tmpHash, err = Hash([8]uint64(elementsToHash[4:12]), [4]uint64(elementsToHash[:4]))
+		var in [8]uint64
+		for i, value := range elementsToHash[4:12] {
+			in[i] = value
+		}
+
+		var capacity [4]uint64
+		for i, value := range elementsToHash[:4] {
+			capacity[i] = value
+		}
+
+		tmpHash, err = Hash(in, capacity)
 		if err != nil {
 			return "", err
 		}

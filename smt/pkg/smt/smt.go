@@ -3,8 +3,8 @@ package smt
 import (
 	"math/big"
 
-	"github.com/revitteth/smt/v2/pkg/db"
-	"github.com/revitteth/smt/v2/pkg/utils"
+	"github.com/ledgerwatch/erigon/smt/pkg/db"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
 type DB interface {

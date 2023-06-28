@@ -47,9 +47,9 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/params/networkname"
+	"github.com/ledgerwatch/erigon/smt/pkg/db"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
-	db2 "github.com/revitteth/smt/v2/pkg/db"
-	"github.com/revitteth/smt/v2/pkg/smt"
 )
 
 // CommitGenesisBlock writes or updates the genesis block in db.
@@ -581,7 +581,7 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 		}
 
 		// use SMT
-		db := db2.NewMemDb()
+		db := db.NewMemDb()
 		s := smt.NewSMT(db)
 		var ro *big.Int
 

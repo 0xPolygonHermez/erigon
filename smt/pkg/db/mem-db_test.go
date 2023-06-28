@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/revitteth/smt/v2/pkg/utils"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
 func TestMemDb(t *testing.T) {

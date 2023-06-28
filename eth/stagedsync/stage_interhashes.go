@@ -23,10 +23,10 @@ import (
 
 	state2 "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
+	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 
 	"github.com/ledgerwatch/erigon/core/state/temporal"
-	db2 "github.com/revitteth/smt/v2/pkg/db"
-	"github.com/revitteth/smt/v2/pkg/smt"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"

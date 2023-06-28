@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/revitteth/smt/v2/pkg/utils"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
 func SetAccountState(ethAddr string, smt *SMT, root, balance, nonce *big.Int) (*big.Int, error) {
