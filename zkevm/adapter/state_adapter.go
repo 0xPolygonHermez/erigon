@@ -194,9 +194,9 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
 	// [zkevm] - restrict progress
-	//if verifiedBatch.BatchNumber > 2 {
-	//	return nil
-	//}
+	if verifiedBatch.BatchNumber > 2 {
+		return nil
+	}
 
 	header, err := WriteHeaderToDb(dbTx, verifiedBatch)
 	if err != nil {

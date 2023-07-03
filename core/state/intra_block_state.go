@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sort"
 
+	"encoding/json"
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -807,18 +808,20 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 	smtDB := db2.NewMemDb()
 	s := smt.NewSMT(smtDB)
 
-	addr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
 
 	txNum := uint256.NewInt(0)
-	sdb.GetState(addr, &sl0, txNum)
+	sdb.GetState(saddr, &sl0, txNum)
 	txNum = txNum.Add(txNum, uint256.NewInt(1))
 
-	// create account if not exists
-	sdb.CreateAccount(addr, false)
+	if !sdb.Exist(saddr) {
+		// create account if not exists
+		sdb.CreateAccount(saddr, false)
+	}
 
 	// set incremented tx num in state
-	sdb.SetState(addr, &sl0, *txNum)
+	sdb.SetState(saddr, &sl0, *txNum)
 
 	fs, err := getFullState(sdb)
 	if err != nil {
@@ -849,11 +852,11 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 		}
 	}
 
-	//jsonData, err := json.MarshalIndent(collection, "", "    ")
-	//if err != nil {
-	//	fmt.Printf("error: %v\n", err)
-	//}
-	//fmt.Println(string(jsonData))
+	jsonData, err := json.MarshalIndent(collection, "", "    ")
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+	fmt.Println(string(jsonData))
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
@@ -863,7 +866,7 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 	rootU256 := uint256.NewInt(0).SetBytes(root.Bytes())
 
 	// set mapping of keccak256(txnum,1) -> smt root
-	sdb.SetState(addr, &mkh, *rootU256)
+	sdb.SetState(saddr, &mkh, *rootU256)
 
 	return nil
 }
@@ -898,6 +901,8 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 					if err != nil {
 						return nil, err
 					}
+
+					// this is really wrong!!!! We cannot do this - the db is overwriting the dirty state for each tx in the block
 					so.originStorage[kh] = *vu
 				}
 				psCombined[addr] = so
@@ -967,7 +972,7 @@ var collection = make(map[libcommon.Address]MyStruct)
 
 func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, inc uint64, ibs *IntraBlockState, addr libcommon.Address) (*big.Int, error) {
 
-	fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
+	// [zkevm] - collect data for json comparison
 	collection[addr] = MyStruct{
 		Storage: as,
 		Balance: a.Balance.ToBig(),

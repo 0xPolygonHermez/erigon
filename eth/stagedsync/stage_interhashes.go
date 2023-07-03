@@ -283,6 +283,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	//	return trie.EmptyRoot, err
 	//}
 
+	//[zkevm] - print state
 	jsonData, err := json.MarshalIndent(collection, "", "    ")
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
@@ -290,9 +291,6 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	fmt.Println(string(jsonData))
 
 	hash = libcommon.BigToHash(root)
-
-	// TODO [zkevm] - max - remove printing of SMT
-	smt.PrintTree()
 
 	// TODO [zkevm] - max - remove printing of roots
 	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())

@@ -212,9 +212,9 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 	lastKnownBlock := header.Number
 
 	// [zkevm] - restrict progress
-	//if lastEthBlockSynced.BlockNumber > 16918695 {
-	//	return lastEthBlockSynced, nil
-	//}
+	if lastEthBlockSynced.BlockNumber > 16919695 {
+		return lastEthBlockSynced, nil
+	}
 
 	var fromBlock uint64
 	if lastEthBlockSynced.BlockNumber > 0 {
@@ -256,9 +256,9 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		fromBlock = toBlock + 1
 
 		// [zkevm] - restrict progress
-		//if fromBlock > 16918695 {
-		//	break
-		//}
+		if fromBlock > 16919695 {
+			break
+		}
 
 		if lastKnownBlock.Cmp(new(big.Int).SetUint64(toBlock)) < 1 {
 			waitDuration = s.cfg.SyncInterval.Duration
