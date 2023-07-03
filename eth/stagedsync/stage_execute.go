@@ -423,9 +423,10 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
-		if blockNum > 2 {
-			break
-		}
+		// [zkevm] - restrict progress
+		//if blockNum > 2 {
+		//	break
+		//}
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}

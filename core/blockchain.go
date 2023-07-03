@@ -119,9 +119,10 @@ func ExecuteBlockEphemerally(
 	noop := state.NewNoopWriter()
 	//fmt.Printf("====txs processing start: %d====\n", block.NumberU64())
 	for i, tx := range block.Transactions() {
-		if i > 0 {
-			break
-		}
+		// [zkevm] - restrict progress
+		//if i > 0 {
+		//	break
+		//}
 		fmt.Printf("====txs processing start: %d-%d====\n", block.NumberU64(), i)
 		ibs.Prepare(tx.Hash(), block.Hash(), i)
 		writeTrace := false
