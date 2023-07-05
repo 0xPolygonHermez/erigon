@@ -212,7 +212,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 	lastKnownBlock := header.Number
 
 	// [zkevm] - restrict progress
-	if lastEthBlockSynced.BlockNumber > 16919695 {
+	if lastEthBlockSynced.BlockNumber > 16904150 {
 		return lastEthBlockSynced, nil
 	}
 
@@ -256,7 +256,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		fromBlock = toBlock + 1
 
 		// [zkevm] - restrict progress
-		if fromBlock > 16919695 {
+		if fromBlock > 16904150 {
 			break
 		}
 

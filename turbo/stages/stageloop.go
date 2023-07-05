@@ -89,12 +89,17 @@ func StageLoop(
 	defer trw.Rollback()
 	err = trw.CreateBucket("HermezBatch")
 	if err != nil {
-		log.Error("Failed to create ZkBatch bucket", "err", err)
+		log.Error("Failed to create HermezBatch bucket", "err", err)
 		return
 	}
 	err = trw.CreateBucket("HermezVerifiedBatch")
 	if err != nil {
-		log.Error("Failed to create ZkVerifiedBatch bucket", "err", err)
+		log.Error("Failed to create HermezVerifiedBatch bucket", "err", err)
+		return
+	}
+	err = trw.CreateBucket("HermezGlobalExitRoot")
+	if err != nil {
+		log.Error("Failed to create HermezGlobalExitRoot bucket", "err", err)
 		return
 	}
 	if err := trw.Commit(); err != nil {

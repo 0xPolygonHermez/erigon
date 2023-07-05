@@ -24,6 +24,7 @@ import (
 	libstate "github.com/ledgerwatch/erigon-lib/state"
 	"github.com/ledgerwatch/log/v3"
 
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/changeset"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -45,6 +46,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
+	"math/big"
 )
 
 const (
@@ -430,6 +432,41 @@ Loop:
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}
+
+		// [zkevm] push the global exit root for the related batch into the db ahead of batch execution
+		psw := state.NewPlainStateWriter(tx, tx, blockNum)
+		blockNoBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(blockNoBytes, blockNum)
+
+		// TODO [zkevm] - GER isn't set on the batch at the point of storage!!!!
+		gp, err := tx.GetOne("HermezGlobalExitRoot", blockNoBytes)
+		if err != nil {
+			return err
+		}
+
+		var ger, gerp common.Hash
+		copy(ger[:], gp[:32])
+		copy(gerp[:], gp[32:64])
+		ts := binary.BigEndian.Uint64(gp[64:72])
+
+		old := common.Hash{}.Big()
+		oldUint256, overflow := uint256.FromBig(old)
+		if overflow {
+			return errors.New("AddGlobalExitRoot: overflow")
+		}
+
+		exitBig := new(big.Int).SetUint64(ts)
+		exitUint256, overflow := uint256.FromBig(exitBig)
+		if overflow {
+			return errors.New("AddGlobalExitRoot: overflow")
+		}
+
+		addr := common.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
+		err = psw.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256)
+		if err != nil {
+			return err
+		}
+		// [zkevm] - finished writing global exit root to state
 
 		blockHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 		if err != nil {

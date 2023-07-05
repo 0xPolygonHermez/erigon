@@ -3,16 +3,12 @@ package adapter
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math/big"
 
-	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	state2 "github.com/ledgerwatch/erigon/core/state"
-
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zkevm/state"
@@ -115,28 +111,12 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 
 }
 
-func (m *StateInterfaceAdapter) writeGlobalExitRootToState(dbTx kv.RwTx, globalExitRootPos common.Hash, value common.Hash, timestamp int64, blockNumber uint64) error {
-	addr := common.HexToAddress(ADDRESS_GLOBAL_EXIT_ROOT_MANAGER_L2)
-
-	exitBig := big.NewInt(timestamp)
-	exitUint256, overflow := uint256.FromBig(exitBig)
-	if overflow {
-		return errors.New("AddGlobalExitRoot: overflow")
-	}
-
-	old := common.Hash{}.Big()
-	oldUint256, overflow := uint256.FromBig(old)
-	if overflow {
-		return errors.New("AddGlobalExitRoot: overflow")
-	}
-
-	gerp := common.BytesToHash(globalExitRootPos[:])
-
-	// get a db state writer
-	psw := state2.NewPlainStateWriter(dbTx, dbTx, blockNumber)
-	// I don't know what 'original' is just yet
-	fmt.Printf("writeGlobalExitRoot addr %x key: %x newVal: %x\n", addr, gerp, exitUint256)
-	return psw.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256)
+func (m *StateInterfaceAdapter) writeGlobalExitRootToDb(dbTx kv.RwTx, blockNo uint64, ger common.Hash, gerp common.Hash, ts uint64) error {
+	tsb := make([]byte, 8)
+	binary.BigEndian.PutUint64(tsb, ts)
+	composite := append(ger[:], gerp[:]...)
+	composite = append(composite, tsb...)
+	return dbTx.Put("HermezGlobalExitRoot", UintBytes(blockNo), composite)
 }
 
 func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error {
@@ -235,7 +215,12 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	// write the global exit root to state
 	gerp, ok := gdb[batch.GlobalExitRoot]
 	if ok {
-		err = m.writeGlobalExitRootToState(dbTx, gerp, batch.GlobalExitRoot, batch.Timestamp.Unix(), verifiedBatch.BlockNumber)
+		err := m.writeGlobalExitRootToDb(dbTx, verifiedBatch.BatchNumber, batch.GlobalExitRoot, gerp, uint64(batch.Timestamp.Unix())) // batch no is block no in stage_execute
+		if err != nil {
+			return err
+		}
+	} else {
+		err := m.writeGlobalExitRootToDb(dbTx, verifiedBatch.BatchNumber, batch.GlobalExitRoot, common.HexToHash("0x0"), 0)
 		if err != nil {
 			return err
 		}

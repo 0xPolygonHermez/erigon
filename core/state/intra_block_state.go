@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sort"
 
-	"encoding/hex"
 	"encoding/json"
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
@@ -39,6 +38,7 @@ import (
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/status-im/keycard-go/hexutils"
 	"math/big"
 	"strings"
 )
@@ -866,6 +866,10 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 	mkh := libcommon.BytesToHash(mapKey)
 	rootU256 := uint256.NewInt(0).SetBytes(root.Bytes())
 
+	if strings.HasPrefix(mkh.Hex(), "0xcc") {
+		fmt.Println("SMT root: ", rootU256.String())
+	}
+
 	// set mapping of keccak256(txnum,1) -> smt root
 	sdb.SetState(saddr, &mkh, *rootU256)
 
@@ -939,6 +943,11 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 		}
 		so.originStorage[kh] = *vu
 	}
+	code := ibs.GetCode(addr)
+	if err != nil {
+		return nil, err
+	}
+	so.code = code
 	psCombined[addr] = so
 
 	// overwrite plainstate data with working data from the IBS which will contain new objects/updates
@@ -949,10 +958,6 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 		} else {
 			if dso.dirtyStorage != nil {
 				psCombined[da].dirtyStorage = dso.dirtyStorage
-			}
-			if dso.dirtyCode {
-				psCombined[da].data.CodeHash = dso.data.CodeHash
-				psCombined[da].code = dso.code
 			}
 		}
 
@@ -976,15 +981,15 @@ var collection = make(map[libcommon.Address]MyStruct)
 
 func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, ac []byte, inc uint64, ibs *IntraBlockState, addr libcommon.Address) (*big.Int, error) {
 
-	actest, _ := ibs.stateReader.ReadAccountCode(addr, inc, a.CodeHash)
+	//actest, _ := ibs.stateReader.ReadAccountCode(addr, inc, a.CodeHash)
 
 	// [zkevm] - collect data for json comparison
 	collection[addr] = MyStruct{
-		Storage:  as,
-		Balance:  a.Balance.ToBig(),
-		Nonce:    new(big.Int).SetUint64(a.Nonce),
-		Code:     hex.EncodeToString(actest),
-		CodeHash: a.CodeHash,
+		Storage: as,
+		Balance: a.Balance.ToBig(),
+		Nonce:   new(big.Int).SetUint64(a.Nonce),
+		//Code:     hex.EncodeToString(actest),
+		//CodeHash: a.CodeHash,
 	}
 
 	// store the account balance and nonce
@@ -995,9 +1000,9 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	}
 
 	// store the contract bytecode
-	if len(ac) > 0 {
-		hexcc := fmt.Sprintf("0x%x", ac)
-		r, err = smt.SetContractBytecode(addr.String(), s, r, hexcc)
+	ach := hexutils.BytesToHex(ac)
+	if len(ach) > 0 {
+		r, err = smt.SetContractBytecode(addr.String(), s, r, fmt.Sprintf("0x%s", ach))
 		if err != nil {
 			return nil, err
 		}
