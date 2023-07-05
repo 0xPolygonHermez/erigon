@@ -425,6 +425,7 @@ func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch) (*ethTypes.Header, e
 		Difficulty: big.NewInt(0),
 		Number:     blockNo,
 		GasLimit:   30_000_000,
+		Coinbase:   common.HexToAddress("0x148Ee7dAF16574cD020aFa34CC658f8F3fbd2800"), // the sequencer gets the txfee
 	}
 	rawdb.WriteHeader(dbTx, h)
 	rawdb.WriteCanonicalHash(dbTx, h.Hash(), blockNo.Uint64())

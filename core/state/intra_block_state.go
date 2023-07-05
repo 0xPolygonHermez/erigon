@@ -901,8 +901,6 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 					if err != nil {
 						return nil, err
 					}
-
-					// this is really wrong!!!! We cannot do this - the db is overwriting the dirty state for each tx in the block
 					so.originStorage[kh] = *vu
 				}
 				psCombined[addr] = so
@@ -942,16 +940,18 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	}
 	psCombined[addr] = so
 
-	// overwrite/augment db state with state objects in ibs
-	// the complex bit here is that the ibs may not have had to load all storage slots, so we should account for this
-	// by adding the dirty storage (which will contain new and updated slots)
-	// we should also add completely new objects
+	// overwrite plainstate data with working data from the IBS which will contain new objects/updates
+	// NB: we have to use dirty storage as the IBS may not load all storage locations (only those used by the tx)
 	for da, dso := range ibs.stateObjects {
 		if psCombined[da] == nil {
 			psCombined[da] = dso
-		}
-		if psCombined[da].dirtyStorage != nil {
-			psCombined[da].dirtyStorage = dso.dirtyStorage
+		} else {
+			if dso.dirtyStorage != nil {
+				psCombined[da].dirtyStorage = dso.dirtyStorage
+			}
+			if dso.dirtyCode {
+				psCombined[da].code = dso.code
+			}
 		}
 
 		// if the data of the account is in the IBS we should use it (for updated nonce, balance)
