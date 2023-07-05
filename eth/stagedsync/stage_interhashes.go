@@ -264,25 +264,6 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 		return trie.EmptyRoot, err
 	}
 
-	// [zkEVM] - FAKE SCALABLE
-	//a = &accounts.Account{
-	//	Initialised: false,
-	//	Nonce:       0,
-	//	Balance:     uint256.Int{},
-	//	Root:        libcommon.Hash{},
-	//	CodeHash:    libcommon.Hash{},
-	//	Incarnation: 0,
-	//}
-	//addr = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-	//as = make(map[string]string)
-	//as["0xcc69885fda6bcc1a4ace058b4a62bf5e179ea78fd58a1ccd71c22cc9b688792f"] = "0x07483d2b55eb8bb44f617a4de963497fab3fafed5c2b49af975fd73246a5df46"
-	//as["0x0"] = "0x0000000000000000000000000000000000000000000000000000000000000001"
-	//inc = 0
-	//root, err = processAccount(smt, root, a, as, inc, psr, addr)
-	//if err != nil {
-	//	return trie.EmptyRoot, err
-	//}
-
 	//[zkevm] - print state
 	jsonData, err := json.MarshalIndent(collection, "", "    ")
 	if err != nil {

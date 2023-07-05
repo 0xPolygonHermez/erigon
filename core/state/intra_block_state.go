@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sort"
 
+	"encoding/hex"
 	"encoding/json"
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
@@ -846,7 +847,7 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 			as[k.Hex()] = v.Hex()
 		}
 
-		root, err = processAccount(s, root, &so.data, as, inc, sdb, addr)
+		root, err = processAccount(s, root, &so.data, as, so.Code(), inc, sdb, addr)
 		if err != nil {
 			return err
 		}
@@ -950,6 +951,7 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 				psCombined[da].dirtyStorage = dso.dirtyStorage
 			}
 			if dso.dirtyCode {
+				psCombined[da].data.CodeHash = dso.data.CodeHash
 				psCombined[da].code = dso.code
 			}
 		}
@@ -963,20 +965,26 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 
 // TODO [zkevm] remove debugging struct
 type MyStruct struct {
-	Storage map[string]string
-	Balance *big.Int
-	Nonce   *big.Int
+	Storage  map[string]string
+	Balance  *big.Int
+	Nonce    *big.Int
+	CodeHash libcommon.Hash
+	Code     string
 }
 
 var collection = make(map[libcommon.Address]MyStruct)
 
-func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, inc uint64, ibs *IntraBlockState, addr libcommon.Address) (*big.Int, error) {
+func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, ac []byte, inc uint64, ibs *IntraBlockState, addr libcommon.Address) (*big.Int, error) {
+
+	actest, _ := ibs.stateReader.ReadAccountCode(addr, inc, a.CodeHash)
 
 	// [zkevm] - collect data for json comparison
 	collection[addr] = MyStruct{
-		Storage: as,
-		Balance: a.Balance.ToBig(),
-		Nonce:   new(big.Int).SetUint64(a.Nonce),
+		Storage:  as,
+		Balance:  a.Balance.ToBig(),
+		Nonce:    new(big.Int).SetUint64(a.Nonce),
+		Code:     hex.EncodeToString(actest),
+		CodeHash: a.CodeHash,
 	}
 
 	// store the account balance and nonce
@@ -987,12 +995,8 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	}
 
 	// store the contract bytecode
-	cc, err := ibs.stateReader.ReadAccountCode(addr, inc, a.CodeHash)
-	if err != nil {
-		return nil, err
-	}
-	if len(cc) > 0 {
-		hexcc := fmt.Sprintf("0x%x", cc)
+	if len(ac) > 0 {
+		hexcc := fmt.Sprintf("0x%x", ac)
 		r, err = smt.SetContractBytecode(addr.String(), s, r, hexcc)
 		if err != nil {
 			return nil, err
