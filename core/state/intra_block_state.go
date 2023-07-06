@@ -818,7 +818,7 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 
 	if !sdb.Exist(saddr) {
 		// create account if not exists
-		sdb.CreateAccount(saddr, false)
+		sdb.CreateAccount(saddr, true)
 	}
 
 	// set incremented tx num in state
@@ -866,9 +866,7 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 	mkh := libcommon.BytesToHash(mapKey)
 	rootU256 := uint256.NewInt(0).SetBytes(root.Bytes())
 
-	if strings.HasPrefix(mkh.Hex(), "0xcc") {
-		fmt.Println("SMT root: ", rootU256.String())
-	}
+	fmt.Println("SMT root: ", rootU256.String())
 
 	// set mapping of keccak256(txnum,1) -> smt root
 	sdb.SetState(saddr, &mkh, *rootU256)
@@ -879,6 +877,8 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, error) {
 	// we need to iterate plainstate, if we find something in ibs and it is dirty - then we should use that
 	// if it exists in dirty ibs but not in plainstate - we should add it
+
+	c, err := ibs.stateReader.
 
 	c, err := ibs.readTx.Cursor(kv.PlainState)
 	if err != nil {
@@ -891,7 +891,7 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	// loop vars - collect existing state from DB
 	var a *accounts.Account
 	var addr libcommon.Address
-	var as map[string]string
+	as := make(map[string]string)
 	var inc uint64
 
 	for k, acc, err := c.First(); err == nil && acc != nil; k, acc, err = c.Next() {
@@ -950,11 +950,12 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	so.code = code
 	psCombined[addr] = so
 
-	// overwrite plainstate data with working data from the IBS which will contain new objects/updates
-	// NB: we have to use dirty storage as the IBS may not load all storage locations (only those used by the tx)
+	//// overwrite plainstate data with working data from the IBS which will contain new objects/updates
+	//// NB: we have to use dirty storage as the IBS may not load all storage locations (only those used by the tx)
 	for da, dso := range ibs.stateObjects {
 		if psCombined[da] == nil {
-			psCombined[da] = dso
+			dsoCopy := *dso
+			psCombined[da] = &dsoCopy
 		} else {
 			if dso.dirtyStorage != nil {
 				psCombined[da].dirtyStorage = dso.dirtyStorage
