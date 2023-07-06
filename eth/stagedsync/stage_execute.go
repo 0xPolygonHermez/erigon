@@ -502,7 +502,7 @@ Loop:
 		}
 		stageProgress = blockNum
 
-		shouldUpdateProgress := batch.BatchSize() >= int(cfg.batchSize)
+		shouldUpdateProgress := true
 		if shouldUpdateProgress {
 			log.Info("Committed State", "gas reached", currentStateGas, "gasTarget", gasState)
 			currentStateGas = 0
