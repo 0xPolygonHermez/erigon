@@ -878,8 +878,6 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	// we need to iterate plainstate, if we find something in ibs and it is dirty - then we should use that
 	// if it exists in dirty ibs but not in plainstate - we should add it
 
-	c, err := ibs.stateReader.
-
 	c, err := ibs.readTx.Cursor(kv.PlainState)
 	if err != nil {
 		return nil, err
