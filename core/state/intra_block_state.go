@@ -878,9 +878,9 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	// we need to iterate plainstate, if we find something in ibs and it is dirty - then we should use that
 	// if it exists in dirty ibs but not in plainstate - we should add it
 
-	c, err := ibs.readTx.Cursor(kv.PlainState)
-	if err != nil {
-		return nil, err
+	iterator, ok := ibs.stateReader.(StateReaderIterator)
+	if !ok {
+		panic("state reader does not support iteration")
 	}
 
 	// state collection (db + dirty from tx)
@@ -892,8 +892,10 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	as := make(map[string]string)
 	var inc uint64
 
-	for k, acc, err := c.First(); err == nil && acc != nil; k, acc, err = c.Next() {
+	err := iterator.ForEach(kv.PlainState, []byte{}, func(k, acc []byte) error {
+		fmt.Println("IIIIGOR unfk: ", fmt.Sprintf("%x", k))
 		if len(k) == 20 {
+			fmt.Println("IIIIGOR k: ", libcommon.BytesToAddress(k).String())
 			if a != nil {
 				// add to psCombined as a new stateObject - nothing should be dirty here this is existing DB state
 				so := newObject(ibs, addr, a, a)
@@ -902,7 +904,7 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 					kh := libcommon.HexToHash(ks)
 					vu, err := uint256.FromHex(trimHexString(vs))
 					if err != nil {
-						return nil, err
+						return err
 					}
 					so.originStorage[kh] = *vu
 				}
@@ -911,10 +913,10 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 
 			a = &accounts.Account{}
 
-			if err = a.DecodeForStorage(acc); err != nil {
+			if err := a.DecodeForStorage(acc); err != nil {
 				// TODO: not an account?
 				as = make(map[string]string)
-				continue
+				return nil
 			}
 			addr = libcommon.BytesToAddress(k)
 			inc = a.Incarnation
@@ -923,12 +925,13 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 		} else { // otherwise we're reading storage
 			_, incarnation, key := dbutils.PlainParseCompositeStorageKey(k)
 			if incarnation != inc {
-				continue // take current account incarnation storage only
+				return nil // take current account incarnation storage only
 			}
 
 			as[fmt.Sprintf("0x%032x", key)] = fmt.Sprintf("0x%032x", acc)
 		}
-	}
+		return nil
+	})
 
 	// add final account to psCombined as a stateObject
 	so := newObject(ibs, addr, a, a)
