@@ -63,17 +63,17 @@ func applyTransaction(config *chain.Config, engine consensus.EngineReader, gp *G
 		return nil, nil, err
 	}
 
-	// calculate the SMT state root
-	err = ibs.SMTScalableStorageSet()
-	if err != nil {
-		return nil, nil, err
-	}
-
 	// Update the state with pending changes
 	if err = ibs.FinalizeTx(rules, stateWriter); err != nil {
 		return nil, nil, err
 	}
 	*usedGas += result.UsedGas
+
+	// calculate the SMT state root
+	err = ibs.SMTScalableStorageSet()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Set the receipt logs and create the bloom filter.
 	// based on the eip phase, we're passing whether the root touch-delete accounts.
