@@ -125,8 +125,9 @@ func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch 
 
 func (m *StateInterfaceAdapter) AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error {
 	fmt.Printf("AddBlock, saving ETH progress block: %d\n", block.BlockNumber)
-
-	return stages.SaveStageProgress(dbTx, stages.L1Blocks, block.BlockNumber)
+	// [zkevm] - max note: we shouldn't save this here - it isn't the true sign of actual progress
+	//return stages.SaveStageProgress(dbTx, stages.L1Blocks, block.BlockNumber)
+	return nil
 }
 
 func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx kv.RwTx) error {
@@ -174,7 +175,7 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
 	// [zkevm] - restrict progress
-	if verifiedBatch.BatchNumber > 4 {
+	if verifiedBatch.BatchNumber > 10 {
 		return nil
 	}
 
@@ -224,6 +225,11 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 		if err != nil {
 			return err
 		}
+	}
+
+	err = stages.SaveStageProgress(dbTx, stages.L1Blocks, verifiedBatch.BlockNumber)
+	if err != nil {
+		return err
 	}
 
 	err = stages.SaveStageProgress(dbTx, stages.Headers, verifiedBatch.BatchNumber)
