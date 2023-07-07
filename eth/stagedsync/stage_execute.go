@@ -502,7 +502,7 @@ Loop:
 		}
 		stageProgress = blockNum
 
-		shouldUpdateProgress := true
+		shouldUpdateProgress := false
 		if shouldUpdateProgress {
 			log.Info("Committed State", "gas reached", currentStateGas, "gasTarget", gasState)
 			currentStateGas = 0

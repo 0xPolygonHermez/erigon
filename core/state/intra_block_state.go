@@ -94,8 +94,6 @@ type IntraBlockState struct {
 	trace          bool
 	accessList     *accessList
 	balanceInc     map[libcommon.Address]*BalanceIncrease // Map of balance increases (without first reading the account)
-
-	readTx kv.RwTx
 }
 
 // Create a new state from a given trie
@@ -110,10 +108,6 @@ func New(stateReader StateReader) *IntraBlockState {
 		accessList:        newAccessList(),
 		balanceInc:        map[libcommon.Address]*BalanceIncrease{},
 	}
-}
-
-func (sdb *IntraBlockState) SetReadTx(tx kv.RwTx) {
-	sdb.readTx = tx
 }
 
 func (sdb *IntraBlockState) SetTrace(trace bool) {
@@ -893,9 +887,7 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	var inc uint64
 
 	err := iterator.ForEach(kv.PlainState, []byte{}, func(k, acc []byte) error {
-		fmt.Println("IIIIGOR unfk: ", fmt.Sprintf("%x", k))
 		if len(k) == 20 {
-			fmt.Println("IIIIGOR k: ", libcommon.BytesToAddress(k).String())
 			if a != nil {
 				// add to psCombined as a new stateObject - nothing should be dirty here this is existing DB state
 				so := newObject(ibs, addr, a, a)

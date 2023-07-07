@@ -136,8 +136,6 @@ func ExecuteBlockEphemerally(
 		}
 
 		gp.Reset(block.GasLimit())
-		// [zkevm] - set tx for reading all of plainstate - a better option is to implement something in stateReader
-		ibs.SetReadTx(dbTx)
 
 		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas)
 		if writeTrace {
