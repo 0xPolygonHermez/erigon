@@ -14,3 +14,9 @@ type GlobalExitRoot struct {
 	RollupExitRoot  common.Hash
 	GlobalExitRoot  common.Hash
 }
+
+type GlobalExitRootDb struct {
+	GlobalExitRoot         common.Hash
+	GlobalExitRootPosition common.Hash
+	Timestamp              int64
+}

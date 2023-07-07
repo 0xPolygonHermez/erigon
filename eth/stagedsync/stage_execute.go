@@ -24,6 +24,7 @@ import (
 	libstate "github.com/ledgerwatch/erigon-lib/state"
 	"github.com/ledgerwatch/log/v3"
 
+	"encoding/json"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/changeset"
 	"github.com/ledgerwatch/erigon/common/dbutils"
@@ -46,6 +47,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
+	zkstate "github.com/ledgerwatch/erigon/zkevm/state"
 	"math/big"
 )
 
@@ -444,10 +446,11 @@ Loop:
 			return err
 		}
 
-		var ger, gerp common.Hash
-		copy(ger[:], gp[:32])
-		copy(gerp[:], gp[32:64])
-		ts := binary.BigEndian.Uint64(gp[64:72])
+		gerdb := &zkstate.GlobalExitRootDb{}
+		err = json.Unmarshal(gp, &gerdb)
+		if err != nil {
+			return err
+		}
 
 		old := common.Hash{}.Big()
 		oldUint256, overflow := uint256.FromBig(old)
@@ -455,14 +458,14 @@ Loop:
 			return errors.New("AddGlobalExitRoot: overflow")
 		}
 
-		exitBig := new(big.Int).SetUint64(ts)
+		exitBig := new(big.Int).SetInt64(gerdb.Timestamp)
 		exitUint256, overflow := uint256.FromBig(exitBig)
 		if overflow {
 			return errors.New("AddGlobalExitRoot: overflow")
 		}
 
 		addr := common.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
-		err = psw.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256)
+		err = psw.WriteAccountStorage(addr, uint64(1), &gerdb.GlobalExitRootPosition, oldUint256, exitUint256)
 		if err != nil {
 			return err
 		}

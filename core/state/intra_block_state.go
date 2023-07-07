@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sort"
 
+	"bytes"
 	"encoding/json"
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
@@ -39,7 +40,9 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"
+	"io"
 	"math/big"
+	"net/http"
 	"strings"
 )
 
@@ -862,6 +865,12 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 
 	fmt.Println("SMT root: ", rootU256.String())
 
+	// double check the root against the RPC
+	err = verifyRoot(rootU256.Hex(), mkh.Hex(), txNum.Hex())
+	if err != nil {
+		return err
+	}
+
 	// set mapping of keccak256(txnum,1) -> smt root
 	sdb.SetState(saddr, &mkh, *rootU256)
 
@@ -1022,4 +1031,60 @@ func trimHexString(s string) string {
 	}
 
 	return "0x0"
+}
+
+func verifyRoot(hash string, storageKey string, txNum string) error {
+	url := "https://zkevm-rpc.com"
+
+	// Construct the payload
+	payload := map[string]interface{}{
+		"method": "eth_getStorageAt",
+		"params": []interface{}{
+			"0x000000000000000000000000000000005ca1ab1e",
+			storageKey,
+			txNum,
+		},
+		"id":      1,
+		"jsonrpc": "2.0",
+	}
+
+	// Convert the payload to JSON
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	// Set the request header Content-Type for JSON
+	req.Header.Set("Content-Type", "application/json")
+
+	// Execute the HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	// Read and print the HTTP response
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// Parse the JSON response
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	rpcHash := trimHexString(result["result"].(string))
+
+	if rpcHash != hash {
+		return fmt.Errorf("root hash mismatch")
+	}
+	return nil
 }

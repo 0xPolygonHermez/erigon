@@ -15,6 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
 
+	"encoding/json"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 )
 
@@ -111,12 +112,12 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 
 }
 
-func (m *StateInterfaceAdapter) writeGlobalExitRootToDb(dbTx kv.RwTx, blockNo uint64, ger common.Hash, gerp common.Hash, ts uint64) error {
-	tsb := make([]byte, 8)
-	binary.BigEndian.PutUint64(tsb, ts)
-	composite := append(ger[:], gerp[:]...)
-	composite = append(composite, tsb...)
-	return dbTx.Put("HermezGlobalExitRoot", UintBytes(blockNo), composite)
+func (m *StateInterfaceAdapter) writeGlobalExitRootToDb(dbTx kv.RwTx, blockNo uint64, gers state.GlobalExitRootDb) error {
+	j, err := json.Marshal(gers)
+	if err != nil {
+		return err
+	}
+	return dbTx.Put("HermezGlobalExitRoot", UintBytes(blockNo), j)
 }
 
 func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error {
@@ -215,16 +216,18 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 
 	// write the global exit root to state
 	gerp, ok := gdb[batch.GlobalExitRoot]
+	ts := int64(0)
 	if ok {
-		err := m.writeGlobalExitRootToDb(dbTx, verifiedBatch.BatchNumber, batch.GlobalExitRoot, gerp, uint64(batch.Timestamp.Unix())) // batch no is block no in stage_execute
-		if err != nil {
-			return err
-		}
-	} else {
-		err := m.writeGlobalExitRootToDb(dbTx, verifiedBatch.BatchNumber, batch.GlobalExitRoot, common.HexToHash("0x0"), 0)
-		if err != nil {
-			return err
-		}
+		ts = batch.Timestamp.Unix()
+	}
+	gerdb := state.GlobalExitRootDb{
+		GlobalExitRoot:         batch.GlobalExitRoot,
+		GlobalExitRootPosition: gerp,
+		Timestamp:              ts,
+	}
+	err = m.writeGlobalExitRootToDb(dbTx, verifiedBatch.BatchNumber, gerdb) // batch no is block no in stage_execute
+	if err != nil {
+		return err
 	}
 
 	err = stages.SaveStageProgress(dbTx, stages.L1Blocks, verifiedBatch.BlockNumber)
