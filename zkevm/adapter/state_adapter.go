@@ -109,7 +109,6 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 	gdb[exitRoot.GlobalExitRoot] = common.BytesToHash(globalExitRootPos)
 
 	return nil
-
 }
 
 func (m *StateInterfaceAdapter) writeGlobalExitRootToDb(dbTx kv.RwTx, blockNo uint64, gers state.GlobalExitRootDb) error {
@@ -176,7 +175,7 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
 	// [zkevm] - restrict progress
-	if verifiedBatch.BatchNumber > 10 {
+	if verifiedBatch.BatchNumber > 55 {
 		return nil
 	}
 
@@ -219,6 +218,7 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	ts := int64(0)
 	if ok {
 		ts = batch.Timestamp.Unix()
+		delete(gdb, batch.GlobalExitRoot)
 	}
 	gerdb := state.GlobalExitRootDb{
 		GlobalExitRoot:         batch.GlobalExitRoot,
