@@ -1,6 +1,0 @@
-datadir : '/mnt/Work/Razorlabs/PolygonProject/HERMEZ'
-chain : "hermez-mainnet"
-http : true
-private.api.addr : "localhost:9090"
-
-http.api : ["eth","debug","net"]
