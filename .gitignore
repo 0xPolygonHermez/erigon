@@ -79,6 +79,7 @@ erigon-lib/
 docker-compose.*.yml
 .env
 coverage.out
+hermezconfig.yaml
 
 dist
 __debug_bin
