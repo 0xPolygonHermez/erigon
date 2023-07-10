@@ -1,4 +1,4 @@
-datadir : '/Volumes/2TB/datadirs/hermez'
+datadir : '/mnt/Work/Razorlabs/PolygonProject/HERMEZ'
 chain : "hermez-mainnet"
 http : true
 private.api.addr : "localhost:9090"

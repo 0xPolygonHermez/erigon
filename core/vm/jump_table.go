@@ -116,14 +116,14 @@ func newRohanInstructionSet() JumpTable {
 
 	instructionSet[SELFDESTRUCT] = &operation{
 		execute:     opSendAll,
-		constantGas: GasFastestStep,
+		dynamicGas: gasSelfdestruct,
 		numPop:      2,
 		numPush:     1,
 	}
 
 	instructionSet[SENDALL] = &operation{
 		execute:     opSendAll,
-		constantGas: GasFastestStep,
+		dynamicGas: gasSelfdestruct,
 		numPop:      2,
 		numPush:     1,
 	}

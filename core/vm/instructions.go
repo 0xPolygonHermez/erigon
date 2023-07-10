@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/iden3/go-iden3-crypto/keccak256"
+
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"golang.org/x/crypto/sha3"
@@ -497,13 +499,25 @@ func opBlockhash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 
 func opBlockhashV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	num := scope.Stack.Peek()
-	num64, overflow := num.Uint64WithOverflow()
+	_, overflow := num.Uint64WithOverflow()
 	if overflow {
 		num.Clear()
 		return nil, nil
 	}
 
-	num.SetBytes(interpreter.evm.Context().GetHash(num64).Bytes())
+	ibs := interpreter.evm.IntraBlockState()
+	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+
+	d1 := common.LeftPadBytes(num.Bytes(), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+
+	// set mapping of keccak256(txnum,1) -> smt root
+	blockHash := uint256.NewInt(0)
+	ibs.GetState(saddr, &mkh, blockHash)
+
+	num.SetBytes(blockHash.Bytes())
 
 	return nil, nil
 }
@@ -526,12 +540,14 @@ func opNumber(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 }
 
 func opNumberV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	txCount, err := interpreter.evm.IntraBlockState().GetTxCount()
-	if err != nil {
-		return nil, err
-	}
-	v := new(uint256.Int).SetUint64(txCount)
-	scope.Stack.Push(v)
+	ibs := interpreter.evm.IntraBlockState()
+	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	sl0 := libcommon.HexToHash("0x0")
+
+	txNum := uint256.NewInt(0)
+	ibs.GetState(saddr, &sl0, txNum)
+
+	scope.Stack.Push(txNum)
 	return nil, nil
 }
 
