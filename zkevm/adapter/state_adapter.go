@@ -17,6 +17,7 @@ import (
 
 	"encoding/json"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	"time"
 )
 
 const HermezBatch = "HermezBatch"
@@ -175,11 +176,17 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
 	// [zkevm] - restrict progress
-	if verifiedBatch.BatchNumber > 55 {
+	if verifiedBatch.BatchNumber > 100 {
 		return nil
 	}
 
-	header, err := WriteHeaderToDb(dbTx, verifiedBatch)
+	// Get the matching batch (body) for the verified batch (header)
+	batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)
+	if err != nil {
+		return err
+	}
+
+	header, err := WriteHeaderToDb(dbTx, verifiedBatch, batch.Timestamp)
 	if err != nil {
 		return err
 	}
@@ -201,12 +208,6 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 
 	fmt.Println("AddVerifiedBatch: seqval", seqval)
 	fmt.Println("AddVerifiedBatch: batch number", verifiedBatch.BatchNumber)
-
-	// Get the matching batch (body) for the verified batch (header)
-	batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)
-	if err != nil {
-		return err
-	}
 
 	err = WriteBodyToDb(dbTx, batch, header.Hash())
 	if err != nil {
@@ -403,7 +404,7 @@ func (m *StateInterfaceAdapter) BeginStateTransaction(ctx context.Context) (kv.R
 	panic("BeginStateTransaction: implement me")
 }
 
-func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch) (*ethTypes.Header, error) {
+func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch, ts time.Time) (*ethTypes.Header, error) {
 	if dbTx == nil {
 		return nil, fmt.Errorf("dbTx is nil")
 	}
@@ -420,6 +421,7 @@ func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch) (*ethTypes.Header, e
 		Number:     blockNo,
 		GasLimit:   30_000_000,
 		Coinbase:   common.HexToAddress("0x148Ee7dAF16574cD020aFa34CC658f8F3fbd2800"), // the sequencer gets the txfee
+		Time:       uint64(ts.Unix()),
 	}
 	rawdb.WriteHeader(dbTx, h)
 	rawdb.WriteCanonicalHash(dbTx, h.Hash(), blockNo.Uint64())

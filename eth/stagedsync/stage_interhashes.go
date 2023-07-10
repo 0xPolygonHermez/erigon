@@ -28,7 +28,6 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/state/temporal"
 
-	"encoding/json"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -265,11 +264,11 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	}
 
 	//[zkevm] - print state
-	jsonData, err := json.MarshalIndent(collection, "", "    ")
-	if err != nil {
-		fmt.Printf("error: %v\n", err)
-	}
-	fmt.Println(string(jsonData))
+	//jsonData, err := json.MarshalIndent(collection, "", "    ")
+	//if err != nil {
+	//	fmt.Printf("error: %v\n", err)
+	//}
+	//fmt.Println(string(jsonData))
 
 	hash = libcommon.BigToHash(root)
 

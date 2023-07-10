@@ -242,8 +242,6 @@ func (m *mapmutation) ForEach(bucket string, fromPrefix []byte, walker func(k, v
 
 	// temp check to see if we are in order
 	sort.SliceStable(keys, func(i, j int) bool {
-		ordered := keys[i] < keys[j]
-		fmt.Println("ordered: ", ordered)
 		return keys[i] < keys[j]
 	})
 

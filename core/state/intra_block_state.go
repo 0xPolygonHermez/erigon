@@ -850,11 +850,11 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 		}
 	}
 
-	jsonData, err := json.MarshalIndent(collection, "", "    ")
-	if err != nil {
-		fmt.Printf("error: %v\n", err)
-	}
-	fmt.Println(string(jsonData))
+	//jsonData, err := json.MarshalIndent(collection, "", "    ")
+	//if err != nil {
+	//	fmt.Printf("error: %v\n", err)
+	//}
+	//fmt.Println(string(jsonData))
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
