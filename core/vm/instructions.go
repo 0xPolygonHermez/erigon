@@ -547,6 +547,10 @@ func opNumberV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	txNum := uint256.NewInt(0)
 	ibs.GetState(saddr, &sl0, txNum)
 
+	//TODO: if the tx count is incremented before the execution
+	// this should be
+	txNum.Add(txNum, uint256.NewInt(1))
+
 	scope.Stack.Push(txNum)
 	return nil, nil
 }
