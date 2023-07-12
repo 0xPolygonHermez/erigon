@@ -36,7 +36,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
-	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"
@@ -44,6 +43,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 )
 
 type revision struct {
@@ -97,6 +97,18 @@ type IntraBlockState struct {
 	trace          bool
 	accessList     *accessList
 	balanceInc     map[libcommon.Address]*BalanceIncrease // Map of balance increases (without first reading the account)
+
+	// SMT
+	/*
+		Create a SMT here and use it to calculate a root after each interaction with the state by doing CRUD on the tree
+
+		This should be more efficient than loading the whole state once per block. Once we start we can run down the whole chain
+		using only the tree.
+
+		Any funcs in this file which update the state should call the tree for the 3 entities: account, storage, code
+
+		The funcs to be updated are:
+	*/
 }
 
 // Create a new state from a given trie
@@ -801,11 +813,24 @@ func (sdb *IntraBlockState) SlotInAccessList(addr libcommon.Address, slot libcom
 	return sdb.accessList.Contains(addr, slot)
 }
 
-func (sdb *IntraBlockState) SMTScalableStorageSet() error {
-	// create an SMT
-	smtDB := db2.NewMemDb()
-	s := smt.NewSMT(smtDB)
+func (sdb *IntraBlockState) ScalableSetTxNum() {
+	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	sl0 := libcommon.HexToHash("0x0")
 
+	txNum := uint256.NewInt(0)
+	sdb.GetState(saddr, &sl0, txNum)
+	txNum = txNum.Add(txNum, uint256.NewInt(1))
+
+	if !sdb.Exist(saddr) {
+		// create account if not exists
+		sdb.CreateAccount(saddr, true)
+	}
+
+	// set incremented tx num in state
+	sdb.SetState(saddr, &sl0, *txNum)
+}
+
+func (sdb *IntraBlockState) ScalableSetSmtRootHash() error {
 	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
 
@@ -821,40 +846,17 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 	// set incremented tx num in state
 	sdb.SetState(saddr, &sl0, *txNum)
 
-	fs, err := getFullState(sdb)
-	if err != nil {
-		return err
-	}
-
-	// now process all the accounts as we would normally, same as in stage_interhashes
+	// [zkevm] - above tx 300 calculate the root locally every 10 txs
 	var root = big.NewInt(0)
-
-	for addr, so := range fs {
-		inc, err := sdb.stateReader.ReadAccountIncarnation(addr)
-		if err != nil {
-			return err
-		}
-
-		as := map[string]string{}
-		for k, v := range so.originStorage {
-			as[k.Hex()] = v.Hex()
-		}
-		// overwrite origin storage with dirty values
-		for k, v := range so.dirtyStorage {
-			as[k.Hex()] = v.Hex()
-		}
-
-		root, err = processAccount(s, root, &so.data, as, so.Code(), inc, sdb, addr)
+	calculatedLocally := false
+	if txNum.Uint64() > 300 && txNum.Uint64()%10 == 0 {
+		var err error
+		root, err = calculateIntermediateRoot(root, sdb)
+		calculatedLocally = true
 		if err != nil {
 			return err
 		}
 	}
-
-	//jsonData, err := json.MarshalIndent(collection, "", "    ")
-	//if err != nil {
-	//	fmt.Printf("error: %v\n", err)
-	//}
-	//fmt.Println(string(jsonData))
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
@@ -866,13 +868,33 @@ func (sdb *IntraBlockState) SMTScalableStorageSet() error {
 	fmt.Println("SMT root: ", rootU256.String())
 
 	// double check the root against the RPC
-	err = verifyRoot(rootU256.Hex(), mkh.Hex(), txNum.Hex())
+	var err error
+	rpcHash := &libcommon.Hash{}
+	if calculatedLocally {
+		rpcHash, err = verifyRoot(rootU256.Hex(), mkh.Hex(), txNum.Hex())
+		if err != nil {
+			return err
+		}
+	} else {
+		rpcHash, err = getRpcRoot(mkh.Hex(), txNum.Hex())
+		if err != nil {
+			return err
+		}
+	}
+
+	// [zkevm] - print state on error
 	if err != nil {
+		jsonData, err := json.MarshalIndent(collection, "", "    ")
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+		}
+		fmt.Println(string(jsonData))
 		return err
 	}
 
 	// set mapping of keccak256(txnum,1) -> smt root
-	sdb.SetState(saddr, &mkh, *rootU256)
+	rpcHashU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
+	sdb.SetState(saddr, &mkh, *rpcHashU256)
 
 	return nil
 }
@@ -1033,7 +1055,20 @@ func trimHexString(s string) string {
 	return "0x0"
 }
 
-func verifyRoot(hash string, storageKey string, txNum string) error {
+func verifyRoot(hash string, storageKey string, txNum string) (*libcommon.Hash, error) {
+	rpcHash, err := getRpcRoot(storageKey, txNum)
+	if err != nil {
+		return nil, err
+	}
+
+	if rpcHash.String() != hash {
+		return nil, fmt.Errorf("root hash mismatch")
+	}
+
+	return rpcHash, nil
+}
+
+func getRpcRoot(storageKey string, txNum string) (*libcommon.Hash, error) {
 	url := "https://zkevm-rpc.com"
 
 	// Construct the payload
@@ -1051,13 +1086,13 @@ func verifyRoot(hash string, storageKey string, txNum string) error {
 	// Convert the payload to JSON
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Create a new HTTP request
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Set the request header Content-Type for JSON
@@ -1067,24 +1102,59 @@ func verifyRoot(hash string, storageKey string, txNum string) error {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Read and print the HTTP response
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Parse the JSON response
 	var result map[string]interface{}
-	json.Unmarshal(body, &result)
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
 
 	rpcHash := trimHexString(result["result"].(string))
 
-	if rpcHash != hash {
-		return fmt.Errorf("root hash mismatch")
+	h := libcommon.HexToHash(rpcHash)
+	return &h, nil
+}
+
+func calculateIntermediateRoot(root *big.Int, sdb *IntraBlockState) (*big.Int, error) {
+	// create an SMT
+	smtDB := db2.NewMemDb()
+	s := smt.NewSMT(smtDB)
+
+	fs, err := getFullState(sdb)
+	if err != nil {
+		return root, err
 	}
-	return nil
+
+	for addr, so := range fs {
+		inc, err := sdb.stateReader.ReadAccountIncarnation(addr)
+		if err != nil {
+			return root, err
+		}
+
+		as := map[string]string{}
+		for k, v := range so.originStorage {
+			as[k.Hex()] = v.Hex()
+		}
+		// overwrite origin storage with dirty values
+		for k, v := range so.dirtyStorage {
+			as[k.Hex()] = v.Hex()
+		}
+
+		root, err = processAccount(s, root, &so.data, as, so.Code(), inc, sdb, addr)
+		if err != nil {
+			return root, err
+		}
+	}
+
+	return root, nil
 }

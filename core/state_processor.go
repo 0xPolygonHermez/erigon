@@ -55,6 +55,9 @@ func applyTransaction(config *chain.Config, engine consensus.EngineReader, gp *G
 		txContext.TxHash = tx.Hash()
 	}
 
+	// [zkevm] - set txnum in magic account
+	ibs.ScalableSetTxNum()
+
 	// Update the evm with the new transaction context.
 	evm.Reset(txContext, ibs)
 
@@ -69,8 +72,8 @@ func applyTransaction(config *chain.Config, engine consensus.EngineReader, gp *G
 	}
 	*usedGas += result.UsedGas
 
-	// calculate the SMT state root
-	err = ibs.SMTScalableStorageSet()
+	// [zkevm] - set smt root hash in magic account
+	err = ibs.ScalableSetSmtRootHash()
 	if err != nil {
 		return nil, nil, err
 	}
