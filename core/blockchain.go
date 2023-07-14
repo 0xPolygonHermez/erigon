@@ -145,6 +145,13 @@ func ExecuteBlockEphemerally(
 
 			vmConfig.Tracer = nil
 		}
+
+		// [zkevm] - set smt root hash in magic account
+		err = ibs.ScalableSetSmtRootHash(dbTx)
+		if err != nil {
+			return nil, err
+		}
+
 		if err != nil {
 			if !vmConfig.StatelessExec {
 				return nil, fmt.Errorf("could not apply tx %d from block %d [%v]: %w", i, block.NumberU64(), tx.Hash().Hex(), err)

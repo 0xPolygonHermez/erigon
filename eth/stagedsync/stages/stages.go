@@ -61,6 +61,7 @@ var (
 // "overrides" for zkEVM
 // "renaming" it here to minimize diff
 var L1Blocks SyncStage = "L1Blocks"
+var Transactions SyncStage = "Transactions"
 
 var AllStages = []SyncStage{
 	Snapshots,

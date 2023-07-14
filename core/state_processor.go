@@ -72,12 +72,6 @@ func applyTransaction(config *chain.Config, engine consensus.EngineReader, gp *G
 	}
 	*usedGas += result.UsedGas
 
-	// [zkevm] - set smt root hash in magic account
-	err = ibs.ScalableSetSmtRootHash()
-	if err != nil {
-		return nil, nil, err
-	}
-
 	// Set the receipt logs and create the bloom filter.
 	// based on the eip phase, we're passing whether the root touch-delete accounts.
 	var receipt *types.Receipt

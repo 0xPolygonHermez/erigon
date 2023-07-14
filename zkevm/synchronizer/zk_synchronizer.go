@@ -81,6 +81,11 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 	}
 
 	lastEthBlockSynced, err := s.state.GetLastBlock(s.ctx, tx)
+	// [zkevm] - restrict progress
+	if lastEthBlockSynced.BlockNumber >= 16923604 {
+		log.Info("Restricted Sync finished")
+		return nil
+	}
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotSynchronized) {
 			/*

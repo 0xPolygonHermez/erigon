@@ -23,7 +23,13 @@ import (
 	"sort"
 
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
+	"io"
+	"math/big"
+	"net/http"
+	"strings"
+
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -36,14 +42,10 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
+	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"
-	"io"
-	"math/big"
-	"net/http"
-	"strings"
-	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 )
 
 type revision struct {
@@ -833,7 +835,7 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 	sdb.SetState(saddr, &sl0, *txNum)
 }
 
-func (sdb *IntraBlockState) ScalableSetSmtRootHash() error {
+func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
 
@@ -842,10 +844,10 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash() error {
 
 	fmt.Printf("reading txNum: %v\n", txNum)
 
-	// [zkevm] - above tx 300 calculate the root locally every 10 txs
+	// [zkevm] - allow calculation locally at a certain point/interval
 	var root = big.NewInt(0)
 	calculatedLocally := false
-	if txNum.Uint64() > 6100 {
+	if txNum.Uint64() > 5300 && txNum.Uint64()%1 == 0 {
 		var err error
 		root, err = calculateIntermediateRoot(root, sdb)
 		calculatedLocally = true
@@ -867,9 +869,9 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash() error {
 	var err error
 	rpcHash := &libcommon.Hash{}
 	if calculatedLocally {
-		rpcHash, err = verifyRoot(rootU256.Hex(), mkh.Hex(), txNum.Hex())
+		rpcHash, err = verifyRoot(dbTx, rootU256.Hex(), txNum.Uint64())
 	} else {
-		rpcHash, err = getRpcRoot(mkh.Hex(), txNum.Hex())
+		rpcHash, err = getDbRoot(dbTx, txNum.Uint64())
 	}
 
 	// [zkevm] - print state on error
@@ -1045,8 +1047,8 @@ func trimHexString(s string) string {
 	return "0x0"
 }
 
-func verifyRoot(hash string, storageKey string, txNum string) (*libcommon.Hash, error) {
-	rpcHash, err := getRpcRoot(storageKey, txNum)
+func verifyRoot(dbTx kv.RwTx, hash string, txNum uint64) (*libcommon.Hash, error) {
+	rpcHash, err := getDbRoot(dbTx, txNum)
 	if err != nil {
 		return nil, err
 	}
@@ -1061,6 +1063,16 @@ func verifyRoot(hash string, storageKey string, txNum string) (*libcommon.Hash, 
 	}
 
 	return rpcHash, nil
+}
+
+func getDbRoot(dbTx kv.RwTx, txNum uint64) (*libcommon.Hash, error) {
+	// TODO how do we get these?
+	rootHash, err := dbTx.GetOne("HermezRpcRoot", UintBytes(txNum))
+	if err != nil {
+		return nil, err
+	}
+	h := libcommon.BytesToHash(rootHash)
+	return &h, nil
 }
 
 func getRpcRoot(storageKey string, txNum string) (*libcommon.Hash, error) {
@@ -1152,4 +1164,10 @@ func calculateIntermediateRoot(root *big.Int, sdb *IntraBlockState) (*big.Int, e
 	}
 
 	return root, nil
+}
+
+func UintBytes(no uint64) []byte {
+	noBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(noBytes, no)
+	return noBytes
 }
