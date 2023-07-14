@@ -61,7 +61,7 @@ func main() {
 		return
 	}
 
-	url := "https://rpc.polygon-zkevm.gateway.fm"
+	url := "https://zkevm-rpc.com/"
 	for accountHash, accountData := range data {
 		fmt.Println(accountHash)
 
