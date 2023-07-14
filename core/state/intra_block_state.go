@@ -845,7 +845,7 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash() error {
 	// [zkevm] - above tx 300 calculate the root locally every 10 txs
 	var root = big.NewInt(0)
 	calculatedLocally := false
-	if txNum.Uint64() > 3575 {
+	if txNum.Uint64() > 6100 {
 		var err error
 		root, err = calculateIntermediateRoot(root, sdb)
 		calculatedLocally = true
