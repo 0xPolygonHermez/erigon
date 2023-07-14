@@ -160,7 +160,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 				continue
 			}
 
-			if latestSyncedBatch >= 2 {
+			if latestSyncedBatch >= 500 {
 				log.Info("L1 state fully synchronized")
 				err = s.syncTrustedState(latestSyncedBatch)
 				if err != nil {
@@ -212,7 +212,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 	lastKnownBlock := header.Number
 
 	// [zkevm] - restrict progress
-	if lastEthBlockSynced.BlockNumber > 16939329 {
+	if lastEthBlockSynced.BlockNumber > 16923704 {
 		return lastEthBlockSynced, nil
 	}
 
@@ -256,7 +256,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		fromBlock = toBlock + 1
 
 		// [zkevm] - restrict progress
-		if fromBlock > 16939329 {
+		if fromBlock > 16923704 {
 			break
 		}
 

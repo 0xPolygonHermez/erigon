@@ -819,7 +819,10 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 
 	txNum := uint256.NewInt(0)
 	sdb.GetState(saddr, &sl0, txNum)
-	txNum = txNum.Add(txNum, uint256.NewInt(1))
+
+	fmt.Printf("txNum inc from : %v", txNum)
+	txNum.Add(txNum, uint256.NewInt(1))
+	fmt.Printf(" to : %v\n", txNum)
 
 	if !sdb.Exist(saddr) {
 		// create account if not exists
@@ -836,20 +839,13 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash() error {
 
 	txNum := uint256.NewInt(0)
 	sdb.GetState(saddr, &sl0, txNum)
-	txNum = txNum.Add(txNum, uint256.NewInt(1))
 
-	if !sdb.Exist(saddr) {
-		// create account if not exists
-		sdb.CreateAccount(saddr, true)
-	}
-
-	// set incremented tx num in state
-	sdb.SetState(saddr, &sl0, *txNum)
+	fmt.Printf("reading txNum: %v\n", txNum)
 
 	// [zkevm] - above tx 300 calculate the root locally every 10 txs
 	var root = big.NewInt(0)
 	calculatedLocally := false
-	if txNum.Uint64() > 300 && txNum.Uint64()%10 == 0 {
+	if txNum.Uint64() > 3575 {
 		var err error
 		root, err = calculateIntermediateRoot(root, sdb)
 		calculatedLocally = true
@@ -872,14 +868,8 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash() error {
 	rpcHash := &libcommon.Hash{}
 	if calculatedLocally {
 		rpcHash, err = verifyRoot(rootU256.Hex(), mkh.Hex(), txNum.Hex())
-		if err != nil {
-			return err
-		}
 	} else {
 		rpcHash, err = getRpcRoot(mkh.Hex(), txNum.Hex())
-		if err != nil {
-			return err
-		}
 	}
 
 	// [zkevm] - print state on error
@@ -1061,7 +1051,12 @@ func verifyRoot(hash string, storageKey string, txNum string) (*libcommon.Hash, 
 		return nil, err
 	}
 
-	if rpcHash.String() != hash {
+	trimmedRpcHash := trimHexString(rpcHash.String())
+
+	fmt.Printf("rpcHash: %s\n", trimmedRpcHash)
+	fmt.Printf("hash: %s\n", hash)
+
+	if trimmedRpcHash != hash {
 		return nil, fmt.Errorf("root hash mismatch")
 	}
 

@@ -428,7 +428,7 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		// [zkevm] - restrict progress
-		if blockNum > 1895 {
+		if blockNum > 500 {
 			break
 		}
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
@@ -451,6 +451,8 @@ Loop:
 		if err != nil {
 			return err
 		}
+
+		fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
 
 		old := common.Hash{}.Big()
 		oldUint256, overflow := uint256.FromBig(old)
