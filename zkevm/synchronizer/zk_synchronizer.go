@@ -38,6 +38,8 @@ type ClientSynchronizer struct {
 	ctx                context.Context
 	cancelCtx          context.CancelFunc
 	cfg                Config
+	restrictAtL1Block  uint64
+	restrictAtL2Batch  uint64
 }
 
 // NewSynchronizer creates and initializes an instance of Synchronizer
@@ -57,6 +59,9 @@ func NewSynchronizer(
 		cancelCtx:          cancel,
 		zkEVMClient:        zkEVMClient,
 		cfg:                cfg,
+		// [zkevm] - restrict progress
+		restrictAtL1Block: 16923604,
+		restrictAtL2Batch: 500,
 	}, nil
 }
 
@@ -81,8 +86,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 	}
 
 	lastEthBlockSynced, err := s.state.GetLastBlock(s.ctx, tx)
-	// [zkevm] - restrict progress
-	if lastEthBlockSynced.BlockNumber >= 16923604 {
+	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber >= s.restrictAtL1Block {
 		log.Info("Restricted Sync finished")
 		return nil
 	}
@@ -165,8 +169,8 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 				continue
 			}
 
-			if latestSyncedBatch >= 500 {
-				log.Info("L1 state fully synchronized")
+			if s.restrictAtL2Batch != 0 && latestSyncedBatch >= 500 {
+				log.Info("L1 state fully synchronized (restricted)")
 				err = s.syncTrustedState(latestSyncedBatch)
 				if err != nil {
 					log.Warn("error syncing trusted state. Error: ", err)
@@ -216,8 +220,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 	}
 	lastKnownBlock := header.Number
 
-	// [zkevm] - restrict progress
-	if lastEthBlockSynced.BlockNumber > 16923704 {
+	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber > s.restrictAtL1Block+5 {
 		return lastEthBlockSynced, nil
 	}
 
@@ -260,8 +263,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		}
 		fromBlock = toBlock + 1
 
-		// [zkevm] - restrict progress
-		if fromBlock > 16923704 {
+		if s.restrictAtL1Block != 0 && fromBlock > s.restrictAtL1Block+5 {
 			break
 		}
 
