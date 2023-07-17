@@ -242,9 +242,10 @@ func makeSelfdestructGasFn(refundsEnabled bool) gasFunc {
 		if evm.IntraBlockState().Empty(address) && !evm.IntraBlockState().GetBalance(contract.Address()).IsZero() {
 			gas += params.CreateBySelfdestructGas
 		}
-		if refundsEnabled && !evm.IntraBlockState().HasSelfdestructed(contract.Address()) {
-			evm.IntraBlockState().AddRefund(params.SelfdestructRefundGas)
-		}
+		//[zkevm] - according to eip-4758 this is removed
+		// if refundsEnabled && !evm.IntraBlockState().HasSelfdestructed(contract.Address()) {
+		// 	evm.IntraBlockState().AddRefund(params.SelfdestructRefundGas)
+		// }
 		return gas, nil
 	}
 	return gasFunc

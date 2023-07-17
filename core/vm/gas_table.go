@@ -493,9 +493,9 @@ func gasSelfdestruct(evm VMInterpreter, contract *Contract, stack *stack.Stack, 
 			gas += params.CreateBySelfdestructGas
 		}
 	}
-
-	if !evm.IntraBlockState().HasSelfdestructed(contract.Address()) {
-		evm.IntraBlockState().AddRefund(params.SelfdestructRefundGas)
-	}
+	//[zkevm] - according to eip-4758 this is removed
+	// if !evm.IntraBlockState().HasSelfdestructed(contract.Address()) {
+	// 	evm.IntraBlockState().AddRefund(params.SelfdestructRefundGas)
+	// }
 	return gas, nil
 }
