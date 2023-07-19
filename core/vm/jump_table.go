@@ -102,41 +102,6 @@ func newRohanInstructionSet() JumpTable {
 		numPush:    1,
 	}
 
-	instructionSet[DIFFICULTY] = &operation{
-		execute:     opDifficultyV2,
-		constantGas: GasQuickStep,
-		numPop:      0,
-		numPush:     1,
-	}
-
-	instructionSet[BLOCKHASH] = &operation{
-		execute:     opBlockhashV2,
-		constantGas: GasExtStep,
-		numPop:      1,
-		numPush:     1,
-	}
-
-	instructionSet[EXTCODEHASH] = &operation{
-		execute:     opExtCodeHashV2,
-		constantGas: params.ExtcodeHashGasConstantinople,
-		numPop:      1,
-		numPush:     1,
-	}
-
-	instructionSet[SELFDESTRUCT] = &operation{
-		execute:     opSendAll,
-		constantGas: GasFastestStep,
-		numPop:      2,
-		numPush:     1,
-	}
-
-	instructionSet[SENDALL] = &operation{
-		execute:     opSendAll,
-		constantGas: GasFastestStep,
-		numPop:      2,
-		numPush:     1,
-	}
-
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }
