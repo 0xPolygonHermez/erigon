@@ -86,46 +86,20 @@ func validateAndFillMaxStack(jt *JumpTable) {
 func newRohanInstructionSet() JumpTable {
 	instructionSet := newBerlinInstructionSet()
 
-	instructionSet[NUMBER] = &operation{
-		execute:     opNumberV2,
-		constantGas: GasQuickStep,
-		numPop:      0,
-		numPush:     1,
-	}
+	instructionSet[NUMBER].execute = opNumberV2
 
-	instructionSet[DIFFICULTY] = &operation{
-		execute:     opDifficultyV2,
-		constantGas: GasQuickStep,
-		numPop:      0,
-		numPush:     1,
-	}
+	instructionSet[DIFFICULTY].execute = opDifficultyV2
 
-	instructionSet[BLOCKHASH] = &operation{
-		execute:     opBlockhashV2,
-		constantGas: GasExtStep,
-		numPop:      1,
-		numPush:     1,
-	}
+	instructionSet[BLOCKHASH].execute = opBlockhashV2
 
-	instructionSet[EXTCODEHASH] = &operation{
-		execute:     opExtCodeHashV2,
-		constantGas: params.ExtcodeHashGasConstantinople,
-		numPop:      1,
-		numPush:     1,
-	}
-
-	instructionSet[SELFDESTRUCT] = &operation{
-		execute:     opSendAll,
-		dynamicGas: gasSelfdestruct,
-		numPop:      2,
-		numPush:     1,
-	}
+	instructionSet[EXTCODEHASH].execute = opExtCodeHashV2
+	instructionSet[SELFDESTRUCT].execute = opSendAll
 
 	instructionSet[SENDALL] = &operation{
-		execute:     opSendAll,
+		execute:    opSendAll,
 		dynamicGas: gasSelfdestruct,
-		numPop:      2,
-		numPush:     1,
+		numPop:     2,
+		numPush:    1,
 	}
 
 	instructionSet[DIFFICULTY] = &operation{
