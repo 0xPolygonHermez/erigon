@@ -24,6 +24,7 @@ import (
 
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"math/big"
@@ -41,9 +42,9 @@ import (
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
-	"github.com/ledgerwatch/erigon/crypto"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"
 )
@@ -391,7 +392,8 @@ func (sdb *IntraBlockState) SetNonce(addr libcommon.Address, nonce uint64) {
 func (sdb *IntraBlockState) SetCode(addr libcommon.Address, code []byte) {
 	stateObject := sdb.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		stateObject.SetCode(crypto.Keccak256Hash(code), code)
+		hashedBytecode, _ := utils.HashContractBytecode(hex.EncodeToString(code))
+		stateObject.SetCode(libcommon.HexToHash(hashedBytecode), code)
 	}
 }
 
@@ -847,7 +849,7 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	// [zkevm] - allow calculation locally at a certain point/interval
 	var root = big.NewInt(0)
 	calculatedLocally := false
-	if txNum.Uint64() > 5382 && txNum.Uint64()%1 == 0 {
+	if txNum.Uint64() > 12000 && txNum.Uint64()%150 == 0 {
 		var err error
 		root, err = calculateIntermediateRoot(root, sdb)
 		calculatedLocally = true
