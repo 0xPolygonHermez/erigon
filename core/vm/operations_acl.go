@@ -173,12 +173,15 @@ func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
 		// the cost to charge for cold access, if any, is Cold - Warm
 		coldCost := params.ColdAccountAccessCostEIP2929 - params.WarmStorageReadCostEIP2929
 		if !warmAccess {
-			evm.IntraBlockState().AddAddressToAccessList(addr)
+			//[zkevm] - moved after err check, because zkevm reverts the address add
+			// evm.IntraBlockState().AddAddressToAccessList(addr)
+
 			// Charge the remaining difference here already, to correctly calculate available
 			// gas for call
 			if !contract.UseGas(coldCost) {
 				return 0, ErrOutOfGas
 			}
+			evm.IntraBlockState().AddAddressToAccessList(addr)
 		}
 		// Now call the old calculator, which takes into account
 		// - create new account

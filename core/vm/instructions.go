@@ -464,9 +464,12 @@ func opExtCodeHash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 func opExtCodeHashV2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	slot := scope.Stack.Peek()
 	address := libcommon.Address(slot.Bytes20())
-
-	slot.SetBytes(interpreter.evm.IntraBlockState().GetCodeHash(address).Bytes())
-
+	ibs := interpreter.evm.IntraBlockState()
+	if ibs.GetCodeSize(address) == 0 {
+		slot.SetBytes(libcommon.Hash{}.Bytes())
+	} else {
+		slot.SetBytes(ibs.GetCodeHash(address).Bytes())
+	}
 	return nil, nil
 }
 
