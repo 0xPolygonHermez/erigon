@@ -39,6 +39,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 )
 
 var (
@@ -82,12 +83,17 @@ func ExecuteBlockEphemerally(
 	chainReader consensus.ChainHeaderReader,
 	getTracer func(txIndex int, txHash libcommon.Hash) (vm.EVMLogger, error),
 	dbTx kv.RwTx,
+	spmt *smt.SMT,
 ) (*EphemeralExecResult, error) {
 
 	defer BlockExecutionTimer.UpdateDuration(time.Now())
 	block.Uncles()
 	ibs := state.New(stateReader)
 	header := block.Header()
+
+	// [zkevm] - setting the dbtx may be a bit hacky here
+	ibs.SetSmt(spmt)
+	ibs.SetDBTx(dbTx)
 
 	usedGas := new(uint64)
 	gp := new(GasPool)
@@ -142,12 +148,6 @@ func ExecuteBlockEphemerally(
 			vmConfig.Tracer = nil
 		}
 
-		// [zkevm] - set smt root hash in magic account
-		err = ibs.ScalableSetSmtRootHash(dbTx)
-		if err != nil {
-			return nil, err
-		}
-
 		if err != nil {
 			if !vmConfig.StatelessExec {
 				return nil, fmt.Errorf("could not apply tx %d from block %d [%v]: %w", i, block.NumberU64(), tx.Hash().Hex(), err)
@@ -157,6 +157,15 @@ func ExecuteBlockEphemerally(
 			includedTxs = append(includedTxs, tx)
 			if !vmConfig.NoReceipts {
 				receipts = append(receipts, receipt)
+			}
+		}
+
+		// [zkevm] - set smt root for each tx, unless last tx in block (see ibs block commit)
+		if i != block.Transactions().Len()-1 {
+			// [zkevm] - set smt root hash in magic account
+			err = ibs.ScalableSetSmtRootHash(dbTx, false)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -457,6 +466,11 @@ func FinalizeBlockExecution(
 	} else {
 		_, _, err = engine.Finalize(cc, header, ibs, txs, uncles, receipts, withdrawals, headerReader, syscall)
 	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	err = ibs.ScalableSetSmtRootHash(ibs.DbTx, true)
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -102,11 +102,6 @@ func StageLoop(
 		log.Error("Failed to create HermezGlobalExitRoot bucket", "err", err)
 		return
 	}
-	err = trw.CreateBucket("HermezRpcRoot")
-	if err != nil {
-		log.Error("Failed to create HermezRpcRoot bucket", "err", err)
-		return
-	}
 	if err := trw.Commit(); err != nil {
 		log.Error("Failed to commit transaction to add new zkevm batch tables", "err", err)
 		return
@@ -412,6 +407,7 @@ func NewDefaultStages(ctx context.Context,
 			cfg.HistoryV3,
 			agg,
 		),
+		stagedsync.StageRpcRootsCfg(db, controlServer.ChainConfig),
 		stagedsync.StageHeadersCfg(db,
 			controlServer.Hd,
 			controlServer.Bd,

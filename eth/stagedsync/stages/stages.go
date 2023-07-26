@@ -62,8 +62,10 @@ var (
 // "renaming" it here to minimize diff
 var L1Blocks SyncStage = "L1Blocks"
 var Transactions SyncStage = "Transactions"
+var RpcRoots SyncStage = "RpcRoots"
 
 var AllStages = []SyncStage{
+	RpcRoots,
 	Snapshots,
 	Headers,
 	BlockHashes,

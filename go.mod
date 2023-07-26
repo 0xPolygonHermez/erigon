@@ -12,6 +12,7 @@ require (
 )
 
 require (
+github.com/TwiN/gocache/v2 v2.2.0
 	github.com/0xPolygonHermez/zkevm-node v0.0.3-RC1
 	github.com/99designs/gqlgen v0.17.29
 	github.com/Giulio2002/bls v0.0.0-20230217173148-c87a29266b6c

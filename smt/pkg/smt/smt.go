@@ -5,14 +5,17 @@ import (
 
 	"encoding/json"
 	"fmt"
+	"github.com/TwiN/gocache/v2"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"sort"
 	"strings"
 )
 
 type DB interface {
 	Get(key utils.NodeKey) (utils.NodeValue12, error)
 	Insert(key utils.NodeKey, value utils.NodeValue12) error
+	IsEmpty() bool
 }
 
 type DebuggableDB interface {
@@ -22,7 +25,10 @@ type DebuggableDB interface {
 }
 
 type SMT struct {
-	Db DB
+	Db                DB
+	LastRoot          *big.Int
+	Cache             *gocache.Cache
+	CacheHitFrequency map[string]int
 }
 
 type SMTResponse struct {
@@ -34,8 +40,11 @@ func NewSMT(database DB) *SMT {
 	if database == nil {
 		database = db.NewMemDb()
 	}
+	cache := gocache.NewCache().WithMaxSize(10000).WithEvictionPolicy(gocache.LeastRecentlyUsed)
 	return &SMT{
-		Db: database,
+		Db:                database,
+		Cache:             cache,
+		CacheHitFrequency: make(map[string]int),
 	}
 }
 
@@ -374,6 +383,35 @@ func (s *SMT) Insert(lastRoot *big.Int, k utils.NodeKey, v utils.NodeValue8) (*S
 }
 
 func (s *SMT) HashSave(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
+	cacheKey := fmt.Sprintf("%v-%v", in, capacity)
+	if cachedValue, exists := s.Cache.Get(cacheKey); exists {
+		s.CacheHitFrequency[cacheKey]++
+		return cachedValue.([4]uint64), nil
+	}
+
+	h, err := utils.Hash(in, capacity)
+	if err != nil {
+		return [4]uint64{}, err
+	}
+
+	var sl []uint64
+	sl = append(sl, in[:]...)
+	sl = append(sl, capacity[:]...)
+
+	v := utils.NodeValue12{}
+	for i, val := range sl {
+		b := new(big.Int)
+		v[i] = b.SetUint64(val)
+	}
+
+	err = s.Db.Insert(h, v)
+
+	s.Cache.Set(cacheKey, h)
+
+	return h, err
+}
+
+func (s *SMT) HashSave1(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
 	h, err := utils.Hash(in, capacity)
 	if err != nil {
 		return [4]uint64{}, err
@@ -431,4 +469,31 @@ func removeNonValueNodes(data map[string][]string) map[string][]string {
 		}
 	}
 	return valueNodes
+}
+
+func (s *SMT) PrintCacheHitsByFrequency() {
+	type kv struct {
+		Key   string
+		Value int
+	}
+
+	fmt.Println("SMT Cache Hits:")
+
+	var ss []kv
+	for k, v := range s.CacheHitFrequency {
+		if v > 1 {
+			ss = append(ss, kv{k, v})
+		}
+	}
+
+	sort.Slice(ss, func(i, j int) bool {
+		return ss[i].Value > ss[j].Value
+	})
+
+	for i, kv := range ss {
+		if i > 10 {
+			break
+		}
+		fmt.Printf("%s: %d\n", kv.Key, kv.Value)
+	}
 }

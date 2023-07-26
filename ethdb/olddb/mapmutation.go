@@ -14,6 +14,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/ethdb"
 	"sort"
+	"strings"
 )
 
 type mapmutation struct {
@@ -247,6 +248,11 @@ func (m *mapmutation) ForEach(bucket string, fromPrefix []byte, walker func(k, v
 
 	// range the ordered structure and call the walker
 	for _, k := range keys {
+		// only where the prefix matches
+		sp := string(fromPrefix)
+		if !strings.HasPrefix(k, sp) {
+			continue
+		}
 		err := walker([]byte(k), values[k])
 		if err != nil {
 			return err

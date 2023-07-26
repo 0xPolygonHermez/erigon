@@ -38,6 +38,10 @@ func (m *MemDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	return nil
 }
 
+func (m *MemDb) IsEmpty() bool {
+	return len(m.Db) == 0
+}
+
 func (m *MemDb) PrintDb() {
 	for k, v := range m.Db {
 		println(k, v)

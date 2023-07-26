@@ -44,6 +44,8 @@ import (
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/olddb"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
+	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
@@ -145,12 +147,54 @@ func executeBlock(
 	writeCallTraces bool,
 	initialCycle bool,
 	stateStream bool,
+	spmt *smt.SMT,
 ) error {
 	blockNum := block.NumberU64()
 	stateReader, stateWriter, err := newStateReaderWriter(batch, tx, block, writeChangesets, cfg.accumulator, initialCycle, stateStream)
 	if err != nil {
 		return err
 	}
+
+	// [zkevm] - write the global exit root inside the batch so we can unwind it
+	// [zkevm] push the global exit root for the related batch into the db ahead of batch execution
+	blockNoBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(blockNoBytes, blockNum)
+
+	// TODO [zkevm] - GER isn't set on the batch at the point of storage!!!!
+	gp, err := tx.GetOne("HermezGlobalExitRoot", blockNoBytes)
+	if err != nil {
+		return err
+	}
+
+	gerdb := &zkstate.GlobalExitRootDb{}
+	err = json.Unmarshal(gp, &gerdb)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
+
+	old := common.Hash{}.Big()
+	oldUint256, overflow := uint256.FromBig(old)
+	if overflow {
+		return errors.New("AddGlobalExitRoot: overflow")
+	}
+
+	exitBig := new(big.Int).SetInt64(gerdb.Timestamp)
+	exitUint256, overflow := uint256.FromBig(exitBig)
+	if overflow {
+		return errors.New("AddGlobalExitRoot: overflow")
+	}
+
+	fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
+
+	addr := common.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
+
+	err = stateWriter.WriteAccountStorage(addr, uint64(1), &gerdb.GlobalExitRootPosition, oldUint256, exitUint256)
+	if err != nil {
+		return err
+	}
+	// [zkevm] - finished writing global exit root to state
 
 	// where the magic happens
 	getHeader := func(hash common.Hash, number uint64) *types.Header {
@@ -177,7 +221,7 @@ func executeBlock(
 	} else {
 		// for zkEVM no receipts
 		vmConfig.NoReceipts = true
-		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx)
+		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx, spmt)
 	}
 	if err != nil {
 		return err
@@ -425,55 +469,19 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 		batch.Rollback()
 	}()
 
+	smtDB := db2.NewMemDb()
+	spmt := smt.NewSMT(smtDB)
+	spmt.LastRoot = big.NewInt(0)
+
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		// [zkevm] - restrict progress
-		if blockNum > 500 {
+		if blockNum > 100000 {
 			break
 		}
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}
-
-		// [zkevm] push the global exit root for the related batch into the db ahead of batch execution
-		psw := state.NewPlainStateWriter(tx, tx, blockNum)
-		blockNoBytes := make([]byte, 8)
-		binary.BigEndian.PutUint64(blockNoBytes, blockNum)
-
-		// TODO [zkevm] - GER isn't set on the batch at the point of storage!!!!
-		gp, err := tx.GetOne("HermezGlobalExitRoot", blockNoBytes)
-		if err != nil {
-			return err
-		}
-
-		gerdb := &zkstate.GlobalExitRootDb{}
-		err = json.Unmarshal(gp, &gerdb)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
-
-		old := common.Hash{}.Big()
-		oldUint256, overflow := uint256.FromBig(old)
-		if overflow {
-			return errors.New("AddGlobalExitRoot: overflow")
-		}
-
-		exitBig := new(big.Int).SetInt64(gerdb.Timestamp)
-		exitUint256, overflow := uint256.FromBig(exitBig)
-		if overflow {
-			return errors.New("AddGlobalExitRoot: overflow")
-		}
-
-		fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
-
-		addr := common.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
-		err = psw.WriteAccountStorage(addr, uint64(1), &gerdb.GlobalExitRootPosition, oldUint256, exitUint256)
-		if err != nil {
-			return err
-		}
-		// [zkevm] - finished writing global exit root to state
 
 		blockHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 		if err != nil {
@@ -494,7 +502,7 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		if err = executeBlock(block, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream); err != nil {
+		if err = executeBlock(block, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, spmt); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {

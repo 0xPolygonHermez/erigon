@@ -69,6 +69,22 @@ var cmdStageSnapshots = &cobra.Command{
 	},
 }
 
+var cmdStageRpcRoots = &cobra.Command{
+	Use:   "stage_rpc_roots",
+	Short: "",
+	Run: func(cmd *cobra.Command, args []string) {
+		db := openDB(dbCfg(kv.ChainDB, chaindata), true)
+		defer db.Close()
+
+		if err := stageRpcRoots(db, cmd.Context()); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				log.Error(err.Error())
+			}
+			return
+		}
+	},
+}
+
 var cmdStageHeaders = &cobra.Command{
 	Use:   "stage_headers",
 	Short: "",
@@ -358,6 +374,11 @@ func init() {
 	withHeimdall(cmdPrintStages)
 	rootCmd.AddCommand(cmdPrintStages)
 
+	withConfig(cmdStageRpcRoots)
+	withDataDir(cmdStageRpcRoots)
+	withChain(cmdStageRpcRoots)
+	rootCmd.AddCommand(cmdStageRpcRoots)
+
 	withConfig(cmdStageSenders)
 	withIntegrityChecks(cmdStageSenders)
 	withReset(cmdStageSenders)
@@ -504,6 +525,22 @@ func init() {
 	cmdSetPrune.Flags().Uint64Var(&pruneCBefore, "prune.c.before", 0, "")
 	cmdSetPrune.Flags().StringSliceVar(&experiments, "experiments", nil, "Storage mode to override database")
 	rootCmd.AddCommand(cmdSetPrune)
+}
+
+func stageRpcRoots(db kv.RwDB, ctx context.Context) error {
+	return db.Update(ctx, func(tx kv.RwTx) error {
+		if reset {
+			if err := stages.SaveStageProgress(tx, stages.RpcRoots, 0); err != nil {
+				return fmt.Errorf("saving RpcRoots progress failed: %w", err)
+			}
+		}
+		progress, err := stages.GetStageProgress(tx, stages.RpcRoots)
+		if err != nil {
+			return fmt.Errorf("re-read RpcRoots progress: %w", err)
+		}
+		log.Info("Progress", "rpc_roots", progress)
+		return nil
+	}
 }
 
 func stageSnapshots(db kv.RwDB, ctx context.Context) error {

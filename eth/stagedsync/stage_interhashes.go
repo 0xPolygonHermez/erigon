@@ -28,6 +28,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/state/temporal"
 
+	"encoding/json"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -35,6 +36,10 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/status-im/keycard-go/hexutils"
+	"io/ioutil"
+	"net/http"
+	"strings"
 )
 
 type TrieCfg struct {
@@ -118,15 +123,12 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		}
 		tooBigJump = s.BlockNumber < n
 	}
-	if s.BlockNumber == 0 || tooBigJump {
-		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, expectedRootHash, ctx); err != nil {
-			return trie.EmptyRoot, err
-		}
-	} else {
-		if root, err = incrementIntermediateHashes(logPrefix, s, tx, to, cfg, expectedRootHash, quit); err != nil {
-			return trie.EmptyRoot, err
-		}
+
+	// [zkevm] - only regenerate for poc
+	if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx); err != nil {
+		return trie.EmptyRoot, err
 	}
+	_ = quit
 
 	if cfg.checkRoot && root != expectedRootHash {
 		log.Error(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
@@ -165,7 +167,7 @@ var collection = make(map[libcommon.Address]MyStruct)
 
 func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address) (*big.Int, error) {
 
-	fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
+	//fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
 	collection[addr] = MyStruct{
 		Storage: as,
 		Balance: a.Balance.ToBig(),
@@ -183,8 +185,10 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	if err != nil {
 		return nil, err
 	}
-	if len(cc) > 0 {
-		hexcc := fmt.Sprintf("0x%x", cc)
+
+	ach := hexutils.BytesToHex(cc)
+	if len(ach) > 0 {
+		hexcc := fmt.Sprintf("0x%s", ach)
 		r, err = smt.SetContractBytecode(addr.String(), s, r, hexcc)
 		if err != nil {
 			return nil, err
@@ -199,7 +203,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	return r, nil
 }
 
-func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, ctx context.Context) (libcommon.Hash, error) {
+func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash *libcommon.Hash, ctx context.Context) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 	_ = db.ClearBucket(kv.TrieOfAccounts)
@@ -210,10 +214,6 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	defer clean2()
 
 	// [zkEVM] - read back the stored transactions and process with SMT
-	c, err := db.Cursor(kv.PlainState)
-	if err != nil {
-		return trie.EmptyRoot, err
-	}
 
 	memdb := db2.NewMemDb()
 	smt := smt.NewSMT(memdb)
@@ -227,12 +227,13 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	var hash libcommon.Hash
 	psr := state2.NewPlainStateReader(db)
 
-	for k, acc, err := c.First(); err == nil && acc != nil; k, acc, err = c.Next() {
+	err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+		var err error
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
 				root, err = processAccount(smt, root, a, as, inc, psr, addr)
 				if err != nil {
-					return trie.EmptyRoot, err
+					return err
 				}
 			}
 
@@ -241,7 +242,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 			if err = a.DecodeForStorage(acc); err != nil {
 				// TODO: not an account?
 				as = make(map[string]string)
-				continue
+				return nil
 			}
 			addr = libcommon.BytesToAddress(k)
 			inc = a.Incarnation
@@ -250,11 +251,19 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 		} else { // otherwise we're reading storage
 			_, incarnation, key := dbutils.PlainParseCompositeStorageKey(k)
 			if incarnation != inc {
-				continue // take current account incarnation storage only
+				return nil
 			}
 
-			as[fmt.Sprintf("0x%032x", key)] = fmt.Sprintf("0x%032x", acc)
+			sk := fmt.Sprintf("0x%032x", key)
+			v := fmt.Sprintf("0x%032x", acc)
+
+			as[sk] = fmt.Sprintf(trimHexString(v))
 		}
+		return nil
+	})
+
+	if err != nil {
+		return trie.EmptyRoot, err
 	}
 
 	// process the final account
@@ -263,22 +272,51 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 		return trie.EmptyRoot, err
 	}
 
-	//[zkevm] - print state
+	// [zkevm] - print state
 	//jsonData, err := json.MarshalIndent(collection, "", "    ")
 	//if err != nil {
 	//	fmt.Printf("error: %v\n", err)
 	//}
+	//_ = jsonData
 	//fmt.Println(string(jsonData))
 
 	hash = libcommon.BigToHash(root)
+
+	smt.PrintCacheHitsByFrequency()
 
 	// TODO [zkevm] - max - remove printing of roots
 	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
 	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
 
-	if cfg.checkRoot && hash != expectedRootHash {
-		log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
-		return hash, nil
+	if cfg.checkRoot && hash != *expectedRootHash {
+		// [zkevm] - check against the rpc get block by number
+		// get block number
+		ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+		key := libcommon.HexToHash("0x0")
+
+		txno, err2 := psr.ReadAccountStorage(ss, 1, &key)
+		if err2 != nil {
+			return trie.EmptyRoot, err
+		}
+		// convert txno to big int
+		bigTxNo := big.NewInt(0)
+		bigTxNo.SetBytes(txno)
+
+		fmt.Println("[zkevm] interhashes - txno: ", bigTxNo)
+
+		sr, err2 := stateRootByTxNo(bigTxNo)
+		if err2 != nil {
+			return trie.EmptyRoot, err
+		}
+
+		if hash != *sr {
+			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
+			return hash, nil
+		}
+
+		log.Info("[zkevm] interhashes - trie root matches rpc get block by number")
+		*expectedRootHash = *sr
+		err = nil
 	}
 	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
 	return hash, nil
@@ -300,6 +338,50 @@ func NewHashPromoter(db kv.RwTx, tempDir string, quitCh <-chan struct{}, logPref
 		quitCh:           quitCh,
 		logPrefix:        logPrefix,
 	}
+}
+
+func stateRootByTxNo(txNo *big.Int) (*libcommon.Hash, error) {
+	requestBody := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "eth_getBlockByNumber",
+		"params":  []interface{}{txNo.Uint64(), true},
+		"id":      1,
+	}
+
+	requestBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := http.Post("https://zkevm-rpc.com", "application/json", bytes.NewBuffer(requestBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	defer response.Body.Close()
+
+	responseBytes, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	responseMap := make(map[string]interface{})
+	if err := json.Unmarshal(responseBytes, &responseMap); err != nil {
+		return nil, err
+	}
+
+	result, ok := responseMap["result"].(map[string]interface{})
+	if !ok {
+		return nil, err
+	}
+
+	stateRoot, ok := result["stateRoot"].(string)
+	if !ok {
+		return nil, err
+	}
+	h := libcommon.HexToHash(stateRoot)
+
+	return &h, nil
 }
 
 func (p *HashPromoter) PromoteOnHistoryV3(logPrefix string, agg *state.AggregatorV3, from, to uint64, storage bool, load func(k []byte, v []byte) error) error {
@@ -879,4 +961,18 @@ func PruneIntermediateHashesStage(s *PruneState, tx kv.RwTx, cfg TrieCfg, ctx co
 		}
 	}
 	return nil
+}
+
+func trimHexString(s string) string {
+	if strings.HasPrefix(s, "0x") {
+		s = s[2:]
+	}
+
+	for i := 0; i < len(s); i++ {
+		if s[i] != '0' {
+			return "0x" + s[i:]
+		}
+	}
+
+	return "0x0"
 }

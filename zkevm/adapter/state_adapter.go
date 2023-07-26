@@ -15,15 +15,14 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
 
-	"encoding/json"
-	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"time"
-	"strings"
-	ericommon "github.com/ledgerwatch/erigon/common"
-	"github.com/holiman/uint256"
 	"bytes"
-	"net/http"
+	"encoding/json"
+	"github.com/holiman/uint256"
+	ericommon "github.com/ledgerwatch/erigon/common"
+	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"io"
+	"net/http"
+	"strings"
 )
 
 const HermezBatch = "HermezBatch"
@@ -182,7 +181,7 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
 	// [zkevm] - restrict progress
-	if verifiedBatch.BatchNumber > 500 {
+	if verifiedBatch.BatchNumber > 100000 {
 		return nil
 	}
 
@@ -192,24 +191,7 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 		return err
 	}
 
-	txCount, err := stages.GetStageProgress(dbTx, stages.Transactions)
-	for _, _ = range batch.Transactions {
-		txCount++
-		// get from rpc
-		root, err := getRpcRoot(ctx, txCount)
-		if err != nil {
-			return err
-		}
-		fmt.Println(root)
-		// store in db
-		dbTx.Put("HermezRpcRoot", UintBytes(txCount), root.Bytes())
-	}
-	err = stages.SaveStageProgress(dbTx, stages.Transactions, txCount)
-	if err != nil {
-		return err
-	}
-
-	header, err := WriteHeaderToDb(dbTx, verifiedBatch, batch.Timestamp)
+	header, err := WriteHeaderToDb(dbTx, verifiedBatch, batch)
 	if err != nil {
 		return err
 	}
@@ -427,7 +409,7 @@ func (m *StateInterfaceAdapter) BeginStateTransaction(ctx context.Context) (kv.R
 	panic("BeginStateTransaction: implement me")
 }
 
-func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch, ts time.Time) (*ethTypes.Header, error) {
+func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch, b *state.Batch) (*ethTypes.Header, error) {
 	if dbTx == nil {
 		return nil, fmt.Errorf("dbTx is nil")
 	}
@@ -444,7 +426,7 @@ func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch, ts time.Time) (*ethT
 		Number:     blockNo,
 		GasLimit:   30_000_000,
 		Coinbase:   common.HexToAddress("0x148Ee7dAF16574cD020aFa34CC658f8F3fbd2800"), // the sequencer gets the txfee
-		Time:       uint64(ts.Unix()),
+		Time:       uint64(b.Timestamp.Unix()),
 	}
 	rawdb.WriteHeader(dbTx, h)
 	rawdb.WriteCanonicalHash(dbTx, h.Hash(), blockNo.Uint64())
@@ -471,7 +453,6 @@ func UintBytes(no uint64) []byte {
 }
 
 func getRpcRoot(ctx context.Context, txNum uint64) (common.Hash, error) {
-	// int64 to bytes
 	txnb := UintBytes(txNum)
 	d1 := ericommon.LeftPadBytes(txnb, 32)
 	d2 := ericommon.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
@@ -494,11 +475,13 @@ func getRpcRoot(ctx context.Context, txNum uint64) (common.Hash, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		fmt.Println(err)
+		return common.Hash{}, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		fmt.Println(err)
+		return common.Hash{}, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -507,18 +490,21 @@ func getRpcRoot(ctx context.Context, txNum uint64) (common.Hash, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Println(err)
+		return common.Hash{}, err
 	}
 
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println(err)
+		return common.Hash{}, err
 	}
 
 	var result map[string]interface{}
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		fmt.Println(err)
+		return common.Hash{}, err
 	}
 
 	rpcHash := trimHexString(result["result"].(string))

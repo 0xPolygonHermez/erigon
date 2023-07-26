@@ -8,22 +8,12 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
-func DefaultStages(ctx context.Context, snapshots SnapshotsCfg, headers HeadersCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, bodies BodiesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*Stage {
+func DefaultStages(ctx context.Context, snapshots SnapshotsCfg, rpcRoots RpcRootsCfg, headers HeadersCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, bodies BodiesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*Stage {
 	return []*Stage{
 		{
-			ID:          stages.Snapshots,
-			Description: "Download snapshots",
+			ID: stages.RpcRoots,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *StageState, u Unwinder, tx kv.RwTx, quiet bool) error {
-				if badBlockUnwind {
-					return nil
-				}
-				return SpawnStageSnapshots(s, ctx, tx, snapshots, firstCycle)
-			},
-			Unwind: func(firstCycle bool, u *UnwindState, s *StageState, tx kv.RwTx) error {
-				return nil
-			},
-			Prune: func(firstCycle bool, p *PruneState, tx kv.RwTx) error {
-				return SnapshotsPrune(p, snapshots, ctx, tx)
+				return RpcRootsForward(s, u, ctx, tx, rpcRoots, test, firstCycle, quiet)
 			},
 		},
 		{

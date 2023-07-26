@@ -42,7 +42,6 @@ import (
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
-	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
@@ -112,6 +111,8 @@ type IntraBlockState struct {
 
 		The funcs to be updated are:
 	*/
+	smt  *smt.SMT
+	DbTx kv.RwTx
 }
 
 // Create a new state from a given trie
@@ -130,6 +131,10 @@ func New(stateReader StateReader) *IntraBlockState {
 
 func (sdb *IntraBlockState) SetTrace(trace bool) {
 	sdb.trace = trace
+}
+
+func (sdb *IntraBlockState) SetDBTx(tx kv.RwTx) {
+	sdb.DbTx = tx
 }
 
 // setErrorUnsafe sets error but should be called in medhods that already have locks
@@ -817,6 +822,10 @@ func (sdb *IntraBlockState) SlotInAccessList(addr libcommon.Address, slot libcom
 	return sdb.accessList.Contains(addr, slot)
 }
 
+func (sdb *IntraBlockState) SetSmt(spmt *smt.SMT) {
+	sdb.smt = spmt
+}
+
 func (sdb *IntraBlockState) ScalableSetTxNum() {
 	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
@@ -837,7 +846,13 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 	sdb.SetState(saddr, &sl0, *txNum)
 }
 
-func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
+func (s *IntraBlockState) PrintSmtRootHash() {
+	// print s.smt.LastRoot as hex
+	rootU256 := uint256.NewInt(0).SetBytes(s.smt.LastRoot.Bytes())
+	fmt.Println("SMT root: ", rootU256.String())
+}
+
+func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock bool) error {
 	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
 
@@ -847,25 +862,27 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	fmt.Printf("reading txNum: %v\n", txNum)
 
 	// [zkevm] - allow calculation locally at a certain point/interval
-	var root = big.NewInt(0)
 	calculatedLocally := false
-	if txNum.Uint64() > 12000 && txNum.Uint64()%150 == 0 {
+	if txNum.Uint64() >= 1000000 { //&& txNum.Uint64()%1 == 0 {
 		var err error
-		root, err = calculateIntermediateRoot(root, sdb)
-		calculatedLocally = true
+		sdb.PrintSmtRootHash()
+		sdb.smt.LastRoot, err = calculateIntermediateRoot(sdb)
 		if err != nil {
 			return err
 		}
+		sdb.PrintSmtRootHash()
+		calculatedLocally = true
 	}
+	//sdb.smt.LastRoot = root
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
 	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := libcommon.BytesToHash(mapKey)
-	rootU256 := uint256.NewInt(0).SetBytes(root.Bytes())
+	rootU256 := uint256.NewInt(0).SetBytes(sdb.smt.LastRoot.Bytes())
 
-	fmt.Println("SMT root: ", rootU256.String())
+	fmt.Println("Pre SMT root: ", rootU256.String())
 
 	// double check the root against the RPC
 	var err error
@@ -876,24 +893,29 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 		rpcHash, err = getDbRoot(dbTx, txNum.Uint64())
 	}
 
-	// [zkevm] - print state on error
 	if err != nil {
-		jsonData, err := json.MarshalIndent(collection, "", "    ")
-		if err != nil {
-			fmt.Printf("error: %v\n", err)
+		jsonData, err2 := json.MarshalIndent(collection, "", "    ")
+		if err2 != nil {
+			fmt.Printf("error: %v\n", err2)
 		}
 		fmt.Println(string(jsonData))
 		return err
 	}
 
-	// set mapping of keccak256(txnum,1) -> smt root
-	rpcHashU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
-	sdb.SetState(saddr, &mkh, *rpcHashU256)
+	if txNum.Uint64() >= 1 {
+		// set mapping of keccak256(txnum,1) -> smt root
+		rpcHashU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
+		sdb.SetState(saddr, &mkh, *rpcHashU256)
+
+		if lastInBlock {
+			sdb.PrintSmtRootHash() // this should be the BLOCK hash on the block boundary
+		}
+	}
 
 	return nil
 }
 
-func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, error) {
+func getFullState(ibs *IntraBlockState, prefix []byte) (map[libcommon.Address]*stateObject, error) {
 	// we need to iterate plainstate, if we find something in ibs and it is dirty - then we should use that
 	// if it exists in dirty ibs but not in plainstate - we should add it
 
@@ -911,7 +933,7 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 	as := make(map[string]string)
 	var inc uint64
 
-	err := iterator.ForEach(kv.PlainState, []byte{}, func(k, acc []byte) error {
+	err := iterator.ForEach(kv.PlainState, prefix, func(k, acc []byte) error {
 		if len(k) == 20 {
 			if a != nil {
 				// add to psCombined as a new stateObject - nothing should be dirty here this is existing DB state
@@ -950,23 +972,25 @@ func getFullState(ibs *IntraBlockState) (map[libcommon.Address]*stateObject, err
 		return nil
 	})
 
-	// add final account to psCombined as a stateObject
-	so := newObject(ibs, addr, a, a)
-	// iterate account storage into originStorage
-	for ks, vs := range as {
-		kh := libcommon.HexToHash(ks)
-		vu, err := uint256.FromHex(trimHexString(vs))
+	if a != nil {
+		// add final account to psCombined as a stateObject
+		so := newObject(ibs, addr, a, a)
+		// iterate account storage into originStorage
+		for ks, vs := range as {
+			kh := libcommon.HexToHash(ks)
+			vu, err := uint256.FromHex(trimHexString(vs))
+			if err != nil {
+				return nil, err
+			}
+			so.originStorage[kh] = *vu
+		}
+		code := ibs.GetCode(addr)
 		if err != nil {
 			return nil, err
 		}
-		so.originStorage[kh] = *vu
+		so.code = code
+		psCombined[addr] = so
 	}
-	code := ibs.GetCode(addr)
-	if err != nil {
-		return nil, err
-	}
-	so.code = code
-	psCombined[addr] = so
 
 	//// overwrite plainstate data with working data from the IBS which will contain new objects/updates
 	//// NB: we have to use dirty storage as the IBS may not load all storage locations (only those used by the tx)
@@ -1000,8 +1024,6 @@ var collection = make(map[libcommon.Address]MyStruct)
 
 func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, ac []byte, inc uint64, ibs *IntraBlockState, addr libcommon.Address) (*big.Int, error) {
 
-	//actest, _ := ibs.stateReader.ReadAccountCode(addr, inc, a.CodeHash)
-
 	// [zkevm] - collect data for json comparison
 	collection[addr] = MyStruct{
 		Storage: as,
@@ -1010,6 +1032,8 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 		//Code:     hex.EncodeToString(actest),
 		//CodeHash: a.CodeHash,
 	}
+
+	//fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
 
 	// store the account balance and nonce
 	nonce := new(big.Int).SetUint64(a.Nonce)
@@ -1054,6 +1078,11 @@ func verifyRoot(dbTx kv.RwTx, hash string, txNum uint64) (*libcommon.Hash, error
 	if err != nil {
 		return nil, err
 	}
+	h := libcommon.HexToHash(hash)
+
+	if rpcHash.Big().Cmp(big.NewInt(0)) == 0 {
+		return &h, fmt.Errorf("RPC root hash is zero")
+	}
 
 	trimmedRpcHash := trimHexString(rpcHash.String())
 
@@ -1061,10 +1090,10 @@ func verifyRoot(dbTx kv.RwTx, hash string, txNum uint64) (*libcommon.Hash, error
 	fmt.Printf("hash: %s\n", hash)
 
 	if trimmedRpcHash != hash {
-		return nil, fmt.Errorf("root hash mismatch")
+		return &h, fmt.Errorf("root hash mismatch")
 	}
 
-	return rpcHash, nil
+	return &h, nil
 }
 
 func getDbRoot(dbTx kv.RwTx, txNum uint64) (*libcommon.Hash, error) {
@@ -1134,23 +1163,31 @@ func getRpcRoot(storageKey string, txNum string) (*libcommon.Hash, error) {
 	return &h, nil
 }
 
-func calculateIntermediateRoot(root *big.Int, sdb *IntraBlockState) (*big.Int, error) {
-	// create an SMT
-	smtDB := db2.NewMemDb()
-	s := smt.NewSMT(smtDB)
+func calculateIntermediateRoot(sdb *IntraBlockState) (*big.Int, error) {
+	fs := map[libcommon.Address]*stateObject{}
 
-	fs, err := getFullState(sdb)
-	if err != nil {
-		return root, err
-	}
+	root := sdb.smt.LastRoot
 
-	for addr, so := range fs {
-		inc, err := sdb.stateReader.ReadAccountIncarnation(addr)
+	var err error
+
+	if sdb.smt.Db.IsEmpty() {
+		fs, err = getFullState(sdb, []byte{})
 		if err != nil {
 			return root, err
 		}
+	} else {
+		ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+		fs, err = getFullState(sdb, ss.Bytes())
+		if err != nil {
+			return root, err
+		}
+	}
 
+	for addr, so := range fs {
 		as := map[string]string{}
+		for k, v := range so.blockOriginStorage {
+			as[k.Hex()] = v.Hex()
+		}
 		for k, v := range so.originStorage {
 			as[k.Hex()] = v.Hex()
 		}
@@ -1158,8 +1195,7 @@ func calculateIntermediateRoot(root *big.Int, sdb *IntraBlockState) (*big.Int, e
 		for k, v := range so.dirtyStorage {
 			as[k.Hex()] = v.Hex()
 		}
-
-		root, err = processAccount(s, root, &so.data, as, so.Code(), inc, sdb, addr)
+		root, err = processAccount(sdb.smt, root, &so.data, as, so.Code(), so.data.Incarnation, sdb, addr)
 		if err != nil {
 			return root, err
 		}

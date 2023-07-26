@@ -60,8 +60,8 @@ func NewSynchronizer(
 		zkEVMClient:        zkEVMClient,
 		cfg:                cfg,
 		// [zkevm] - restrict progress
-		restrictAtL1Block: 16923604,
-		restrictAtL2Batch: 500,
+		restrictAtL1Block: 17506238,
+		restrictAtL2Batch: 100000,
 	}, nil
 }
 
@@ -169,7 +169,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 				continue
 			}
 
-			if s.restrictAtL2Batch != 0 && latestSyncedBatch >= 500 {
+			if s.restrictAtL2Batch != 0 && latestSyncedBatch >= s.restrictAtL2Batch {
 				log.Info("L1 state fully synchronized (restricted)")
 				err = s.syncTrustedState(latestSyncedBatch)
 				if err != nil {
@@ -220,7 +220,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 	}
 	lastKnownBlock := header.Number
 
-	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber > s.restrictAtL1Block+5 {
+	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber > s.restrictAtL1Block {
 		return lastEthBlockSynced, nil
 	}
 
@@ -263,7 +263,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		}
 		fromBlock = toBlock + 1
 
-		if s.restrictAtL1Block != 0 && fromBlock > s.restrictAtL1Block+5 {
+		if s.restrictAtL1Block != 0 && fromBlock > s.restrictAtL1Block {
 			break
 		}
 
