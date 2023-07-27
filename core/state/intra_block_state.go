@@ -397,6 +397,11 @@ func (sdb *IntraBlockState) SetNonce(addr libcommon.Address, nonce uint64) {
 func (sdb *IntraBlockState) SetCode(addr libcommon.Address, code []byte) {
 	stateObject := sdb.GetOrNewStateObject(addr)
 	if stateObject != nil {
+		if len(code) == 0 {
+			stateObject.setCode(libcommon.BytesToHash(emptyCodeHash), code)
+			return
+		}
+
 		hashedBytecode, _ := utils.HashContractBytecode(hex.EncodeToString(code))
 		stateObject.SetCode(libcommon.HexToHash(hashedBytecode), code)
 	}
