@@ -33,7 +33,7 @@ import (
 )
 
 type ZkSynchronizer interface {
-	Sync(kv.RwTx) error
+	Sync(kv.RwDB, kv.RwTx, func(ctx context.Context, db kv.RwDB, tx kv.RwTx) (kv.RwTx, error)) (kv.RwTx, error)
 }
 
 // The number of blocks we should be able to re-org sub-second on commodity hardware.
@@ -104,22 +104,13 @@ func SpawnStageHeaders(
 	initialCycle bool,
 	test bool, // Set to true in tests, allows the stage to fail rather than wait indefinitely
 ) error {
-	useExternalTx := tx != nil
-	if !useExternalTx {
-		var err error
-		tx, err = cfg.db.BeginRw(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-	}
 
 	// iiii
 	// zkEVM
 
 	// iiii
 
-	return HeadersZK(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx)
+	return HeadersZK(s, u, ctx, tx, cfg, initialCycle, test)
 
 	/*
 		if initialCycle && cfg.snapshots != nil && cfg.snapshots.Cfg().Enabled {

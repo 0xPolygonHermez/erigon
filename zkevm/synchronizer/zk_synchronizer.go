@@ -48,8 +48,10 @@ func NewSynchronizer(
 	ethMan ethermanInterface,
 	st stateInterface,
 	zkEVMClient zkEVMClientInterface,
-	cfg Config) (*ClientSynchronizer, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	cfg Config,
+	ctx context.Context) (*ClientSynchronizer, error) {
+
+	ctx, cancel := context.WithCancel(ctx)
 
 	return &ClientSynchronizer{
 		isTrustedSequencer: isTrustedSequencer,
@@ -69,27 +71,22 @@ var waitDuration = time.Duration(0)
 
 // Sync function will read the last state synced and will continue from that point.
 // Sync() will read blockchain events to detect rollup updates
-func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
+func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(context.Context, kv.RwDB, kv.RwTx) (kv.RwTx, error)) (kv.RwTx, error) {
 	// If there is no lastEthereumBlock means that sync from the beginning is necessary. If not, it continues from the retrieved ethereum block
 	// Get the latest synced block. If there is no block on db, use genesis block
 	log.Info("Sync started")
 
 	highestInDb, err := stages.GetStageProgress(tx, stages.L1Blocks)
 	if err != nil {
-		return err
+		return tx, err
 	}
-
-	if highestInDb == 0 {
-		// TODO: this isn't recorded in the DB despite running genesis_write funcs
-		// need genesis update
-		log.Warn("Genesis block not found in db")
-	}
+	_ = highestInDb
 
 	lastEthBlockSynced, err := s.state.GetLastBlock(s.ctx, tx)
 
 	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber >= s.restrictAtL1Block {
 		log.Info("Restricted Sync finished")
-		return nil
+		return tx, nil
 	}
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotSynchronized) {
@@ -146,7 +143,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 	for {
 		select {
 		case <-s.ctx.Done():
-			return nil
+			return tx, nil
 		case <-time.After(waitDuration):
 			//Sync L1Blocks
 			if lastEthBlockSynced, err = s.syncBlocks(tx, lastEthBlockSynced); err != nil {
@@ -170,6 +167,15 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 				continue
 			}
 
+			if saveProgress != nil {
+				log.Debug("saving progress")
+				tx, err = saveProgress(s.ctx, db, tx)
+				if err != nil {
+					log.Warn("error saving progress. Error: ", err)
+					continue
+				}
+			}
+
 			if s.restrictAtL2Batch != 0 && latestSyncedBatch >= s.restrictAtL2Batch {
 				log.Info("L1 state fully synchronized (restricted)")
 				err = s.syncTrustedState(latestSyncedBatch)
@@ -178,7 +184,7 @@ func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 					continue
 				}
 				waitDuration = s.cfg.SyncInterval.Duration
-				return nil
+				return tx, nil
 			}
 
 			if latestSyncedBatch >= latestSequencedBatchNumber {
@@ -230,7 +236,15 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		fromBlock = lastEthBlockSynced.BlockNumber + 1
 	}
 
+	counter := 0
+
 	for {
+		select {
+		case <-s.ctx.Done():
+			return lastEthBlockSynced, nil
+		default:
+		}
+		counter++
 		toBlock := fromBlock + s.cfg.SyncChunkSize
 		log.Infof("Syncing block %d of %d", fromBlock, lastKnownBlock.Uint64())
 		log.Infof("Getting rollup info from block %d to block %d", fromBlock, toBlock)
@@ -265,6 +279,11 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		fromBlock = toBlock + 1
 
 		if s.restrictAtL1Block != 0 && fromBlock > s.restrictAtL1Block {
+			break
+		}
+
+		// save progress
+		if counter%5 == 0 {
 			break
 		}
 

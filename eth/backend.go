@@ -675,6 +675,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		adapter.NewStateAdapter(), //state              stateInterface
 		client.NewClient("https://rpc.polygon-zkevm.gateway.fm"), //zkEVMClient        zkEVMClientInterface
 		synchronizer.Config{SyncChunkSize: 1000, GenBlockNumber: 16896721},
+		ctx,
 	)
 	if err != nil {
 		return nil, err

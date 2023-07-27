@@ -48,6 +48,8 @@ func RpcRootsForward(
 		defer tx.Rollback()
 	}
 
+	log.Info("Starting rpc roots stage")
+
 	if !firstCycle {
 		// TODO: non-first cycle handling
 		// at the tip the algo below is inefficient (writing the whole json file)
@@ -65,6 +67,8 @@ func RpcRootsForward(
 	if err != nil {
 		return err
 	}
+
+	txNo = txNo - 10000
 
 	if prog >= txNo {
 		return nil

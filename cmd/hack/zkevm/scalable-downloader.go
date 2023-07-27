@@ -135,12 +135,14 @@ func worker(ctx context.Context, id int, jobs <-chan int64, results chan<- map[i
 	}
 }
 
-func logProcessedTxNumEvery(processedTxNum *int64, totalTxNumToProcess *int64, duration time.Duration, startTime time.Time, doneCh chan struct{}) {
+func logProcessedTxNumEvery(ctx context.Context, processedTxNum *int64, totalTxNumToProcess *int64, duration time.Duration, startTime time.Time, doneCh chan struct{}) {
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-doneCh:
 			return
 		case <-ticker.C:
@@ -210,7 +212,7 @@ func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int
 	var doneCh = make(chan struct{})
 	var processedTxNum int64
 	startTime := time.Now()
-	go logProcessedTxNumEvery(&processedTxNum, &missingCount, 3*time.Second, startTime, doneCh)
+	go logProcessedTxNumEvery(ctx, &processedTxNum, &missingCount, 3*time.Second, startTime, doneCh)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
@@ -232,7 +234,6 @@ func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int
 	go func() {
 		for _ = range signals {
 			log.Warn("Received signal, cancelling context...")
-			close(doneCh)
 			cancel()
 			break
 		}

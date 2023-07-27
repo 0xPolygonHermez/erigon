@@ -502,8 +502,9 @@ func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr lib
 	}
 
 	// store the account storage
-	r, err = s.SetContractStorage(addr.String(), sm)
-
+	if len(sm) > 0 {
+		r, err = s.SetContractStorage(addr.String(), sm)
+	}
 	return r, nil
 }
 

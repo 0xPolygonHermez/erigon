@@ -6,6 +6,18 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 )
 
+func commitAndReturnNewTx(ctx context.Context, db kv.RwDB, tx kv.RwTx) (kv.RwTx, error) {
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	tx, err := db.BeginRw(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, err
+}
+
 // HeadersPOW progresses Headers stage for Proof-of-Work headers
 func HeadersZK(
 	s *StageState,
@@ -15,16 +27,27 @@ func HeadersZK(
 	cfg HeadersCfg,
 	initialCycle bool,
 	test bool, // Set to true in tests, allows the stage to fail rather than wait indefinitely
-	useExternalTx bool,
 ) error {
+	useExternalTx := tx != nil
+	if !useExternalTx {
+		var err error
+		tx, err = cfg.db.BeginRw(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
+
+	var err error
+
 	// TODO: add ability to commit regularly so we don't lose progress on restart (every 10k batches)
-	err := cfg.zkSynchronizer.Sync(tx)
+	tx, err = cfg.zkSynchronizer.Sync(cfg.db, tx, commitAndReturnNewTx)
 	if err != nil {
 		return err
 	}
 
 	if !useExternalTx {
-		if err := tx.Commit(); err != nil {
+		if err = tx.Commit(); err != nil {
 			return err
 		}
 	}
