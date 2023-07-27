@@ -17,7 +17,7 @@ func HeadersZK(
 	test bool, // Set to true in tests, allows the stage to fail rather than wait indefinitely
 	useExternalTx bool,
 ) error {
-
+	// TODO: add ability to commit regularly so we don't lose progress on restart (every 10k batches)
 	err := cfg.zkSynchronizer.Sync(tx)
 	if err != nil {
 		return err

@@ -40,6 +40,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type TrieCfg struct {
@@ -175,7 +176,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	}
 
 	// store the account balance and nonce
-	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance.ToBig(), new(big.Int).SetUint64(a.Nonce))
+	_, err := s.SetAccountState(addr.String(), a.Balance.ToBig(), new(big.Int).SetUint64(a.Nonce))
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +190,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	ach := hexutils.BytesToHex(cc)
 	if len(ach) > 0 {
 		hexcc := fmt.Sprintf("0x%s", ach)
-		r, err = smt.SetContractBytecode(addr.String(), s, r, hexcc)
+		err = s.SetContractBytecode(addr.String(), hexcc)
 		if err != nil {
 			return nil, err
 		}
@@ -197,10 +198,10 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 
 	if len(as) > 0 {
 		// store the account storage
-		r, err = smt.SetContractStorage(addr.String(), s, r, as)
+		_, err = s.SetContractStorage(addr.String(), as)
 	}
 
-	return r, nil
+	return s.LastRoot(), nil
 }
 
 func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash *libcommon.Hash, ctx context.Context) (libcommon.Hash, error) {
@@ -218,6 +219,10 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	memdb := db2.NewMemDb()
 	smt := smt.NewSMT(memdb)
 
+	// [zkevm] - starts a 30s ticker to lock the db and remove orphans
+	doneChan := make(chan bool)
+	smt.StartPeriodicCheck(doneChan)
+
 	var a *accounts.Account
 	var addr libcommon.Address
 	var as map[string]string
@@ -227,7 +232,41 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	var hash libcommon.Hash
 	psr := state2.NewPlainStateReader(db)
 
+	stateCt := 0
 	err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+		stateCt++
+		return nil
+	})
+
+	progCt := 0
+	progress := make(chan int)
+	ctDone := make(chan bool)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		var pc int
+		var pct int
+
+		for {
+			select {
+			case newPc := <-progress:
+				pc = newPc
+				if stateCt > 0 {
+					pct = (pc * 100) / stateCt
+				}
+			case <-ticker.C:
+				log.Info(fmt.Sprintf("[%s] Progress: %d/%d (%d%%)", logPrefix, pc, stateCt, pct))
+			case <-ctDone:
+				return
+			}
+		}
+	}()
+
+	err = psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+		progCt++
+		progress <- progCt
 		var err error
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
@@ -282,7 +321,9 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 
 	hash = libcommon.BigToHash(root)
 
-	smt.PrintCacheHitsByFrequency()
+	close(progress)
+	close(doneChan)
+	close(ctDone)
 
 	// TODO [zkevm] - max - remove printing of roots
 	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())

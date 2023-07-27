@@ -249,15 +249,13 @@ func ScalarToNodeKey(s *big.Int) NodeKey {
 func ScalarToRoot(s *big.Int) NodeKey {
 	var result [4]uint64
 	divisor := new(big.Int).Exp(big.NewInt(2), big.NewInt(64), nil)
+
+	sCopy := new(big.Int).Set(s)
+
 	for i := 0; i < 4; i++ {
-		// Calculate n mod 2^64
-		mod := new(big.Int).Mod(s, divisor)
-
-		// Convert the modulus to uint64 and store it
+		mod := new(big.Int).Mod(sCopy, divisor)
 		result[i] = mod.Uint64()
-
-		// Divide n by 2^64 for the next iteration
-		s.Div(s, divisor)
+		sCopy.Div(sCopy, divisor)
 	}
 	return result
 }

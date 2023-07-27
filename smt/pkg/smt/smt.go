@@ -3,19 +3,24 @@ package smt
 import (
 	"math/big"
 
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/TwiN/gocache/v2"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/log/v3"
 	"sort"
-	"strings"
+	"sync"
+	"time"
 )
 
 type DB interface {
 	Get(key utils.NodeKey) (utils.NodeValue12, error)
 	Insert(key utils.NodeKey, value utils.NodeValue12) error
 	IsEmpty() bool
+	Delete(string) error
 }
 
 type DebuggableDB interface {
@@ -26,9 +31,11 @@ type DebuggableDB interface {
 
 type SMT struct {
 	Db                DB
-	LastRoot          *big.Int
 	Cache             *gocache.Cache
 	CacheHitFrequency map[string]int
+
+	lastRoot     *big.Int
+	clearUpMutex sync.Mutex
 }
 
 type SMTResponse struct {
@@ -45,27 +52,66 @@ func NewSMT(database DB) *SMT {
 		Db:                database,
 		Cache:             cache,
 		CacheHitFrequency: make(map[string]int),
+		lastRoot:          big.NewInt(0),
 	}
+}
+
+func (s *SMT) LastRoot() *big.Int {
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+	copy := new(big.Int).Set(s.lastRoot)
+	return copy
+}
+
+func (s *SMT) SetLastRoot(lr *big.Int) {
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+	s.lastRoot = lr
+}
+
+func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-doneChan:
+				cancel()
+				return
+			case <-ticker.C:
+				// start timer
+				start := time.Now()
+				ct := s.CheckOrphanedNodes(ctx)
+				elapsed := time.Since(start)
+				fmt.Printf("CheckOrphanedNodes took %s removing %d orphaned nodes\n", elapsed, ct)
+			}
+		}
+	}()
 }
 
 func (s *SMT) InsertBI(lastRoot *big.Int, key *big.Int, value *big.Int) (*SMTResponse, error) {
 	k := utils.ScalarToNodeKey(key)
 	v := utils.ScalarToNodeValue8(value)
-	return s.Insert(lastRoot, k, v)
+	return s.Insert(k, v)
 }
 
-func (s *SMT) InsertKA(lastRoot *big.Int, key utils.NodeKey, value *big.Int) (*SMTResponse, error) {
+func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) {
 	x := utils.ScalarToArrayBig(value)
 	v, err := utils.NodeValue8FromBigIntArray(x)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.Insert(lastRoot, key, *v)
+	return s.Insert(key, *v)
 }
 
-func (s *SMT) Insert(lastRoot *big.Int, k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) {
-	oldRoot := utils.ScalarToRoot(lastRoot)
+func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) {
+
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+
+	oldRoot := utils.ScalarToRoot(s.lastRoot)
 	r := oldRoot
 	newRoot := oldRoot
 
@@ -129,7 +175,6 @@ func (s *SMT) Insert(lastRoot *big.Int, k utils.NodeKey, v utils.NodeValue8) (*S
 		usedKey = usedKey[:len(usedKey)-1]
 	}
 
-	//
 	proofHashCounter = 0
 	if !oldRoot.IsZero() {
 		utils.RemoveOver(siblings, level+1)
@@ -379,6 +424,8 @@ func (s *SMT) Insert(lastRoot *big.Int, k utils.NodeKey, v utils.NodeValue8) (*S
 
 	smtResponse.NewRoot = newRoot.ToBigInt()
 
+	s.lastRoot = newRoot.ToBigInt()
+
 	return smtResponse, nil
 }
 
@@ -451,26 +498,6 @@ func (s *SMT) PrintTree() {
 	}
 }
 
-func removeNonValueNodes(data map[string][]string) map[string][]string {
-	valueNodes := make(map[string][]string)
-	for k, v := range data {
-		isValue := true
-		for _, val := range v[0:8] {
-			// remove hex prefix
-			valStr := strings.TrimPrefix(val, "0x")
-			if len(valStr)*4 > 32 {
-				isValue = false
-				break
-			}
-		}
-
-		if isValue {
-			valueNodes[k] = v[0:8]
-		}
-	}
-	return valueNodes
-}
-
 func (s *SMT) PrintCacheHitsByFrequency() {
 	type kv struct {
 		Key   string
@@ -496,4 +523,90 @@ func (s *SMT) PrintCacheHitsByFrequency() {
 		}
 		fmt.Printf("%s: %d\n", kv.Key, kv.Value)
 	}
+}
+
+type VisitedNodesMap map[string]bool
+
+func (s *SMT) CheckOrphanedNodes(ctx context.Context) int {
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+
+	visited := make(VisitedNodesMap)
+
+	root := s.lastRoot
+
+	err := s.traverseAndMark(ctx, root, visited)
+	if err != nil {
+		return 0
+	}
+
+	debugDB, ok := s.Db.(DebuggableDB)
+	if !ok {
+		log.Warn("db is not cleanable")
+	}
+
+	orphanedNodes := make([]string, 0)
+	for dbKey := range debugDB.GetDb() {
+		if _, ok := visited[dbKey]; !ok {
+			orphanedNodes = append(orphanedNodes, dbKey)
+		}
+	}
+
+	rootKey := utils.ConvertBigIntToHex(root)
+
+	for _, node := range orphanedNodes {
+		if node == rootKey {
+			continue
+		}
+		err := s.Db.Delete(node)
+		if err != nil {
+			log.Warn("failed to delete orphaned node", "node", node, "err", err)
+		}
+	}
+
+	return len(orphanedNodes)
+}
+
+func (s *SMT) traverseAndMark(ctx context.Context, node *big.Int, visited VisitedNodesMap) error {
+	if node == nil || node.Cmp(big.NewInt(0)) == 0 {
+		return nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	nodeKey := utils.ConvertBigIntToHex(node)
+
+	if _, ok := visited[nodeKey]; ok {
+		return nil
+	}
+
+	visited[nodeKey] = true
+
+	ky := utils.ScalarToRoot(node)
+
+	nodeValue, err := s.Db.Get(ky)
+	if err != nil {
+		return err
+	}
+
+	if nodeValue.IsFinalNode() {
+		return nil
+	}
+
+	for i := 0; i < 2; i++ {
+		if len(nodeValue) < i*4+4 {
+			return errors.New("nodeValue has insufficient length")
+		}
+		child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
+		err := s.traverseAndMark(ctx, child.ToBigInt(), visited)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	return nil
 }

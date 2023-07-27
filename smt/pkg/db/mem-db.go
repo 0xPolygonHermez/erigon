@@ -1,9 +1,13 @@
 package db
 
-import "github.com/ledgerwatch/erigon/smt/pkg/utils"
+import (
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"sync"
+)
 
 type MemDb struct {
-	Db map[string][]string
+	Db   map[string][]string
+	lock sync.RWMutex
 }
 
 func NewMemDb() *MemDb {
@@ -13,6 +17,9 @@ func NewMemDb() *MemDb {
 }
 
 func (m *MemDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
+	m.lock.RLock()         // Lock for reading
+	defer m.lock.RUnlock() // Make sure to unlock when done
+
 	keyConc := utils.ArrayToScalar(key[:])
 
 	k := utils.ConvertBigIntToHex(keyConc)
@@ -26,6 +33,9 @@ func (m *MemDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 }
 
 func (m *MemDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
@@ -38,16 +48,33 @@ func (m *MemDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	return nil
 }
 
+func (m *MemDb) Delete(key string) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
+	delete(m.Db, key)
+	return nil
+}
+
 func (m *MemDb) IsEmpty() bool {
+	m.lock.RLock()         // Lock for reading
+	defer m.lock.RUnlock() // Make sure to unlock when done
+
 	return len(m.Db) == 0
 }
 
 func (m *MemDb) PrintDb() {
+	m.lock.RLock()         // Lock for reading
+	defer m.lock.RUnlock() // Make sure to unlock when done
+
 	for k, v := range m.Db {
 		println(k, v)
 	}
 }
 
 func (m *MemDb) GetDb() map[string][]string {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
 	return m.Db
 }

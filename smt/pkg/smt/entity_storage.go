@@ -7,7 +7,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
-func SetAccountState(ethAddr string, smt *SMT, root, balance, nonce *big.Int) (*big.Int, error) {
+func (s *SMT) SetAccountState(ethAddr string, balance, nonce *big.Int) (*big.Int, error) {
 	keyBalance, err := utils.KeyEthAddrBalance(ethAddr)
 	if err != nil {
 		return nil, err
@@ -17,24 +17,24 @@ func SetAccountState(ethAddr string, smt *SMT, root, balance, nonce *big.Int) (*
 		return nil, err
 	}
 
-	auxRes, err := smt.InsertKA(root, keyBalance, balance)
+	auxRes, err := s.InsertKA(keyBalance, balance)
 	if err != nil {
 		return nil, err
 	}
 
-	auxRes, err = smt.InsertKA(auxRes.NewRoot, keyNonce, nonce)
+	auxRes, err = s.InsertKA(keyNonce, nonce)
 
 	return auxRes.NewRoot, err
 }
 
-func SetContractBytecode(ethAddr string, smt *SMT, root *big.Int, bytecode string) (*big.Int, error) {
+func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 	keyContractCode, err := utils.KeyContractCode(ethAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	keyContractLength, err := utils.KeyContractLength(ethAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	hashedBytecode, err := utils.HashContractBytecode(bytecode)
@@ -55,22 +55,23 @@ func SetContractBytecode(ethAddr string, smt *SMT, root *big.Int, bytecode strin
 
 	bi := utils.ConvertHexToBigInt(hashedBytecode)
 
-	r1, err := smt.InsertKA(root, keyContractCode, bi)
+	_, err = s.InsertKA(keyContractCode, bi)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	r2, err := smt.InsertKA(r1.NewRoot, keyContractLength, big.NewInt(int64(bytecodeLength)))
+	_, err = s.InsertKA(keyContractLength, big.NewInt(int64(bytecodeLength)))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return r2.NewRoot, nil
+	return nil
 }
 
-func SetContractStorage(ethAddr string, smt *SMT, root *big.Int, storage map[string]string) (*big.Int, error) {
+func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*big.Int, error) {
 	i := 0
-	tmpRoot := root
+
+	var auxRes *SMTResponse
 
 	for k, v := range storage {
 		keyStoragePosition, err := utils.KeyContractStorage(ethAddr, k)
@@ -86,14 +87,13 @@ func SetContractStorage(ethAddr string, smt *SMT, root *big.Int, storage map[str
 
 		val, _ := new(big.Int).SetString(v, base)
 
-		auxRes, err := smt.InsertKA(tmpRoot, keyStoragePosition, val)
+		auxRes, err = s.InsertKA(keyStoragePosition, val)
 		if err != nil {
 			return nil, err
 		}
 
-		tmpRoot = auxRes.NewRoot
 		i++
 	}
 
-	return tmpRoot, nil
+	return auxRes.NewRoot, nil
 }

@@ -482,14 +482,14 @@ func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr lib
 	}
 
 	// store the account balance and nonce
-	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance, new(big.Int).SetUint64(a.Nonce))
+	r, err := s.SetAccountState(addr.String(), a.Balance, new(big.Int).SetUint64(a.Nonce))
 	if err != nil {
 		return nil, err
 	}
 
 	if len(a.Code) > 0 {
 		xs := hex.EncodeToString(a.Code)
-		r, err = smt.SetContractBytecode(addr.String(), s, r, xs)
+		err = s.SetContractBytecode(addr.String(), xs)
 		if err != nil {
 			return nil, err
 		}
@@ -502,7 +502,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr lib
 	}
 
 	// store the account storage
-	r, err = smt.SetContractStorage(addr.String(), s, r, sm)
+	r, err = s.SetContractStorage(addr.String(), sm)
 
 	return r, nil
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"context"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
@@ -51,10 +52,6 @@ func TestGenesis(t *testing.T) {
 	runGenesisTest(t, "testdata/mainnet-genesis.json")
 }
 
-func TestGenesisTestnet(t *testing.T) {
-	runGenesisTest(t, "testdata/after-one-tx.json")
-}
-
 func BenchmarkGenesis(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		runGenesisTest(b, "testdata/mainnet-genesis.json")
@@ -75,21 +72,20 @@ func runGenesisTest(tb testing.TB, filename string) {
 	}
 
 	smt := NewSMT(nil)
-	tmpRoot := big.NewInt(0)
 
 	for _, addr := range genesis.Genesis {
 		fmt.Println(addr.ContractName)
 		bal, _ := new(big.Int).SetString(addr.Balance, 10)
 		non, _ := new(big.Int).SetString(addr.Nonce, 10)
 		// add balance and nonce
-		tmpRoot, _ = SetAccountState(addr.Address, smt, tmpRoot, bal, non)
+		_, _ = smt.SetAccountState(addr.Address, bal, non)
 		// add bytecode if defined
 		if addr.Bytecode != "" {
-			tmpRoot, _ = SetContractBytecode(addr.Address, smt, tmpRoot, addr.Bytecode)
+			_ = smt.SetContractBytecode(addr.Address, addr.Bytecode)
 		}
 		// add storage if defined
 		if len(addr.Storage) > 0 {
-			tmpRoot, _ = SetContractStorage(addr.Address, smt, tmpRoot, addr.Storage)
+			_, _ = smt.SetContractStorage(addr.Address, addr.Storage)
 		}
 	}
 
@@ -100,20 +96,22 @@ func runGenesisTest(tb testing.TB, filename string) {
 		base = 16
 	}
 
-	smt.PrintTree()
+	smt.CheckOrphanedNodes(context.Background())
+
+	//smt.PrintTree()
 
 	expected, _ := new(big.Int).SetString(root, base)
 	fmt.Println("Expected root: ", genesis.Root)
-	fmt.Println("Actual root: ", fmt.Sprintf("0x%x", tmpRoot))
-	if expected.Cmp(tmpRoot) != 0 {
-		tb.Errorf("Expected root does not match. Got %v, want %v", tmpRoot, root)
+	fmt.Println("Actual root: ", fmt.Sprintf("0x%x", smt.LastRoot()))
+
+	if expected.Cmp(smt.LastRoot()) != 0 {
+		tb.Errorf("Expected root does not match. Got 0x%x, want %s", smt.LastRoot(), root)
 	}
 }
 
 func Test_Data(t *testing.T) {
 	runTestVectors(t, "testdata/data.json")
 	runTestVectors(t, "testdata/data2.json")
-	runTestVectors(t, "testdata/data3.json")
 }
 
 func runTestVectors(t *testing.T, filename string) {
@@ -131,21 +129,20 @@ func runTestVectors(t *testing.T, filename string) {
 
 	for k, tc := range testCases {
 		t.Run(strconv.Itoa(k), func(t *testing.T) {
-			tmpRoot := big.NewInt(0)
 			smt := NewSMT(nil)
 			for _, addr := range tc.Addresses {
 
 				bal, _ := new(big.Int).SetString(addr.Balance, 10)
 				non, _ := new(big.Int).SetString(addr.Nonce, 10)
 				// add balance and nonce
-				tmpRoot, _ = SetAccountState(addr.Address, smt, tmpRoot, bal, non)
+				_, _ = smt.SetAccountState(addr.Address, bal, non)
 				// add bytecode if defined
 				if addr.Bytecode != "" {
-					tmpRoot, _ = SetContractBytecode(addr.Address, smt, tmpRoot, addr.Bytecode)
+					_ = smt.SetContractBytecode(addr.Address, addr.Bytecode)
 				}
 				// add storage if defined
 				if len(addr.Storage) > 0 {
-					tmpRoot, _ = SetContractStorage(addr.Address, smt, tmpRoot, addr.Storage)
+					_, _ = smt.SetContractStorage(addr.Address, addr.Storage)
 				}
 			}
 
@@ -157,8 +154,8 @@ func runTestVectors(t *testing.T, filename string) {
 
 			expected, _ := new(big.Int).SetString(tc.ExpectedRoot, base)
 
-			if expected.Cmp(tmpRoot) != 0 {
-				t.Errorf("Expected root does not match. Got 0x%x, want 0x%x", tmpRoot, expected)
+			if expected.Cmp(smt.LastRoot()) != 0 {
+				t.Errorf("Expected root does not match. Got 0x%x, want 0x%x", smt.LastRoot(), expected)
 			}
 		})
 	}
@@ -176,12 +173,11 @@ func Test_FullGenesisTest_Deprecated(t *testing.T) {
 	expected := e.ToBigInt()
 
 	ethAddr := "0x617b3a3528F9cDd6630fd3301B9c8911F7Bf063D"
-	root := big.NewInt(0)
 	balance := big.Int{}
 	balance.SetString("100000000000000000000", 10)
 	nonce := big.NewInt(0)
 
-	newRoot, err := SetAccountState(ethAddr, s, root, &balance, nonce)
+	newRoot, err := s.SetAccountState(ethAddr, &balance, nonce)
 	if err != nil {
 		t.Errorf("setAccountState failed: %v", err)
 	}

@@ -848,7 +848,7 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 
 func (s *IntraBlockState) PrintSmtRootHash() {
 	// print s.smt.LastRoot as hex
-	rootU256 := uint256.NewInt(0).SetBytes(s.smt.LastRoot.Bytes())
+	rootU256 := uint256.NewInt(0).SetBytes(s.smt.LastRoot().Bytes())
 	fmt.Println("SMT root: ", rootU256.String())
 }
 
@@ -866,7 +866,7 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock boo
 	if txNum.Uint64() >= 1000000 { //&& txNum.Uint64()%1 == 0 {
 		var err error
 		sdb.PrintSmtRootHash()
-		sdb.smt.LastRoot, err = calculateIntermediateRoot(sdb)
+		_, err = calculateIntermediateRoot(sdb)
 		if err != nil {
 			return err
 		}
@@ -880,7 +880,7 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock boo
 	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := libcommon.BytesToHash(mapKey)
-	rootU256 := uint256.NewInt(0).SetBytes(sdb.smt.LastRoot.Bytes())
+	rootU256 := uint256.NewInt(0).SetBytes(sdb.smt.LastRoot().Bytes())
 
 	fmt.Println("Pre SMT root: ", rootU256.String())
 
@@ -1037,7 +1037,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 
 	// store the account balance and nonce
 	nonce := new(big.Int).SetUint64(a.Nonce)
-	r, err := smt.SetAccountState(addr.String(), s, root, a.Balance.ToBig(), nonce)
+	r, err := s.SetAccountState(addr.String(), a.Balance.ToBig(), nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -1045,7 +1045,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	// store the contract bytecode
 	ach := hexutils.BytesToHex(ac)
 	if len(ach) > 0 {
-		r, err = smt.SetContractBytecode(addr.String(), s, r, fmt.Sprintf("0x%s", ach))
+		err = s.SetContractBytecode(addr.String(), fmt.Sprintf("0x%s", ach))
 		if err != nil {
 			return nil, err
 		}
@@ -1053,7 +1053,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 
 	if len(as) > 0 {
 		// store the account storage
-		r, err = smt.SetContractStorage(addr.String(), s, r, as)
+		r, err = s.SetContractStorage(addr.String(), as)
 	}
 
 	return r, nil
@@ -1166,7 +1166,7 @@ func getRpcRoot(storageKey string, txNum string) (*libcommon.Hash, error) {
 func calculateIntermediateRoot(sdb *IntraBlockState) (*big.Int, error) {
 	fs := map[libcommon.Address]*stateObject{}
 
-	root := sdb.smt.LastRoot
+	root := sdb.smt.LastRoot()
 
 	var err error
 

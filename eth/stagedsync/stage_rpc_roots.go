@@ -1,6 +1,7 @@
 package stagedsync
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -8,8 +9,13 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	scalable "github.com/ledgerwatch/erigon/cmd/hack/zkevm"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/log/v3"
+	"io/ioutil"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type RpcRootsCfg struct {
@@ -32,13 +38,6 @@ func RpcRootsForward(
 	quiet bool,
 ) error {
 
-	if !firstCycle {
-		return nil
-	}
-
-	// Checks for missing rpc hashes up to max. tx num and downloads them from the rpc
-	scalable.DownloadScalableHashes(ctx, "zkevm-roots.json")
-
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -49,8 +48,38 @@ func RpcRootsForward(
 		defer tx.Rollback()
 	}
 
+	if !firstCycle {
+		// TODO: non-first cycle handling
+		// at the tip the algo below is inefficient (writing the whole json file)
+		// in this case we should just write the DB with retrieved hashes and continue
+		return nil
+	}
+
+	// call rpc to get latest block no
+	txNo, err := getHighestTxNo()
+	if err != nil {
+		return err
+	}
+
+	prog, err := stages.GetStageProgress(tx, stages.RpcRoots)
+	if err != nil {
+		return err
+	}
+
+	if prog >= txNo {
+		return nil
+	}
+
+	// checks for missing rpc hashes up to max. tx num and downloads them from the rpc
+	scalable.DownloadScalableHashes(ctx, "zkevm-roots.json", int64(txNo))
+
 	// loads zkevm-roots.json into the db
-	err := loadHermezRpcRoots(tx)
+	err = loadHermezRpcRoots(tx)
+	if err != nil {
+		return err
+	}
+
+	err = stages.SaveStageProgress(tx, stages.RpcRoots, uint64(txNo))
 	if err != nil {
 		return err
 	}
@@ -85,4 +114,41 @@ func loadHermezRpcRoots(tx kv.RwTx) error {
 	}
 
 	return nil
+}
+
+func getHighestTxNo() (uint64, error) {
+	data := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "eth_getBlockByNumber",
+		"params":  []interface{}{"latest", true},
+		"id":      1,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err := http.Post("https://zkevm-rpc.com", "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return 0, err
+	}
+
+	number := result["result"].(map[string]interface{})["number"]
+	hexString := strings.TrimPrefix(number.(string), "0x")
+	val, err := strconv.ParseUint(hexString, 16, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	return val, nil
 }

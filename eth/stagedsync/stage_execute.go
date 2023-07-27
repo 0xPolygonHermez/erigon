@@ -471,14 +471,13 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 
 	smtDB := db2.NewMemDb()
 	spmt := smt.NewSMT(smtDB)
-	spmt.LastRoot = big.NewInt(0)
 
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		// [zkevm] - restrict progress
-		if blockNum > 100000 {
-			break
-		}
+		//if blockNum > 8000 {
+		//	break
+		//}
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}

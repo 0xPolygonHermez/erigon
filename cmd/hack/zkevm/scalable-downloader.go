@@ -102,9 +102,8 @@ func trimHexString(s string) string {
 }
 
 const (
-	numWorkers = 50      // number of concurrent workers
-	rateLimit  = 250     // requests per second
-	totalTxNum = 2827625 // total number of transactions
+	numWorkers = 50  // number of concurrent workers
+	rateLimit  = 250 // requests per second
 )
 
 func worker(ctx context.Context, id int, jobs <-chan int64, results chan<- map[int64]string, rl *rate.Limiter, wg *sync.WaitGroup, processedTxNum *int64) {
@@ -136,23 +135,29 @@ func worker(ctx context.Context, id int, jobs <-chan int64, results chan<- map[i
 	}
 }
 
-func logProcessedTxNumEvery(processedTxNum *int64, totalTxNumToProcess *int64, duration time.Duration, startTime time.Time) {
+func logProcessedTxNumEvery(processedTxNum *int64, totalTxNumToProcess *int64, duration time.Duration, startTime time.Time, doneCh chan struct{}) {
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		elapsed := time.Since(startTime)
-		completed := float64(*processedTxNum)
-		total := float64(*totalTxNumToProcess) // de-reference the pointer to get the value
+	for {
+		select {
+		case <-doneCh:
+			return
+		case <-ticker.C:
+			elapsed := time.Since(startTime)
+			completed := float64(*processedTxNum)
+			total := float64(*totalTxNumToProcess) // de-reference the pointer to get the value
 
-		if completed == 0 {
-			log.Info("Processed transaction number so far: 0. Total number of transactions to process: ", total, ". Time estimation is not available yet.")
-		} else {
-			averageTxPerSec := completed / elapsed.Seconds()
-			estimatedRemainingTime := time.Duration((total - completed) / averageTxPerSec * float64(time.Second))
-			percentageCompleted := (completed / total) * 100 // calculate percentage of completed transactions
+			if completed == 0 {
+				log.Info("Processed transaction number so far: 0. Total number of transactions to process: ", total, ". Time estimation is not available yet.")
+			} else {
+				averageTxPerSec := completed / elapsed.Seconds()
+				estimatedRemainingTime := time.Duration((total - completed) / averageTxPerSec * float64(time.Second))
+				percentageCompleted := (completed / total) * 100 // calculate percentage of completed transactions
 
-			log.Info("Processed transaction number so far: ", *processedTxNum, " of ", *totalTxNumToProcess, " (", percentageCompleted, "%). Estimated time remaining: ", estimatedRemainingTime)
+				// log.info takes a message and then a set of key value pairs
+				log.Info("RpcRoot Download Progress", "processed", *processedTxNum, "of", *totalTxNumToProcess, "% complete", percentageCompleted, "time remaining", estimatedRemainingTime)
+			}
 		}
 	}
 }
@@ -177,11 +182,13 @@ func main() {
 
 	fileName := os.Args[1]
 
+	totalTxNum := 2827625
+
 	ctx := context.Background()
-	DownloadScalableHashes(ctx, fileName)
+	DownloadScalableHashes(ctx, fileName, int64(totalTxNum))
 }
 
-func DownloadScalableHashes(ctx context.Context, fileName string) {
+func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int64) {
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -200,9 +207,10 @@ func DownloadScalableHashes(ctx context.Context, fileName string) {
 		return
 	}
 
+	var doneCh = make(chan struct{})
 	var processedTxNum int64
 	startTime := time.Now()
-	go logProcessedTxNumEvery(&processedTxNum, &missingCount, 3*time.Second, startTime)
+	go logProcessedTxNumEvery(&processedTxNum, &missingCount, 3*time.Second, startTime, doneCh)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
@@ -224,6 +232,7 @@ func DownloadScalableHashes(ctx context.Context, fileName string) {
 	go func() {
 		for _ = range signals {
 			log.Warn("Received signal, cancelling context...")
+			close(doneCh)
 			cancel()
 			break
 		}
@@ -232,6 +241,7 @@ func DownloadScalableHashes(ctx context.Context, fileName string) {
 	go func() {
 		wg.Wait()
 		close(results)
+		close(doneCh)
 	}()
 
 	saveTicker := time.NewTicker(60 * time.Second)
