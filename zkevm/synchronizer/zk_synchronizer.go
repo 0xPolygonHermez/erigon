@@ -20,7 +20,6 @@ import (
 
 	ericommon "github.com/ledgerwatch/erigon/common"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 // Synchronizer connects L1 and L2
@@ -48,10 +47,8 @@ func NewSynchronizer(
 	ethMan ethermanInterface,
 	st stateInterface,
 	zkEVMClient zkEVMClientInterface,
-	cfg Config,
-	ctx context.Context) (*ClientSynchronizer, error) {
-
-	ctx, cancel := context.WithCancel(ctx)
+	cfg Config) (*ClientSynchronizer, error) {
+	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ClientSynchronizer{
 		isTrustedSequencer: isTrustedSequencer,
@@ -62,8 +59,8 @@ func NewSynchronizer(
 		zkEVMClient:        zkEVMClient,
 		cfg:                cfg,
 		// [zkevm] - restrict progress
-		restrictAtL1Block: 17782337,
-		restrictAtL2Batch: 372893,
+		restrictAtL1Block: 0,
+		restrictAtL2Batch: 0,
 	}, nil
 }
 
@@ -71,22 +68,28 @@ var waitDuration = time.Duration(0)
 
 // Sync function will read the last state synced and will continue from that point.
 // Sync() will read blockchain events to detect rollup updates
-func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(context.Context, kv.RwDB, kv.RwTx) (kv.RwTx, error)) (kv.RwTx, error) {
+func (s *ClientSynchronizer) Sync(tx kv.RwTx) error {
 	// If there is no lastEthereumBlock means that sync from the beginning is necessary. If not, it continues from the retrieved ethereum block
 	// Get the latest synced block. If there is no block on db, use genesis block
 	log.Info("Sync started")
 
-	highestInDb, err := stages.GetStageProgress(tx, stages.L1Blocks)
+	// Call the blockchain to get the header at the tip of the chain
+	header, err := s.etherMan.HeaderByNumber(s.ctx, nil)
 	if err != nil {
-		return tx, err
+		return err
 	}
-	_ = highestInDb
+	lastKnownBlock := header.Number
 
 	lastEthBlockSynced, err := s.state.GetLastBlock(s.ctx, tx)
 
+	if lastEthBlockSynced.BlockNumber >= lastKnownBlock.Uint64() {
+		log.Info("L1 state fully synchronized")
+		return nil
+	}
+
 	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber >= s.restrictAtL1Block {
 		log.Info("Restricted Sync finished")
-		return tx, nil
+		return nil
 	}
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotSynchronized) {
@@ -143,7 +146,7 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(cont
 	for {
 		select {
 		case <-s.ctx.Done():
-			return tx, nil
+			return nil
 		case <-time.After(waitDuration):
 			//Sync L1Blocks
 			if lastEthBlockSynced, err = s.syncBlocks(tx, lastEthBlockSynced); err != nil {
@@ -167,15 +170,6 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(cont
 				continue
 			}
 
-			if saveProgress != nil {
-				log.Debug("saving progress")
-				tx, err = saveProgress(s.ctx, db, tx)
-				if err != nil {
-					log.Warn("error saving progress. Error: ", err)
-					continue
-				}
-			}
-
 			if s.restrictAtL2Batch != 0 && latestSyncedBatch >= s.restrictAtL2Batch {
 				log.Info("L1 state fully synchronized (restricted)")
 				err = s.syncTrustedState(latestSyncedBatch)
@@ -184,7 +178,7 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(cont
 					continue
 				}
 				waitDuration = s.cfg.SyncInterval.Duration
-				return tx, nil
+				return nil
 			}
 
 			if latestSyncedBatch >= latestSequencedBatchNumber {
@@ -236,15 +230,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		fromBlock = lastEthBlockSynced.BlockNumber + 1
 	}
 
-	counter := 0
-
 	for {
-		select {
-		case <-s.ctx.Done():
-			return lastEthBlockSynced, nil
-		default:
-		}
-		counter++
 		toBlock := fromBlock + s.cfg.SyncChunkSize
 		log.Infof("Syncing block %d of %d", fromBlock, lastKnownBlock.Uint64())
 		log.Infof("Getting rollup info from block %d to block %d", fromBlock, toBlock)
@@ -279,11 +265,6 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		fromBlock = toBlock + 1
 
 		if s.restrictAtL1Block != 0 && fromBlock > s.restrictAtL1Block {
-			break
-		}
-
-		// save progress
-		if counter%5 == 0 {
 			break
 		}
 

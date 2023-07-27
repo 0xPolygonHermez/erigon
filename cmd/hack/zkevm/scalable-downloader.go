@@ -164,10 +164,10 @@ func logProcessedTxNumEvery(ctx context.Context, processedTxNum *int64, totalTxN
 	}
 }
 
-func verifyTxNums(totalTxNum int64, hashResults map[int64]string) []int64 {
+func verifyTxNums(totalTxNum, startFrom int64, hashResults map[int64]string) []int64 {
 	missing := make([]int64, 0)
 
-	for i := int64(1); i <= totalTxNum; i++ {
+	for i := startFrom; i <= totalTxNum; i++ {
 		if _, ok := hashResults[i]; !ok {
 			missing = append(missing, i)
 		}
@@ -184,13 +184,13 @@ func main() {
 
 	fileName := os.Args[1]
 
-	totalTxNum := 2827625
+	totalTxNum := 2827625 // edit with highest txnum you want to download hashes up to
 
 	ctx := context.Background()
-	DownloadScalableHashes(ctx, fileName, int64(totalTxNum))
+	DownloadScalableHashes(ctx, fileName, int64(totalTxNum), true, 1)
 }
 
-func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int64) {
+func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int64, saveResultsToFile bool, startFrom int64) map[int64]string {
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -200,13 +200,16 @@ func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int
 
 	rl := rate.NewLimiter(rateLimit, numWorkers)
 
-	hashResults := loadExistingData(fileName)
-	missingTxNums := verifyTxNums(totalTxNum, hashResults)
+	hashResults := make(map[int64]string)
+	if saveResultsToFile {
+		hashResults = loadExistingData(fileName)
+	}
+	missingTxNums := verifyTxNums(totalTxNum, startFrom, hashResults)
 	missingCount := int64(len(missingTxNums))
 
 	if missingCount == 0 {
 		log.Info("No missing RPC Roots to download")
-		return
+		return nil
 	}
 
 	var doneCh = make(chan struct{})
@@ -258,16 +261,19 @@ func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int
 			} else {
 				log.Info("Results channel was closed - we should be done!")
 
-				// results channel was closed, save and exit loop
-				saveData(hashResults, fileName)
+				if saveResultsToFile {
+					saveData(hashResults, fileName)
+				}
 
 				log.Info("Verifying all transactions...")
-				missingTxNums = verifyTxNums(totalTxNum, hashResults)
-				return
+				missingTxNums = verifyTxNums(totalTxNum, startFrom, hashResults)
+				return hashResults
 			}
 		case <-saveTicker.C:
 			// save data periodically
-			saveData(hashResults, fileName)
+			if saveResultsToFile {
+				saveData(hashResults, fileName)
+			}
 		}
 	}
 }

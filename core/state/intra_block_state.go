@@ -868,17 +868,16 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock boo
 
 	// [zkevm] - allow calculation locally at a certain point/interval
 	calculatedLocally := false
-	if txNum.Uint64() >= 1000000 { //&& txNum.Uint64()%1 == 0 {
-		var err error
-		sdb.PrintSmtRootHash()
-		_, err = calculateIntermediateRoot(sdb)
-		if err != nil {
-			return err
-		}
-		sdb.PrintSmtRootHash()
-		calculatedLocally = true
-	}
-	//sdb.smt.LastRoot = root
+	//if txNum.Uint64() >= 1000000 { //&& txNum.Uint64()%1 == 0 {
+	//	var err error
+	//	sdb.PrintSmtRootHash()
+	//	_, err = calculateIntermediateRoot(sdb)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	sdb.PrintSmtRootHash()
+	//	calculatedLocally = true
+	//}
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
