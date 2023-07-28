@@ -470,7 +470,10 @@ func FinalizeBlockExecution(
 		return nil, nil, nil, err
 	}
 
-	err = ibs.ScalableSetSmtRootHash(ibs.DbTx, true)
+	// [zkevm] - root hash only changes on blocks containing txs
+	if len(txs) > 0 {
+		err = ibs.ScalableSetSmtRootHash(ibs.DbTx, true)
+	}
 	if err != nil {
 		return nil, nil, nil, err
 	}

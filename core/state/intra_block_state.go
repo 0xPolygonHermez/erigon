@@ -868,7 +868,7 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock boo
 
 	// [zkevm] - allow calculation locally at a certain point/interval
 	calculatedLocally := false
-	//if txNum.Uint64() >= 1000000 { //&& txNum.Uint64()%1 == 0 {
+	//if txNum.Uint64() >= 1 { //&& txNum.Uint64()%1 == 0 {
 	//	var err error
 	//	sdb.PrintSmtRootHash()
 	//	_, err = calculateIntermediateRoot(sdb)
@@ -1101,7 +1101,6 @@ func verifyRoot(dbTx kv.RwTx, hash string, txNum uint64) (*libcommon.Hash, error
 }
 
 func getDbRoot(dbTx kv.RwTx, txNum uint64) (*libcommon.Hash, error) {
-	// TODO how do we get these?
 	rootHash, err := dbTx.GetOne("HermezRpcRoot", UintBytes(txNum))
 	if err != nil {
 		return nil, err
