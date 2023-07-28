@@ -216,8 +216,8 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 
 	// [zkEVM] - read back the stored transactions and process with SMT
 
-	memdb := db2.NewMemDb()
-	smt := smt.NewSMT(memdb)
+	eridb := db2.NewEriDb(db)
+	smt := smt.NewSMT(eridb)
 
 	// [zkevm] - starts a 30s ticker to lock the db and remove orphans
 	doneChan := make(chan bool)

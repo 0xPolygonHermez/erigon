@@ -70,6 +70,11 @@ func (s *SMT) SetLastRoot(lr *big.Int) {
 }
 
 func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
+	if _, ok := s.Db.(*db.EriDb); ok {
+		log.Warn("mdbx tx cannot be used in goroutine - periodic check disabled")
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
@@ -528,6 +533,11 @@ func (s *SMT) PrintCacheHitsByFrequency() {
 type VisitedNodesMap map[string]bool
 
 func (s *SMT) CheckOrphanedNodes(ctx context.Context) int {
+	if _, ok := s.Db.(*db.EriDb); ok {
+		log.Warn("mdbx tx cannot be used in goroutine - periodic check disabled")
+		return 0
+	}
+
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 

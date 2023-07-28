@@ -527,6 +527,41 @@ func TestScalarToNodeKey(t *testing.T) {
 	}
 }
 
+func TestScalarToNodeValue(t *testing.T) {
+	// Define the array of original values
+	originalValues := [12]*big.Int{
+		big.NewInt(1),
+		big.NewInt(2),
+		big.NewInt(3),
+		big.NewInt(4),
+		big.NewInt(5),
+		big.NewInt(6),
+		big.NewInt(7),
+		big.NewInt(8),
+		big.NewInt(9),
+		big.NewInt(10),
+		big.NewInt(11),
+		big.NewInt(12),
+	}
+
+	// Create a big scalar that is the concatenation of the 12 original values
+	scalar := new(big.Int)
+	for i := 11; i >= 0; i-- {
+		scalar.Lsh(scalar, 64)
+		scalar.Or(scalar, originalValues[i])
+	}
+
+	// Call the function to test
+	result := ScalarToNodeValue(scalar)
+
+	// Check that each element of the result matches the corresponding original value
+	for i := range originalValues {
+		if result[i].Cmp(originalValues[i]) != 0 {
+			t.Errorf("Element %d: expected %s, got %s", i, originalValues[i], result[i])
+		}
+	}
+}
+
 // parseBinaryString converts a string of binary digits to an array of ints
 func parseBinaryString(s string) []int {
 	binaryArr := make([]int, len(s))
