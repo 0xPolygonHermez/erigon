@@ -161,13 +161,13 @@ func ExecuteBlockEphemerally(
 		}
 
 		// [zkevm] - set smt root for each tx, unless last tx in block (see ibs block commit)
-		if i != block.Transactions().Len()-1 {
-			// [zkevm] - set smt root hash in magic account
-			err = ibs.ScalableSetSmtRootHash(dbTx, false)
-			if err != nil {
-				return nil, err
-			}
+		//if i != block.Transactions().Len()-1 {
+		// [zkevm] - set smt root hash in magic account
+		err = ibs.ScalableSetSmtRootHash(dbTx)
+		if err != nil {
+			return nil, err
 		}
+		//}
 	}
 
 	receiptSha := types.DeriveSha(receipts)
@@ -359,7 +359,6 @@ func SysCallContract(contract libcommon.Address, data []byte, chainConfig chain.
 		nil, nil,
 		data, nil, false,
 		true, // isFree
-		nil,  // maxFeePerDataGas
 	)
 	vmConfig := vm.Config{NoReceipts: true, RestoreState: constCall}
 	// Create a new context to be used in the EVM environment
@@ -403,7 +402,6 @@ func SysCreate(contract libcommon.Address, data []byte, chainConfig chain.Config
 		nil, nil,
 		data, nil, false,
 		true, // isFree
-		nil,  // maxFeePerDataGas
 	)
 	vmConfig := vm.Config{NoReceipts: true}
 	// Create a new context to be used in the EVM environment
@@ -470,13 +468,10 @@ func FinalizeBlockExecution(
 		return nil, nil, nil, err
 	}
 
-	// [zkevm] - root hash only changes on blocks containing txs
-	if len(txs) > 0 {
-		err = ibs.ScalableSetSmtRootHash(ibs.DbTx, true)
-	}
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	//err = ibs.ScalableSetSmtRootHash(ibs.DbTx, true)
+	//if err != nil {
+	//	return nil, nil, nil, err
+	//}
 
 	if err := ibs.CommitBlock(cc.Rules(header.Number.Uint64(), header.Time), stateWriter); err != nil {
 		return nil, nil, nil, fmt.Errorf("committing block %d failed: %w", header.Number.Uint64(), err)

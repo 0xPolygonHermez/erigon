@@ -125,11 +125,15 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		tooBigJump = s.BlockNumber < n
 	}
 
-	// [zkevm] - only regenerate for poc
-	if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx); err != nil {
-		return trie.EmptyRoot, err
+	if s.BlockNumber == 0 || tooBigJump {
+		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx); err != nil {
+			return trie.EmptyRoot, err
+		}
+	} else {
+		if root, err = incrementIntermediateHashes(logPrefix, s, tx, to, cfg, expectedRootHash, quit); err != nil {
+			return trie.EmptyRoot, err
+		}
 	}
-	_ = quit
 
 	if cfg.checkRoot && root != expectedRootHash {
 		log.Error(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
@@ -767,6 +771,11 @@ func (p *HashPromoter) Unwind(logPrefix string, s *StageState, u *UnwindState, s
 }
 
 func incrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to uint64, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
+
+	// read the latest SMT root from the db, and set it on the SMT object
+
+	// how to get the state which has been changed since last run of intermediate hashes?
+
 	p := NewHashPromoter(db, cfg.tmpDir, quit, logPrefix)
 	rl := trie.NewRetainList(0)
 	if cfg.historyV3 {

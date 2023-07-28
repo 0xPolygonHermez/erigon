@@ -857,7 +857,7 @@ func (s *IntraBlockState) PrintSmtRootHash() {
 	fmt.Println("SMT root: ", rootU256.String())
 }
 
-func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock bool) error {
+func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
 
@@ -868,16 +868,16 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock boo
 
 	// [zkevm] - allow calculation locally at a certain point/interval
 	calculatedLocally := false
-	//if txNum.Uint64() >= 1 { //&& txNum.Uint64()%1 == 0 {
-	//	var err error
-	//	sdb.PrintSmtRootHash()
-	//	_, err = calculateIntermediateRoot(sdb)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	sdb.PrintSmtRootHash()
-	//	calculatedLocally = true
-	//}
+	if txNum.Uint64() >= 1000000 { //&& txNum.Uint64()%1 == 0 {
+		var err error
+		sdb.PrintSmtRootHash()
+		_, err = calculateIntermediateRoot(sdb)
+		if err != nil {
+			return err
+		}
+		sdb.PrintSmtRootHash()
+		calculatedLocally = true
+	}
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
@@ -910,10 +910,6 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx, lastInBlock boo
 		// set mapping of keccak256(txnum,1) -> smt root
 		rpcHashU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
 		sdb.SetState(saddr, &mkh, *rpcHashU256)
-
-		if lastInBlock {
-			sdb.PrintSmtRootHash() // this should be the BLOCK hash on the block boundary
-		}
 	}
 
 	return nil
@@ -1101,6 +1097,7 @@ func verifyRoot(dbTx kv.RwTx, hash string, txNum uint64) (*libcommon.Hash, error
 }
 
 func getDbRoot(dbTx kv.RwTx, txNum uint64) (*libcommon.Hash, error) {
+	// TODO how do we get these?
 	rootHash, err := dbTx.GetOne("HermezRpcRoot", UintBytes(txNum))
 	if err != nil {
 		return nil, err
