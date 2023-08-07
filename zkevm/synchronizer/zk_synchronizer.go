@@ -20,7 +20,6 @@ import (
 
 	ericommon "github.com/ledgerwatch/erigon/common"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 // Synchronizer connects L1 and L2
@@ -62,8 +61,8 @@ func NewSynchronizer(
 		zkEVMClient:        zkEVMClient,
 		cfg:                cfg,
 		// [zkevm] - restrict progress
-		restrictAtL1Block: 16920436,
-		restrictAtL2Batch: 110,
+		restrictAtL1Block: 0,
+		restrictAtL2Batch: 0,
 	}, nil
 }
 
@@ -76,13 +75,19 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(cont
 	// Get the latest synced block. If there is no block on db, use genesis block
 	log.Info("Sync started")
 
-	highestInDb, err := stages.GetStageProgress(tx, stages.L1Blocks)
+	// Call the blockchain to get the header at the tip of the chain
+	header, err := s.etherMan.HeaderByNumber(s.ctx, nil)
 	if err != nil {
 		return tx, err
 	}
-	_ = highestInDb
+	lastKnownBlock := header.Number
 
 	lastEthBlockSynced, err := s.state.GetLastBlock(s.ctx, tx)
+
+	if lastEthBlockSynced.BlockNumber >= lastKnownBlock.Uint64() {
+		log.Info("L1 state fully synchronized")
+		return tx, nil
+	}
 
 	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber >= s.restrictAtL1Block {
 		log.Info("Restricted Sync finished")
@@ -156,11 +161,13 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(cont
 					continue
 				}
 			}
+			latestVerifiedBatchNumber, err := s.etherMan.GetLatestVerifiedBatchNum()
 			latestSequencedBatchNumber, err := s.etherMan.GetLatestBatchNumber()
 			if err != nil {
 				log.Warn("error getting latest sequenced batch in the rollup. Error: ", err)
 				continue
 			}
+			_ = latestSequencedBatchNumber
 			latestSyncedBatch, err := s.state.GetLastBatchNumber(s.ctx, tx)
 			if err != nil {
 				log.Warn("error getting latest batch synced. Error: ", err)
@@ -187,7 +194,7 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(cont
 				return tx, nil
 			}
 
-			if latestSyncedBatch >= latestSequencedBatchNumber {
+			if latestSyncedBatch >= latestVerifiedBatchNumber {
 				log.Info("L1 state fully synchronized")
 				err = s.syncTrustedState(latestSyncedBatch)
 				if err != nil {
@@ -195,6 +202,7 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, saveProgress func(cont
 					continue
 				}
 				waitDuration = s.cfg.SyncInterval.Duration
+				return tx, nil
 			}
 		}
 	}
@@ -244,6 +252,11 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 			return lastEthBlockSynced, nil
 		default:
 		}
+
+		if lastKnownBlock.Cmp(new(big.Int).SetUint64(fromBlock)) < 1 {
+			return lastEthBlockSynced, nil
+		}
+
 		counter++
 		toBlock := fromBlock + s.cfg.SyncChunkSize
 		log.Infof("Syncing block %d of %d", fromBlock, lastKnownBlock.Uint64())
@@ -287,10 +300,6 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 			break
 		}
 
-		if lastKnownBlock.Cmp(new(big.Int).SetUint64(toBlock)) < 1 {
-			waitDuration = s.cfg.SyncInterval.Duration
-			break
-		}
 		if len(blocks) == 0 { // If there is no events in the checked blocks range and lastKnownBlock > fromBlock.
 			// Store the latest block of the block range. Get block info and process the block
 			fb, err := s.etherMan.EthBlockByNumber(s.ctx, toBlock)
