@@ -40,8 +40,7 @@ func HeadersZK(
 
 	var err error
 
-	// TODO: add ability to commit regularly so we don't lose progress on restart (every 10k batches)
-	tx, err = cfg.zkSynchronizer.Sync(cfg.db, tx, commitAndReturnNewTx)
+	tx, err = cfg.zkSynchronizer.Sync(cfg.db, tx, commitAndReturnNewTx) // pass nil to turn off commit and new tx
 	if err != nil {
 		return err
 	}

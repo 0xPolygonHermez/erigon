@@ -166,34 +166,38 @@ func executeBlock(
 		return err
 	}
 
-	gerdb := &zkstate.GlobalExitRootDb{}
-	err = json.Unmarshal(gp, &gerdb)
-	if err != nil {
-		return err
+	// [zkevm] - add GER if there is one for this batch
+	if gp != nil {
+		gerdb := &zkstate.GlobalExitRootDb{}
+		err = json.Unmarshal(gp, &gerdb)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
+
+		old := common.Hash{}.Big()
+		oldUint256, overflow := uint256.FromBig(old)
+		if overflow {
+			return errors.New("AddGlobalExitRoot: overflow")
+		}
+
+		exitBig := new(big.Int).SetInt64(gerdb.Timestamp)
+		exitUint256, overflow := uint256.FromBig(exitBig)
+		if overflow {
+			return errors.New("AddGlobalExitRoot: overflow")
+		}
+
+		fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
+
+		addr := common.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
+
+		err = stateWriter.WriteAccountStorage(addr, uint64(1), &gerdb.GlobalExitRootPosition, oldUint256, exitUint256)
+		if err != nil {
+			return err
+		}
 	}
 
-	fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
-
-	old := common.Hash{}.Big()
-	oldUint256, overflow := uint256.FromBig(old)
-	if overflow {
-		return errors.New("AddGlobalExitRoot: overflow")
-	}
-
-	exitBig := new(big.Int).SetInt64(gerdb.Timestamp)
-	exitUint256, overflow := uint256.FromBig(exitBig)
-	if overflow {
-		return errors.New("AddGlobalExitRoot: overflow")
-	}
-
-	fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
-
-	addr := common.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
-
-	err = stateWriter.WriteAccountStorage(addr, uint64(1), &gerdb.GlobalExitRootPosition, oldUint256, exitUint256)
-	if err != nil {
-		return err
-	}
 	// [zkevm] - finished writing global exit root to state
 
 	// where the magic happens
@@ -475,7 +479,7 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		// [zkevm] - restrict progress
-		if blockNum > 110 {
+		if blockNum > 100 {
 			break
 		}
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {

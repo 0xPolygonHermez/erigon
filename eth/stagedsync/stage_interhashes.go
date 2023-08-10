@@ -125,15 +125,16 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		tooBigJump = s.BlockNumber < n
 	}
 
-	if s.BlockNumber == 0 || tooBigJump {
-		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx); err != nil {
-			return trie.EmptyRoot, err
-		}
-	} else {
-		if root, err = incrementIntermediateHashes(logPrefix, s, tx, to, cfg, expectedRootHash, quit); err != nil {
-			return trie.EmptyRoot, err
-		}
+	//if s.BlockNumber == 0 || tooBigJump {
+	if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx); err != nil {
+		return trie.EmptyRoot, err
 	}
+	_ = quit
+	//} else {
+	//	if root, err = incrementIntermediateHashes(logPrefix, s, tx, to, cfg, expectedRootHash, quit); err != nil {
+	//		return trie.EmptyRoot, err
+	//	}
+	//}
 
 	if cfg.checkRoot && root != expectedRootHash {
 		log.Error(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))

@@ -97,6 +97,11 @@ func StageLoop(
 		log.Error("Failed to create HermezVerifiedBatch bucket", "err", err)
 		return
 	}
+	err = trw.CreateBucket("HermezGlobalExitRootTemp")
+	if err != nil {
+		log.Error("Failed to create HermezGlobalExitRootTemp bucket", "err", err)
+		return
+	}
 	err = trw.CreateBucket("HermezGlobalExitRoot")
 	if err != nil {
 		log.Error("Failed to create HermezGlobalExitRoot bucket", "err", err)
