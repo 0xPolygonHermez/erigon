@@ -18,6 +18,16 @@ func TestGenesisMdbx(t *testing.T) {
 	runGenesisTestMdbx(t, "testdata/mainnet-genesis.json")
 }
 
+func TestIncrementalSMT(t *testing.T) {
+	// run one of the existing tests
+
+	// add some data to the SMT
+
+	// verify the root updated correctly
+
+	// the best way to verify the root is to run the in mem db, and then the MDBX db and compare the roots when adding the same data
+}
+
 func BenchmarkGenesisMdbx(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		runGenesisTestMdbx(b, "testdata/mainnet-genesis.json")

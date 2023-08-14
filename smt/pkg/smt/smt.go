@@ -56,6 +56,12 @@ func NewSMT(database DB) *SMT {
 	}
 }
 
+func NewSMTWithRoot(database DB, root *big.Int) *SMT {
+	smt := NewSMT(database)
+	smt.lastRoot = root
+	return smt
+}
+
 func (s *SMT) LastRoot() *big.Int {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
