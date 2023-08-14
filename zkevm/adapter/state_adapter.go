@@ -17,12 +17,13 @@ import (
 
 	"bytes"
 	"encoding/json"
-	"github.com/holiman/uint256"
-	ericommon "github.com/ledgerwatch/erigon/common"
-	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/holiman/uint256"
+	ericommon "github.com/ledgerwatch/erigon/common"
+	ethTypes "github.com/ledgerwatch/erigon/core/types"
 )
 
 const HermezBatch = "HermezBatch"
@@ -61,9 +62,6 @@ type stateInterface interface {
 
 	BeginStateTransaction(ctx context.Context) (kv.RwTx, error)
 }
-
-// gdb is a database of global exit roots
-var gdb = map[common.Hash]common.Hash{}
 
 type StateInterfaceAdapter struct {
 	currentBatchNumber int64
@@ -112,7 +110,10 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 
 	globalExitRootPos := keccak256.Hash(rootPlusStorage)
 
-	gdb[exitRoot.GlobalExitRoot] = common.BytesToHash(globalExitRootPos)
+	err := dbTx.Put("HermezGlobalExitRootTemp", exitRoot.GlobalExitRoot.Bytes(), globalExitRootPos)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -219,18 +220,34 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 		return err
 	}
 
-	// write the global exit root to state
-	gerp, ok := gdb[batch.GlobalExitRoot]
-	ts := int64(0)
-	if ok {
-		ts = batch.Timestamp.Unix()
-		delete(gdb, batch.GlobalExitRoot)
+	gerp, err := dbTx.Has("HermezGlobalExitRootTemp", batch.GlobalExitRoot.Bytes())
+	if err != nil {
+		return err
 	}
+	ts := int64(0)
+	var gerpVal []byte
+	var gerpValCopy []byte
+	if gerp {
+		gerpVal, err = dbTx.GetOne("HermezGlobalExitRootTemp", batch.GlobalExitRoot.Bytes())
+		if err != nil {
+			return err
+		}
+		// if you don't copy, the delete will adjust the backing array and give the wrong value in gerpVal
+		gerpValCopy = make([]byte, len(gerpVal))
+		copy(gerpValCopy, gerpVal)
+		ts = batch.Timestamp.Unix()
+		err = dbTx.Delete("HermezGlobalExitRootTemp", batch.GlobalExitRoot.Bytes())
+		if err != nil {
+			return err
+		}
+	}
+
 	gerdb := state.GlobalExitRootDb{
 		GlobalExitRoot:         batch.GlobalExitRoot,
-		GlobalExitRootPosition: gerp,
+		GlobalExitRootPosition: common.BytesToHash(gerpValCopy),
 		Timestamp:              ts,
 	}
+
 	err = m.writeGlobalExitRootToDb(dbTx, verifiedBatch.BatchNumber, gerdb) // batch no is block no in stage_execute
 	if err != nil {
 		return err

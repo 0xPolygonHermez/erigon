@@ -29,6 +29,11 @@ import (
 	"github.com/ledgerwatch/erigon/core/state/temporal"
 
 	"encoding/json"
+	"io/ioutil"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -38,10 +43,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/zkevm/adapter"
 	"github.com/status-im/keycard-go/hexutils"
-	"io/ioutil"
-	"net/http"
-	"strings"
-	"time"
 )
 
 type TrieCfg struct {
@@ -136,6 +137,12 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 			return trie.EmptyRoot, err
 		}
 	}
+	_ = quit
+	//} else {
+	//	if root, err = incrementIntermediateHashes(logPrefix, s, tx, to, cfg, expectedRootHash, quit); err != nil {
+	//		return trie.EmptyRoot, err
+	//	}
+	//}
 
 	if cfg.checkRoot && root != expectedRootHash {
 		log.Error(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
