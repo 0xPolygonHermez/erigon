@@ -43,7 +43,8 @@ func TestSMT_SingleInsert(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			s := NewSMT(nil)
-			newRoot, err := s.InsertBI(scenario.oldRoot, scenario.k, scenario.v)
+			// set scenario old root if fail
+			newRoot, err := s.InsertBI(scenario.k, scenario.v)
 			if err != nil {
 				t.Errorf("Insert failed: %v", err)
 			}
@@ -93,7 +94,7 @@ func TestSMT_MultipleInsert(t *testing.T) {
 		if i > 0 {
 			testCase.root = root
 		}
-		r, err := s.InsertBI(testCase.root, testCase.key, testCase.value)
+		r, err := s.InsertBI(testCase.key, testCase.value)
 		if err != nil {
 			t.Errorf("Test case %d: Insert failed: %v", i, err)
 			continue
@@ -148,7 +149,7 @@ func TestSMT_UpdateElement1(t *testing.T) {
 	var err error
 
 	for i, testCase := range testCases {
-		r, err = s.InsertBI(r.NewRoot, testCase.key, testCase.value)
+		r, err = s.InsertBI(testCase.key, testCase.value)
 		if err != nil {
 			t.Errorf("Test case %d: Insert failed: %v", i, err)
 			continue
@@ -167,22 +168,22 @@ func TestSMT_UpdateElement1(t *testing.T) {
 func TestSMT_AddSharedElement2(t *testing.T) {
 	s := NewSMT(nil)
 
-	r1, err := s.InsertBI(big.NewInt(0), big.NewInt(8), big.NewInt(2))
+	r1, err := s.InsertBI(big.NewInt(8), big.NewInt(2))
 	if err != nil {
 		t.Errorf("Insert failed: %v", err)
 	}
 	printNode(r1)
-	r2, err := s.InsertBI(r1.NewRoot, big.NewInt(9), big.NewInt(3))
+	r2, err := s.InsertBI(big.NewInt(9), big.NewInt(3))
 	if err != nil {
 		t.Errorf("Insert failed: %v", err)
 	}
 	printNode(r2)
-	r3, err := s.InsertBI(r2.NewRoot, big.NewInt(8), big.NewInt(0))
+	r3, err := s.InsertBI(big.NewInt(8), big.NewInt(0))
 	if err != nil {
 		t.Errorf("Insert failed: %v", err)
 	}
 	printNode(r3)
-	r4, err := s.InsertBI(r3.NewRoot, big.NewInt(9), big.NewInt(0))
+	r4, err := s.InsertBI(big.NewInt(9), big.NewInt(0))
 	if err != nil {
 		t.Errorf("Insert failed: %v", err)
 	}

@@ -14,10 +14,29 @@ type EriDb struct {
 func NewEriDb(tx kv.RwTx) *EriDb {
 
 	_ = tx.CreateBucket("HermezSmt")
+	_ = tx.CreateBucket("HermezSmtLastRoot")
 
 	return &EriDb{
 		tx: tx,
 	}
+}
+
+func (m *EriDb) GetLastRoot() (*big.Int, error) {
+	data, err := m.tx.GetOne("HermezSmtLastRoot", []byte("lastRoot"))
+	if err != nil {
+		return big.NewInt(0), err
+	}
+
+	if data == nil {
+		return big.NewInt(0), nil
+	}
+
+	return utils.ConvertHexToBigInt(string(data)), nil
+}
+
+func (m *EriDb) SetLastRoot(r *big.Int) error {
+	v := utils.ConvertBigIntToHex(r)
+	return m.tx.Put("HermezSmtLastRoot", []byte("lastRoot"), []byte(v))
 }
 
 func (m *EriDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {

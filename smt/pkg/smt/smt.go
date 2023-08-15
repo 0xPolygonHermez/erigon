@@ -21,6 +21,9 @@ type DB interface {
 	Insert(key utils.NodeKey, value utils.NodeValue12) error
 	IsEmpty() bool
 	Delete(string) error
+
+	SetLastRoot(lr *big.Int) error
+	GetLastRoot() (*big.Int, error)
 }
 
 type DebuggableDB interface {
@@ -34,7 +37,6 @@ type SMT struct {
 	Cache             *gocache.Cache
 	CacheHitFrequency map[string]int
 
-	lastRoot     *big.Int
 	clearUpMutex sync.Mutex
 }
 
@@ -52,27 +54,27 @@ func NewSMT(database DB) *SMT {
 		Db:                database,
 		Cache:             cache,
 		CacheHitFrequency: make(map[string]int),
-		lastRoot:          big.NewInt(0),
 	}
-}
-
-func NewSMTWithRoot(database DB, root *big.Int) *SMT {
-	smt := NewSMT(database)
-	smt.lastRoot = root
-	return smt
 }
 
 func (s *SMT) LastRoot() *big.Int {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
-	copy := new(big.Int).Set(s.lastRoot)
-	return copy
+	lr, err := s.Db.GetLastRoot()
+	if err != nil {
+		panic(err)
+	}
+	cop := new(big.Int).Set(lr)
+	return cop
 }
 
 func (s *SMT) SetLastRoot(lr *big.Int) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
-	s.lastRoot = lr
+	err := s.Db.SetLastRoot(lr)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
@@ -101,7 +103,7 @@ func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
 	}()
 }
 
-func (s *SMT) InsertBI(lastRoot *big.Int, key *big.Int, value *big.Int) (*SMTResponse, error) {
+func (s *SMT) InsertBI(key *big.Int, value *big.Int) (*SMTResponse, error) {
 	k := utils.ScalarToNodeKey(key)
 	v := utils.ScalarToNodeValue8(value)
 	return s.Insert(k, v)
@@ -122,7 +124,11 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 
-	oldRoot := utils.ScalarToRoot(s.lastRoot)
+	or, err := s.Db.GetLastRoot()
+	if err != nil {
+		return nil, err
+	}
+	oldRoot := utils.ScalarToRoot(or)
 	r := oldRoot
 	newRoot := oldRoot
 
@@ -435,7 +441,10 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 
 	smtResponse.NewRoot = newRoot.ToBigInt()
 
-	s.lastRoot = newRoot.ToBigInt()
+	err = s.Db.SetLastRoot(newRoot.ToBigInt())
+	if err != nil {
+		return nil, err
+	}
 
 	return smtResponse, nil
 }
@@ -549,9 +558,12 @@ func (s *SMT) CheckOrphanedNodes(ctx context.Context) int {
 
 	visited := make(VisitedNodesMap)
 
-	root := s.lastRoot
+	root, err := s.Db.GetLastRoot()
+	if err != nil {
+		return 0
+	}
 
-	err := s.traverseAndMark(ctx, root, visited)
+	err = s.traverseAndMark(ctx, root, visited)
 	if err != nil {
 		return 0
 	}

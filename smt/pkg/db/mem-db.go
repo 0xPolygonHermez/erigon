@@ -2,18 +2,37 @@ package db
 
 import (
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"math/big"
 	"sync"
 )
 
 type MemDb struct {
-	Db   map[string][]string
+	Db       map[string][]string
+	LastRoot *big.Int
+
 	lock sync.RWMutex
 }
 
 func NewMemDb() *MemDb {
 	return &MemDb{
-		Db: make(map[string][]string),
+		Db:       make(map[string][]string),
+		LastRoot: big.NewInt(0),
 	}
+}
+
+func (m *MemDb) GetLastRoot() (*big.Int, error) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	return m.LastRoot, nil
+}
+
+func (m *MemDb) SetLastRoot(value *big.Int) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.LastRoot = value
+	return nil
 }
 
 func (m *MemDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {

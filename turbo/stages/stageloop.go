@@ -112,11 +112,6 @@ func StageLoop(
 		log.Error("Failed to create HermezRpcRoot bucket", "err", err)
 		return
 	}
-	err = trw.CreateBucket("HermezCalculatedSmtRoot")
-	if err != nil {
-		log.Error("Failed to create HermezCalculatedSmtRoot bucket", "err", err)
-		return
-	}
 	if err := trw.Commit(); err != nil {
 		log.Error("Failed to commit transaction to add new zkevm batch tables", "err", err)
 		return

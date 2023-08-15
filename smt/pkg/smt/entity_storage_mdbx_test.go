@@ -18,14 +18,75 @@ func TestGenesisMdbx(t *testing.T) {
 	runGenesisTestMdbx(t, "testdata/mainnet-genesis.json")
 }
 
-func TestIncrementalSMT(t *testing.T) {
-	// run one of the existing tests
+func TestSMT_Mdbx_MultipleInsert(t *testing.T) {
+	dbi, err := mdbx.NewTemporaryMdbx()
+	tx, err := dbi.BeginRw(context.Background())
+	if err != nil {
+		t.Fatal("Failed to open db: ", err)
+	}
+	sdb := db2.NewEriDb(tx)
 
-	// add some data to the SMT
+	testCases := []struct {
+		root  *big.Int
+		key   *big.Int
+		value *big.Int
+		want  string
+		mode  string
+	}{
+		{
+			big.NewInt(0),
+			big.NewInt(1),
+			big.NewInt(1),
+			"0xb26e0de762d186d2efc35d9ff4388def6c96ec15f942d83d779141386fe1d2e1",
+			"insertNotFound",
+		},
+		{
+			nil,
+			big.NewInt(2),
+			big.NewInt(2),
+			"0xa399847134a9987c648deabc85a7310fbe854315cbeb6dc3a7efa1a4fa2a2c86",
+			"insertFound",
+		},
+		{
+			nil,
+			big.NewInt(3),
+			big.NewInt(3),
+			"0xb5a4b1b7a8c3a7c11becc339bbd7f639229cd14f14f76ee3a0e9170074399da4",
+			"insertFound",
+		},
+	}
 
-	// verify the root updated correctly
+	var root *big.Int
+	for i, testCase := range testCases {
+		if i > 0 {
+			testCase.root = root
+		}
 
-	// the best way to verify the root is to run the in mem db, and then the MDBX db and compare the roots when adding the same data
+		tr := new(big.Int).SetInt64(0)
+		if i > 0 {
+			x, _ := new(big.Int).SetString(testCases[i-1].want[2:], 16)
+			tr = x
+		}
+
+		s := NewSMT(sdb)
+
+		s.SetLastRoot(tr)
+		r, err := s.InsertBI(testCase.key, testCase.value)
+		if err != nil {
+			t.Errorf("Test case %d: Insert failed: %v", i, err)
+			continue
+		}
+
+		got := toHex(r.NewRoot)
+		if got != testCase.want {
+			t.Errorf("Test case %d: Root hash is not as expected, got %v, want %v", i, got, testCase.want)
+		}
+		if testCase.mode != r.Mode {
+			t.Errorf("Test case %d: Mode is not as expected, got %v, want %v", i, r.Mode, testCase.mode)
+		}
+
+		root = r.NewRoot
+	}
 }
 
 func BenchmarkGenesisMdbx(b *testing.B) {

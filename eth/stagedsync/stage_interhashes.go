@@ -369,11 +369,6 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	}
 	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
 
-	// store the root in the db for preload in the tree in incremental intermediate hashes
-	err = db.Put("HermezCalculatedSmtRoot", []byte("latest"), hash.Bytes())
-	if err != nil {
-		return trie.EmptyRoot, err
-	}
 	return hash, nil
 }
 
@@ -1039,17 +1034,10 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 	fmt.Println("[zkevm] interhashes - previous root @: ", s.BlockNumber)
 	fmt.Println("[zkevm] interhashes - calculating root @: ", to)
 
-	lastRoot, err := db.GetOne("HermezCalculatedSmtRoot", []byte("latest"))
-	if err != nil {
-		return libcommon.Hash{}, err
-	}
-
-	fmt.Println("[zkevm] interhashes - last root: ", libcommon.BytesToHash(lastRoot).Hex())
-
 	psr := state2.NewPlainStateReader(db)
 
 	eridb := db2.NewEriDb(db)
-	dbSmt := smt.NewSMTWithRoot(eridb, libcommon.BytesToHash(lastRoot).Big())
+	dbSmt := smt.NewSMT(eridb)
 
 	ac, err := db.CursorDupSort(kv.AccountChangeSet)
 	if err != nil {
@@ -1065,7 +1053,7 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 
 	// NB: changeset tables are zero indexed
 	// changeset tables contain historical value at N-1, so we look up values from plainstate
-	for i := s.BlockNumber + 1; i <= to; i++ {
+	for i := s.BlockNumber; i <= to; i++ {
 		dupSortKey := dbutils.EncodeBlockNumber(i)
 
 		fmt.Println("[zkevm] interhashes - block: ", i)
@@ -1165,11 +1153,6 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 	}
 	_ = jsonData
 	fmt.Println(string(jsonData))
-
-	err = db.Put("HermezCalculatedSmtRoot", []byte("latest"), dbSmt.LastRoot().Bytes())
-	if err != nil {
-		return trie.EmptyRoot, err
-	}
 
 	return libcommon.BigToHash(dbSmt.LastRoot()), nil
 }

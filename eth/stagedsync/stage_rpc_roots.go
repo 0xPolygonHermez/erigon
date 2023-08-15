@@ -61,7 +61,7 @@ func RpcRootsForward(
 		return nil
 	}
 
-	if !firstCycle {
+	if !firstCycle || true { //TODO remove true
 		res := scalable.DownloadScalableHashes(ctx, "zkevm-roots.json", int64(txNo), false, int64(prog))
 		err = putRootsInDb(tx, res)
 		if err != nil {
