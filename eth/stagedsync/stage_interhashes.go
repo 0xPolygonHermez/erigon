@@ -138,11 +138,6 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		}
 	}
 	_ = quit
-	//} else {
-	//	if root, err = incrementIntermediateHashes(logPrefix, s, tx, to, cfg, expectedRootHash, quit); err != nil {
-	//		return trie.EmptyRoot, err
-	//	}
-	//}
 
 	if cfg.checkRoot && root != expectedRootHash {
 		log.Error(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
@@ -1070,7 +1065,7 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 
 	// NB: changeset tables are zero indexed
 	// changeset tables contain historical value at N-1, so we look up values from plainstate
-	for i := s.BlockNumber; i < to; i++ {
+	for i := s.BlockNumber + 1; i <= to; i++ {
 		dupSortKey := dbutils.EncodeBlockNumber(i)
 
 		fmt.Println("[zkevm] interhashes - block: ", i)
@@ -1101,12 +1096,16 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 				return trie.EmptyRoot, err
 			}
 
-			code, err := psr.ReadAccountCode(addr, currAcc.Incarnation, currAcc.CodeHash)
+			// store the contract bytecode
+			cc, err := psr.ReadAccountCode(addr, currAcc.Incarnation, currAcc.CodeHash)
 			if err != nil {
 				return trie.EmptyRoot, err
 			}
-			if len(code) > 0 {
-				err = updateCodeInTree(dbSmt, addr, code)
+
+			ach := hexutils.BytesToHex(cc)
+			if len(ach) > 0 {
+				hexcc := fmt.Sprintf("0x%s", ach)
+				err = updateCodeInTree(dbSmt, addr.String(), hexcc)
 				if err != nil {
 					return trie.EmptyRoot, err
 				}
@@ -1139,8 +1138,11 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 
 				fmt.Println(value)
 
+				stkk := fmt.Sprintf("0x%032x", stk)
+				v := fmt.Sprintf("0x%032x", libcommon.BytesToHash(value))
+
 				m := make(map[string]string)
-				m[stk.String()] = libcommon.BytesToHash(value).String()
+				m[stkk] = v
 				x.Storage[stk.String()] = libcommon.BytesToHash(value).String()
 
 				fmt.Printf("key: %s, value: %s\n", stk.String(), libcommon.BytesToHash(value).String())
@@ -1183,8 +1185,6 @@ func updateStorageInTree(smt *smt.SMT, addr libcommon.Address, as map[string]str
 	return err
 }
 
-func updateCodeInTree(smt *smt.SMT, addr libcommon.Address, code []byte) error {
-	ach := hexutils.BytesToHex(code)
-	hexcc := fmt.Sprintf("0x%s", ach)
-	return smt.SetContractBytecode(addr.String(), hexcc)
+func updateCodeInTree(smt *smt.SMT, addr string, code string) error {
+	return smt.SetContractBytecode(addr, code)
 }
