@@ -172,12 +172,12 @@ type MyStruct struct {
 	Nonce   *big.Int
 }
 
-var collection = make(map[libcommon.Address]MyStruct)
+var collection = make(map[libcommon.Address]*MyStruct)
 
 func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address) (*big.Int, error) {
 
 	//fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
-	collection[addr] = MyStruct{
+	collection[addr] = &MyStruct{
 		Storage: as,
 		Balance: a.Balance.ToBig(),
 		Nonce:   new(big.Int).SetUint64(a.Nonce),
@@ -1090,6 +1090,14 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 				return trie.EmptyRoot, err
 			}
 
+			x := &MyStruct{
+				Balance: currAcc.Balance.ToBig(),
+				Nonce:   new(big.Int).SetUint64(currAcc.Nonce),
+			}
+			if collection[addr] != nil {
+				x = collection[addr]
+			}
+
 			ach := hexutils.BytesToHex(cc)
 			if len(ach) > 0 {
 				hexcc := fmt.Sprintf("0x%s", ach)
@@ -1097,12 +1105,6 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 				if err != nil {
 					return trie.EmptyRoot, err
 				}
-			}
-
-			x := MyStruct{
-				Storage: make(map[string]string),
-				Balance: currAcc.Balance.ToBig(),
-				Nonce:   new(big.Int).SetUint64(currAcc.Nonce),
 			}
 
 			storageKey := append(dupSortKey, addr.Bytes()...)
@@ -1131,6 +1133,9 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 
 				m := make(map[string]string)
 				m[stkk] = v
+				if x.Storage == nil {
+					x.Storage = make(map[string]string)
+				}
 				x.Storage[stk.String()] = libcommon.BytesToHash(value).String()
 
 				fmt.Printf("key: %s, value: %s\n", stk.String(), libcommon.BytesToHash(value).String())
