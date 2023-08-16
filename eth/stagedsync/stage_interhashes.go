@@ -41,7 +41,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/turbo/trie"
-	"github.com/ledgerwatch/erigon/zkevm/adapter"
 	"github.com/status-im/keycard-go/hexutils"
 )
 
@@ -1051,12 +1050,18 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 	}
 	defer sc.Close()
 
+	accChanges := make(map[libcommon.Address]*accounts.Account)
+	codeChanges := make(map[libcommon.Address]string)
+	storageChanges := make(map[libcommon.Address]map[string]string)
+
 	// NB: changeset tables are zero indexed
 	// changeset tables contain historical value at N-1, so we look up values from plainstate
-	for i := s.BlockNumber; i <= to; i++ {
+	for i := s.BlockNumber + 1; i <= to; i++ {
 		dupSortKey := dbutils.EncodeBlockNumber(i)
 
 		fmt.Println("[zkevm] interhashes - block: ", i)
+
+		// collect changes to accounts and code
 		for k, v, err := ac.SeekExact(dupSortKey); err == nil && v != nil; k, v, err = ac.NextDup() {
 			fmt.Println(k)
 			addr := libcommon.BytesToAddress(v[:length.Addr])
@@ -1066,8 +1071,6 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 				return trie.EmptyRoot, err
 			}
 
-			fmt.Println("[zkevm] interhashes - account: ", addr.Hex())
-
 			oldAcc := &accounts.Account{}
 			if len(v[length.Addr:]) != 0 {
 				err := oldAcc.DecodeForStorage(v[length.Addr:])
@@ -1076,90 +1079,110 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 				}
 			}
 
-			fmt.Println(oldAcc)
-			fmt.Println(currAcc)
+			// store the account
+			accChanges[addr] = currAcc
 
-			err = updateAccInTree(dbSmt, addr, currAcc)
-			if err != nil {
-				return trie.EmptyRoot, err
-			}
-
-			// store the contract bytecode
+			// TODO: figure out if we can optimise for performance by making this optional, only on 'creation' or similar
 			cc, err := psr.ReadAccountCode(addr, currAcc.Incarnation, currAcc.CodeHash)
 			if err != nil {
 				return trie.EmptyRoot, err
 			}
 
-			x := &MyStruct{
-				Balance: currAcc.Balance.ToBig(),
-				Nonce:   new(big.Int).SetUint64(currAcc.Nonce),
-			}
-			if collection[addr] != nil {
-				x = collection[addr]
-			}
-
 			ach := hexutils.BytesToHex(cc)
 			if len(ach) > 0 {
 				hexcc := fmt.Sprintf("0x%s", ach)
-				err = updateCodeInTree(dbSmt, addr.String(), hexcc)
+				codeChanges[addr] = hexcc
 				if err != nil {
 					return trie.EmptyRoot, err
 				}
 			}
-
-			storageKey := append(dupSortKey, addr.Bytes()...)
-			incarnationBytes := adapter.UintBytes(currAcc.Incarnation)
-			storageKey = append(storageKey, incarnationBytes...)
-
-			for sk, sv, serr := sc.SeekExact(storageKey); serr == nil && sv != nil; sk, sv, serr = sc.NextDup() {
-				fmt.Println(sk)
-				changesetKey := sk[length.BlockNum:]
-				address, incarnation := dbutils.PlainParseStoragePrefix(changesetKey)
-
-				fmt.Println("updating storage for: " + address.Hex())
-
-				sstorageKey := sv[:length.Hash]
-				stk := libcommon.BytesToHash(sstorageKey)
-
-				value, err := psr.ReadAccountStorage(address, incarnation, &stk)
-				if err != nil {
-					return trie.EmptyRoot, err
-				}
-
-				fmt.Println(value)
-
-				stkk := fmt.Sprintf("0x%032x", stk)
-				v := fmt.Sprintf("0x%032x", libcommon.BytesToHash(value))
-
-				m := make(map[string]string)
-				m[stkk] = v
-				if x.Storage == nil {
-					x.Storage = make(map[string]string)
-				}
-				x.Storage[stk.String()] = libcommon.BytesToHash(value).String()
-
-				fmt.Printf("key: %s, value: %s\n", stk.String(), libcommon.BytesToHash(value).String())
-
-				err = updateStorageInTree(dbSmt, address, m)
-				if err != nil {
-					return trie.EmptyRoot, err
-				}
-			}
-
-			collection[addr] = x
 		}
 
-		fmt.Println(dbSmt.LastRoot())
+		err = db.ForPrefix(kv.StorageChangeSet, dupSortKey, func(sk, sv []byte) error {
+			changesetKey := sk[length.BlockNum:]
+			address, incarnation := dbutils.PlainParseStoragePrefix(changesetKey)
+
+			sstorageKey := sv[:length.Hash]
+			stk := libcommon.BytesToHash(sstorageKey)
+
+			value, err := psr.ReadAccountStorage(address, incarnation, &stk)
+			if err != nil {
+				return err
+			}
+
+			stkk := fmt.Sprintf("0x%032x", stk)
+			v := fmt.Sprintf("0x%032x", libcommon.BytesToHash(value))
+
+			m := make(map[string]string)
+			m[stkk] = v
+
+			if storageChanges[address] == nil {
+				storageChanges[address] = make(map[string]string)
+			}
+			storageChanges[address][stkk] = v
+			return nil
+		})
+
+		// update the tree
+		for addr, acc := range accChanges {
+			err := updateAccInTree(dbSmt, addr, acc)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+		}
+		for addr, code := range codeChanges {
+			err := updateCodeInTree(dbSmt, addr.String(), code)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+		}
+
+		for addr, storage := range storageChanges {
+			err := updateStorageInTree(dbSmt, addr, storage)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+		}
 	}
 
-	jsonData, err := json.MarshalIndent(collection, "", "    ")
-	if err != nil {
-		fmt.Printf("error: %v\n", err)
-	}
-	_ = jsonData
-	fmt.Println(string(jsonData))
+	hash := libcommon.BigToHash(dbSmt.LastRoot())
 
-	return libcommon.BigToHash(dbSmt.LastRoot()), nil
+	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
+	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
+
+	if cfg.checkRoot && hash != *expectedRootHash {
+		// [zkevm] - check against the rpc get block by number
+		// get block number
+		ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+		key := libcommon.HexToHash("0x0")
+
+		txno, err2 := psr.ReadAccountStorage(ss, 1, &key)
+		if err2 != nil {
+			return trie.EmptyRoot, err
+		}
+		// convert txno to big int
+		bigTxNo := big.NewInt(0)
+		bigTxNo.SetBytes(txno)
+
+		fmt.Println("[zkevm] interhashes - txno: ", bigTxNo)
+
+		sr, err2 := stateRootByTxNo(bigTxNo)
+		if err2 != nil {
+			return trie.EmptyRoot, err
+		}
+
+		if hash != *sr {
+			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
+			return hash, nil
+		}
+
+		log.Info("[zkevm] interhashes - trie root matches rpc get block by number")
+		*expectedRootHash = *sr
+		err = nil
+	}
+	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
+
+	return hash, nil
 }
 
 func updateAccInTree(smt *smt.SMT, addr libcommon.Address, acc *accounts.Account) error {
