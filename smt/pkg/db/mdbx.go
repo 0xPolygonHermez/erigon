@@ -48,6 +48,10 @@ func (m *EriDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 		return utils.NodeValue12{}, err
 	}
 
+	if data == nil {
+		return utils.NodeValue12{}, nil
+	}
+
 	vConc := utils.ConvertHexToBigInt(string(data))
 	val := utils.ScalarToNodeValue(vConc)
 

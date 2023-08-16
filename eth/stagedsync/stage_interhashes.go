@@ -1062,21 +1062,12 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 		fmt.Println("[zkevm] interhashes - block: ", i)
 
 		// collect changes to accounts and code
-		for k, v, err := ac.SeekExact(dupSortKey); err == nil && v != nil; k, v, err = ac.NextDup() {
-			fmt.Println(k)
+		for _, v, err := ac.SeekExact(dupSortKey); err == nil && v != nil; _, v, err = ac.NextDup() {
 			addr := libcommon.BytesToAddress(v[:length.Addr])
 
 			currAcc, err := psr.ReadAccountData(addr)
 			if err != nil {
 				return trie.EmptyRoot, err
-			}
-
-			oldAcc := &accounts.Account{}
-			if len(v[length.Addr:]) != 0 {
-				err := oldAcc.DecodeForStorage(v[length.Addr:])
-				if err != nil {
-					return trie.EmptyRoot, err
-				}
 			}
 
 			// store the account
