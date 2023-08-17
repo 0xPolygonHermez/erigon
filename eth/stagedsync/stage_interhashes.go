@@ -127,7 +127,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		tooBigJump = s.BlockNumber < n
 	}
 
-	if s.BlockNumber == 0 || tooBigJump {
+	if s.BlockNumber == 0 { //|| tooBigJump {
 		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx); err != nil {
 			return trie.EmptyRoot, err
 		}
@@ -1134,12 +1134,12 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 				return trie.EmptyRoot, err
 			}
 		}
+	}
 
-		err = verifyLastHash(dbSmt, expectedRootHash, &cfg, psr, logPrefix)
-		if err != nil {
-			fmt.Println("failed to verify hash at block: ", i)
-			return trie.EmptyRoot, err
-		}
+	err = verifyLastHash(dbSmt, expectedRootHash, &cfg, psr, logPrefix)
+	if err != nil {
+		fmt.Println("failed to verify hash")
+		return trie.EmptyRoot, err
 	}
 
 	hash := libcommon.BigToHash(dbSmt.LastRoot())

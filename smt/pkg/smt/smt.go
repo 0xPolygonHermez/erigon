@@ -349,9 +349,6 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 				}
 				siblings[level+1] = &sl
 
-				x := siblings[level+1].IsFinalNode()
-				_ = x
-
 				if siblings[level+1].IsFinalNode() {
 					valH := siblings[level+1].Get4to8()
 					preValA, err := s.Db.Get(*valH)
