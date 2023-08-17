@@ -335,6 +335,11 @@ func TestIsFinalNode(t *testing.T) {
 			value: NodeValue12{big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)},
 			want:  false,
 		},
+		{
+			name:  "Nil value at 9th element",
+			value: NodeValue12{big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, big.NewInt(0), big.NewInt(0), big.NewInt(0)},
+			want:  true,
+		},
 	}
 
 	for _, tt := range cases {
@@ -558,6 +563,64 @@ func TestScalarToNodeValue(t *testing.T) {
 	for i := range originalValues {
 		if result[i].Cmp(originalValues[i]) != 0 {
 			t.Errorf("Element %d: expected %s, got %s", i, originalValues[i], result[i])
+		}
+	}
+}
+
+func TestScalarToNodeValue8(t *testing.T) {
+	// Define the array of original values
+	originalValues := [8]*big.Int{
+		big.NewInt(1),
+		big.NewInt(2),
+		big.NewInt(3),
+		big.NewInt(4),
+		big.NewInt(5),
+		big.NewInt(6),
+		big.NewInt(7),
+		big.NewInt(8),
+	}
+
+	// Create a big scalar that is the concatenation of the 12 original values
+	scalar := new(big.Int)
+	for i := 7; i >= 0; i-- {
+		scalar.Lsh(scalar, 64)
+		scalar.Or(scalar, originalValues[i])
+	}
+
+	// Call the function to test
+	result := ScalarToNodeValue8(scalar)
+
+	// Check that each element of the result matches the corresponding original value
+	for i := range originalValues {
+		if result[i].Cmp(originalValues[i]) != 0 {
+			t.Errorf("Element %d: expected %s, got %s", i, originalValues[i], result[i])
+		}
+	}
+}
+
+func TestValue8FromBigIntArray(t *testing.T) {
+	tests := []struct {
+		input  []*big.Int
+		output NodeValue8
+	}{
+		{
+			input:  []*big.Int{big.NewInt(1), big.NewInt(2), big.NewInt(3)},
+			output: NodeValue8{big.NewInt(1), big.NewInt(2), big.NewInt(3), nil, nil, nil, nil, nil},
+		},
+		{
+			input:  []*big.Int{big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(4), big.NewInt(5), big.NewInt(6), big.NewInt(7), big.NewInt(8)},
+			output: NodeValue8{big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(4), big.NewInt(5), big.NewInt(6), big.NewInt(7), big.NewInt(8)},
+		},
+	}
+
+	for _, test := range tests {
+		result := Value8FromBigIntArray(test.input)
+		for i := range result {
+			if result[i] != nil && test.output[i] != nil && result[i].Cmp(test.output[i]) != 0 {
+				t.Errorf("For input %v, expected %v but got %v", test.input, test.output, result)
+			} else if (result[i] == nil && test.output[i] != nil) || (result[i] != nil && test.output[i] == nil) {
+				t.Errorf("For input %v, expected %v but got %v", test.input, test.output, result)
+			}
 		}
 	}
 }

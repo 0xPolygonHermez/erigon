@@ -115,18 +115,22 @@ func (nv *NodeValue12) Get0to8() [8]uint64 {
 	return [8]uint64{nv[0].Uint64(), nv[1].Uint64(), nv[2].Uint64(), nv[3].Uint64(), nv[4].Uint64(), nv[5].Uint64(), nv[6].Uint64(), nv[7].Uint64()}
 }
 
-func (nv *NodeValue12) IsUniqueSibling() (bool, error) {
-	has := false
+func (nv *NodeValue12) IsUniqueSibling() (int, error) {
+	count := 0
+	fnd := 0
 	a := nv[:]
 
 	for i := 0; i < len(a); i += 4 {
 		k := NodeKeyFromBigIntArray(a[i : i+4])
-		if k.IsZero() {
-			has = true
-			break
+		if !k.IsZero() {
+			count++
+			fnd = i / 4
 		}
 	}
-	return has, nil
+	if count == 1 {
+		return fnd, nil
+	}
+	return -1, nil
 }
 
 func NodeKeyFromBigIntArray(arr []*big.Int) NodeKey {
@@ -185,7 +189,10 @@ func (nv *NodeValue12) IsZero() bool {
 }
 
 func (nv *NodeValue12) IsFinalNode() bool {
-	return nv[8] != nil && nv[8].Cmp(big.NewInt(1)) == 0
+	if nv[8] == nil {
+		return false
+	}
+	return nv[8].Cmp(big.NewInt(1)) == 0
 }
 
 func ConvertBigIntToHex(n *big.Int) string {
@@ -260,9 +267,10 @@ func ScalarToRoot(s *big.Int) NodeKey {
 	return result
 }
 
-func ScalarToNodeValue(scalar *big.Int) NodeValue12 {
+func ScalarToNodeValue(scalarIn *big.Int) NodeValue12 {
 	out := [12]*big.Int{}
 	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
+	scalar := new(big.Int).Set(scalarIn)
 
 	for i := 0; i < 12; i++ {
 		value := new(big.Int).And(scalar, mask)
@@ -272,11 +280,15 @@ func ScalarToNodeValue(scalar *big.Int) NodeValue12 {
 	return out
 }
 
-func ScalarToNodeValue8(scalar *big.Int) NodeValue8 {
+func ScalarToNodeValue8(scalarIn *big.Int) NodeValue8 {
 	out := [8]*big.Int{}
+	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
+	scalar := new(big.Int).Set(scalarIn)
+
 	for i := 0; i < 8; i++ {
-		out[i] = new(big.Int).Set(scalar)
-		scalar.Lsh(scalar, 64)
+		value := new(big.Int).And(scalar, mask)
+		out[i] = value
+		scalar.Rsh(scalar, 64)
 	}
 	return out
 }

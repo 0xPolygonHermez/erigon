@@ -87,6 +87,13 @@ func TestSMT_MultipleInsert(t *testing.T) {
 			"0xb5a4b1b7a8c3a7c11becc339bbd7f639229cd14f14f76ee3a0e9170074399da4",
 			"insertFound",
 		},
+		{
+			nil,
+			big.NewInt(3),
+			big.NewInt(0),
+			"0x0f740b94e3935291daf0998666160414f14a93bb7be05ad56df4df21ff817c1d",
+			"deleteFound",
+		},
 	}
 
 	var root *big.Int
@@ -188,7 +195,29 @@ func TestSMT_AddSharedElement2(t *testing.T) {
 		t.Errorf("Insert failed: %v", err)
 	}
 	printNode(r4)
+}
 
+func TestSMT_AddRemove128Elements(t *testing.T) {
+	s := NewSMT(nil)
+	N := 128
+	var r *SMTResponse
+
+	for i := 0; i < N; i++ {
+		r, _ = s.InsertBI(big.NewInt(int64(i)), big.NewInt(int64(i+1000)))
+	}
+
+	for i := 0; i < N; i++ {
+		r, _ = s.InsertBI(big.NewInt(int64(i)), big.NewInt(0))
+		if r.Mode != "deleteFound" && i != N-1 {
+			t.Errorf("Mode is not deleteFound, got %v", r.Mode)
+		} else if r.Mode != "deleteLast" && i == N-1 {
+			t.Errorf("Mode is not deleteLast, got %v", r.Mode)
+		}
+	}
+
+	if r.NewRoot.Cmp(big.NewInt(0)) != 0 {
+		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRoot))
+	}
 }
 
 func printNode(n *SMTResponse) {

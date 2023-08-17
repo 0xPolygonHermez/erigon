@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"context"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 )
@@ -18,13 +19,99 @@ func TestGenesisMdbx(t *testing.T) {
 	runGenesisTestMdbx(t, "testdata/mainnet-genesis.json")
 }
 
-func TestSMT_Mdbx_MultipleInsert(t *testing.T) {
-	dbi, err := mdbx.NewTemporaryMdbx()
-	tx, err := dbi.BeginRw(context.Background())
+func TestSMT_Mdbx_AddRemove1Element(t *testing.T) {
+	sdb, _, err := getTempMdbx()
 	if err != nil {
-		t.Fatal("Failed to open db: ", err)
+		t.Errorf("Failed to create temp db: %v", err)
 	}
-	sdb := db2.NewEriDb(tx)
+	//defer dbi.Close()
+
+	s := NewSMT(sdb)
+
+	r, _ := s.InsertBI(big.NewInt(1), big.NewInt(2))
+	if r.Mode != "insertNotFound" {
+		t.Errorf("Mode is not insert, got %v", r.Mode)
+	}
+
+	r, _ = s.InsertBI(big.NewInt(1), big.NewInt(0))
+	if r.Mode != "deleteLast" {
+		t.Errorf("Mode is not deleteFound, got %v", r.Mode)
+	}
+
+	if r.NewRoot.Cmp(big.NewInt(0)) != 0 {
+		t.Errorf("Last root is not 0, got %v", r.NewRoot)
+	}
+}
+
+func TestSMT_Mdbx_AddRemove3Elements(t *testing.T) {
+	sdb, _, err := getTempMdbx()
+	if err != nil {
+		t.Errorf("Failed to create temp db: %v", err)
+	}
+
+	s := NewSMT(sdb)
+	N := 3
+	var r *SMTResponse
+
+	for i := 0; i < N; i++ {
+		r, _ = s.InsertBI(big.NewInt(int64(i)), big.NewInt(int64(i+1000)))
+	}
+
+	fmt.Println("done writing to tree")
+
+	for i := 0; i < N; i++ {
+		r, _ = s.InsertBI(big.NewInt(int64(i)), big.NewInt(0))
+		if r.Mode != "deleteFound" && i != N-1 {
+			t.Errorf("Mode is not deleteFound, got %v", r.Mode)
+		} else if r.Mode != "deleteLast" && i == N-1 {
+			t.Errorf("Mode is not deleteLast, got %v", r.Mode)
+		}
+	}
+
+	newR := s.LastRoot()
+
+	if newR.Cmp(big.NewInt(0)) != 0 {
+		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRoot))
+	}
+}
+
+func TestSMT_Mdbx_AddRemove128Elements(t *testing.T) {
+	sdb, _, err := getTempMdbx()
+	if err != nil {
+		t.Errorf("Failed to create temp db: %v", err)
+	}
+
+	s := NewSMT(sdb)
+	N := 128
+	var r *SMTResponse
+
+	for i := 0; i < N; i++ {
+		r, _ = s.InsertBI(big.NewInt(int64(i)), big.NewInt(int64(i+1000)))
+	}
+
+	fmt.Println("done writing to tree")
+
+	for i := 0; i < N; i++ {
+		r, _ = s.InsertBI(big.NewInt(int64(i)), big.NewInt(0))
+		if r.Mode != "deleteFound" && i != N-1 {
+			t.Errorf("Mode is not deleteFound, got %v", r.Mode)
+		} else if r.Mode != "deleteLast" && i == N-1 {
+			t.Errorf("Mode is not deleteLast, got %v", r.Mode)
+		}
+	}
+
+	newR := s.LastRoot()
+
+	if newR.Cmp(big.NewInt(0)) != 0 {
+		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRoot))
+	}
+}
+
+func TestSMT_Mdbx_MultipleInsert(t *testing.T) {
+	sdb, _, err := getTempMdbx()
+	if err != nil {
+		t.Errorf("Failed to create temp db: %v", err)
+	}
 
 	testCases := []struct {
 		root  *big.Int
@@ -53,6 +140,13 @@ func TestSMT_Mdbx_MultipleInsert(t *testing.T) {
 			big.NewInt(3),
 			"0xb5a4b1b7a8c3a7c11becc339bbd7f639229cd14f14f76ee3a0e9170074399da4",
 			"insertFound",
+		},
+		{
+			big.NewInt(0),
+			big.NewInt(3),
+			big.NewInt(0),
+			"0x000000",
+			"deleteFound",
 		},
 	}
 
@@ -203,4 +297,14 @@ func runTestVectorsMdbx(t *testing.T, filename string) {
 			}
 		})
 	}
+}
+
+func getTempMdbx() (*db2.EriDb, kv.RwDB, error) {
+	dbi, err := mdbx.NewTemporaryMdbx()
+	tx, err := dbi.BeginRw(context.Background())
+	if err != nil {
+		return nil, nil, err
+	}
+	sdb := db2.NewEriDb(tx)
+	return sdb, dbi, nil
 }

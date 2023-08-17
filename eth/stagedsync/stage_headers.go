@@ -113,6 +113,7 @@ func SpawnStageHeaders(
 	return HeadersZK(s, u, ctx, tx, cfg, initialCycle, test)
 
 	/*
+		defer dbi.Close()
 		if initialCycle && cfg.snapshots != nil && cfg.snapshots.Cfg().Enabled {
 			if err := cfg.hd.AddHeadersFromSnapshot(tx, cfg.snapshots.BlocksAvailable(), cfg.blockReader); err != nil {
 				return err

@@ -1134,44 +1134,15 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 				return trie.EmptyRoot, err
 			}
 		}
+
+		err = verifyLastHash(dbSmt, expectedRootHash, &cfg, psr, logPrefix)
+		if err != nil {
+			fmt.Println("failed to verify hash at block: ", i)
+			return trie.EmptyRoot, err
+		}
 	}
 
 	hash := libcommon.BigToHash(dbSmt.LastRoot())
-
-	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
-	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
-
-	if cfg.checkRoot && hash != *expectedRootHash {
-		// [zkevm] - check against the rpc get block by number
-		// get block number
-		ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-		key := libcommon.HexToHash("0x0")
-
-		txno, err2 := psr.ReadAccountStorage(ss, 1, &key)
-		if err2 != nil {
-			return trie.EmptyRoot, err
-		}
-		// convert txno to big int
-		bigTxNo := big.NewInt(0)
-		bigTxNo.SetBytes(txno)
-
-		fmt.Println("[zkevm] interhashes - txno: ", bigTxNo)
-
-		sr, err2 := stateRootByTxNo(bigTxNo)
-		if err2 != nil {
-			return trie.EmptyRoot, err
-		}
-
-		if hash != *sr {
-			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
-			return hash, nil
-		}
-
-		log.Info("[zkevm] interhashes - trie root matches rpc get block by number")
-		*expectedRootHash = *sr
-		err = nil
-	}
-	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
 
 	return hash, nil
 }
@@ -1189,4 +1160,45 @@ func updateStorageInTree(smt *smt.SMT, addr libcommon.Address, as map[string]str
 
 func updateCodeInTree(smt *smt.SMT, addr string, code string) error {
 	return smt.SetContractBytecode(addr, code)
+}
+
+func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *TrieCfg, psr *state2.PlainStateReader, logPrefix string) error {
+	hash := libcommon.BigToHash(dbSmt.LastRoot())
+
+	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
+	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
+
+	if cfg.checkRoot && hash != *expectedRootHash {
+		// [zkevm] - check against the rpc get block by number
+		// get block number
+		ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+		key := libcommon.HexToHash("0x0")
+
+		txno, err := psr.ReadAccountStorage(ss, 1, &key)
+		if err != nil {
+			return err
+		}
+		// convert txno to big int
+		bigTxNo := big.NewInt(0)
+		bigTxNo.SetBytes(txno)
+
+		fmt.Println("[zkevm] interhashes - txno: ", bigTxNo)
+
+		sr, err := stateRootByTxNo(bigTxNo)
+		if err != nil {
+			return err
+		}
+
+		*expectedRootHash = *sr
+
+		if hash != *sr {
+			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
+			return nil
+		}
+
+		log.Info("[zkevm] interhashes - trie root matches rpc get block by number")
+		err = nil
+	}
+	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
+	return nil
 }

@@ -137,10 +137,6 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 		Mode:    "not run",
 	}
 
-	if k.IsZero() && v.IsZero() {
-		return smtResponse, nil
-	}
-
 	// split the key
 	keys := k.GetPath()
 
@@ -194,7 +190,7 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 
 	proofHashCounter = 0
 	if !oldRoot.IsZero() {
-		utils.RemoveOver(siblings, level+1)
+		//utils.RemoveOver(siblings, level+1)
 		proofHashCounter += len(siblings)
 		if foundVal.IsZero() {
 			proofHashCounter += 2
@@ -335,7 +331,7 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 		oldValue = foundVal
 		if level >= 0 {
 			for j := 0; j < 4; j++ {
-				siblings[level][keys[level]*4+j] = nil
+				siblings[level][keys[level]*4+j] = big.NewInt(0)
 			}
 
 			uKey, err := siblings[level].IsUniqueSibling()
@@ -343,15 +339,18 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 				return nil, err
 			}
 
-			if uKey {
+			if uKey >= 0 {
 				// DELETE FOUND
 				smtResponse.Mode = "deleteFound"
-				dk := utils.NodeKeyFromBigIntArray(siblings[level][4:8])
+				dk := utils.NodeKeyFromBigIntArray(siblings[level][uKey*4 : uKey*4+4])
 				sl, err := s.Db.Get(dk)
 				if err != nil {
 					return nil, err
 				}
 				siblings[level+1] = &sl
+
+				x := siblings[level+1].IsFinalNode()
+				_ = x
 
 				if siblings[level+1].IsFinalNode() {
 					valH := siblings[level+1].Get4to8()
@@ -364,11 +363,11 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 					proofHashCounter += 2
 
 					val := utils.ArrayToScalar(valA[:])
-					insKey = utils.JoinKey(append(usedKey, 1), *rKey)
+					insKey = utils.JoinKey(append(usedKey, uKey), *rKey)
 					insValue = utils.ScalarToNodeValue8(val)
 					isOld0 = false
 
-					for uKey && level >= 0 {
+					for uKey >= 0 && level >= 0 {
 						level -= 1
 						if level >= 0 {
 							uKey, err = siblings[level].IsUniqueSibling()
@@ -451,10 +450,10 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 
 func (s *SMT) HashSave(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
 	cacheKey := fmt.Sprintf("%v-%v", in, capacity)
-	if cachedValue, exists := s.Cache.Get(cacheKey); exists {
-		s.CacheHitFrequency[cacheKey]++
-		return cachedValue.([4]uint64), nil
-	}
+	//if cachedValue, exists := s.Cache.Get(cacheKey); exists {
+	//	s.CacheHitFrequency[cacheKey]++
+	//	return cachedValue.([4]uint64), nil
+	//}
 
 	h, err := utils.Hash(in, capacity)
 	if err != nil {
