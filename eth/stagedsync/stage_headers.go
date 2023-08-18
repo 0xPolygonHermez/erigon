@@ -34,10 +34,9 @@ import (
 
 type ZkSynchronizer interface {
 	Sync(kv.RwDB, kv.RwTx, bool, func(ctx context.Context, db kv.RwDB, tx kv.RwTx) (kv.RwTx, error)) (kv.RwTx, error)
-	SyncPreTip(kv.RwTx, uint64, ZkProgress) (uint64, error)
+	SyncPreTip(tx kv.RwTx, chunkSize uint64, progress ZkProgress) (uint64, error)
+	SyncTip(tx kv.RwTx, progress ZkProgress) error
 	GetProgress(kv.RwTx) ZkProgress
-	GetLatestVerifiedBatchNumber() (uint64, error)
-	GetLatestSequencedBatchNumber() (uint64, error)
 }
 
 // The number of blocks we should be able to re-org sub-second on commodity hardware.

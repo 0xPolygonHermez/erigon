@@ -32,16 +32,13 @@ type Synchronizer interface {
 
 // ClientSynchronizer connects L1 and L2
 type ClientSynchronizer struct {
-	isTrustedSequencer        bool
-	etherMan                  ethermanInterface
-	state                     stateInterface
-	zkEVMClient               zkEVMClientInterface
-	ctx                       context.Context
-	cancelCtx                 context.CancelFunc
-	cfg                       Config
-	restrictAtL1Block         uint64
-	restrictAtL2Batch         uint64
-	restrictAtL2VerifiedBatch uint64
+	isTrustedSequencer bool
+	etherMan           ethermanInterface
+	state              stateInterface
+	zkEVMClient        zkEVMClientInterface
+	ctx                context.Context
+	cancelCtx          context.CancelFunc
+	cfg                Config
 }
 
 // NewSynchronizer creates and initializes an instance of Synchronizer
@@ -63,29 +60,10 @@ func NewSynchronizer(
 		cancelCtx:          cancel,
 		zkEVMClient:        zkEVMClient,
 		cfg:                cfg,
-		// [zkevm] - restrict progress
-		restrictAtL1Block: 0,
-		restrictAtL2Batch: 0,
 	}, nil
 }
 
 var waitDuration = time.Duration(0)
-
-func (s *ClientSynchronizer) GetLatestVerifiedBatchNumber() (uint64, error) {
-	latestVerifiedBatchNumber, err := s.etherMan.GetLatestVerifiedBatchNum()
-	if err != nil {
-		return 0, err
-	}
-	return latestVerifiedBatchNumber, nil
-}
-
-func (s *ClientSynchronizer) GetLatestSequencedBatchNumber() (uint64, error) {
-	latestSequencedBatchNumber, err := s.etherMan.GetLatestBatchNumber()
-	if err != nil {
-		return 0, err
-	}
-	return latestSequencedBatchNumber, nil
-}
 
 func (s *ClientSynchronizer) GetProgress(tx kv.RwTx) stagedsync.ZkProgress {
 	progress := stagedsync.ZkProgress{}
@@ -114,10 +92,11 @@ func (s *ClientSynchronizer) SyncPreTip(tx kv.RwTx, chunkSize uint64, progress s
 	return s.syncBlocksFromL1(tx, chunkSize, progress.LocalSyncedL1Block)
 }
 
-//
-//func (s *ClientSynchronizer) SyncTip(db dv.RwDb, tx kv.RwTx) error {
-//
-//}
+func (s *ClientSynchronizer) SyncTip(tx kv.RwTx, progress stagedsync.ZkProgress) error {
+
+	// this gets TXs from the sequencer for us to execute - writing them via the state_adapter
+	return s.syncTrustedState(tx, progress.LocalSyncedL2SequencedBatch)
+}
 
 // Sync function will read the last state synced and will continue from that point.
 // Sync() will read blockchain events to detect rollup updates
@@ -126,17 +105,17 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, initialCycle bool, sav
 	s.GetProgress(tx)
 
 	var err error
-	s.restrictAtL2VerifiedBatch, err = s.etherMan.GetLatestVerifiedBatchNum()
-	if err != nil {
-		return tx, err
-	}
+	//s.restrictAtL2VerifiedBatch, err = s.etherMan.GetLatestVerifiedBatchNum()
+	//if err != nil {
+	//	return tx, err
+	//}
 
 	lvb, err := s.state.GetLastVerifiedBatch(s.ctx, tx)
 	if err != nil {
 		return tx, err
 	}
 
-	log.Info("Virtual batches", "local", lvb.BatchNumber, "network", s.restrictAtL2VerifiedBatch, "initialCycle", initialCycle, "behind", s.restrictAtL2VerifiedBatch-lvb.BatchNumber)
+	log.Info("Virtual batches", "local", lvb.BatchNumber, "initialCycle", initialCycle)
 
 	// TODO - all the logic here can be improved for informing the sync start point
 	// Call the blockchain to get the header at the tip of the L1 chain
@@ -153,11 +132,6 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, initialCycle bool, sav
 	// hack to keep syncing when the RPC fails to return a block number
 	if l1BlockProgress.BlockNumber >= lastKnownBlock.Uint64() {
 		log.Info("L1 state fully synchronized")
-		return tx, nil
-	}
-
-	if s.restrictAtL1Block != 0 && l1BlockProgress.BlockNumber >= s.restrictAtL1Block {
-		log.Info("Restricted Sync finished")
 		return tx, nil
 	}
 
@@ -208,22 +182,10 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, initialCycle bool, sav
 				}
 			}
 
-			// TODO: remove, manually restricted sync
-			if s.restrictAtL2Batch != 0 && latestSyncedBatch >= s.restrictAtL2Batch {
-				log.Info("L1 state fully synchronized (restricted)")
-				err = s.syncTrustedState(latestSyncedBatch)
-				if err != nil {
-					log.Warn("error syncing trusted state. Error: ", err)
-					continue
-				}
-				waitDuration = s.cfg.SyncInterval.Duration
-				return tx, nil
-			}
-
 			// TODO: this is the trigger for 'tip sync'
 			if latestSyncedBatch >= latestVerifiedBatchNumber {
 				log.Info("L1 state fully synchronized")
-				err = s.syncTrustedState(latestSyncedBatch)
+				err = s.syncTrustedState(tx, latestSyncedBatch)
 				if err != nil {
 					log.Warn("error syncing trusted state. Error: ", err)
 					continue
@@ -265,10 +227,6 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		return lastEthBlockSynced, err
 	}
 	lastKnownBlock := header.Number
-
-	if s.restrictAtL1Block != 0 && lastEthBlockSynced.BlockNumber > s.restrictAtL1Block {
-		return lastEthBlockSynced, nil
-	}
 
 	var fromBlock uint64
 	if lastEthBlockSynced.BlockNumber > 0 {
@@ -322,10 +280,6 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 		}
 		fromBlock = toBlock + 1
 
-		if s.restrictAtL1Block != 0 && fromBlock > s.restrictAtL1Block {
-			break
-		}
-
 		// save progress
 		if counter%5 == 0 {
 			break
@@ -366,7 +320,7 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 // syncTrustedState synchronizes information from the trusted sequencer
 // related to the trusted state when the node has all the information from
 // l1 synchronized
-func (s *ClientSynchronizer) syncTrustedState(latestSyncedBatch uint64) error {
+func (s *ClientSynchronizer) syncTrustedState(tx kv.RwTx, latestSyncedBatch uint64) error {
 	if s.isTrustedSequencer {
 		return nil
 	}
@@ -392,28 +346,17 @@ func (s *ClientSynchronizer) syncTrustedState(latestSyncedBatch uint64) error {
 			return err
 		}
 
-		dbTx, err := s.state.BeginStateTransaction(s.ctx)
-		if err != nil {
-			log.Error("error creating db transaction to sync trusted batch", "batch", batchNumberToSync, "error", err)
-			return err
-		}
-
-		if err := s.processTrustedBatch(batchToSync, dbTx); err != nil {
+		if err := s.processTrustedBatch(batchToSync, tx); err != nil {
 			log.Error("error processing trusted batch", "batch", batchNumberToSync, "error", err)
-			//err := dbTx.Rollback(s.ctx)
+
+			// TODO: remove the batch
+
 			if err != nil {
 				log.Error("error rolling back db transaction to sync trusted batch", "batch", batchNumberToSync, "error", err)
 				return err
 			}
 			break
 		}
-
-		/*
-			if err := dbTx.Commit(s.ctx); err != nil {
-				log.Error("error committing db transaction to sync trusted batch %v: %v", batchNumberToSync, err)
-				return err
-			}
-		*/
 
 		batchNumberToSync++
 	}
@@ -481,18 +424,6 @@ func (s *ClientSynchronizer) processBlockRange(dbTx kv.RwTx, blocks []etherman.B
 				}
 			}
 		}
-		/*
-			err = dbTx.Commit(s.ctx)
-			if err != nil {
-				log.Error("error committing state to store block. BlockNumber: %d, err: %v", blocks[i].BlockNumber, err)
-				rollbackErr := dbTx.Rollback(s.ctx)
-				if rollbackErr != nil {
-					log.Error("error rolling back state to store block. BlockNumber: %d, rollbackErr: %s, error : %v", blocks[i].BlockNumber, rollbackErr.Error(), err)
-					return rollbackErr
-				}
-				return err
-			}
-		*/
 	}
 	return nil
 }

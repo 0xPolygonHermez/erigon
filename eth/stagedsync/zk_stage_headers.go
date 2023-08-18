@@ -53,7 +53,7 @@ func HeadersZK(
 
 	// add to config - chunk size is how many l1 blocks to take
 	chunkSize := uint64(100)
-	restrictAtBatch := uint64(50)
+	restrictAtBatch := uint64(0)
 	saveEvery := 1
 
 	// probably we should loop here with our commit logic etc. - and then the synchronizer should be a bit dumb without loop logic etc
@@ -85,12 +85,12 @@ func HeadersZK(
 		prg := cfg.zkSynchronizer.GetProgress(tx)
 		fmt.Printf("zk stage headers.go: prg: %+v\n", prg)
 
-		// don't go to etherman if we're already at the restriction point - possibly debug only
-		if prg.LocalSyncedL2VerifiedBatch >= restrictAtBatch {
+		// DEBUG: don't go to etherman if we're already at the restriction point
+		if restrictAtBatch != 0 && prg.LocalSyncedL2VerifiedBatch >= restrictAtBatch {
 			break
 		}
 
-		// we're nowhere near the tip at this point
+		// sync verified batches behind the tip
 		if prg.LocalSyncedL2VerifiedBatch < prg.HighestL2VerifiedBatch {
 			l1Block, err := cfg.zkSynchronizer.SyncPreTip(tx, chunkSize, prg)
 			if err != nil {
@@ -102,18 +102,17 @@ func HeadersZK(
 			}
 		}
 
+		// TODO:
+		// this next bit should call the trusted batch sync to get batches from the trusted sequencer and put them into the db tables (batches, txs)
+		// we can then execute those txs and update the state trie in memory - on reorg we can unwind execution, and these tables (naively re-sync them from common ancestor of the forks)
+		// next loop iteration will pick up any that have been verified and execute/calculate state trie into the DB
+
 		// we're at the tip - i.e. sequenced batches are coming in - we should ingest them, and execute them
-		//if prg.LocalSyncedL2VerifiedBatch == prg.HighestL2VerifiedBatch {
-		//	if err := cfg.zkSynchronizer.SyncTip(cfg.db, tx, initialCycle, commitAndReturnNewTx); err != nil {
-		//		return err
-		//	}
-		//}
-
-		//tx, err := cfg.zkSynchronizer.Sync(cfg.db, tx, initialCycle, commitAndReturnNewTx) // pass nil to turn off commit and new tx
-		//if err != nil {
-		//	return err
-		//}
-
+		if prg.LocalSyncedL2VerifiedBatch == prg.HighestL2VerifiedBatch {
+			if err := cfg.zkSynchronizer.SyncTip(tx, prg); err != nil {
+				return err
+			}
+		}
 	}
 
 	if !useExternalTx {

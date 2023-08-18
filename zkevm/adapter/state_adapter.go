@@ -15,14 +15,9 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/state/metrics"
 	"github.com/ledgerwatch/erigon/zkevm/state/runtime/executor/pb"
 
-	"bytes"
 	"encoding/json"
-	"io"
-	"net/http"
 	"strings"
 
-	"github.com/holiman/uint256"
-	ericommon "github.com/ledgerwatch/erigon/common"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 )
 
@@ -180,11 +175,6 @@ func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextFo
 
 func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx kv.RwTx) error {
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
-
-	// [zkevm] - restrict progress
-	//if verifiedBatch.BatchNumber > 541617 {
-	//	return nil
-	//}
 
 	// Get the matching batch (body) for the verified batch (header)
 	batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)
@@ -467,68 +457,6 @@ func UintBytes(no uint64) []byte {
 	noBytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(noBytes, no)
 	return noBytes
-}
-
-func getRpcRoot(ctx context.Context, txNum uint64) (common.Hash, error) {
-	txnb := UintBytes(txNum)
-	d1 := ericommon.LeftPadBytes(txnb, 32)
-	d2 := ericommon.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
-	mapKey := keccak256.Hash(d1, d2)
-	mkh := common.BytesToHash(mapKey)
-
-	url := "https://zkevm-rpc.com"
-
-	payload := map[string]interface{}{
-		"method": "eth_getStorageAt",
-		"params": []interface{}{
-			"0x000000000000000000000000000000005ca1ab1e",
-			mkh.Hex(),
-			txNum,
-		},
-		"id":      1,
-		"jsonrpc": "2.0",
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		fmt.Println(err)
-		return common.Hash{}, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payloadBytes))
-	if err != nil {
-		fmt.Println(err)
-		return common.Hash{}, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println(err)
-		return common.Hash{}, err
-	}
-
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println(err)
-		return common.Hash{}, err
-	}
-
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		fmt.Println(err)
-		return common.Hash{}, err
-	}
-
-	rpcHash := trimHexString(result["result"].(string))
-
-	h := common.HexToHash(rpcHash)
-	fmt.Println(h)
-	return h, nil
 }
 
 func trimHexString(s string) string {
