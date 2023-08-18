@@ -49,10 +49,10 @@ func NewSMT(database DB) *SMT {
 	if database == nil {
 		database = db.NewMemDb()
 	}
-	cache := gocache.NewCache().WithMaxSize(10000).WithEvictionPolicy(gocache.LeastRecentlyUsed)
+
 	return &SMT{
 		Db:                database,
-		Cache:             cache,
+		Cache:             gocache.NewCache().WithMaxSize(10000).WithEvictionPolicy(gocache.LeastRecentlyUsed),
 		CacheHitFrequency: make(map[string]int),
 	}
 }

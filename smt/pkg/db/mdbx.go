@@ -13,8 +13,15 @@ type EriDb struct {
 
 func NewEriDb(tx kv.RwTx) *EriDb {
 
-	_ = tx.CreateBucket("HermezSmt")
-	_ = tx.CreateBucket("HermezSmtLastRoot")
+	err := tx.CreateBucket("HermezSmt")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = tx.CreateBucket("HermezSmtLastRoot")
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	return &EriDb{
 		tx: tx,

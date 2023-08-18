@@ -3,8 +3,20 @@ package stagedsync
 import (
 	"context"
 
+	"fmt"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
+
+type ZkProgress struct {
+	HighestL1Block          uint64
+	HighestL2VerifiedBatch  uint64
+	HighestL2SequencedBatch uint64
+
+	LocalSyncedL1Block          uint64
+	LocalSyncedL2VerifiedBatch  uint64
+	LocalSyncedL2SequencedBatch uint64
+}
 
 func commitAndReturnNewTx(ctx context.Context, db kv.RwDB, tx kv.RwTx) (kv.RwTx, error) {
 	if err := tx.Commit(); err != nil {
@@ -28,6 +40,7 @@ func HeadersZK(
 	initialCycle bool,
 	test bool, // Set to true in tests, allows the stage to fail rather than wait indefinitely
 ) error {
+
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -38,180 +51,76 @@ func HeadersZK(
 		defer tx.Rollback()
 	}
 
-	var err error
+	// add to config - chunk size is how many l1 blocks to take
+	chunkSize := uint64(100)
+	restrictAtBatch := uint64(50)
+	saveEvery := 1
 
-	tx, err = cfg.zkSynchronizer.Sync(cfg.db, tx, commitAndReturnNewTx) // pass nil to turn off commit and new tx
-	if err != nil {
-		return err
+	// probably we should loop here with our commit logic etc. - and then the synchronizer should be a bit dumb without loop logic etc
+
+	count := 0
+
+	// loop for (desired amount of progress before commit):
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		count++
+
+		if count%saveEvery == 0 && !useExternalTx {
+			var err error
+			err = tx.Commit()
+			if err != nil {
+				return err
+			}
+			tx, err = cfg.db.BeginRw(ctx)
+			if err != nil {
+				return err
+			}
+		}
+
+		// helper func gets network + local progress for l1 l2 and verified/sequenced batches
+		prg := cfg.zkSynchronizer.GetProgress(tx)
+		fmt.Printf("zk stage headers.go: prg: %+v\n", prg)
+
+		// don't go to etherman if we're already at the restriction point - possibly debug only
+		if prg.LocalSyncedL2VerifiedBatch >= restrictAtBatch {
+			break
+		}
+
+		// we're nowhere near the tip at this point
+		if prg.LocalSyncedL2VerifiedBatch < prg.HighestL2VerifiedBatch {
+			l1Block, err := cfg.zkSynchronizer.SyncPreTip(tx, chunkSize, prg)
+			if err != nil {
+				return err
+			}
+			err = stages.SaveStageProgress(tx, stages.L1Blocks, l1Block)
+			if err != nil {
+				return err
+			}
+		}
+
+		// we're at the tip - i.e. sequenced batches are coming in - we should ingest them, and execute them
+		//if prg.LocalSyncedL2VerifiedBatch == prg.HighestL2VerifiedBatch {
+		//	if err := cfg.zkSynchronizer.SyncTip(cfg.db, tx, initialCycle, commitAndReturnNewTx); err != nil {
+		//		return err
+		//	}
+		//}
+
+		//tx, err := cfg.zkSynchronizer.Sync(cfg.db, tx, initialCycle, commitAndReturnNewTx) // pass nil to turn off commit and new tx
+		//if err != nil {
+		//	return err
+		//}
+
 	}
 
 	if !useExternalTx {
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			return err
 		}
 	}
 
 	return nil
-
-	/*
-				cfg.hd.SetPOSSync(false)
-				cfg.hd.SetFetchingNew(true)
-				defer cfg.hd.SetFetchingNew(false)
-
-			headerProgress = cfg.hd.Progress()
-			logPrefix := s.LogPrefix()
-			// Check if this is called straight after the unwinds, which means we need to create new canonical markings
-			hash, err := rawdb.ReadCanonicalHash(tx, headerProgress)
-			if err != nil {
-				return err
-			}
-
-			headerInserter := headerdownload.NewHeaderInserter(logPrefix, localTd, headerProgress, cfg.blockReader)
-			cfg.hd.SetHeaderReader(&ChainReaderImpl{config: &cfg.chainConfig, tx: tx, blockReader: cfg.blockReader})
-
-			stopped := false
-			var noProgressCounter uint = 0
-			prevProgress := headerProgress
-			var wasProgress bool
-			var lastSkeletonTime time.Time
-			var peer [64]byte
-			var sentToPeer bool
-		Loop:
-			for !stopped {
-
-				transitionedToPoS, err := rawdb.Transitioned(tx, headerProgress, cfg.chainConfig.TerminalTotalDifficulty)
-				if err != nil {
-					return err
-				}
-				if transitionedToPoS {
-					if err := s.Update(tx, headerProgress); err != nil {
-						return err
-					}
-					break
-				}
-
-				sentToPeer = false
-				currentTime := time.Now()
-				req, penalties := cfg.hd.RequestMoreHeaders(currentTime)
-				if req != nil {
-					peer, sentToPeer = cfg.headerReqSend(ctx, req)
-					if sentToPeer {
-						cfg.hd.UpdateStats(req, false, peer)
-						cfg.hd.UpdateRetryTime(req, currentTime, 5*time.Second)
-					}
-				}
-				if len(penalties) > 0 {
-					cfg.penalize(ctx, penalties)
-				}
-				maxRequests := 64 // Limit number of requests sent per round to let some headers to be inserted into the database
-				for req != nil && sentToPeer && maxRequests > 0 {
-					req, penalties = cfg.hd.RequestMoreHeaders(currentTime)
-					if req != nil {
-						peer, sentToPeer = cfg.headerReqSend(ctx, req)
-						if sentToPeer {
-							cfg.hd.UpdateStats(req, false, peer)
-							cfg.hd.UpdateRetryTime(req, currentTime, 5*time.Second)
-						}
-					}
-					if len(penalties) > 0 {
-						cfg.penalize(ctx, penalties)
-					}
-					maxRequests--
-				}
-
-				// Send skeleton request if required
-				if time.Since(lastSkeletonTime) > 1*time.Second {
-					req = cfg.hd.RequestSkeleton()
-					if req != nil {
-						peer, sentToPeer = cfg.headerReqSend(ctx, req)
-						if sentToPeer {
-							cfg.hd.UpdateStats(req, true, peer)
-							lastSkeletonTime = time.Now()
-						}
-					}
-				}
-				// Load headers into the database
-				var inSync bool
-				if inSync, err = cfg.hd.InsertHeaders(headerInserter.NewFeedHeaderFunc(tx, cfg.blockReader), cfg.chainConfig.TerminalTotalDifficulty, logPrefix, logEvery.C, uint64(currentTime.Unix())); err != nil {
-					return err
-				}
-
-				if test {
-					announces := cfg.hd.GrabAnnounces()
-					if len(announces) > 0 {
-						cfg.announceNewHashes(ctx, announces)
-					}
-				}
-
-				if headerInserter.BestHeaderChanged() { // We do not break unless there best header changed
-					noProgressCounter = 0
-					wasProgress = true
-					// if this is initial cycle, we want to make sure we insert all known headers (inSync)
-					if inSync {
-						break
-					}
-				}
-				if test {
-					break
-				}
-				timer := time.NewTimer(1 * time.Second)
-				select {
-				case <-ctx.Done():
-					stopped = true
-				case <-logEvery.C:
-					progress := cfg.hd.Progress()
-					logProgressHeaders(logPrefix, prevProgress, progress)
-					stats := cfg.hd.ExtractStats()
-					if prevProgress == progress {
-						noProgressCounter++
-					} else {
-						noProgressCounter = 0 // Reset, there was progress
-					}
-					if noProgressCounter >= 5 {
-						log.Info("Req/resp stats", "req", stats.Requests, "reqMin", stats.ReqMinBlock, "reqMax", stats.ReqMaxBlock,
-							"skel", stats.SkeletonRequests, "skelMin", stats.SkeletonReqMinBlock, "skelMax", stats.SkeletonReqMaxBlock,
-							"resp", stats.Responses, "respMin", stats.RespMinBlock, "respMax", stats.RespMaxBlock, "dups", stats.Duplicates)
-						cfg.hd.LogAnchorState()
-						if wasProgress {
-							log.Warn("Looks like chain is not progressing, moving to the next stage")
-							break Loop
-						}
-					}
-					prevProgress = progress
-				case <-timer.C:
-					log.Trace("RequestQueueTime (header) ticked")
-				case <-cfg.hd.DeliveryNotify:
-					log.Trace("headerLoop woken up by the incoming request")
-				}
-				timer.Stop()
-			}
-			if headerInserter.Unwind() {
-				u.UnwindTo(headerInserter.UnwindPoint(), libcommon.Hash{})
-			}
-			if headerInserter.GetHighest() != 0 {
-				if !headerInserter.Unwind() {
-					if err := fixCanonicalChain(logPrefix, logEvery, headerInserter.GetHighest(), headerInserter.GetHighestHash(), tx, cfg.blockReader); err != nil {
-						return fmt.Errorf("fix canonical chain: %w", err)
-					}
-				}
-				if err = rawdb.WriteHeadHeaderHash(tx, headerInserter.GetHighestHash()); err != nil {
-					return fmt.Errorf("[%s] marking head header hash as %x: %w", logPrefix, headerInserter.GetHighestHash(), err)
-				}
-				if err = s.Update(tx, headerInserter.GetHighest()); err != nil {
-					return fmt.Errorf("[%s] saving Headers progress: %w", logPrefix, err)
-				}
-			}
-			if !useExternalTx {
-				if err := tx.Commit(); err != nil {
-					return err
-				}
-			}
-			if stopped {
-				return libcommon.ErrStopped
-			}
-			// We do not print the following line if the stage was interrupted
-			log.Info(fmt.Sprintf("[%s] Processed", logPrefix), "highest inserted", headerInserter.GetHighest(), "age", common.PrettyAge(time.Unix(int64(headerInserter.GetHighestTimestamp()), 0)))
-
-			return nil
-	*/
 }

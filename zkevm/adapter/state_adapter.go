@@ -182,9 +182,9 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
 	// [zkevm] - restrict progress
-	if verifiedBatch.BatchNumber > 60 {
-		return nil
-	}
+	//if verifiedBatch.BatchNumber > 541617 {
+	//	return nil
+	//}
 
 	// Get the matching batch (body) for the verified batch (header)
 	batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)

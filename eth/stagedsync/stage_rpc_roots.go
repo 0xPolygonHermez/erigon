@@ -83,7 +83,11 @@ func RpcRootsForward(
 		return err
 	}
 
-	return tx.Commit()
+	if !useExternalTx {
+		return tx.Commit()
+	}
+
+	return nil
 }
 
 func putRootsInDb(tx kv.RwTx, results map[int64]string) error {
