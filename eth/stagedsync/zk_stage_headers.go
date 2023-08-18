@@ -107,6 +107,9 @@ func HeadersZK(
 		// we can then execute those txs and update the state trie in memory - on reorg we can unwind execution, and these tables (naively re-sync them from common ancestor of the forks)
 		// next loop iteration will pick up any that have been verified and execute/calculate state trie into the DB
 
+		// update progress
+		prg = cfg.zkSynchronizer.GetProgress(tx)
+
 		// we're at the tip - i.e. sequenced batches are coming in - we should ingest them, and execute them
 		if prg.LocalSyncedL2VerifiedBatch == prg.HighestL2VerifiedBatch {
 			if err := cfg.zkSynchronizer.SyncTip(tx, prg); err != nil {
