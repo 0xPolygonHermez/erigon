@@ -18,18 +18,6 @@ type ZkProgress struct {
 	LocalSyncedL2SequencedBatch uint64
 }
 
-func commitAndReturnNewTx(ctx context.Context, db kv.RwDB, tx kv.RwTx) (kv.RwTx, error) {
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	tx, err := db.BeginRw(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return tx, err
-}
-
 // HeadersPOW progresses Headers stage for Proof-of-Work headers
 func HeadersZK(
 	s *StageState,
@@ -67,7 +55,7 @@ func HeadersZK(
 	}
 
 	chunkSize := uint64(2000)
-	saveEvery := 1
+	saveEvery := 5
 	count := 0
 
 	for {
@@ -107,5 +95,4 @@ func HeadersZK(
 			}
 		}
 	}
-
 }
