@@ -166,6 +166,8 @@ func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumbe
 }
 
 func (m *StateInterfaceAdapter) ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) error {
+
+	// this should remove any batch after the number passed into this func
 	panic("ResetTrustedState: implement me")
 }
 

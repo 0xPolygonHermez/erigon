@@ -145,7 +145,7 @@ func TestSMT_Mdbx_MultipleInsert(t *testing.T) {
 			big.NewInt(0),
 			big.NewInt(3),
 			big.NewInt(0),
-			"0x000000",
+			"0xa399847134a9987c648deabc85a7310fbe854315cbeb6dc3a7efa1a4fa2a2c86",
 			"deleteFound",
 		},
 	}

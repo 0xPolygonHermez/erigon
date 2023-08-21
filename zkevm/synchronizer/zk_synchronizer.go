@@ -93,8 +93,6 @@ func (s *ClientSynchronizer) SyncPreTip(tx kv.RwTx, chunkSize uint64, progress s
 }
 
 func (s *ClientSynchronizer) SyncTip(tx kv.RwTx, progress stagedsync.ZkProgress) error {
-
-	// this gets TXs from the sequencer for us to execute - writing them via the state_adapter
 	return s.syncTrustedState(tx, progress.LocalSyncedL2SequencedBatch)
 }
 
@@ -509,7 +507,7 @@ As input param needs the last ethereum block synced. Retrieve the block info fro
 to compare it with the stored info. If hash and hash parent matches, then no reorg is detected and return a nil.
 If hash or hash parent don't match, reorg detected and the function will return the block until the sync process
 must be reverted. Then, check the previous ethereum block synced, get block info from the blockchain and check
-hash and has parent. This operation has to be done until a match is found.
+hash and has parent. This operation has to be doneuntil a match is found.
 */
 func (s *ClientSynchronizer) checkReorg(latestBlock *state.Block) (*state.Block, error) {
 	// This function only needs to worry about reorgs if some of the reorganized blocks contained rollup info.
@@ -834,6 +832,11 @@ func (s *ClientSynchronizer) processSequenceBatches(sequencedBatches []etherman.
 				return err
 			}
 		} else {
+
+			// TODO: this logic needs to be moved to subsequent erigon stages
+
+			// store the batch to 'HermezTempExecution' table
+
 			// Reprocess batch to compare the stateRoot with tBatch.StateRoot and get accInputHash
 			p, err := s.state.ExecuteBatch(s.ctx, batch, false, dbTx)
 			if err != nil {
@@ -849,6 +852,9 @@ func (s *ClientSynchronizer) processSequenceBatches(sequencedBatches []etherman.
 			}
 			newRoot = common.BytesToHash(p.NewStateRoot)
 			accumulatedInputHash := common.BytesToHash(p.NewAccInputHash)
+
+			// TODO: remove this logic and move to execution stage to push to 'HermezTempSmt' table - we should open a tx at this point, calculate the new root, rollback the tx
+			// and store it fo verification
 
 			//AddAccumulatedInputHash
 			err = s.state.AddAccumulatedInputHash(s.ctx, batch.BatchNumber, accumulatedInputHash, dbTx)

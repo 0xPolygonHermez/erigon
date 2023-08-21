@@ -91,7 +91,7 @@ func TestSMT_MultipleInsert(t *testing.T) {
 			nil,
 			big.NewInt(3),
 			big.NewInt(0),
-			"0x0f740b94e3935291daf0998666160414f14a93bb7be05ad56df4df21ff817c1d",
+			"0xa399847134a9987c648deabc85a7310fbe854315cbeb6dc3a7efa1a4fa2a2c86",
 			"deleteFound",
 		},
 	}

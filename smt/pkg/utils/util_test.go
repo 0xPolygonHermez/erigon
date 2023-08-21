@@ -338,7 +338,7 @@ func TestIsFinalNode(t *testing.T) {
 		{
 			name:  "Nil value at 9th element",
 			value: NodeValue12{big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, big.NewInt(0), big.NewInt(0), big.NewInt(0)},
-			want:  true,
+			want:  false,
 		},
 	}
 

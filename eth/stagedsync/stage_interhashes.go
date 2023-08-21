@@ -5,10 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"math/big"
-	"math/bits"
-	"sync/atomic"
-
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/common/length"
@@ -20,6 +16,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/state"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
+	"math/big"
+	"math/bits"
 
 	state2 "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -214,12 +212,9 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash *libcommon.Hash, ctx context.Context) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
-	_ = db.ClearBucket(kv.TrieOfAccounts)
-	_ = db.ClearBucket(kv.TrieOfStorage)
-	clean := kv.ReadAhead(ctx, cfg.db, &atomic.Bool{}, kv.HashedAccounts, nil, math.MaxUint32)
-	defer clean()
-	clean2 := kv.ReadAhead(ctx, cfg.db, &atomic.Bool{}, kv.HashedStorage, nil, math.MaxUint32)
-	defer clean2()
+
+	_ = db.ClearBucket("HermezSmt")
+	_ = db.ClearBucket("HermezSmtLastRoot")
 
 	// [zkEVM] - read back the stored transactions and process with SMT
 

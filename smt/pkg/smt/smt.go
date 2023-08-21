@@ -447,10 +447,10 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 
 func (s *SMT) HashSave(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
 	cacheKey := fmt.Sprintf("%v-%v", in, capacity)
-	//if cachedValue, exists := s.Cache.Get(cacheKey); exists {
-	//	s.CacheHitFrequency[cacheKey]++
-	//	return cachedValue.([4]uint64), nil
-	//}
+	if cachedValue, exists := s.Cache.Get(cacheKey); exists {
+		s.CacheHitFrequency[cacheKey]++
+		return cachedValue.([4]uint64), nil
+	}
 
 	h, err := utils.Hash(in, capacity)
 	if err != nil {

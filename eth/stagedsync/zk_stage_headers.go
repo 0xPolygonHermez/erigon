@@ -87,6 +87,14 @@ func HeadersZK(
 			}
 		}
 
+		//if prg.LocalSyncedL2SequencedBatch < prg.HighestL2SequencedBatch {
+		//	// sync the tip from the l2
+		//	l2block, err := cfg.zkSynchronizer.SyncTip(tx, chunkSize, prg)
+		//	if err != nil {
+		//
+		//	}
+		//}
+
 		if count%saveEvery == 0 && !useExternalTx {
 			var err error
 			tx, err = manageTx(tx)
