@@ -61,13 +61,22 @@ func RpcRootsForward(
 		return nil
 	}
 
-	if !firstCycle || prog != 0 { //TODO remove debug prog==0
+	if !firstCycle || prog != 0 {
 		res := scalable.DownloadScalableHashes(ctx, "zkevm-roots.json", int64(txNo), false, int64(prog))
 		err = putRootsInDb(tx, res)
 		if err != nil {
 			return err
 		}
-		return stages.SaveStageProgress(tx, stages.RpcRoots, uint64(txNo))
+
+		err = stages.SaveStageProgress(tx, stages.RpcRoots, txNo)
+		if err != nil {
+			return err
+		}
+
+		if !useExternalTx {
+			return tx.Commit()
+		}
+		return nil
 	}
 
 	// checks for missing rpc hashes up to max. tx num and downloads them from the rpc

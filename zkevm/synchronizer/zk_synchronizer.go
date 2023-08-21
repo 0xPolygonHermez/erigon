@@ -198,15 +198,14 @@ func (s *ClientSynchronizer) Sync(db kv.RwDB, tx kv.RwTx, initialCycle bool, sav
 }
 
 func (s *ClientSynchronizer) syncBlocksFromL1(dbTx kv.RwTx, chunkSize, highestL1BlockSynced uint64) (uint64, error) {
-	from := highestL1BlockSynced + 1 // we can do this because no relevant logs are in the first block the contract was deployed
+	from := highestL1BlockSynced + 1
 	to := from + chunkSize
 
-	blocks, order, err := s.etherMan.GetRollupInfoByBlockRange(s.ctx, from, &to)
+	blocks, order, err := s.retryGetRollupInfoByBlockRange(from, &to)
 	if err != nil {
 		return 0, err
 	}
 
-	// return the progress but if there are no events, don't try to process
 	if len(blocks) == 0 {
 		return to, nil
 	}
@@ -217,6 +216,36 @@ func (s *ClientSynchronizer) syncBlocksFromL1(dbTx kv.RwTx, chunkSize, highestL1
 	}
 
 	return to, nil
+}
+
+func (s *ClientSynchronizer) retryGetRollupInfoByBlockRange(from uint64, to *uint64) ([]etherman.Block, map[common.Hash][]etherman.Order, error) {
+	var consecutiveFailures int
+
+	const baseDelay = 500 * time.Millisecond
+	const maxRetries = 10
+	const circuitBreakerThreshold = 10
+
+	for retry := 0; retry < maxRetries; retry++ {
+		select {
+		case <-s.ctx.Done():
+			return nil, nil, s.ctx.Err()
+		default:
+		}
+
+		blocks, order, err := s.etherMan.GetRollupInfoByBlockRange(s.ctx, from, to)
+		if err == nil {
+			return blocks, order, nil
+		}
+
+		consecutiveFailures++
+		if consecutiveFailures >= circuitBreakerThreshold {
+			return nil, nil, errors.New("eth node appears to be down")
+		}
+
+		delay := baseDelay * (1 << retry)
+		time.Sleep(delay)
+	}
+	return nil, nil, errors.New("max retries reached for GetRollupInfoByBlockRange")
 }
 
 // This function syncs the node from a specific block to the latest
