@@ -126,7 +126,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 	}
 
 	if s.BlockNumber == 0 { //|| tooBigJump {
-		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx); err != nil {
+		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx, quit); err != nil {
 			return trie.EmptyRoot, err
 		}
 	} else {
@@ -209,7 +209,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[strin
 	return s.LastRoot(), nil
 }
 
-func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash *libcommon.Hash, ctx context.Context) (libcommon.Hash, error) {
+func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash *libcommon.Hash, ctx context.Context, quitCh <-chan struct{}) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 
@@ -220,6 +220,8 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 
 	eridb := db2.NewEriDb(db)
 	smt := smt.NewSMT(eridb)
+
+	eridb.OpenBatch(quitCh)
 
 	// [zkevm] - starts a 30s ticker to lock the db and remove orphans
 	doneChan := make(chan bool)
@@ -326,6 +328,11 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	close(progress)
 	close(doneChan)
 	close(ctDone)
+
+	err = eridb.CommitBatch()
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
 
 	// TODO [zkevm] - max - remove printing of roots
 	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
@@ -1033,6 +1040,8 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 	eridb := db2.NewEriDb(db)
 	dbSmt := smt.NewSMT(eridb)
 
+	eridb.OpenBatch(quit)
+
 	ac, err := db.CursorDupSort(kv.AccountChangeSet)
 	if err != nil {
 		return trie.EmptyRoot, err
@@ -1134,6 +1143,12 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 	err = verifyLastHash(dbSmt, expectedRootHash, &cfg, psr, logPrefix)
 	if err != nil {
 		fmt.Println("failed to verify hash")
+		return trie.EmptyRoot, err
+	}
+
+	// TODO: provide batch rollback!
+	err = eridb.CommitBatch()
+	if err != nil {
 		return trie.EmptyRoot, err
 	}
 

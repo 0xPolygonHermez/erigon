@@ -20,6 +20,13 @@ func NewMemDb() *MemDb {
 	}
 }
 
+func (m *MemDb) OpenBatch(quitCh <-chan struct{}) {
+}
+
+func (m *MemDb) CommitBatch() error {
+	return nil
+}
+
 func (m *MemDb) GetLastRoot() (*big.Int, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type ZkProgress struct {
@@ -31,7 +32,7 @@ func HeadersZK(
 
 	useExternalTx := tx != nil
 
-	manageTx := func(currentTx kv.RwTx) (kv.RwTx, error) {
+	manageTx := func(currentTx kv.RwTx, new bool) (kv.RwTx, error) {
 		// don't mess with the tx if using external one
 		if useExternalTx {
 			return nil, nil
@@ -43,25 +44,29 @@ func HeadersZK(
 				return nil, err
 			}
 		}
-		return cfg.db.BeginRw(ctx)
+		if new {
+			return cfg.db.BeginRw(ctx)
+		}
+		return nil, nil
 	}
 
 	if !useExternalTx {
 		var err error
-		tx, err = manageTx(nil)
+		tx, err = manageTx(nil, true)
 		if err != nil {
 			return err
 		}
 	}
 
-	chunkSize := uint64(2000)
-	saveEvery := 5
+	chunkSize := uint64(500)
+	saveEvery := 2
 	count := 0
+	restrictAtBatch := uint64(60)
 
 	for {
 		select {
 		case <-ctx.Done():
-			_, err := manageTx(tx)
+			_, err := manageTx(tx, false)
 			return err
 		default:
 		}
@@ -70,7 +75,13 @@ func HeadersZK(
 		prg := cfg.zkSynchronizer.GetProgress(tx)
 		fmt.Printf("zk stage headers.go: prg: %+v\n", prg)
 
-		if prg.LocalSyncedL2VerifiedBatch < prg.HighestL2VerifiedBatch {
+		// DEBUG: don't go to etherman if we're already at the restriction point
+		if restrictAtBatch != 0 && prg.LocalSyncedL2VerifiedBatch >= restrictAtBatch {
+			_, err := manageTx(tx, false)
+			return err
+		}
+
+		if prg.LocalSyncedL2VerifiedBatch <= prg.HighestL2VerifiedBatch {
 			l1Block, err := cfg.zkSynchronizer.SyncPreTip(tx, chunkSize, prg)
 			if err != nil {
 				if !useExternalTx {
@@ -87,17 +98,17 @@ func HeadersZK(
 			}
 		}
 
-		//if prg.LocalSyncedL2SequencedBatch < prg.HighestL2SequencedBatch {
-		//	// sync the tip from the l2
-		//	l2block, err := cfg.zkSynchronizer.SyncTip(tx, chunkSize, prg)
-		//	if err != nil {
-		//
-		//	}
-		//}
+		if prg.LocalSyncedL2VerifiedBatch >= prg.HighestL2VerifiedBatch && prg.LocalSyncedL2SequencedBatch < prg.HighestL2SequencedBatch {
+			// sync the tip from the l2
+			err := cfg.zkSynchronizer.SyncTip(tx, prg)
+			if err != nil {
+				log.Error("failed to sync tip", err, err)
+			}
+		}
 
 		if count%saveEvery == 0 && !useExternalTx {
 			var err error
-			tx, err = manageTx(tx)
+			tx, err = manageTx(tx, true)
 			if err != nil {
 				return err
 			}

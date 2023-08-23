@@ -3,16 +3,29 @@ package db
 import (
 	"fmt"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/ethdb"
+	"github.com/ledgerwatch/erigon/ethdb/olddb"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"math/big"
 )
 
+type SmtDbTx interface {
+	GetOne(bucket string, key []byte) ([]byte, error)
+	Put(bucket string, key []byte, value []byte) error
+	Has(bucket string, key []byte) (bool, error)
+	Delete(bucket string, key []byte) error
+	ForEach(bucket string, start []byte, fn func(k, v []byte) error) error
+	ForPrefix(bucket string, prefix []byte, fn func(k, v []byte) error) error
+	Commit() error
+	Rollback()
+}
+
 type EriDb struct {
-	tx kv.RwTx
+	kvTx kv.RwTx
+	tx   SmtDbTx
 }
 
 func NewEriDb(tx kv.RwTx) *EriDb {
-
 	err := tx.CreateBucket("HermezSmt")
 	if err != nil {
 		fmt.Println(err)
@@ -24,8 +37,27 @@ func NewEriDb(tx kv.RwTx) *EriDb {
 	}
 
 	return &EriDb{
-		tx: tx,
+		kvTx: tx,
+		tx:   tx,
 	}
+}
+
+func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
+	var batch ethdb.DbWithPendingMutations
+	batch = olddb.NewHashBatch(m.kvTx, quitCh, "./tempdb")
+	defer func() {
+		batch.Rollback()
+	}()
+	m.tx = batch
+}
+
+func (m *EriDb) CommitBatch() error {
+	err := m.tx.Commit()
+	if err != nil {
+		m.tx.Rollback()
+		return err
+	}
+	return nil
 }
 
 func (m *EriDb) GetLastRoot() (*big.Int, error) {
@@ -82,15 +114,6 @@ func (m *EriDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 
 func (m *EriDb) Delete(key string) error {
 	return m.tx.Delete("HermezSmt", []byte(key))
-}
-
-func (m *EriDb) IsEmpty() bool {
-	s, err := m.tx.BucketSize("HermezSmt")
-	if err != nil {
-		return true
-	}
-
-	return s == 0
 }
 
 func (m *EriDb) PrintDb() {

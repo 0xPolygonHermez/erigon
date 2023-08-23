@@ -19,11 +19,13 @@ import (
 type DB interface {
 	Get(key utils.NodeKey) (utils.NodeValue12, error)
 	Insert(key utils.NodeKey, value utils.NodeValue12) error
-	IsEmpty() bool
 	Delete(string) error
 
 	SetLastRoot(lr *big.Int) error
 	GetLastRoot() (*big.Int, error)
+
+	OpenBatch(quitCh <-chan struct{})
+	CommitBatch() error
 }
 
 type DebuggableDB interface {

@@ -22,13 +22,9 @@ import (
 	"fmt"
 	"sort"
 
-	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
-	"io"
 	"math/big"
-	"net/http"
 	"strings"
 
 	"github.com/holiman/uint256"
@@ -38,14 +34,12 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
-	"github.com/status-im/keycard-go/hexutils"
 )
 
 type revision struct {
@@ -866,19 +860,6 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 
 	fmt.Printf("reading txNum: %v\n", txNum)
 
-	// [zkevm] - allow calculation locally at a certain point/interval
-	calculatedLocally := false
-	//if txNum.Uint64() >= 1 { //&& txNum.Uint64()%1 == 0 {
-	//	var err error
-	//	sdb.PrintSmtRootHash()
-	//	_, err = calculateIntermediateRoot(sdb)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	sdb.PrintSmtRootHash()
-	//	calculatedLocally = true
-	//}
-
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
 	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
@@ -888,21 +869,8 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 
 	fmt.Println("Pre SMT root: ", rootU256.String())
 
-	// double check the root against the RPC
-	var err error
-	rpcHash := &libcommon.Hash{}
-	if calculatedLocally {
-		rpcHash, err = verifyRoot(dbTx, rootU256.Hex(), txNum.Uint64())
-	} else {
-		rpcHash, err = getDbRoot(dbTx, txNum.Uint64())
-	}
-
+	rpcHash, err := getDbRoot(dbTx, txNum.Uint64())
 	if err != nil {
-		jsonData, err2 := json.MarshalIndent(collection, "", "    ")
-		if err2 != nil {
-			fmt.Printf("error: %v\n", err2)
-		}
-		fmt.Println(string(jsonData))
 		return err
 	}
 
@@ -915,102 +883,6 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	return nil
 }
 
-func getFullState(ibs *IntraBlockState, prefix []byte) (map[libcommon.Address]*stateObject, error) {
-	// we need to iterate plainstate, if we find something in ibs and it is dirty - then we should use that
-	// if it exists in dirty ibs but not in plainstate - we should add it
-
-	iterator, ok := ibs.stateReader.(StateReaderIterator)
-	if !ok {
-		panic("state reader does not support iteration")
-	}
-
-	// state collection (db + dirty from tx)
-	psCombined := make(map[libcommon.Address]*stateObject)
-
-	// loop vars - collect existing state from DB
-	var a *accounts.Account
-	var addr libcommon.Address
-	as := make(map[string]string)
-	var inc uint64
-
-	err := iterator.ForEach(kv.PlainState, prefix, func(k, acc []byte) error {
-		if len(k) == 20 {
-			if a != nil {
-				// add to psCombined as a new stateObject - nothing should be dirty here this is existing DB state
-				so := newObject(ibs, addr, a, a)
-				// iterate account storage into originStorage
-				for ks, vs := range as {
-					kh := libcommon.HexToHash(ks)
-					vu, err := uint256.FromHex(trimHexString(vs))
-					if err != nil {
-						return err
-					}
-					so.originStorage[kh] = *vu
-				}
-				psCombined[addr] = so
-			}
-
-			a = &accounts.Account{}
-
-			if err := a.DecodeForStorage(acc); err != nil {
-				// TODO: not an account?
-				as = make(map[string]string)
-				return nil
-			}
-			addr = libcommon.BytesToAddress(k)
-			inc = a.Incarnation
-			// empty storage of previous account
-			as = make(map[string]string)
-		} else { // otherwise we're reading storage
-			_, incarnation, key := dbutils.PlainParseCompositeStorageKey(k)
-			if incarnation != inc {
-				return nil // take current account incarnation storage only
-			}
-
-			as[fmt.Sprintf("0x%032x", key)] = fmt.Sprintf("0x%032x", acc)
-		}
-		return nil
-	})
-
-	if a != nil {
-		// add final account to psCombined as a stateObject
-		so := newObject(ibs, addr, a, a)
-		// iterate account storage into originStorage
-		for ks, vs := range as {
-			kh := libcommon.HexToHash(ks)
-			vu, err := uint256.FromHex(trimHexString(vs))
-			if err != nil {
-				return nil, err
-			}
-			so.originStorage[kh] = *vu
-		}
-		code := ibs.GetCode(addr)
-		if err != nil {
-			return nil, err
-		}
-		so.code = code
-		psCombined[addr] = so
-	}
-
-	//// overwrite plainstate data with working data from the IBS which will contain new objects/updates
-	//// NB: we have to use dirty storage as the IBS may not load all storage locations (only those used by the tx)
-	for da, dso := range ibs.stateObjects {
-		if psCombined[da] == nil {
-			dsoCopy := *dso
-			psCombined[da] = &dsoCopy
-		} else {
-			if dso.dirtyStorage != nil {
-				psCombined[da].dirtyStorage = dso.dirtyStorage
-			}
-		}
-
-		// if the data of the account is in the IBS we should use it (for updated nonce, balance)
-		psCombined[da].data = dso.data
-	}
-
-	return psCombined, nil
-}
-
 // TODO [zkevm] remove debugging struct
 type MyStruct struct {
 	Storage  map[string]string
@@ -1018,45 +890,6 @@ type MyStruct struct {
 	Nonce    *big.Int
 	CodeHash libcommon.Hash
 	Code     string
-}
-
-var collection = make(map[libcommon.Address]MyStruct)
-
-func processAccount(s *smt.SMT, root *big.Int, a *accounts.Account, as map[string]string, ac []byte, inc uint64, ibs *IntraBlockState, addr libcommon.Address) (*big.Int, error) {
-
-	// [zkevm] - collect data for json comparison
-	collection[addr] = MyStruct{
-		Storage: as,
-		Balance: a.Balance.ToBig(),
-		Nonce:   new(big.Int).SetUint64(a.Nonce),
-		//Code:     hex.EncodeToString(actest),
-		//CodeHash: a.CodeHash,
-	}
-
-	//fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
-
-	// store the account balance and nonce
-	nonce := new(big.Int).SetUint64(a.Nonce)
-	r, err := s.SetAccountState(addr.String(), a.Balance.ToBig(), nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	// store the contract bytecode
-	ach := hexutils.BytesToHex(ac)
-	if len(ach) > 0 {
-		err = s.SetContractBytecode(addr.String(), fmt.Sprintf("0x%s", ach))
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(as) > 0 {
-		// store the account storage
-		r, err = s.SetContractStorage(addr.String(), as)
-	}
-
-	return r, nil
 }
 
 func trimHexString(s string) string {
@@ -1103,104 +936,6 @@ func getDbRoot(dbTx kv.RwTx, txNum uint64) (*libcommon.Hash, error) {
 	}
 	h := libcommon.BytesToHash(rootHash)
 	return &h, nil
-}
-
-func getRpcRoot(storageKey string, txNum string) (*libcommon.Hash, error) {
-	url := "https://zkevm-rpc.com"
-
-	// Construct the payload
-	payload := map[string]interface{}{
-		"method": "eth_getStorageAt",
-		"params": []interface{}{
-			"0x000000000000000000000000000000005ca1ab1e",
-			storageKey,
-			txNum,
-		},
-		"id":      1,
-		"jsonrpc": "2.0",
-	}
-
-	// Convert the payload to JSON
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the request header Content-Type for JSON
-	req.Header.Set("Content-Type", "application/json")
-
-	// Execute the HTTP request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Read and print the HTTP response
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse the JSON response
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return nil, err
-	}
-
-	rpcHash := trimHexString(result["result"].(string))
-
-	h := libcommon.HexToHash(rpcHash)
-	return &h, nil
-}
-
-func calculateIntermediateRoot(sdb *IntraBlockState) (*big.Int, error) {
-	fs := map[libcommon.Address]*stateObject{}
-
-	root := sdb.smt.LastRoot()
-
-	var err error
-
-	if sdb.smt.Db.IsEmpty() {
-		fs, err = getFullState(sdb, []byte{})
-		if err != nil {
-			return root, err
-		}
-	} else {
-		ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-		fs, err = getFullState(sdb, ss.Bytes())
-		if err != nil {
-			return root, err
-		}
-	}
-
-	for addr, so := range fs {
-		as := map[string]string{}
-		for k, v := range so.blockOriginStorage {
-			as[k.Hex()] = v.Hex()
-		}
-		for k, v := range so.originStorage {
-			as[k.Hex()] = v.Hex()
-		}
-		// overwrite origin storage with dirty values
-		for k, v := range so.dirtyStorage {
-			as[k.Hex()] = v.Hex()
-		}
-		root, err = processAccount(sdb.smt, root, &so.data, as, so.Code(), so.data.Incarnation, sdb, addr)
-		if err != nil {
-			return root, err
-		}
-	}
-
-	return root, nil
 }
 
 func UintBytes(no uint64) []byte {

@@ -835,7 +835,7 @@ func (s *ClientSynchronizer) processSequenceBatches(sequencedBatches []etherman.
 
 			// TODO: this logic needs to be moved to subsequent erigon stages
 
-			// store the batch to 'HermezTempExecution' table
+			// store the batch to 'HermezTempExecution' table - in here we should also store/or be able to retrieve the tBatch.StateRoot, and the accInputHash for comparisons
 
 			// Reprocess batch to compare the stateRoot with tBatch.StateRoot and get accInputHash
 			p, err := s.state.ExecuteBatch(s.ctx, batch, false, dbTx)
