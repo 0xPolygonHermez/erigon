@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"sync"
+	"time"
+
 	"github.com/TwiN/gocache/v2"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/log/v3"
-	"sort"
-	"sync"
-	"time"
 )
 
 type DB interface {
@@ -108,7 +109,7 @@ func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
 func (s *SMT) InsertBI(key *big.Int, value *big.Int) (*SMTResponse, error) {
 	k := utils.ScalarToNodeKey(key)
 	v := utils.ScalarToNodeValue8(value)
-	return s.Insert(k, v)
+	return s.Insert(k, v, [4]uint64{})
 }
 
 func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) {
@@ -118,10 +119,10 @@ func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) 
 		return nil, err
 	}
 
-	return s.Insert(key, *v)
+	return s.Insert(key, *v, [4]uint64{})
 }
 
-func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) {
+func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*SMTResponse, error) {
 
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
@@ -206,10 +207,15 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 				smtResponse.Mode = "update"
 				oldValue = foundVal
 
-				newValH, err := s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+				if newValH == [4]uint64{} {
+					newValH, err = s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+				} else {
+					newValH, err = s.HashSaveWithoutRecalc(v.ToUintArray(), utils.BranchCapacity, newValH)
+				}
 				if err != nil {
 					return nil, err
 				}
+
 				newLeafHash, err := s.HashSave(utils.ConcatArrays4(foundRKey, newValH), utils.LeafCapacity)
 				if err != nil {
 					return nil, err
@@ -250,7 +256,13 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 				isOld0 = false
 
 				newKey := utils.RemoveKeyBits(k, level2+1)
-				newValH, err := s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+
+				if newValH == [4]uint64{} {
+					newValH, err = s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+				} else {
+					newValH, err = s.HashSaveWithoutRecalc(v.ToUintArray(), utils.BranchCapacity, newValH)
+				}
+
 				if err != nil {
 					return nil, err
 				}
@@ -305,7 +317,11 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 			smtResponse.Mode = "insertNotFound"
 			newKey := utils.RemoveKeyBits(k, level+1)
 
-			newValH, err := s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+			if newValH == [4]uint64{} {
+				newValH, err = s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+			} else {
+				newValH, err = s.HashSaveWithoutRecalc(v.ToUintArray(), utils.BranchCapacity, newValH)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -445,6 +461,30 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8) (*SMTResponse, error) 
 	}
 
 	return smtResponse, nil
+}
+
+func (s *SMT) HashSaveWithoutRecalc(in [8]uint64, capacity, h [4]uint64) ([4]uint64, error) {
+	cacheKey := fmt.Sprintf("%v-%v", in, capacity)
+	if cachedValue, exists := s.Cache.Get(cacheKey); exists {
+		s.CacheHitFrequency[cacheKey]++
+		return cachedValue.([4]uint64), nil
+	}
+
+	var sl []uint64
+	sl = append(sl, in[:]...)
+	sl = append(sl, capacity[:]...)
+
+	v := utils.NodeValue12{}
+	for i, val := range sl {
+		b := new(big.Int)
+		v[i] = b.SetUint64(val)
+	}
+
+	err := s.Db.Insert(h, v)
+
+	s.Cache.Set(cacheKey, h)
+
+	return h, err
 }
 
 func (s *SMT) HashSave(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
