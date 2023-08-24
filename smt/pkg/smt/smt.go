@@ -27,6 +27,7 @@ type DB interface {
 
 	OpenBatch(quitCh <-chan struct{})
 	CommitBatch() error
+	RollbackBatch()
 }
 
 type DebuggableDB interface {

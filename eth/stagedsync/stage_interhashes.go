@@ -125,7 +125,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		tooBigJump = s.BlockNumber < n
 	}
 
-	if s.BlockNumber == 0 { //|| tooBigJump {
+	if s.BlockNumber == 0 || tooBigJump {
 		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx, quit); err != nil {
 			return trie.EmptyRoot, err
 		}

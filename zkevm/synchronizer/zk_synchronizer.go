@@ -348,10 +348,10 @@ func (s *ClientSynchronizer) syncBlocks(dbTx kv.RwTx, lastEthBlockSynced *state.
 // related to the trusted state when the node has all the information from
 // l1 synchronized
 func (s *ClientSynchronizer) syncTrustedState(tx kv.RwTx, latestSyncedBatch uint64) error {
-	if s.isTrustedSequencer {
-		return nil
-	}
-
+	//if s.isTrustedSequencer {
+	//	return nil
+	//}
+	//
 	log.Info("Getting trusted state info")
 	lastTrustedStateBatchNumber, err := s.zkEVMClient.BatchNumber(s.ctx)
 	if err != nil {

@@ -27,6 +27,9 @@ func (m *MemDb) CommitBatch() error {
 	return nil
 }
 
+func (m *MemDb) RollbackBatch() {
+}
+
 func (m *MemDb) GetLastRoot() (*big.Int, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()

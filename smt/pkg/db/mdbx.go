@@ -52,12 +52,22 @@ func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 }
 
 func (m *EriDb) CommitBatch() error {
+	if _, ok := m.tx.(ethdb.DbWithPendingMutations); !ok {
+		return nil // don't commit a kvRw tx
+	}
 	err := m.tx.Commit()
 	if err != nil {
 		m.tx.Rollback()
 		return err
 	}
 	return nil
+}
+
+func (m *EriDb) RollbackBatch() {
+	if _, ok := m.tx.(ethdb.DbWithPendingMutations); !ok {
+		return // don't roll back a kvRw tx
+	}
+	m.tx.Rollback()
 }
 
 func (m *EriDb) GetLastRoot() (*big.Int, error) {

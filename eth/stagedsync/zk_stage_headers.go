@@ -30,6 +30,10 @@ func HeadersZK(
 	test bool,
 ) error {
 
+	//tx, _ = cfg.db.BeginRw(ctx)
+	//stages.SaveStageProgress(tx, stages.L1Blocks, 17977261)
+	//tx.Commit()
+
 	useExternalTx := tx != nil
 
 	manageTx := func(currentTx kv.RwTx, new bool) (kv.RwTx, error) {
@@ -58,10 +62,9 @@ func HeadersZK(
 		}
 	}
 
-	chunkSize := uint64(500)
-	saveEvery := 2
+	saveEvery := 1
 	count := 0
-	restrictAtBatch := uint64(60)
+	restrictAtBatch := uint64(0) // chunkSize may take us further than this batch if set sufficiently high
 
 	for {
 		select {
@@ -70,6 +73,8 @@ func HeadersZK(
 			return err
 		default:
 		}
+
+		chunkSize := uint64(500)
 		count++
 
 		prg := cfg.zkSynchronizer.GetProgress(tx)
@@ -81,7 +86,15 @@ func HeadersZK(
 			return err
 		}
 
-		if prg.LocalSyncedL2VerifiedBatch <= prg.HighestL2VerifiedBatch {
+		// sync from L1
+		if prg.LocalSyncedL2VerifiedBatch < prg.HighestL2VerifiedBatch &&
+			prg.LocalSyncedL1Block < prg.HighestL1Block {
+
+			// prevent overshooting the tip
+			if chunkSize > prg.HighestL1Block-prg.LocalSyncedL1Block {
+				chunkSize = 1 // over cautious - update it
+			}
+
 			l1Block, err := cfg.zkSynchronizer.SyncPreTip(tx, chunkSize, prg)
 			if err != nil {
 				if !useExternalTx {
@@ -96,10 +109,18 @@ func HeadersZK(
 				}
 				return err
 			}
+
+			// if we're at the tip, move erigon to the next stage
+			if l1Block == prg.HighestL1Block {
+				_, err := manageTx(tx, false)
+				return err
+			}
 		}
 
+		// sync trusted state from L2 when L1 is synced
 		if prg.LocalSyncedL2VerifiedBatch >= prg.HighestL2VerifiedBatch && prg.LocalSyncedL2SequencedBatch < prg.HighestL2SequencedBatch {
 			// sync the tip from the l2
+			// todo: manage the blocks here
 			err := cfg.zkSynchronizer.SyncTip(tx, prg)
 			if err != nil {
 				log.Error("failed to sync tip", err, err)
