@@ -49,9 +49,9 @@ func EncodeTransactions(txs []types.Transaction) ([]byte, error) {
 		}
 
 		newV := new(big.Int).Add(big.NewInt(ether155V), big.NewInt(int64(sign)))
-		newRPadded := fmt.Sprintf("%064s", r.String())
-		newSPadded := fmt.Sprintf("%064s", s.String())
-		newVPadded := fmt.Sprintf("%02s", newV.Text(hex.Base))
+		newRPadded := fmt.Sprintf("%064x", r.String())
+		newSPadded := fmt.Sprintf("%064x", s.String())
+		newVPadded := fmt.Sprintf("%02x", newV.Text(hex.Base))
 		txData, err := hex.DecodeString(hex.EncodeToString(txCodedRlp) + newRPadded + newSPadded + newVPadded)
 		if err != nil {
 			return nil, err

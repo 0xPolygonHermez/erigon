@@ -123,7 +123,7 @@ func HeadersZK(
 			// todo: manage the blocks here
 			err := cfg.zkSynchronizer.SyncTip(tx, prg)
 			if err != nil {
-				log.Error("failed to sync tip", err, err)
+				log.Error("failed to sync tip", "err", err)
 			}
 		}
 

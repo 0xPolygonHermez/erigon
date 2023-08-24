@@ -37,7 +37,7 @@ type stateInterface interface {
 	GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error)
 	ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) error
 	GetNextForcedBatches(ctx context.Context, nextForcedBatches int, dbTx kv.RwTx) ([]state.ForcedBatch, error)
-	AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx kv.RwTx) error
+	AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, trustedBatch *state.Batch, dbTx kv.RwTx) error
 	ProcessAndStoreClosedBatch(ctx context.Context, processingCtx state.ProcessingContext, encodedTxs []byte, dbTx kv.RwTx, caller metrics.CallerLabel) (common.Hash, error)
 	OpenBatch(ctx context.Context, processingContext state.ProcessingContext, dbTx kv.RwTx) error
 	CloseBatch(ctx context.Context, receipt state.ProcessingReceipt, dbTx kv.RwTx) error
@@ -167,6 +167,8 @@ func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumbe
 
 func (m *StateInterfaceAdapter) ResetTrustedState(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) error {
 
+	// TODO: ideally here we should just augment the state we have with the correct state root etc.
+
 	// this should remove any batch after the number passed into this func
 	panic("ResetTrustedState: implement me")
 }
@@ -175,14 +177,17 @@ func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextFo
 	panic("GetNextForcedBatches: implement me")
 }
 
-func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, dbTx kv.RwTx) error {
+func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, trustedBatch *state.Batch, dbTx kv.RwTx) error {
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
-	// Get the matching batch (body) for the verified batch (header)
-	batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)
-	if err != nil {
-		return err
-	}
+	// at point of verification we should also add the trusted state from the sequencer
+	batch := trustedBatch
+
+	//// Get the matching batch (body) for the verified batch (header)
+	//batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)
+	//if err != nil {
+	//	return err
+	//}
 
 	header, err := WriteHeaderToDb(dbTx, verifiedBatch, batch)
 	if err != nil {
@@ -313,6 +318,9 @@ func (m *StateInterfaceAdapter) CloseBatch(ctx context.Context, receipt state.Pr
 }
 
 func (m *StateInterfaceAdapter) ProcessSequencerBatch(ctx context.Context, batchNumber uint64, batchL2Data []byte, caller metrics.CallerLabel, dbTx kv.RwTx) (*state.ProcessBatchResponse, error) {
+
+	// this is in tip mode - batches coming in here will be from the sequencer
+
 	panic("ProcessSequencerBatch: implement me")
 }
 
