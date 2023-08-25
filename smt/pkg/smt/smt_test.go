@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
+
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
 // Test vectors from JS implementation: https://github.com/0xPolygonHermez/zkevm-testvectors/blob/main/merkle-tree/smt-raw.json
@@ -48,7 +50,7 @@ func TestSMT_SingleInsert(t *testing.T) {
 			if err != nil {
 				t.Errorf("Insert failed: %v", err)
 			}
-			hex := fmt.Sprintf("0x%0x", newRoot.NewRoot)
+			hex := fmt.Sprintf("0x%0x", newRoot.NewRootScalar.ToBigInt())
 			printNode(newRoot)
 			if hex != scenario.expected {
 				t.Errorf("root hash is not as expected, got %v wanted %v", hex, scenario.expected)
@@ -107,7 +109,7 @@ func TestSMT_MultipleInsert(t *testing.T) {
 			continue
 		}
 
-		got := toHex(r.NewRoot)
+		got := toHex(r.NewRootScalar.ToBigInt())
 		if got != testCase.want {
 			t.Errorf("Test case %d: Root hash is not as expected, got %v, want %v", i, got, testCase.want)
 		}
@@ -115,7 +117,7 @@ func TestSMT_MultipleInsert(t *testing.T) {
 			t.Errorf("Test case %d: Mode is not as expected, got %v, want %v", i, r.Mode, testCase.mode)
 		}
 
-		root = r.NewRoot
+		root = r.NewRootScalar.ToBigInt()
 	}
 }
 
@@ -150,8 +152,9 @@ func TestSMT_UpdateElement1(t *testing.T) {
 	}
 
 	// set up the first root as that from the first testCase
+	rs := utils.ScalarToRoot(testCases[0].root)
 	r := &SMTResponse{
-		NewRoot: testCases[0].root,
+		NewRootScalar: &rs,
 	}
 	var err error
 
@@ -162,7 +165,7 @@ func TestSMT_UpdateElement1(t *testing.T) {
 			continue
 		}
 
-		got := toHex(r.NewRoot)
+		got := toHex(r.NewRootScalar.ToBigInt())
 		if got != testCase.want {
 			t.Errorf("Test case %d: Root hash is not as expected, got %v, want %v", i, got, testCase.want)
 		}
@@ -215,13 +218,13 @@ func TestSMT_AddRemove128Elements(t *testing.T) {
 		}
 	}
 
-	if r.NewRoot.Cmp(big.NewInt(0)) != 0 {
-		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRoot))
+	if r.NewRootScalar.ToBigInt().Cmp(big.NewInt(0)) != 0 {
+		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRootScalar.ToBigInt()))
 	}
 }
 
 func printNode(n *SMTResponse) {
-	fmt.Printf(fmt.Sprintf("Root: %s Mode: %s\n", toHex(n.NewRoot), n.Mode))
+	fmt.Printf(fmt.Sprintf("Root: %s Mode: %s\n", toHex(n.NewRootScalar.ToBigInt()), n.Mode))
 }
 
 func toHex(i *big.Int) string {

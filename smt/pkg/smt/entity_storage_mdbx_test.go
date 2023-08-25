@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"context"
+
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
@@ -38,8 +39,8 @@ func TestSMT_Mdbx_AddRemove1Element(t *testing.T) {
 		t.Errorf("Mode is not deleteFound, got %v", r.Mode)
 	}
 
-	if r.NewRoot.Cmp(big.NewInt(0)) != 0 {
-		t.Errorf("Last root is not 0, got %v", r.NewRoot)
+	if r.NewRootScalar.ToBigInt().Cmp(big.NewInt(0)) != 0 {
+		t.Errorf("Last root is not 0, got %v", r.NewRootScalar.ToBigInt())
 	}
 }
 
@@ -71,7 +72,7 @@ func TestSMT_Mdbx_AddRemove3Elements(t *testing.T) {
 	newR := s.LastRoot()
 
 	if newR.Cmp(big.NewInt(0)) != 0 {
-		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRoot))
+		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRootScalar.ToBigInt()))
 	}
 }
 
@@ -103,7 +104,7 @@ func TestSMT_Mdbx_AddRemove128Elements(t *testing.T) {
 	newR := s.LastRoot()
 
 	if newR.Cmp(big.NewInt(0)) != 0 {
-		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRoot))
+		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRootScalar.ToBigInt()))
 	}
 }
 
@@ -171,7 +172,7 @@ func TestSMT_Mdbx_MultipleInsert(t *testing.T) {
 			continue
 		}
 
-		got := toHex(r.NewRoot)
+		got := toHex(r.NewRootScalar.ToBigInt())
 		if got != testCase.want {
 			t.Errorf("Test case %d: Root hash is not as expected, got %v, want %v", i, got, testCase.want)
 		}
@@ -179,7 +180,7 @@ func TestSMT_Mdbx_MultipleInsert(t *testing.T) {
 			t.Errorf("Test case %d: Mode is not as expected, got %v, want %v", i, r.Mode, testCase.mode)
 		}
 
-		root = r.NewRoot
+		root = r.NewRootScalar.ToBigInt()
 	}
 }
 

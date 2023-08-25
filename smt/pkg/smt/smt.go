@@ -45,8 +45,8 @@ type SMT struct {
 }
 
 type SMTResponse struct {
-	NewRoot *big.Int
-	Mode    string
+	NewRootScalar *utils.NodeKey
+	Mode          string
 }
 
 func NewSMT(database DB) *SMT {
@@ -110,7 +110,7 @@ func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
 func (s *SMT) InsertBI(key *big.Int, value *big.Int) (*SMTResponse, error) {
 	k := utils.ScalarToNodeKey(key)
 	v := utils.ScalarToNodeValue8(value)
-	return s.Insert(k, v, [4]uint64{})
+	return s.insertSingle(k, v, [4]uint64{})
 }
 
 func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) {
@@ -120,48 +120,88 @@ func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) 
 		return nil, err
 	}
 
-	return s.Insert(key, *v, [4]uint64{})
+	return s.insertSingle(key, *v, [4]uint64{})
 }
 
-func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*SMTResponse, error) {
-
+func (s *SMT) InsertStorage(ethAddr string, storage *map[string]string, chm *map[string]*utils.NodeValue8, vhm *map[string][4]uint64) (*SMTResponse, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 
-	or, err := s.Db.GetLastRoot()
+	a := utils.ConvertHexToBigInt(ethAddr)
+	add := utils.ScalarToArrayBig(a)
+
+	or, err := s.getLastRoot()
 	if err != nil {
 		return nil, err
 	}
-	oldRoot := utils.ScalarToRoot(or)
-	r := oldRoot
+
+	smtr := &SMTResponse{
+		NewRootScalar: &or,
+	}
+	for k := range *storage {
+		keyStoragePosition, err := utils.KeyContractStorage(add, k)
+		if err != nil {
+			return nil, err
+		}
+
+		smtr, err = s.insert(keyStoragePosition, *(*chm)[k], (*vhm)[k], *smtr.NewRootScalar)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err = s.setLastRoot(*smtr.NewRootScalar); err != nil {
+		return nil, err
+	}
+
+	return smtr, nil
+}
+
+func (s *SMT) insertSingle(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*SMTResponse, error) {
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+
+	or, err := s.getLastRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	smtr, err := s.insert(k, v, newValH, or)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = s.setLastRoot(*smtr.NewRootScalar); err != nil {
+		return nil, err
+	}
+
+	return smtr, nil
+}
+
+func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, oldRoot utils.NodeKey) (*SMTResponse, error) {
 	newRoot := oldRoot
 
 	smtResponse := &SMTResponse{
-		NewRoot: big.NewInt(0),
-		Mode:    "not run",
+		Mode: "not run",
 	}
 
 	// split the key
 	keys := k.GetPath()
 
 	var usedKey []int
-	var siblings map[int]*utils.NodeValue12
 	var level int
 	var foundKey *utils.NodeKey
 	var foundVal utils.NodeValue8
-	var oldValue utils.NodeValue8
 	var foundRKey utils.NodeKey
 	var proofHashCounter int
 	var foundOldValHash utils.NodeKey
-	var insKey *utils.NodeKey
-	var insValue utils.NodeValue8
-	var isOld0 bool
 
-	siblings = map[int]*utils.NodeValue12{}
+	siblings := map[int]*utils.NodeValue12{}
 
+	var err error
 	// JS WHILE
-	for !r.IsZero() && foundKey == nil {
-		sl, err := s.Db.Get(r)
+	for !oldRoot.IsZero() && foundKey == nil {
+		sl, err := s.Db.Get(oldRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +221,7 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 				return nil, err
 			}
 		} else {
-			r = utils.NodeKeyFromBigIntArray(siblings[level][keys[level]*4 : keys[level]*4+4])
+			oldRoot = utils.NodeKeyFromBigIntArray(siblings[level][keys[level]*4 : keys[level]*4+4])
 			usedKey = append(usedKey, keys[level])
 			level++
 		}
@@ -206,18 +246,17 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 			if foundKey.IsEqualTo(k) {
 				// UPDATE MODE
 				smtResponse.Mode = "update"
-				oldValue = foundVal
 
 				if newValH == [4]uint64{} {
-					newValH, err = s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+					newValH, err = s.hashcalcAndSave(v.ToUintArray(), utils.BranchCapacity)
 				} else {
-					newValH, err = s.HashSaveWithoutRecalc(v.ToUintArray(), utils.BranchCapacity, newValH)
+					newValH, err = s.hashSave(v.ToUintArray(), utils.BranchCapacity, newValH)
 				}
 				if err != nil {
 					return nil, err
 				}
 
-				newLeafHash, err := s.HashSave(utils.ConcatArrays4(foundRKey, newValH), utils.LeafCapacity)
+				newLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(foundRKey, newValH), utils.LeafCapacity)
 				if err != nil {
 					return nil, err
 				}
@@ -247,28 +286,27 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 				}
 
 				oldKey := utils.RemoveKeyBits(*foundKey, level2+1)
-				oldLeafHash, err := s.HashSave(utils.ConcatArrays4(oldKey, foundOldValHash), utils.LeafCapacity)
+				oldLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(oldKey, foundOldValHash), utils.LeafCapacity)
 				if err != nil {
 					return nil, err
 				}
-
-				insKey = foundKey
-				insValue = foundVal
-				isOld0 = false
 
 				newKey := utils.RemoveKeyBits(k, level2+1)
 
 				if newValH == [4]uint64{} {
-					newValH, err = s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+					newValH, err = s.hashcalcAndSave(v.ToUintArray(), utils.BranchCapacity)
 				} else {
-					newValH, err = s.HashSaveWithoutRecalc(v.ToUintArray(), utils.BranchCapacity, newValH)
+					newValH, err = s.hashSave(v.ToUintArray(), utils.BranchCapacity, newValH)
 				}
 
 				if err != nil {
 					return nil, err
 				}
 
-				newLeafHash, err := s.HashSave(utils.ConcatArrays4(newKey, newValH), utils.LeafCapacity)
+				newLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(newKey, newValH), utils.LeafCapacity)
+				if err != nil {
+					return nil, err
+				}
 
 				var node [8]uint64
 				for i := 0; i < 8; i++ {
@@ -280,7 +318,7 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 					node[foundKeys[level2]*4+j] = oldLeafHash[j]
 				}
 
-				r2, err := s.HashSave(node, utils.BranchCapacity)
+				r2, err := s.hashcalcAndSave(node, utils.BranchCapacity)
 				if err != nil {
 					return nil, err
 				}
@@ -296,7 +334,7 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 						node[keys[level2]*4+j] = r2[j]
 					}
 
-					r2, err = s.HashSave(node, utils.BranchCapacity)
+					r2, err = s.hashcalcAndSave(node, utils.BranchCapacity)
 					if err != nil {
 						return nil, err
 					}
@@ -319,9 +357,9 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 			newKey := utils.RemoveKeyBits(k, level+1)
 
 			if newValH == [4]uint64{} {
-				newValH, err = s.HashSave(v.ToUintArray(), utils.BranchCapacity)
+				newValH, err = s.hashcalcAndSave(v.ToUintArray(), utils.BranchCapacity)
 			} else {
-				newValH, err = s.HashSaveWithoutRecalc(v.ToUintArray(), utils.BranchCapacity, newValH)
+				newValH, err = s.hashSave(v.ToUintArray(), utils.BranchCapacity, newValH)
 			}
 			if err != nil {
 				return nil, err
@@ -329,7 +367,7 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 
 			nk := utils.ConcatArrays4(newKey, newValH)
 
-			newLeafHash, err := s.HashSave(nk, utils.LeafCapacity)
+			newLeafHash, err := s.hashcalcAndSave(nk, utils.LeafCapacity)
 			if err != nil {
 				return nil, err
 			}
@@ -347,7 +385,6 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 			}
 		}
 	} else if foundKey != nil && foundKey.IsEqualTo(k) { // we don't have a value so we're deleting
-		oldValue = foundVal
 		if level >= 0 {
 			for j := 0; j < 4; j++ {
 				siblings[level][keys[level]*4+j] = big.NewInt(0)
@@ -370,18 +407,11 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 
 				if siblings[level+1].IsFinalNode() {
 					valH := siblings[level+1].Get4to8()
-					preValA, err := s.Db.Get(*valH)
-					if err != nil {
-						return nil, err
-					}
-					valA := preValA.Get0to8()
+
 					rKey := siblings[level+1].Get0to4()
 					proofHashCounter += 2
 
-					val := utils.ArrayToScalar(valA[:])
-					insKey = utils.JoinKey(append(usedKey, uKey), *rKey)
-					insValue = utils.ScalarToNodeValue8(val)
-					isOld0 = false
+					insKey := utils.JoinKey(append(usedKey, uKey), *rKey)
 
 					for uKey >= 0 && level >= 0 {
 						level -= 1
@@ -394,7 +424,7 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 					}
 
 					oldKey := utils.RemoveKeyBits(*insKey, level+1)
-					oldLeafHash, err := s.HashSave(utils.ConcatArrays4(oldKey, *valH), utils.LeafCapacity)
+					oldLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(oldKey, *valH), utils.LeafCapacity)
 					if err != nil {
 						return nil, err
 					}
@@ -422,19 +452,17 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 		}
 	} else { // we're going zero to zero - do nothing
 		smtResponse.Mode = "zeroToZero"
-		if foundKey != nil {
-			insKey = foundKey
-			insValue = foundVal
-			isOld0 = false
-		}
 	}
 
 	utils.RemoveOver(siblings, level+1)
 
 	for level >= 0 {
 		hashValueIn, err := utils.NodeValue8FromBigIntArray(siblings[level][0:8])
+		if err != nil {
+			return nil, err
+		}
 		hashCapIn := utils.NodeKeyFromBigIntArray(siblings[level][8:12])
-		newRoot, err = s.HashSave(hashValueIn.ToUintArray(), hashCapIn)
+		newRoot, err = s.hashcalcAndSave(hashValueIn.ToUintArray(), hashCapIn)
 		if err != nil {
 			return nil, err
 		}
@@ -449,22 +477,14 @@ func (s *SMT) Insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64) (*S
 		}
 	}
 
-	_ = r
-	_ = oldValue
-	_ = insValue
-	_ = isOld0
+	_ = oldRoot
 
-	smtResponse.NewRoot = newRoot.ToBigInt()
-
-	err = s.Db.SetLastRoot(newRoot.ToBigInt())
-	if err != nil {
-		return nil, err
-	}
+	smtResponse.NewRootScalar = &newRoot
 
 	return smtResponse, nil
 }
 
-func (s *SMT) HashSaveWithoutRecalc(in [8]uint64, capacity, h [4]uint64) ([4]uint64, error) {
+func (s *SMT) hashSave(in [8]uint64, capacity, h [4]uint64) ([4]uint64, error) {
 	cacheKey := fmt.Sprintf("%v-%v", in, capacity)
 	if cachedValue, exists := s.Cache.Get(cacheKey); exists {
 		s.CacheHitFrequency[cacheKey]++
@@ -488,54 +508,25 @@ func (s *SMT) HashSaveWithoutRecalc(in [8]uint64, capacity, h [4]uint64) ([4]uin
 	return h, err
 }
 
-func (s *SMT) HashSave(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
-	cacheKey := fmt.Sprintf("%v-%v", in, capacity)
-	if cachedValue, exists := s.Cache.Get(cacheKey); exists {
-		s.CacheHitFrequency[cacheKey]++
-		return cachedValue.([4]uint64), nil
-	}
-
+func (s *SMT) hashcalcAndSave(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
 	h, err := utils.Hash(in, capacity)
 	if err != nil {
 		return [4]uint64{}, err
 	}
 
-	var sl []uint64
-	sl = append(sl, in[:]...)
-	sl = append(sl, capacity[:]...)
-
-	v := utils.NodeValue12{}
-	for i, val := range sl {
-		b := new(big.Int)
-		v[i] = b.SetUint64(val)
-	}
-
-	err = s.Db.Insert(h, v)
-
-	s.Cache.Set(cacheKey, h)
-
-	return h, err
+	return s.hashSave(in, capacity, h)
 }
 
-func (s *SMT) HashSave1(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
-	h, err := utils.Hash(in, capacity)
+func (s *SMT) getLastRoot() (utils.NodeKey, error) {
+	or, err := s.Db.GetLastRoot()
 	if err != nil {
-		return [4]uint64{}, err
+		return utils.NodeKey{}, err
 	}
+	return utils.ScalarToRoot(or), nil
+}
 
-	var sl []uint64
-
-	sl = append(sl, in[:]...)
-	sl = append(sl, capacity[:]...)
-
-	v := utils.NodeValue12{}
-	for i, val := range sl {
-		b := new(big.Int)
-		v[i] = b.SetUint64(val)
-	}
-
-	err = s.Db.Insert(h, v)
-	return h, err
+func (s *SMT) setLastRoot(newRoot utils.NodeKey) error {
+	return s.Db.SetLastRoot(newRoot.ToBigInt())
 }
 
 // Utility functions for debugging

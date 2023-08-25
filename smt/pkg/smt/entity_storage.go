@@ -19,14 +19,14 @@ func (s *SMT) SetAccountState(ethAddr string, balance, nonce *big.Int) (*big.Int
 		return nil, err
 	}
 
-	auxRes, err := s.InsertKA(keyBalance, balance)
+	_, err = s.InsertKA(keyBalance, balance)
 	if err != nil {
 		return nil, err
 	}
 
-	auxRes, err = s.InsertKA(keyNonce, nonce)
+	auxRes, err := s.InsertKA(keyNonce, nonce)
 
-	return auxRes.NewRoot, err
+	return auxRes.NewRootScalar.ToBigInt(), err
 }
 
 func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
@@ -40,6 +40,9 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 	}
 
 	hashedBytecode, err := utils.HashContractBytecode(bytecode)
+	if err != nil {
+		return err
+	}
 
 	var parsedBytecode string
 
@@ -70,34 +73,7 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 	return nil
 }
 
-func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
-	base := 10
-	if strings.HasPrefix(v, "0x") {
-		v = v[2:]
-		base = 16
-	}
-
-	val, _ := new(big.Int).SetString(v, base)
-
-	x := utils.ScalarToArrayBig(val)
-	value, err := utils.NodeValue8FromBigIntArray(x)
-	if err != nil {
-		return nil, [4]uint64{}, err
-	}
-
-	h, err := utils.Hash(value.ToUintArray(), utils.BranchCapacity)
-	if err != nil {
-		return nil, [4]uint64{}, err
-	}
-
-	return value, h, nil
-}
-
 func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*big.Int, error) {
-	i := 0
-
-	var auxRes *SMTResponse
-
 	storageKeys := make([]string, len(storage))
 	ii := 0
 	for k := range storage {
@@ -128,7 +104,7 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 		wg.Add(cpuNum)
 
 		var err error
-		for i = 0; i < cpuNum; i++ {
+		for i := 0; i < cpuNum; i++ {
 			go func(cpuI int) {
 				defer wg.Done()
 				count := 0
@@ -157,7 +133,7 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 			return nil, err
 		}
 
-		for i = 0; i < len(keyArray); i++ {
+		for i := 0; i < len(keyArray); i++ {
 			for j := 0; j < len(keyArray[i]); j++ {
 				k := keyArray[i][j]
 				if k == "" {
@@ -187,19 +163,33 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 		}
 	}
 
-	for k := range storage {
-		keyStoragePosition, err := utils.KeyContractStorage(ethAddr, k)
-		if err != nil {
-			return nil, err
-		}
-
-		auxRes, err = s.Insert(keyStoragePosition, *chm[k], vhm[k])
-		if err != nil {
-			return nil, err
-		}
-
-		i++
+	auxRes, err := s.InsertStorage(ethAddr, &storage, &chm, &vhm)
+	if err != nil {
+		return nil, err
 	}
 
-	return auxRes.NewRoot, nil
+	return auxRes.NewRootScalar.ToBigInt(), nil
+}
+
+func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
+	base := 10
+	if strings.HasPrefix(v, "0x") {
+		v = v[2:]
+		base = 16
+	}
+
+	val, _ := new(big.Int).SetString(v, base)
+
+	x := utils.ScalarToArrayBig(val)
+	value, err := utils.NodeValue8FromBigIntArray(x)
+	if err != nil {
+		return nil, [4]uint64{}, err
+	}
+
+	h, err := utils.Hash(value.ToUintArray(), utils.BranchCapacity)
+	if err != nil {
+		return nil, [4]uint64{}, err
+	}
+
+	return value, h, nil
 }

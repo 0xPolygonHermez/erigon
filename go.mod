@@ -12,11 +12,11 @@ require (
 )
 
 require (
-github.com/TwiN/gocache/v2 v2.2.0
 	github.com/0xPolygonHermez/zkevm-node v0.0.3-RC1
 	github.com/99designs/gqlgen v0.17.29
 	github.com/Giulio2002/bls v0.0.0-20230217173148-c87a29266b6c
 	github.com/RoaringBitmap/roaring v1.2.3
+	github.com/TwiN/gocache/v2 v2.2.0
 	github.com/VictoriaMetrics/fastcache v1.12.1
 	github.com/VictoriaMetrics/metrics v1.23.1
 	github.com/anacrolix/sync v0.4.0
@@ -30,6 +30,7 @@ github.com/TwiN/gocache/v2 v2.2.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/deckarep/golang-set v1.8.0
 	github.com/deckarep/golang-set/v2 v2.3.0
+	github.com/dgravesa/go-parallel v0.6.0
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/dop251/goja v0.0.0-20230122112309-96b1610dd4f7
 	github.com/edsrzf/mmap-go v1.1.0

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/iden3/go-iden3-crypto/goldenposeidon"
+	poseidon "github.com/iden3/go-iden3-crypto/goldenposeidon"
 )
 
 const (
@@ -491,25 +491,27 @@ func Key(ethAddr string, c int) (NodeKey, error) {
 	return Hash(key1.ToUintArray(), key1Capacity)
 }
 
-func KeyContractStorage(ethAddr string, storagePosition string) (NodeKey, error) {
-	a := ConvertHexToBigInt(ethAddr)
-	add := ScalarToArrayBig(a)
-
-	base := 10
-	if strings.HasPrefix(storagePosition, "0x") {
-		storagePosition = storagePosition[2:]
-		base = 16
+func StrValToBigInt(v string) (*big.Int, bool) {
+	if strings.HasPrefix(v, "0x") {
+		return new(big.Int).SetString(v[2:], 16)
 	}
 
-	sp, _ := new(big.Int).SetString(storagePosition, base)
+	return new(big.Int).SetString(v, 10)
+}
+
+func KeyContractStorage(ethAddr []*big.Int, storagePosition string) (NodeKey, error) {
+	sp, _ := StrValToBigInt(storagePosition)
 	spArray, err := NodeValue8FromBigIntArray(ScalarToArrayBig(sp))
 	if err != nil {
 		return NodeKey{}, err
 	}
 
 	hk0, err := Hash(spArray.ToUintArray(), [4]uint64{0, 0, 0, 0})
+	if err != nil {
+		return NodeKey{}, err
+	}
 
-	key1 := NodeValue8{add[0], add[1], add[2], add[3], add[4], add[5], big.NewInt(int64(SC_STORAGE)), big.NewInt(0)}
+	key1 := NodeValue8{ethAddr[0], ethAddr[1], ethAddr[2], ethAddr[3], ethAddr[4], ethAddr[5], big.NewInt(int64(SC_STORAGE)), big.NewInt(0)}
 
 	return Hash(key1.ToUintArray(), hk0)
 }
