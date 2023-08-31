@@ -8,6 +8,21 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
+//////////////////////////////////////////////////////////////////////////////
+//	Since we have all the kv pairs and they are all unique, we can create a tree under the assumption
+//	that there will be only inserts (no updates and deletes) in the tree.
+//
+//	With that assumption we sort the keys and build a binary tree representing the SMT. This way we
+//	don't have to calculate and save to the db the hashes of all the nodes that are reordered because
+//	of an insert somewhere below them. This saves a lot of time, because those hash recalculations are
+//	growing exponentially with the tree size / amount of values.
+//
+//	Another thing we have optimized is that, since our keys are sorted ASC, we can be sure that the
+//	"left" part of the tree is at its final place. Because of that, every time we insert a node on the
+//	right side of something, we can hash, save and delete it from the temp binary tree. We can also
+//	delete the values from the KV map, so we actually get the same or smaller memory usage.
+//////////////////////////////////////////////////////////////////////////////
+
 // sorts the keys and builds a binary tree from left
 // this makes it so the left part of a node can be deleted once it's right part is inserted
 // this is because the left part is at its final spot
