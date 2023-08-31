@@ -319,6 +319,47 @@ func TestNodeValueIsZero(t *testing.T) {
 	}
 }
 
+func TestNodeValue8SetHalfValue(t *testing.T) {
+	cases := []struct {
+		name string
+		part int
+	}{
+		{
+			name: "first part",
+			part: 0,
+		},
+		{
+			name: "second part",
+			part: 1,
+		},
+		{
+			name: "both parts",
+			part: 2,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			var a NodeValue8
+			v := [4]uint64{1, 0, 0, 0}
+			if tt.part == 2 {
+				a.SetHalfValue(v, 0)
+				a.SetHalfValue(v, 1)
+			} else {
+				a.SetHalfValue(v, tt.part)
+			}
+
+			if tt.part == 0 && a[0].Uint64() != v[0] {
+				t.Errorf("first part not set to 1")
+			} else if tt.part == 1 && a[4].Uint64() != v[0] {
+				t.Errorf("second part not set to 1")
+			} else if tt.part == 2 && a[0].Uint64() != v[0] && a[4].Uint64() != v[0] {
+				t.Errorf("first and second part not set to 1")
+			}
+		})
+	}
+}
+
 func TestIsFinalNode(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -646,4 +687,67 @@ func compareIntArray(arr1, arr2 []int) bool {
 		}
 	}
 	return true
+}
+
+func TestSortNodeKeysBitwiseAsc(t *testing.T) {
+	tests := []struct {
+		input  []NodeKey
+		output []NodeKey
+	}{
+		{
+			input:  []NodeKey{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 1, 0}},
+			output: []NodeKey{{0, 0, 1, 0}, {0, 1, 0, 0}, {1, 0, 0, 0}},
+		},
+		{
+			input:  []NodeKey{{1, 0, 0, 0}, {0, 0, 1, 0}, {0, 1, 0, 0}, {0, 0, 0, 1}, {0, 1, 0, 0}},
+			output: []NodeKey{{0, 0, 0, 1}, {0, 0, 1, 0}, {0, 1, 0, 0}, {0, 1, 0, 0}, {1, 0, 0, 0}},
+		},
+		{
+			input:  []NodeKey{{345, 13626, 23, 1}, {124, 54, 3452, 547547}, {121, 434, 34436, 1}, {25, 346, 235, 12456}, {6334, 346346, 1, 0}},
+			output: []NodeKey{{124, 54, 3452, 547547}, {6334, 346346, 1, 0}, {121, 434, 34436, 1}, {25, 346, 235, 12456}, {345, 13626, 23, 1}},
+		},
+	}
+
+	for _, test := range tests {
+		SortNodeKeysBitwiseAsc(test.input)
+		for i := range test.input {
+			if test.input[i] != test.output[i] {
+				fmt.Println(test.input[i].GetPath())
+				t.Errorf("expected %v but got %v", test.output, test.input)
+			}
+		}
+	}
+}
+
+func TestNodeKeyFromPath(t *testing.T) {
+	tests := []struct {
+		input  int
+		output NodeKey
+	}{
+		{
+			input: 0,
+		},
+		{
+			input: 1,
+		},
+		{
+			input: 124124,
+		},
+		{
+			input: 124124124124124,
+		},
+	}
+
+	for _, test := range tests {
+		input := ScalarToNodeKey(big.NewInt(int64(test.input)))
+		result, err := NodeKeyFromPath(input.GetPath())
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if result != input {
+			t.Errorf("parse doesn't match, expected: %v, got: %v", input, result)
+		}
+	}
 }

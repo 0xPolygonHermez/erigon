@@ -121,6 +121,54 @@ func TestSMT_MultipleInsert(t *testing.T) {
 	}
 }
 
+func TestSMT_MultipleInsert3(t *testing.T) {
+	s := NewSMT(nil)
+	testCases := []struct {
+		root  *big.Int
+		key   *big.Int
+		value *big.Int
+		want  string
+		mode  string
+	}{
+		{
+			big.NewInt(0),
+			big.NewInt(18),
+			big.NewInt(18),
+			"0xc5eb28fcdad974a3b988a7e5441cb9dfef6f7159bbab0f9387aaf4ea192b5b88",
+			"insertNotFound",
+		},
+		{
+			nil,
+			big.NewInt(19),
+			big.NewInt(19),
+			"0xfa2d3062e11e44668ab79c595c0c916a82036a017408377419d74523569858ea",
+			"insertFound",
+		},
+	}
+
+	var root *big.Int
+	for i, testCase := range testCases {
+		if i > 0 {
+			testCase.root = root
+		}
+		r, err := s.InsertBI(testCase.key, testCase.value)
+		if err != nil {
+			t.Errorf("Test case %d: Insert failed: %v", i, err)
+			continue
+		}
+
+		got := toHex(r.NewRootScalar.ToBigInt())
+		if got != testCase.want {
+			t.Errorf("Test case %d: Root hash is not as expected, got %v, want %v", i, got, testCase.want)
+		}
+		if testCase.mode != r.Mode {
+			t.Errorf("Test case %d: Mode is not as expected, got %v, want %v", i, r.Mode, testCase.mode)
+		}
+
+		root = r.NewRootScalar.ToBigInt()
+	}
+}
+
 func TestSMT_UpdateElement1(t *testing.T) {
 	s := NewSMT(nil)
 	testCases := []struct {
@@ -220,6 +268,42 @@ func TestSMT_AddRemove128Elements(t *testing.T) {
 
 	if r.NewRootScalar.ToBigInt().Cmp(big.NewInt(0)) != 0 {
 		t.Errorf("Root hash is not zero, got %v", toHex(r.NewRootScalar.ToBigInt()))
+	}
+}
+
+func TestSMT_MultipleInsert2(t *testing.T) {
+	s := NewSMT(nil)
+	testCases := []struct {
+		root  *big.Int
+		key   utils.NodeKey
+		value utils.NodeValue8
+	}{
+		{
+			big.NewInt(0),
+			utils.ScalarToNodeKey(big.NewInt(2)),
+			utils.ScalarToNodeValue8(big.NewInt(1)),
+		},
+		{
+			nil,
+			utils.ScalarToNodeKey(big.NewInt(10)),
+			utils.ScalarToNodeValue8(big.NewInt(1)),
+		},
+	}
+
+	var root *big.Int
+	for i, testCase := range testCases {
+		if i > 0 {
+			testCase.root = root
+		}
+		fmt.Println(testCase.key.GetPath())
+		r, err := s.insertSingle(testCase.key, testCase.value, [4]uint64{})
+		if err != nil {
+			t.Errorf("Test case %d: Insert failed: %v", i, err)
+			continue
+		}
+
+		root = r.NewRootScalar.ToBigInt()
+		s.PrintTree()
 	}
 }
 

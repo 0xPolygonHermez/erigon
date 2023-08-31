@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"sort"
+
 	poseidon "github.com/iden3/go-iden3-crypto/goldenposeidon"
 )
 
@@ -74,6 +76,22 @@ func (nv *NodeValue8) IsZero() bool {
 	}
 
 	return true
+}
+
+// part = 0 for first 4 values, 1 for the last 4 values
+func (nv *NodeValue8) SetHalfValue(values [4]uint64, part int) error {
+	if part < 0 || part > 1 {
+		return fmt.Errorf("part must be 0 or 1")
+	}
+
+	partI := part * 4
+	for i, v := range values {
+		nlh := big.Int{}
+		nlh.SetUint64(v)
+		nv[i+partI] = &nlh
+	}
+
+	return nil
 }
 
 func (nv *NodeValue8) ToUintArray() [8]uint64 {
@@ -143,6 +161,16 @@ func NodeKeyFromBigIntArray(arr []*big.Int) NodeKey {
 		}
 	}
 	return nk
+}
+
+func IsArrayUint64Empty(arr []uint64) bool {
+	for _, v := range arr {
+		if v > 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 func Value8FromBigIntArray(arr []*big.Int) NodeValue8 {
@@ -305,6 +333,23 @@ func (nk *NodeKey) GetPath() []int {
 	}
 
 	return res
+}
+
+func NodeKeyFromPath(path []int) (NodeKey, error) {
+	if len(path) != 256 {
+		return NodeKey{}, fmt.Errorf("path is not 256 bits")
+	}
+
+	res := [4]uint64{0, 0, 0, 0}
+
+	for j := 0; j < 256; j++ {
+		i := j % 4
+
+		k := j / 4
+		res[i] |= uint64(path[j]) << k
+	}
+
+	return res, nil
 }
 
 func BinaryKey(key NodeKey) string {
@@ -599,4 +644,27 @@ func binaryStringToUint64(binary string) (uint64, error) {
 		return 0, err
 	}
 	return num, nil
+}
+
+func SortNodeKeysBitwiseAsc(keys []NodeKey) {
+	sort.Slice(keys, func(i, j int) bool {
+		aTmp := keys[i]
+		bTmp := keys[j]
+
+		for l := 0; l < 64; l++ {
+			for n := 0; n < 4; n++ {
+				aBit := aTmp[n] & 1
+				bBit := bTmp[n] & 1
+
+				aTmp[n] >>= 1 // Right shift the current part
+				bTmp[n] >>= 1 // Right shift the current part
+
+				if aBit != bBit {
+					return aBit < bBit
+				}
+			}
+		}
+
+		return true
+	})
 }
