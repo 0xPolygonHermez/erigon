@@ -2,21 +2,24 @@ package smt
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/log/v3"
 )
 
 // sorts the keys and builds a binary tree from left
 // this makes it so the left part of a node can be deleted once it's right part is inserted
 // this is because the left part is at its final spot
 // when deleting nodes, go down to the leaf and create and save hashes in the SMT
-func (s *SMT) GenerateFromKVBulk(kvMap map[utils.NodeKey]utils.NodeValue8) ([4]uint64, error) {
+func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils.NodeValue8) ([4]uint64, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 
+	log.Info(fmt.Sprintf("[%s] Building temp binary tree started", logPrefix))
+
 	// get nodeKeys and sort them bitwise
 	nodeKeys := []utils.NodeKey{}
-
 	for k := range kvMap {
 		v := kvMap[k]
 		if v.IsZero() {
@@ -24,8 +27,18 @@ func (s *SMT) GenerateFromKVBulk(kvMap map[utils.NodeKey]utils.NodeValue8) ([4]u
 		}
 		nodeKeys = append(nodeKeys, k)
 	}
+	totalKeysCount := len(nodeKeys)
+
+	log.Info(fmt.Sprintf("[%s] Total values to insert: %d", logPrefix, totalKeysCount))
+
+	log.Info(fmt.Sprintf("[%s] Sorting keys...", logPrefix))
+	sortStartTime := time.Now()
+
 	//TODO: can sort without converting
 	utils.SortNodeKeysBitwiseAsc(nodeKeys)
+
+	sortTotalTime := time.Since(sortStartTime)
+	log.Info(fmt.Sprintf("[%s] Keys sorted in %v", logPrefix, sortTotalTime))
 
 	rootNode := SmtNode{
 		leftHash: [4]uint64{},
@@ -33,6 +46,34 @@ func (s *SMT) GenerateFromKVBulk(kvMap map[utils.NodeKey]utils.NodeValue8) ([4]u
 		node1:    nil,
 	}
 
+	//start a progress checker
+	insertedKeysCount := 0
+	keysInserted := make(chan int)
+	ctDone := make(chan bool)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		var pc int
+		var pct int
+
+		for {
+			select {
+			case newPc := <-keysInserted:
+				pc = newPc
+				if totalKeysCount > 0 {
+					pct = (pc * 100) / totalKeysCount
+				}
+			case <-ticker.C:
+				log.Info(fmt.Sprintf("[%s] Progress: %d/%d (%d%%)", logPrefix, pc, totalKeysCount, pct))
+			case <-ctDone:
+				return
+			}
+		}
+	}()
+
+	tempTreeBuildStart := time.Now()
 	for _, k := range nodeKeys {
 		// split the key
 		keys := k.GetPath()
@@ -166,7 +207,16 @@ func (s *SMT) GenerateFromKVBulk(kvMap map[utils.NodeKey]utils.NodeValue8) ([4]u
 				}
 			}
 		}
+
+		insertedKeysCount++
+		keysInserted <- insertedKeysCount
 	}
+
+	tempTreeBuildTime := time.Since(tempTreeBuildStart)
+	close(keysInserted)
+	close(ctDone)
+
+	log.Info(fmt.Sprintf("[%s] Finished the temp tree build in %v, hashing and saving the result", logPrefix, tempTreeBuildTime))
 
 	//special case where no values were inserted
 	if rootNode.isLeaf() {
