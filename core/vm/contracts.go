@@ -201,10 +201,12 @@ type sha256hash struct{}
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
 func (c *sha256hash) RequiredGas(input []byte) uint64 {
+	//[zkevm]
 	return 0
 	// return uint64(len(input)+31)/32*params.Sha256PerWordGas + params.Sha256BaseGas
 }
 func (c *sha256hash) Run(input []byte) ([]byte, error) {
+	//[zkevm]
 	return []byte{}, ErrExecutionReverted
 	// h := sha256.Sum256(input)
 	// return h[:], nil
@@ -218,10 +220,12 @@ type ripemd160hash struct{}
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
 func (c *ripemd160hash) RequiredGas(input []byte) uint64 {
+	//[zkevm]
 	return 0
 	// return uint64(len(input)+31)/32*params.Ripemd160PerWordGas + params.Ripemd160BaseGas
 }
 func (c *ripemd160hash) Run(input []byte) ([]byte, error) {
+	//[zkevm]
 	// ripemd := ripemd160.New()
 	// ripemd.Write(input)
 	// return common.LeftPadBytes(ripemd.Sum(nil), 32), nil
@@ -295,6 +299,7 @@ func modexpMultComplexity(x *big.Int) *big.Int {
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bigModExp) RequiredGas(input []byte) uint64 {
+	//[zkevm]
 	return 0
 	// var (
 	// 	baseLen = new(big.Int).SetBytes(getData(input, 0, 32))
@@ -366,6 +371,7 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 }
 
 func (c *bigModExp) Run(input []byte) ([]byte, error) {
+	//[zkevm]
 	return []byte{}, ErrExecutionReverted
 
 	// var (
@@ -448,11 +454,13 @@ type bn256AddIstanbul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256AddIstanbul) RequiredGas(input []byte) uint64 {
+	//[zkevm]
 	return 0
 	// return params.Bn256AddGasIstanbul
 }
 
 func (c *bn256AddIstanbul) Run(input []byte) ([]byte, error) {
+	//[zkevm]
 	return []byte{}, ErrExecutionReverted
 
 	// return runBn256Add(input)
@@ -489,11 +497,13 @@ type bn256ScalarMulIstanbul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256ScalarMulIstanbul) RequiredGas(input []byte) uint64 {
+	//[zkevm]
 	return 0
 	// return params.Bn256ScalarMulGasIstanbul
 }
 
 func (c *bn256ScalarMulIstanbul) Run(input []byte) ([]byte, error) {
+	//[zkevm]
 	return []byte{}, ErrExecutionReverted
 
 	// return runBn256ScalarMul(input)
@@ -560,11 +570,13 @@ type bn256PairingIstanbul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256PairingIstanbul) RequiredGas(input []byte) uint64 {
+	//[zkevm]
 	return 0
 	// return params.Bn256PairingBaseGasIstanbul + uint64(len(input)/192)*params.Bn256PairingPerPointGasIstanbul
 }
 
 func (c *bn256PairingIstanbul) Run(input []byte) ([]byte, error) {
+	//[zkevm]
 	return []byte{}, ErrExecutionReverted
 
 	// return runBn256Pairing(input)
@@ -586,6 +598,7 @@ func (c *bn256PairingByzantium) Run(input []byte) ([]byte, error) {
 type blake2F struct{}
 
 func (c *blake2F) RequiredGas(input []byte) uint64 {
+	//[zkevm]
 	return 0
 	// If the input is malformed, we can't calculate the gas, return 0 and let the
 	// actual call choke and fault.
@@ -607,6 +620,7 @@ var (
 )
 
 func (c *blake2F) Run(input []byte) ([]byte, error) {
+	//[zkevm]
 	return []byte{}, ErrExecutionReverted
 
 	// // Make sure the input is valid (correct length and final flag)
