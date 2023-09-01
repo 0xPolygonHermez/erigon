@@ -69,7 +69,7 @@ func TestSMT_Create_Insert(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			s := NewSMT(nil)
 			// set scenario old root if fail
-			newRoot, err := s.GenerateFromKVBulk(scenario.kvMap)
+			newRoot, err := s.GenerateFromKVBulk("", scenario.kvMap)
 			if err != nil {
 				t.Errorf("Insert failed: %v", err)
 			}
@@ -113,7 +113,7 @@ func TestSMT_Create_CompareWithRandomData(t *testing.T) {
 	startTime = time.Now()
 	s2 := NewSMT(nil)
 	// set scenario old root if fail
-	root2, err := s2.GenerateFromKVBulk(kvMap)
+	root2, err := s2.GenerateFromKVBulk("", kvMap)
 	if err != nil {
 		t.Errorf("Insert failed: %v", err)
 	}
