@@ -4,15 +4,25 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"math/big"
+	"io"
+	"log"
 	"net/http"
 	"os"
-	"strings"
+
+	"github.com/ledgerwatch/erigon/eth/tracers/logger"
+	"gopkg.in/yaml.v2"
 )
 
 type HTTPResponse struct {
-	Result string `json:"result"`
+	JsonRpc string `json:"jsonrpc"`
+	Id      int    `json:"id"`
+	Result  Result `json:"result"`
+}
+
+type Result struct {
+	Gas        int                `json:"gas"`
+	Failed     bool               `json:"failed"`
+	StructLogs []logger.OpContext `json:"structLogs"`
 }
 
 type RequestData struct {
@@ -22,158 +32,143 @@ type RequestData struct {
 	Jsonrpc string   `json:"jsonrpc"`
 }
 
-type AccountData struct {
-	Nonce   *big.Int          `json:"nonce"`
-	Balance *big.Int          `json:"balance"`
-	Storage map[string]string `json:"Storage"`
+type Config struct {
+	Url      string `yaml: "url"`
+	Username string `yaml: "username"`
+	Pass     string `yaml: "pass"`
 }
 
-func toHex(i int64) string {
-	return fmt.Sprintf("0x%x", i)
-}
-
-func toInt(s string) int64 {
-	i, _ := new(big.Int).SetString(s, 10)
-	return i.Int64()
-}
-
-var block = toHex(5382)
+// var localTraceFile = "localOpDump.json"
+// var rpcTraceFile = "rpcOpDump.json"
 
 func main() {
-	// read block number from a command-line flag if present
-	if len(os.Args) > 1 {
-		// concert to int
-		block = toHex(toInt(os.Args[1]))
-	}
+	fmt.Println("Check started.")
 
-	// read from stdin until end of file
-	jsonData, err := ioutil.ReadAll(os.Stdin)
+	yamlFile, err := os.ReadFile("rpcConfig.yaml")
 	if err != nil {
-		fmt.Println("Error reading from Stdin:", err)
-		return
+		panic(err)
 	}
 
-	data := make(map[string]AccountData)
+	var config Config
 
-	err = json.Unmarshal([]byte(jsonData), &data)
+	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
-		fmt.Println("Error parsing JSON data:", err)
-		return
+		panic(err)
 	}
 
-	url := "https://zkevm-rpc.com/"
-	for accountHash, accountData := range data {
-		fmt.Println(accountHash)
+	files, err := os.ReadDir("traces/")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		// check nonce
-		payloadNonce := RequestData{
-			Method:  "eth_getTransactionCount",
-			Params:  []string{accountHash, block},
-			ID:      1,
-			Jsonrpc: "2.0",
+	for _, file := range files {
+		txHash := file.Name()
+		// remove .json ending
+		txHash = txHash[:len(txHash)-5]
+		fmt.Println("Checking tx:", txHash)
+
+		jsonFile, err := os.Open("traces/" + file.Name())
+		if err != nil {
+			fmt.Println(err)
 		}
-		compareValues("Nonce", accountData.Nonce, url, payloadNonce)
+		defer jsonFile.Close()
 
-		// check balance
-		payloadBalance := RequestData{
-			Method:  "eth_getBalance",
-			Params:  []string{accountHash, block},
-			ID:      1,
-			Jsonrpc: "2.0",
+		var localTrace []logger.OpContext
+		byteValue, _ := io.ReadAll(jsonFile)
+		err = json.Unmarshal(byteValue, &localTrace)
+		if err != nil {
+			fmt.Println("Error parsing JSON data:", err)
+			return
 		}
-		compareValues("Balance", accountData.Balance, url, payloadBalance)
 
-		// check storage
-		for storageLocation, localValue := range accountData.Storage {
-			payloadStorage := RequestData{
-				Method:  "eth_getStorageAt",
-				Params:  []string{accountHash, storageLocation, block},
-				ID:      1,
-				Jsonrpc: "2.0",
-			}
-			compareValuesString(storageLocation, localValue, url, payloadStorage)
+		rpcTrace, err := getRpcTrace(config, txHash)
+		if err != nil {
+			panic(err)
+		}
+
+		err = compareTraces(localTrace, rpcTrace)
+		if err != nil {
+			panic(err)
+		}
+
+		e := os.Remove("traces/" + file.Name())
+		if e != nil {
+			log.Fatal(e)
 		}
 	}
+
+	fmt.Println("Check finished.")
 }
 
-func compareValuesString(key string, localValue string, url string, payload RequestData) {
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		fmt.Println("Error preparing request:", err)
-		return
+func compareTraces(localTrace, rpcTrace []logger.OpContext) error {
+
+	localTracelen := len(localTrace)
+	rpcTracelen := len(rpcTrace)
+	if localTracelen != rpcTracelen {
+		fmt.Printf("opcode counts mismatch. Local count: %d, RPC count: %d\n", len(localTrace), len(rpcTrace))
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
+	var length int
+	if len(localTrace) > len(rpcTrace) {
+		length = len(rpcTrace)
+	} else {
+		length = len(localTrace)
+	}
+	for i := 0; i < length; i++ {
+		loc := localTrace[i]
+		roc := rpcTrace[i]
+		areEqual := loc.Cmp(roc)
+
+		if !areEqual {
+			return fmt.Errorf("opcodes at index {%d} are not equal.\nLocal:\t%v\nRPC:\t%v", i, loc, roc)
+		}
 	}
 
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	var httpResp HTTPResponse
-	json.Unmarshal(body, &httpResp)
-	remoteValueDecode := httpResp.Result
-
-	localValueStr := strings.TrimPrefix(localValue, "0x")
-	remoteValueStr := strings.TrimPrefix(remoteValueDecode, "0x")
-
-	localValueInt, _ := new(big.Int).SetString(localValueStr, 16)
-	remoteValueInt, _ := new(big.Int).SetString(remoteValueStr, 16)
-
-	if localValueInt == nil {
-		fmt.Println("Local value not found for", key)
-		return
-	}
-
-	if remoteValueInt == nil {
-		fmt.Println("Remote value not found for", key)
-		fmt.Println(localValue)
-		return
-	}
-
-	fmt.Printf("\t %s : 0x%064x : %s\n", key, localValueInt, remoteValueDecode)
-	if localValueInt.Cmp(remoteValueInt) != 0 {
-		fmt.Printf("Mismatch detected for %s. Local: %s, Remote: %s\n", key, localValue, remoteValueStr)
-	}
+	return nil
 }
 
-func compareValues(key string, localValue *big.Int, url string, payload RequestData) {
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		fmt.Println("Error preparing request:", err)
-		return
+func getRpcTrace(cfg Config, txHash string) ([]logger.OpContext, error) {
+	payloadbytecode := RequestData{
+		Method:  "debug_traceTransaction",
+		Params:  []string{txHash},
+		ID:      1,
+		Jsonrpc: "2.0",
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
+	jsonPayload, err := json.Marshal(payloadbytecode)
 	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
+		return []logger.OpContext{}, err
 	}
 
+	req, err := http.NewRequest("POST", cfg.Url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return []logger.OpContext{}, err
+	}
+
+	req.SetBasicAuth(cfg.Username, cfg.Pass)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return []logger.OpContext{}, err
+	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return []logger.OpContext{}, err
+	}
+
+	if resp.StatusCode != 200 {
+		return []logger.OpContext{}, fmt.Errorf(string(body))
+	}
+
 	var httpResp HTTPResponse
-	json.Unmarshal(body, &httpResp)
-	remoteValueDecode := httpResp.Result
-
-	remoteValueStr := strings.TrimPrefix(remoteValueDecode, "0x")
-
-	remoteValueInt := new(big.Int)
-	remoteValueInt.SetString(remoteValueStr, 16)
-
-	if remoteValueInt == nil {
-		fmt.Println("Remote value not found for", key)
-		fmt.Println(localValue)
-		return
+	err = json.Unmarshal(body, &httpResp)
+	if err != nil {
+		return []logger.OpContext{}, err
 	}
+	result := httpResp.Result
 
-	localValueHex := localValue.Text(16)
-
-	fmt.Printf("\t %s : 0x%s : %s\n", key, localValueHex, remoteValueDecode)
-	if localValue.Cmp(remoteValueInt) != 0 {
-		fmt.Printf(" \tMismatch detected for %s. Local: 0x%s, Remote: 0x%s\n", key, localValueHex, remoteValueStr)
-	}
+	return result.StructLogs, nil
 }
