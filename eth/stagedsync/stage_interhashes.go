@@ -351,7 +351,42 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	dataCollectStartTime := time.Now()
 	log.Info(fmt.Sprintf("[%s] Collecting account data...", logPrefix))
 	kvMap := map[utils.NodeKey]utils.NodeValue8{}
+
+	stateCt := 0
 	err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+		stateCt++
+		return nil
+	})
+
+	progCt := 0
+	progress := make(chan int)
+	ctDone := make(chan bool)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		var pc int
+		var pct int
+
+		for {
+			select {
+			case newPc := <-progress:
+				pc = newPc
+				if stateCt > 0 {
+					pct = (pc * 100) / stateCt
+				}
+			case <-ticker.C:
+				log.Info(fmt.Sprintf("[%s] Progress: %d/%d (%d%%)", logPrefix, pc, stateCt, pct))
+			case <-ctDone:
+				return
+			}
+		}
+	}()
+
+	err = psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+		progCt++
+		progress <- progCt
 		var err error
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
@@ -385,6 +420,9 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 		}
 		return nil
 	})
+
+	close(progress)
+	close(ctDone)
 
 	if err != nil {
 		return trie.EmptyRoot, err
@@ -1201,6 +1239,9 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 			storageChanges[address][stkk] = v
 			return nil
 		})
+		if err != nil {
+			return trie.EmptyRoot, err
+		}
 
 		// update the tree
 		for addr, acc := range accChanges {
