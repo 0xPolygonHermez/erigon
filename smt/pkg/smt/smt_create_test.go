@@ -131,6 +131,31 @@ func TestSMT_Create_CompareWithRandomData(t *testing.T) {
 	fmt.Println("Second build time: ", secondBuildTime)
 }
 
+func TestSMT_Create_Benchmark(t *testing.T) {
+	limit := 500000
+
+	kvMap := map[utils.NodeKey]utils.NodeValue8{}
+	for i := 1; i <= limit; i++ {
+		bigInt := big.NewInt(rand.Int63n(int64(i)))
+		kvMap[utils.ScalarToNodeKey(bigInt)] = utils.ScalarToNodeValue8(bigInt)
+	}
+
+	//build and benchmark the tree the first way
+	startTime := time.Now()
+	//build the tree the from kvbulk
+	s2 := NewSMT(nil)
+	// set scenario old root if fail
+	_, err := s2.GenerateFromKVBulk("", kvMap)
+	if err != nil {
+		t.Errorf("Insert failed: %v", err)
+	}
+	secondBuildTime := time.Since(startTime)
+	s2 = nil
+
+	fmt.Println("Number of values: ", limit)
+	fmt.Println("Build time: ", secondBuildTime)
+}
+
 func Test_findLastNode(t *testing.T) {
 	leftTreeRoot := SmtNode{}
 	currentNode := &leftTreeRoot

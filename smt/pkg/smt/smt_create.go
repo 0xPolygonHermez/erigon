@@ -2,6 +2,7 @@ package smt
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
@@ -88,8 +89,27 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 		}
 	}()
 
+	//start the node deletion worker
+	deletesQueue := utils.NewQueue(1000)
+	errChan := make(chan error)
+	deletesWorker := utils.NewWorker("hash and delete nodes worker", errChan, deletesQueue)
+	// deletes work group. Await this at end
+	var dwg sync.WaitGroup
+	dwg.Add(1)
+
+	go func() {
+		deletesWorker.DoWork()
+		dwg.Done()
+	}()
+
 	tempTreeBuildStart := time.Now()
 	for _, k := range nodeKeys {
+		select {
+		case err := <-errChan:
+			return [4]uint64{}, err
+		default:
+		}
+
 		// split the key
 		keys := k.GetPath()
 		// find last node
@@ -157,16 +177,22 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 			}
 
 			//hash, save and delete left leaf
-			pathToDeleteFrom := make([]int, level+level2+1)
-			copy(pathToDeleteFrom, keys[:level+level2])
-			pathToDeleteFrom[level+level2] = 0
-			_, leftHash, err := siblings[len(siblings)-1].node0.deleteTree(pathToDeleteFrom, s, kvMap)
-			if err != nil {
-				return [4]uint64{}, err
-			}
+			deleteFunc := func() error {
+				nodeToDelFrom := siblings[len(siblings)-1]
+				pathToDeleteFrom := make([]int, level+level2+1)
+				copy(pathToDeleteFrom, keys[:level+level2])
+				pathToDeleteFrom[level+level2] = 0
+				_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s, kvMap)
+				if err != nil {
+					return err
+				}
 
-			siblings[len(siblings)-1].leftHash = leftHash
-			siblings[len(siblings)-1].node0 = nil
+				nodeToDelFrom.leftHash = leftHash
+				nodeToDelFrom.node0 = nil
+
+				return nil
+			}
+			deletesQueue.AddJob(utils.Job{Action: deleteFunc})
 		} else
 		// if it is not leaf
 		// insert the new leaf on the right side
@@ -210,15 +236,21 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 
 				//hash, save and delete left leaf
 				if upperNode.node0 != nil {
-					pathToDeleteFrom := make([]int, level+1)
-					copy(pathToDeleteFrom, keys[:level])
-					pathToDeleteFrom[level] = 0
-					_, leftHash, err := upperNode.node0.deleteTree(pathToDeleteFrom, s, kvMap)
-					if err != nil {
-						return [4]uint64{}, err
+					deleteFunc := func() error {
+						nodeToDelFrom := upperNode
+						pathToDeleteFrom := make([]int, level+1)
+						copy(pathToDeleteFrom, keys[:level])
+						pathToDeleteFrom[level] = 0
+						_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s, kvMap)
+						if err != nil {
+							return err
+						}
+						nodeToDelFrom.leftHash = leftHash
+						nodeToDelFrom.node0 = nil
+						return nil
 					}
-					upperNode.leftHash = leftHash
-					upperNode.node0 = nil
+
+					deletesQueue.AddJob(utils.Job{Action: deleteFunc})
 				}
 			}
 		}
@@ -231,7 +263,11 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 	close(keysInserted)
 	close(ctDone)
 
-	log.Info(fmt.Sprintf("[%s] Finished the temp tree build in %v, hashing and saving the result", logPrefix, tempTreeBuildTime))
+	log.Info(fmt.Sprintf("[%s] Finished the temp tree build in %v, hashing and saving the result...", logPrefix, tempTreeBuildTime))
+
+	//wait previous deletions
+	deletesQueue.Stop()
+	dwg.Wait()
 
 	//special case where no values were inserted
 	if rootNode.isLeaf() {
