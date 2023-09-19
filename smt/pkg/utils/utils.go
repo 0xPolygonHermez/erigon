@@ -10,7 +10,7 @@ import (
 
 	"sort"
 
-	poseidon "github.com/iden3/go-iden3-crypto/goldenposeidon"
+	"github.com/gateway-fm/vectorized-poseidon-gold/src/vectorizedposeidongold"
 )
 
 const (
@@ -45,7 +45,7 @@ const (
 var (
 	LeafCapacity   = [4]uint64{1, 0, 0, 0}
 	BranchCapacity = [4]uint64{0, 0, 0, 0}
-	hashFunc       = poseidon.Hash
+	hashFunc       = vectorizedposeidongold.Hash
 )
 
 func Hash(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
