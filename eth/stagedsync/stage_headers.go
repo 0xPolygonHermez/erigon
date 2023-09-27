@@ -12,7 +12,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/dbg"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/etl"
 	"github.com/ledgerwatch/erigon-lib/gointerfaces/remote"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -35,7 +34,7 @@ import (
 type ZkSynchronizer interface {
 	Sync(kv.RwDB, kv.RwTx, bool, func(ctx context.Context, db kv.RwDB, tx kv.RwTx) (kv.RwTx, error)) (kv.RwTx, error)
 	SyncPreTip(tx kv.RwTx, chunkSize uint64, progress ZkProgress) (uint64, error)
-	SyncTip(tx kv.RwTx, progress ZkProgress) error
+	SyncTip(tx kv.RwTx, fromBatch uint64, progress ZkProgress) (uint64, bool, error)
 	GetProgress(kv.RwTx) ZkProgress
 }
 
@@ -993,108 +992,111 @@ func fixCanonicalChain(logPrefix string, logEvery *time.Ticker, height uint64, h
 }
 
 func HeadersUnwind(u *UnwindState, s *StageState, tx kv.RwTx, cfg HeadersCfg, test bool) (err error) {
-	useExternalTx := tx != nil
-	if !useExternalTx {
-		tx, err = cfg.db.BeginRw(context.Background())
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-	}
-	// Delete canonical hashes that are being unwound
-	badBlock := u.BadBlock != (libcommon.Hash{})
-	if badBlock {
-		cfg.hd.ReportBadHeader(u.BadBlock)
-		// Mark all descendants of bad block as bad too
-		headerCursor, cErr := tx.Cursor(kv.Headers)
-		if cErr != nil {
-			return cErr
-		}
-		defer headerCursor.Close()
-		var k, v []byte
-		for k, v, err = headerCursor.Seek(hexutility.EncodeTs(u.UnwindPoint + 1)); err == nil && k != nil; k, v, err = headerCursor.Next() {
-			var h types.Header
-			if err = rlp.DecodeBytes(v, &h); err != nil {
-				return err
-			}
-			if cfg.hd.IsBadHeader(h.ParentHash) {
-				cfg.hd.ReportBadHeader(h.Hash())
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("iterate over headers to mark bad headers: %w", err)
-		}
-	}
-	if err := rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, false /* deleteHeaders */); err != nil {
-		return err
-	}
-	if badBlock {
-		var maxTd big.Int
-		var maxHash libcommon.Hash
-		var maxNum uint64 = 0
 
-		if test { // If we are not in the test, we can do searching for the heaviest chain in the next cycle
-			// Find header with biggest TD
-			tdCursor, cErr := tx.Cursor(kv.HeaderTD)
-			if cErr != nil {
-				return cErr
-			}
-			defer tdCursor.Close()
-			var k, v []byte
-			k, v, err = tdCursor.Last()
-			if err != nil {
-				return err
-			}
-			for ; err == nil && k != nil; k, v, err = tdCursor.Prev() {
-				if len(k) != 40 {
-					return fmt.Errorf("key in TD table has to be 40 bytes long: %x", k)
-				}
-				var hash libcommon.Hash
-				copy(hash[:], k[8:])
-				if cfg.hd.IsBadHeader(hash) {
-					continue
-				}
-				var td big.Int
-				if err = rlp.DecodeBytes(v, &td); err != nil {
-					return err
-				}
-				if td.Cmp(&maxTd) > 0 {
-					maxTd.Set(&td)
-					copy(maxHash[:], k[8:])
-					maxNum = binary.BigEndian.Uint64(k[:8])
-				}
-			}
-			if err != nil {
-				return err
-			}
-		}
-		/* TODO(yperbasis): Is it safe?
-		if err := rawdb.TruncateTd(tx, u.UnwindPoint+1); err != nil {
-			return err
-		}
-		*/
-		if maxNum == 0 {
-			maxNum = u.UnwindPoint
-			if maxHash, err = rawdb.ReadCanonicalHash(tx, maxNum); err != nil {
-				return err
-			}
-		}
-		if err = rawdb.WriteHeadHeaderHash(tx, maxHash); err != nil {
-			return err
-		}
-		if err = u.Done(tx); err != nil {
-			return err
-		}
-		if err = s.Update(tx, maxNum); err != nil {
-			return err
-		}
-	}
-	if !useExternalTx {
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return ZkHeadersUnwind(u, s, tx, cfg, test)
+
+	//useExternalTx := tx != nil
+	//if !useExternalTx {
+	//	tx, err = cfg.db.BeginRw(context.Background())
+	//	if err != nil {
+	//		return err
+	//	}
+	//	defer tx.Rollback()
+	//}
+	//// Delete canonical hashes that are being unwound
+	//badBlock := u.BadBlock != (libcommon.Hash{})
+	//if badBlock {
+	//	cfg.hd.ReportBadHeader(u.BadBlock)
+	//	// Mark all descendants of bad block as bad too
+	//	headerCursor, cErr := tx.Cursor(kv.Headers)
+	//	if cErr != nil {
+	//		return cErr
+	//	}
+	//	defer headerCursor.Close()
+	//	var k, v []byte
+	//	for k, v, err = headerCursor.Seek(hexutility.EncodeTs(u.UnwindPoint + 1)); err == nil && k != nil; k, v, err = headerCursor.Next() {
+	//		var h types.Header
+	//		if err = rlp.DecodeBytes(v, &h); err != nil {
+	//			return err
+	//		}
+	//		if cfg.hd.IsBadHeader(h.ParentHash) {
+	//			cfg.hd.ReportBadHeader(h.Hash())
+	//		}
+	//	}
+	//	if err != nil {
+	//		return fmt.Errorf("iterate over headers to mark bad headers: %w", err)
+	//	}
+	//}
+	//if err := rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, false /* deleteHeaders */); err != nil {
+	//	return err
+	//}
+	//if badBlock {
+	//	var maxTd big.Int
+	//	var maxHash libcommon.Hash
+	//	var maxNum uint64 = 0
+	//
+	//	if test { // If we are not in the test, we can do searching for the heaviest chain in the next cycle
+	//		// Find header with biggest TD
+	//		tdCursor, cErr := tx.Cursor(kv.HeaderTD)
+	//		if cErr != nil {
+	//			return cErr
+	//		}
+	//		defer tdCursor.Close()
+	//		var k, v []byte
+	//		k, v, err = tdCursor.Last()
+	//		if err != nil {
+	//			return err
+	//		}
+	//		for ; err == nil && k != nil; k, v, err = tdCursor.Prev() {
+	//			if len(k) != 40 {
+	//				return fmt.Errorf("key in TD table has to be 40 bytes long: %x", k)
+	//			}
+	//			var hash libcommon.Hash
+	//			copy(hash[:], k[8:])
+	//			if cfg.hd.IsBadHeader(hash) {
+	//				continue
+	//			}
+	//			var td big.Int
+	//			if err = rlp.DecodeBytes(v, &td); err != nil {
+	//				return err
+	//			}
+	//			if td.Cmp(&maxTd) > 0 {
+	//				maxTd.Set(&td)
+	//				copy(maxHash[:], k[8:])
+	//				maxNum = binary.BigEndian.Uint64(k[:8])
+	//			}
+	//		}
+	//		if err != nil {
+	//			return err
+	//		}
+	//	}
+	//	/* TODO(yperbasis): Is it safe?
+	//	if err := rawdb.TruncateTd(tx, u.UnwindPoint+1); err != nil {
+	//		return err
+	//	}
+	//	*/
+	//	if maxNum == 0 {
+	//		maxNum = u.UnwindPoint
+	//		if maxHash, err = rawdb.ReadCanonicalHash(tx, maxNum); err != nil {
+	//			return err
+	//		}
+	//	}
+	//	if err = rawdb.WriteHeadHeaderHash(tx, maxHash); err != nil {
+	//		return err
+	//	}
+	//	if err = u.Done(tx); err != nil {
+	//		return err
+	//	}
+	//	if err = s.Update(tx, maxNum); err != nil {
+	//		return err
+	//	}
+	//}
+	//if !useExternalTx {
+	//	if err := tx.Commit(); err != nil {
+	//		return err
+	//	}
+	//}
+	//return nil
 }
 
 func logProgressHeaders(logPrefix string, prev, now uint64) uint64 {

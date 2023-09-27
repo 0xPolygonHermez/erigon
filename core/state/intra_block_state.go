@@ -845,12 +845,6 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 	sdb.SetState(saddr, &sl0, *txNum)
 }
 
-func (s *IntraBlockState) PrintSmtRootHash() {
-	// print s.smt.LastRoot as hex
-	rootU256 := uint256.NewInt(0).SetBytes(s.smt.LastRoot().Bytes())
-	fmt.Println("SMT root: ", rootU256.String())
-}
-
 func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
@@ -865,9 +859,6 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := libcommon.BytesToHash(mapKey)
-	rootU256 := uint256.NewInt(0).SetBytes(sdb.smt.LastRoot().Bytes())
-
-	fmt.Println("Pre SMT root: ", rootU256.String())
 
 	rpcHash, err := getDbRoot(dbTx, txNum.Uint64())
 	if err != nil {

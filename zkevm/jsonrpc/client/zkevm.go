@@ -53,3 +53,29 @@ func (c *Client) BatchByNumber(ctx context.Context, number *big.Int) (*types.Bat
 
 	return result, nil
 }
+
+func (c *Client) BatchBatchesByNumber(ctx context.Context, numbers []*big.Int) ([]*types.Batch, error) {
+	methods := make([]string, len(numbers))
+	paramGroups := make([][]interface{}, len(numbers))
+
+	for i, num := range numbers {
+		methods[i] = "zkevm_getBatchByNumber"
+		paramGroups[i] = []interface{}{types.ToBatchNumArg(num), true}
+	}
+
+	responses, err := JSONRPCBatchCall(c.url, methods, paramGroups...)
+	if err != nil {
+		return nil, err
+	}
+
+	batches := make([]*types.Batch, len(responses))
+	for i, res := range responses {
+		var batch types.Batch
+		if err := json.Unmarshal(res.Result, &batch); err != nil {
+			return nil, err
+		}
+		batches[i] = &batch
+	}
+
+	return batches, nil
+}

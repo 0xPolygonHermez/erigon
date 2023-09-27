@@ -60,6 +60,11 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 
 	bi := utils.ConvertHexToBigInt(hashedBytecode)
 
+	if len(bytecode) == 0 {
+		bytecodeLength = 0
+		bi = big.NewInt(0)
+	}
+
 	_, err = s.InsertKA(keyContractCode, bi)
 	if err != nil {
 		return err

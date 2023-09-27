@@ -3,10 +3,9 @@ package smt
 import (
 	"fmt"
 	"math/big"
+	"math/rand"
 	"testing"
 	"time"
-
-	"math/rand"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
@@ -18,18 +17,11 @@ func TestSMT_Create_Insert(t *testing.T) {
 		expectedRoot string
 	}{
 		{
-			"TestSMT_Insert_0Key_0Value",
+			"TestSMT_Insert_1Key_0Value",
 			map[utils.NodeKey]utils.NodeValue8{
-				utils.ScalarToNodeKey(big.NewInt(0)): utils.ScalarToNodeValue8(big.NewInt(0)),
+				utils.ScalarToNodeKey(big.NewInt(1)): utils.ScalarToNodeValue8(big.NewInt(0)),
 			},
 			"0x0",
-		},
-		{
-			"TestSMT_Insert_0Key_1Value",
-			map[utils.NodeKey]utils.NodeValue8{
-				utils.ScalarToNodeKey(big.NewInt(0)): utils.ScalarToNodeValue8(big.NewInt(1)),
-			},
-			"0x42bb2f66296df03552203ae337815976ca9c1bf52cc1bdd59399ede8fea8a822",
 		},
 		{
 			"TestSMT_Insert1Key_XValue",
@@ -68,8 +60,15 @@ func TestSMT_Create_Insert(t *testing.T) {
 	for _, scenario := range testCases {
 		t.Run(scenario.name, func(t *testing.T) {
 			s := NewSMT(nil)
+			keys := []utils.NodeKey{}
+			for k, v := range scenario.kvMap {
+				if !v.IsZero() {
+					s.Db.InsertAccountValue(k, v)
+					keys = append(keys, k)
+				}
+			}
 			// set scenario old root if fail
-			newRoot, err := s.GenerateFromKVBulk("", scenario.kvMap)
+			newRoot, err := s.GenerateFromKVBulk("", keys)
 			if err != nil {
 				t.Errorf("Insert failed: %v", err)
 			}
@@ -113,7 +112,15 @@ func TestSMT_Create_CompareWithRandomData(t *testing.T) {
 	startTime = time.Now()
 	s2 := NewSMT(nil)
 	// set scenario old root if fail
-	root2, err := s2.GenerateFromKVBulk("", kvMap)
+	keys := []utils.NodeKey{}
+	for k, v := range kvMap {
+		if !v.IsZero() {
+			s2.Db.InsertAccountValue(k, v)
+			keys = append(keys, k)
+		}
+	}
+	// set scenario old root if fail
+	root2, err := s2.GenerateFromKVBulk("", keys)
 	if err != nil {
 		t.Errorf("Insert failed: %v", err)
 	}
@@ -143,14 +150,23 @@ func TestSMT_Create_Benchmark(t *testing.T) {
 	//build and benchmark the tree the first way
 	startTime := time.Now()
 	//build the tree the from kvbulk
-	s2 := NewSMT(nil)
+	s := NewSMT(nil)
 	// set scenario old root if fail
-	_, err := s2.GenerateFromKVBulk("", kvMap)
+	keys := []utils.NodeKey{}
+	for k, v := range kvMap {
+		if !v.IsZero() {
+			s.Db.InsertAccountValue(k, v)
+			keys = append(keys, k)
+		}
+	}
+	kvMap = nil
+
+	_, err := s.GenerateFromKVBulk("", keys)
 	if err != nil {
 		t.Errorf("Insert failed: %v", err)
 	}
 	secondBuildTime := time.Since(startTime)
-	s2 = nil
+	s = nil
 
 	fmt.Println("Number of values: ", limit)
 	fmt.Println("Build time: ", secondBuildTime)

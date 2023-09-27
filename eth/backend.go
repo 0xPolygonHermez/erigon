@@ -673,7 +673,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		true,                      /*isTrustedSequencer*/
 		etherMan,                  //etherMan           ethermanInterface
 		adapter.NewStateAdapter(), //state              stateInterface
-		client.NewClient("https://rpc.polygon-zkevm.gateway.fm"), //zkEVMClient        zkEVMClientInterface
+		client.NewClient("https://rpc.eu-north-1.gateway.fm/v4/polygon-zkevm/archival/mainnet?apiKey=DkrTDQVU0SkU0WvxyIYc4oxOCyyF9Mzd.9aqlbyImRuJiMlaQ"), //zkEVMClient        zkEVMClientInterface
 		synchronizer.Config{SyncChunkSize: 1000, GenBlockNumber: 16896721},
 		ctx,
 	)
@@ -684,6 +684,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	backend.syncStages = stages2.NewDefaultStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSynchronizer)
 	backend.syncUnwindOrder = stagedsync.DefaultUnwindOrder
 	backend.syncPruneOrder = stagedsync.DefaultPruneOrder
+
+	backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 
 	return backend, nil
 }

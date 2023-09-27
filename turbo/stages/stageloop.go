@@ -87,6 +87,16 @@ func StageLoop(
 		return
 	}
 	defer trw.Rollback()
+	err = trw.CreateBucket("HermezMeta")
+	if err != nil {
+		log.Error("Failed to create HermezMeta bucket", "err", err)
+		return
+	}
+	err = trw.CreateBucket("HermezL1Block")
+	if err != nil {
+		log.Error("Failed to create HermezL1Block bucket", "err", err)
+		return
+	}
 	err = trw.CreateBucket("HermezBatch")
 	if err != nil {
 		log.Error("Failed to create HermezBatch bucket", "err", err)

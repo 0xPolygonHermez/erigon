@@ -33,7 +33,7 @@ type stateInterface interface {
 	AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx kv.RwTx) error
 	AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error
 	AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error
-	AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx kv.RwTx) error
+	AddVirtualBatch(ctx context.Context, batch *state.Batch, l1BlockNumber uint64, dbTx kv.RwTx) error
 	GetPreviousBlock(ctx context.Context, offset uint64, dbTx kv.RwTx) (*state.Block, error)
 	GetLastBatchNumber(ctx context.Context, dbTx kv.RwTx) (uint64, error)
 	GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error)
@@ -57,6 +57,9 @@ type stateInterface interface {
 	GetForkIDTrustedReorgCount(ctx context.Context, forkID uint64, version string, dbTx kv.RwTx) (uint64, error)
 	UpdateForkIDIntervals(intervals []state.ForkIDInterval)
 
+	AddSequencerBatch(ctx context.Context, batch *state.Batch, dbTx kv.RwTx) error
+	GetLastVerifiedBatchNo(ctx context.Context, dbTx kv.RwTx) (uint64, error)
+
 	BeginStateTransaction(ctx context.Context) (kv.RwTx, error)
 }
 
@@ -72,4 +75,5 @@ type poolInterface interface {
 type zkEVMClientInterface interface {
 	BatchNumber(ctx context.Context) (uint64, error)
 	BatchByNumber(ctx context.Context, number *big.Int) (*types.Batch, error)
+	BatchBatchesByNumber(ctx context.Context, numbers []*big.Int) ([]*types.Batch, error)
 }

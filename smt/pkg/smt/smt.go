@@ -20,6 +20,8 @@ import (
 type DB interface {
 	Get(key utils.NodeKey) (utils.NodeValue12, error)
 	Insert(key utils.NodeKey, value utils.NodeValue12) error
+	GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error)
+	InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) error
 	Delete(string) error
 
 	SetLastRoot(lr *big.Int) error

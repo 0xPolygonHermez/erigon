@@ -316,6 +316,24 @@ var DefaultForwardOrder = UnwindOrder{
 	stages.Finish,
 }
 
+var ZkUnwindOrder = UnwindOrder{
+	stages.Headers,
+	stages.BlockHashes,
+	stages.Bodies,
+
+	stages.IntermediateHashes, // need to unwind SMT before we remove history
+	stages.Execution,
+	stages.HashState,
+	stages.Senders,
+	stages.Translation,
+	stages.CallTraces,
+	stages.AccountHistoryIndex,
+	stages.StorageHistoryIndex,
+	stages.LogIndex,
+	stages.TxLookup,
+	stages.Finish,
+}
+
 // UnwindOrder represents the order in which the stages needs to be unwound.
 // The unwind order is important and not always just stages going backwards.
 // Let's say, there is tx pool can be unwound only after execution.

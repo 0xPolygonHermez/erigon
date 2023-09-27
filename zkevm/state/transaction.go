@@ -323,7 +323,7 @@ func (s *State) DebugTransaction(ctx context.Context, transactionHash common.Has
 	// 	return nil, err
 	// }
 
-	txs, _, err := DecodeTxs(batchL2Data)
+	txs, _, _, err := DecodeTxs(batchL2Data, 5)
 	if err != nil && !errors.Is(err, ErrInvalidData) {
 		return nil, err
 	}

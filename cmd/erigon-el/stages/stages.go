@@ -66,6 +66,7 @@ func NewStagedSync(ctx context.Context,
 				cfg.HistoryV3,
 				agg,
 			),
+			stagedsync.StageRpcRootsCfg(db, controlServer.ChainConfig),
 			stagedsync.StageHeadersCfg(
 				db,
 				controlServer.Hd,

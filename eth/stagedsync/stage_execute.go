@@ -161,7 +161,6 @@ func executeBlock(
 	blockNoBytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(blockNoBytes, blockNum)
 
-	// TODO [zkevm] - GER isn't set on the batch at the point of storage!!!!
 	gp, err := tx.GetOne("HermezGlobalExitRoot", blockNoBytes)
 	if err != nil {
 		return err
@@ -208,6 +207,7 @@ func executeBlock(
 	}
 
 	getTracer := func(txIndex int, txHash common.Hash) (vm.EVMLogger, error) {
+		//return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
 		return logger.NewStructLogger(&logger.LogConfig{}), nil
 	}
 

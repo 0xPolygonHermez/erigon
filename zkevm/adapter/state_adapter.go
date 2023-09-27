@@ -24,6 +24,12 @@ import (
 const HermezBatch = "HermezBatch"
 const HermezVerifiedBatch = "HermezVerifiedBatch"
 
+const Meta_HermezMeta = "HermezMeta"
+const META_L1BlockOfHighestVerifiedBatch = "META_L1BlockOfHighestVerifiedBatch"
+const META_VirtualBatch = "META_VirtualBatch"
+const META_VerifiedBatch = "META_VerifiedBatch"
+const META_Batch = "META_Batch"
+
 // write me an adapter mock for stateInterface from zk_synchronizer.go
 // Interface
 type stateInterface interface {
@@ -31,7 +37,7 @@ type stateInterface interface {
 	AddGlobalExitRoot(ctx context.Context, exitRoot *state.GlobalExitRoot, dbTx kv.RwTx) error
 	AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error
 	AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error
-	AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx kv.RwTx) error
+	AddVirtualBatch(ctx context.Context, batch *state.Batch, l1BlockNumber uint64, dbTx kv.RwTx) error
 	GetPreviousBlock(ctx context.Context, offset uint64, dbTx kv.RwTx) (*state.Block, error)
 	GetLastBatchNumber(ctx context.Context, dbTx kv.RwTx) (uint64, error)
 	GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error)
@@ -54,6 +60,9 @@ type stateInterface interface {
 	ResetForkID(ctx context.Context, batchNumber, forkID uint64, version string, dbTx kv.RwTx) error
 	GetForkIDTrustedReorgCount(ctx context.Context, forkID uint64, version string, dbTx kv.RwTx) (uint64, error)
 	UpdateForkIDIntervals(intervals []state.ForkIDInterval)
+
+	AddSequencerBatch(ctx context.Context, batch *state.Batch, dbTx kv.RwTx) error
+	GetLastVerifiedBatchNo(ctx context.Context, dbTx kv.RwTx) (uint64, error)
 
 	BeginStateTransaction(ctx context.Context) (kv.RwTx, error)
 }
@@ -111,6 +120,19 @@ func (m *StateInterfaceAdapter) AddGlobalExitRoot(ctx context.Context, exitRoot 
 	}
 
 	return nil
+
+	// DO NOTHING - we can retrieve this from trusted state in execution to supply the bridge contract with exit roots
+	return nil
+}
+
+func CalculateStateRootPos(ger []byte) []byte {
+	gerb := make([]byte, 32)
+	binary.BigEndian.PutUint64(gerb, GLOBAL_EXIT_ROOT_STORAGE_POS)
+
+	// concat global exit root and global_exit_root_storage_pos
+	rootPlusStorage := append(ger[:], gerb...)
+
+	return keccak256.Hash(rootPlusStorage)
 }
 
 func (m *StateInterfaceAdapter) writeGlobalExitRootToDb(dbTx kv.RwTx, blockNo uint64, gers state.GlobalExitRootDb) error {
@@ -122,33 +144,103 @@ func (m *StateInterfaceAdapter) writeGlobalExitRootToDb(dbTx kv.RwTx, blockNo ui
 }
 
 func (m *StateInterfaceAdapter) AddForcedBatch(ctx context.Context, forcedBatch *state.ForcedBatch, dbTx kv.RwTx) error {
-	panic("AddForcedBatch: implement me")
+	panic("AddForcedBatch: not implemented for PoC")
 }
 
 func (m *StateInterfaceAdapter) AddBlock(ctx context.Context, block *state.Block, dbTx kv.RwTx) error {
 	fmt.Printf("AddBlock, saving ETH progress block: %d\n", block.BlockNumber)
-	// [zkevm] - max note: we shouldn't save this here - it isn't the true sign of actual progress
-	//return stages.SaveStageProgress(dbTx, stages.L1Blocks, block.BlockNumber)
+
+	bj, err := json.Marshal(block)
+	if err != nil {
+		return err
+	}
+
+	return dbTx.Put("HermezL1Block", UintBytes(block.BlockNumber), bj)
+}
+
+func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, batch *state.Batch, l1BlockNumber uint64, dbTx kv.RwTx) error {
+	// serialize and store batch
+	batchJson, err := batch.ToJSON()
+	if err != nil {
+		return err
+	}
+
+	key := CreateBatchKey(batch.BatchNumber, l1BlockNumber)
+
+	err = dbTx.Put(HermezBatch, key, []byte(batchJson))
+	if err != nil {
+		return err
+	}
+
+	err = PutHermezMeta(dbTx, META_VirtualBatch, batch.BatchNumber)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("AddVirtualBatch: virtual batch number", batch.BatchNumber)
 	return nil
 }
 
-func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, virtualBatch *state.VirtualBatch, dbTx kv.RwTx) error {
-	// [zkevm] - store in temp in mem db for debugging
+func (m *StateInterfaceAdapter) AddSequencerBatch(ctx context.Context, batch *state.Batch, dbTx kv.RwTx) error {
+
+	fmt.Println("AddSequencerBatch: batch number", batch.BatchNumber)
+
+	WriteHeaderToDb(dbTx, nil, batch)
+
+	// write these to the DB - into headers + bodies tables, and hermezbatch - but also make sure that we can diff this with hermezverifiedbatch
+	// the dif should be the unwind point for a reorg
+
+	//header, err := WriteHeaderToDb(dbTx, nil, batch)
+
 	return nil
 }
 
 func (m *StateInterfaceAdapter) GetPreviousBlock(ctx context.Context, offset uint64, dbTx kv.RwTx) (*state.Block, error) {
-	panic("GetPreviousBlock: implement me")
+
+	// get db cursor on l1 blocks, get latest block number, minus the offset and return that block
+	c, err := dbTx.Cursor("HermezL1Block")
+	if err != nil {
+		return nil, err
+	}
+
+	// get the last block number
+	lastBlockNumber, _, err := c.Last()
+	if err != nil {
+		return nil, err
+	}
+
+	lbn := binary.BigEndian.Uint64(lastBlockNumber)
+
+	// get the block number minus the offset
+	blockNumber := lbn - offset
+	block, err := dbTx.GetOne("HermezL1Block", UintBytes(blockNumber))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(block) == 0 {
+		return nil, state.ErrNotFound
+	}
+
+	b := &state.Block{}
+	err = json.Unmarshal(block, b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
 
 func (m *StateInterfaceAdapter) GetLastBatchNumber(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
-	return stages.GetStageProgress(dbTx, stages.Bodies)
+	return GetHermezMeta(dbTx, META_Batch)
 }
 
 func (m *StateInterfaceAdapter) GetBatchByNumber(ctx context.Context, batchNumber uint64, dbTx kv.RwTx) (*state.Batch, error) {
 
 	batch := &state.Batch{}
-	b, err := dbTx.GetOne(HermezBatch, UintBytes(batchNumber))
+
+	it, err := dbTx.Prefix(HermezBatch, UintBytes(batchNumber))
+	_, b, err := it.Next()
 	if err != nil {
 		return nil, err
 	}
@@ -180,14 +272,12 @@ func (m *StateInterfaceAdapter) GetNextForcedBatches(ctx context.Context, nextFo
 func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBatch *state.VerifiedBatch, trustedBatch *state.Batch, dbTx kv.RwTx) error {
 	fmt.Printf("AddVerifiedBatch, saving L2 progress batch: %d blockNum: %d\n", verifiedBatch.BatchNumber, verifiedBatch.BlockNumber)
 
+	fmt.Println(trustedBatch.GlobalExitRoot.Hex())
+
+	// TODO: we should check here if the sequenced batch has gone in, if so, then only update the meta table
+
 	// at point of verification we should also add the trusted state from the sequencer
 	batch := trustedBatch
-
-	//// Get the matching batch (body) for the verified batch (header)
-	//batch, err := m.GetBatchByNumber(ctx, verifiedBatch.BatchNumber, dbTx)
-	//if err != nil {
-	//	return err
-	//}
 
 	header, err := WriteHeaderToDb(dbTx, verifiedBatch, batch)
 	if err != nil {
@@ -198,18 +288,26 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 	if err != nil {
 		return err
 	}
-
 	err = dbTx.Put(HermezVerifiedBatch, UintBytes(verifiedBatch.BatchNumber), []byte(vbJson))
 	if err != nil {
 		return err
 	}
 
-	seqval, err := dbTx.IncrementSequence(HermezVerifiedBatch, 1)
+	// TODO: maybe unecessary to update the batch table here
+	bJson, err := batch.ToJSON()
+	if err != nil {
+		return err
+	}
+	err = dbTx.Put(HermezBatch, CreateBatchKey(verifiedBatch.BatchNumber, verifiedBatch.BlockNumber), []byte(bJson))
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("AddVerifiedBatch: seqval", seqval)
+	err = PutHermezMeta(dbTx, META_VerifiedBatch, verifiedBatch.BatchNumber)
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("AddVerifiedBatch: batch number", verifiedBatch.BatchNumber)
 
 	err = WriteBodyToDb(dbTx, batch, header.Hash())
@@ -217,6 +315,7 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 		return err
 	}
 
+	// TODO: check if we can refactor this to use the batch timestamp + the batch global exit root - in which case we can remove the need for the temp table
 	gerp, err := dbTx.Has("HermezGlobalExitRootTemp", batch.GlobalExitRoot.Bytes())
 	if err != nil {
 		return err
@@ -265,11 +364,20 @@ func (m *StateInterfaceAdapter) AddVerifiedBatch(ctx context.Context, verifiedBa
 		return err
 	}
 
+	err = PutHermezMeta(dbTx, META_L1BlockOfHighestVerifiedBatch, verifiedBatch.BlockNumber)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, processingCtx state.ProcessingContext, encodedTxs []byte, dbTx kv.RwTx, caller metrics.CallerLabel) (common.Hash, error) {
-	txs, _, err := state.DecodeTxs(encodedTxs)
+	forkId := uint64(1)
+	if processingCtx.BatchNumber > 813266 {
+		forkId = 5
+	}
+	txs, _, _, err := state.DecodeTxs(encodedTxs, forkId)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -292,18 +400,18 @@ func (m *StateInterfaceAdapter) ProcessAndStoreClosedBatch(ctx context.Context, 
 	if err != nil {
 		return common.Hash{}, err
 	}
-	err = dbTx.Put(HermezBatch, UintBytes(processingCtx.BatchNumber), []byte(batchJson))
+	err = dbTx.Put(HermezBatch, CreateBatchKey(processingCtx.BatchNumber, processingCtx.L1BlockNumber), []byte(batchJson))
 	if err != nil {
 		return common.Hash{}, err
 	}
 
-	// increment sequence so we can easily get 'highest batch'
-	seqval, err := dbTx.IncrementSequence(HermezBatch, 1)
+	err = PutHermezMeta(dbTx, META_Batch, processingCtx.BatchNumber)
 	if err != nil {
 		return common.Hash{}, err
 	}
 
-	fmt.Println("ProcessAndStoreClosedBatch: seqval", seqval)
+	// TODO: write to the headers and bodies tables?
+
 	fmt.Println("ProcessAndStoreClosedBatch: batch number", processingCtx.BatchNumber)
 
 	return common.Hash{}, nil
@@ -315,6 +423,10 @@ func (m *StateInterfaceAdapter) OpenBatch(ctx context.Context, processingContext
 
 func (m *StateInterfaceAdapter) CloseBatch(ctx context.Context, receipt state.ProcessingReceipt, dbTx kv.RwTx) error {
 	panic("CloseBatch: implement me")
+}
+
+func (m *StateInterfaceAdapter) GetLastVerifiedBatchNo(ctx context.Context, dbTx kv.RwTx) (uint64, error) {
+	return GetHermezMeta(dbTx, "HermezVerifiedBatch")
 }
 
 func (m *StateInterfaceAdapter) ProcessSequencerBatch(ctx context.Context, batchNumber uint64, batchL2Data []byte, caller metrics.CallerLabel, dbTx kv.RwTx) (*state.ProcessBatchResponse, error) {
@@ -360,7 +472,7 @@ func (m *StateInterfaceAdapter) ExecuteBatch(ctx context.Context, batch state.Ba
 
 func (m *StateInterfaceAdapter) GetLastVerifiedBatch(ctx context.Context, dbTx kv.RwTx) (*state.VerifiedBatch, error) {
 
-	maxKey, err := dbTx.ReadSequence(HermezVerifiedBatch)
+	maxKey, err := GetHermezMeta(dbTx, "HermezVerifiedBatch")
 	if err != nil {
 		return nil, err
 	}
@@ -434,15 +546,13 @@ func WriteHeaderToDb(dbTx kv.RwTx, vb *state.VerifiedBatch, b *state.Batch) (*et
 	// erigon block number is l2 batch number
 	blockNo := new(big.Int).SetUint64(vb.BatchNumber)
 
-	fmt.Println(vb.StateRoot)
-
 	h := &ethTypes.Header{
-		Root:       vb.StateRoot,
+		Root:       b.StateRoot,
 		TxHash:     vb.TxHash,
 		Difficulty: big.NewInt(0),
 		Number:     blockNo,
 		GasLimit:   30_000_000,
-		Coinbase:   common.HexToAddress("0x148Ee7dAF16574cD020aFa34CC658f8F3fbd2800"), // the sequencer gets the txfee
+		Coinbase:   b.Coinbase,
 		Time:       uint64(b.Timestamp.Unix()),
 	}
 	rawdb.WriteHeader(dbTx, h)
@@ -481,4 +591,34 @@ func trimHexString(s string) string {
 	}
 
 	return "0x0"
+}
+
+func GetHermezMeta(dbTx kv.RwTx, key string) (uint64, error) {
+	v, err := dbTx.GetOne(Meta_HermezMeta, []byte(key))
+	if err != nil {
+		return 0, err
+	}
+
+	if len(v) == 0 {
+		return 0, nil
+	}
+
+	return binary.BigEndian.Uint64(v), nil
+}
+
+func PutHermezMeta(dbTx kv.RwTx, key string, value uint64) error {
+	return dbTx.Put(Meta_HermezMeta, []byte(key), UintBytes(value))
+}
+
+func CreateBatchKey(batchNo uint64, l1BlockNo uint64) []byte {
+	key := make([]byte, 16)
+	binary.BigEndian.PutUint64(key[:8], batchNo)
+	binary.BigEndian.PutUint64(key[8:], l1BlockNo)
+	return key
+}
+
+func ParseBatchKey(key []byte) (batchNo uint64, l1BlockNo uint64) {
+	batchNo = binary.BigEndian.Uint64(key[:8])
+	l1BlockNo = binary.BigEndian.Uint64(key[8:])
+	return
 }

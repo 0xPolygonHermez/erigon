@@ -2,11 +2,12 @@ package db
 
 import (
 	"fmt"
+	"math/big"
+
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/olddb"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
-	"math/big"
 )
 
 type SmtDbTx interface {
@@ -20,26 +21,35 @@ type SmtDbTx interface {
 	Rollback()
 }
 
+const TableSmt = "HermezSmt"
+const TableLastRoot = "HermezSmtLastRoot"
+const TableAccountValues = "HermezSmtAccountValues"
+
 type EriDb struct {
 	kvTx kv.RwTx
 	tx   SmtDbTx
 }
 
-func NewEriDb(tx kv.RwTx) *EriDb {
-	err := tx.CreateBucket("HermezSmt")
+func NewEriDb(tx kv.RwTx) (*EriDb, error) {
+	err := tx.CreateBucket(TableSmt)
 	if err != nil {
-		fmt.Println(err)
+		return &EriDb{}, err
 	}
 
-	err = tx.CreateBucket("HermezSmtLastRoot")
+	err = tx.CreateBucket(TableLastRoot)
 	if err != nil {
-		fmt.Println(err)
+		return &EriDb{}, err
+	}
+
+	err = tx.CreateBucket(TableAccountValues)
+	if err != nil {
+		return &EriDb{}, err
 	}
 
 	return &EriDb{
 		kvTx: tx,
 		tx:   tx,
-	}
+	}, nil
 }
 
 func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
@@ -53,13 +63,14 @@ func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 
 func (m *EriDb) CommitBatch() error {
 	if _, ok := m.tx.(ethdb.DbWithPendingMutations); !ok {
-		return nil // don't commit a kvRw tx
+		return nil // don't roll back a kvRw tx
 	}
 	err := m.tx.Commit()
 	if err != nil {
 		m.tx.Rollback()
 		return err
 	}
+	m.tx = m.kvTx
 	return nil
 }
 
@@ -68,10 +79,11 @@ func (m *EriDb) RollbackBatch() {
 		return // don't roll back a kvRw tx
 	}
 	m.tx.Rollback()
+	m.tx = m.kvTx
 }
 
 func (m *EriDb) GetLastRoot() (*big.Int, error) {
-	data, err := m.tx.GetOne("HermezSmtLastRoot", []byte("lastRoot"))
+	data, err := m.tx.GetOne(TableLastRoot, []byte("lastRoot"))
 	if err != nil {
 		return big.NewInt(0), err
 	}
@@ -85,14 +97,14 @@ func (m *EriDb) GetLastRoot() (*big.Int, error) {
 
 func (m *EriDb) SetLastRoot(r *big.Int) error {
 	v := utils.ConvertBigIntToHex(r)
-	return m.tx.Put("HermezSmtLastRoot", []byte("lastRoot"), []byte(v))
+	return m.tx.Put(TableLastRoot, []byte("lastRoot"), []byte(v))
 }
 
 func (m *EriDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
-	data, err := m.tx.GetOne("HermezSmt", []byte(k))
+	data, err := m.tx.GetOne(TableSmt, []byte(k))
 	if err != nil {
 		return utils.NodeValue12{}, err
 	}
@@ -119,15 +131,49 @@ func (m *EriDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	vConc := utils.ArrayToScalarBig(vals[:])
 	v := utils.ConvertBigIntToHex(vConc)
 
-	return m.tx.Put("HermezSmt", []byte(k), []byte(v))
+	return m.tx.Put(TableSmt, []byte(k), []byte(v))
+}
+
+func (m *EriDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+
+	data, err := m.tx.GetOne(TableAccountValues, []byte(k))
+	if err != nil {
+		return utils.NodeValue8{}, err
+	}
+
+	if data == nil {
+		return utils.NodeValue8{}, nil
+	}
+
+	vConc := utils.ConvertHexToBigInt(string(data))
+	val := utils.ScalarToNodeValue8(vConc)
+
+	return val, nil
+}
+
+func (m *EriDb) InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) error {
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+
+	vals := make([]*big.Int, 8)
+	for i, v := range value {
+		vals[i] = v
+	}
+
+	vConc := utils.ArrayToScalarBig(vals[:])
+	v := utils.ConvertBigIntToHex(vConc)
+
+	return m.tx.Put(TableAccountValues, []byte(k), []byte(v))
 }
 
 func (m *EriDb) Delete(key string) error {
-	return m.tx.Delete("HermezSmt", []byte(key))
+	return m.tx.Delete(TableSmt, []byte(key))
 }
 
 func (m *EriDb) PrintDb() {
-	err := m.tx.ForEach("HermezSmt", []byte{}, func(k, v []byte) error {
+	err := m.tx.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		println(string(k), string(v))
 		return nil
 	})
@@ -139,7 +185,7 @@ func (m *EriDb) PrintDb() {
 func (m *EriDb) GetDb() map[string]string {
 	db := make(map[string]string)
 
-	err := m.tx.ForEach("HermezSmt", []byte{}, func(k, v []byte) error {
+	err := m.tx.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		kStr := string(k)
 		vStr := string(v)
 

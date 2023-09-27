@@ -23,6 +23,7 @@ import (
 
 	state2 "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
@@ -37,6 +38,7 @@ import (
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
+	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
@@ -75,6 +77,7 @@ func StageTrieCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHalt bool, t
 func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg TrieCfg, ctx context.Context, quiet bool) (libcommon.Hash, error) {
 	quit := ctx.Done()
 	_ = quit
+
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -117,24 +120,59 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 	}
 
 	var root libcommon.Hash
-	tooBigJump := to > s.BlockNumber && to-s.BlockNumber > 100_000 // RetainList is in-memory structure and it will OOM if jump is too big, such big jump anyway invalidate most of existing Intermediate hashes
-	if !tooBigJump && cfg.historyV3 && to-s.BlockNumber > 10 {
+	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > 10 // RetainList is in-memory structure and it will OOM if jump is too big, such big jump anyway invalidate most of existing Intermediate hashes
+	if !shouldRegenerate && cfg.historyV3 && to-s.BlockNumber > 10 {
 		//incremental can work only on DB data, not on snapshots
 		_, n, err := rawdbv3.TxNums.FindBlockNum(tx, cfg.agg.EndTxNumMinimax())
 		if err != nil {
 			return trie.EmptyRoot, err
 		}
-		tooBigJump = s.BlockNumber < n
+		shouldRegenerate = s.BlockNumber < n
 	}
 
-	if s.BlockNumber == 0 || tooBigJump {
+	if s.BlockNumber == 0 || shouldRegenerate {
 		if root, err = RegenerateIntermediateHashes(logPrefix, tx, cfg, &expectedRootHash, ctx, quit); err != nil {
 			return trie.EmptyRoot, err
 		}
 	} else {
-		if root, err = ZkIncrementIntermediateHashes(logPrefix, s, tx, to, cfg, &expectedRootHash, quit); err != nil {
+		// TODO: run up to the tip of sequenced batches here
+		// if we're past the first SMT calculation of verified batches, we should only calculate stateroot for subsequent verified batches
+		// vBatchNo, err := adapter.GetHermezMeta(tx, "HermezVerifiedBatch")
+		vBatchNo, err := stages.GetStageProgress(tx, stages.Execution)
+		if err != nil {
 			return trie.EmptyRoot, err
 		}
+
+		lastVBlockHeader, err := cfg.blockReader.HeaderByNumber(ctx, tx, vBatchNo)
+		if err != nil {
+			return trie.EmptyRoot, err
+		}
+		expectedRootHash = lastVBlockHeader.Root
+
+		if root, err = ZkIncrementIntermediateHashes(logPrefix, s, tx, vBatchNo, cfg, &expectedRootHash, quit); err != nil {
+			return trie.EmptyRoot, err
+		}
+
+		// TODO: remove unwind test code
+		//fmt.Println("DEBUG: UNWINDING TREE!!!!")
+		//to = vBatchNo - 300
+		//
+		//// get the header and check the hash
+		//syncHeadHeader, err = cfg.blockReader.HeaderByNumber(ctx, tx, to)
+		//if err != nil {
+		//	return trie.EmptyRoot, err
+		//}
+		//
+		//expectedRootHash = syncHeadHeader.Root
+		//
+		//root, err = UnwindZkSMT(logPrefix, vBatchNo, to, tx, cfg, &expectedRootHash, quit)
+		//if err != nil {
+		//	return trie.EmptyRoot, err
+		//}
+		//
+		//if expectedRootHash != root {
+		//	return trie.EmptyRoot, fmt.Errorf("wrong trie root on unwind")
+		//}
 	}
 	_ = quit
 
@@ -173,48 +211,53 @@ type MyStruct struct {
 
 var collection = make(map[libcommon.Address]*MyStruct)
 
-func insertAccountStateToKV(kvMap map[utils.NodeKey]utils.NodeValue8, ethAddr string, balance, nonce *big.Int) error {
+func insertAccountStateToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, balance, nonce *big.Int) ([]utils.NodeKey, error) {
 	keyBalance, err := utils.KeyEthAddrBalance(ethAddr)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 	keyNonce, err := utils.KeyEthAddrNonce(ethAddr)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	x := utils.ScalarToArrayBig(balance)
 	valueBalance, err := utils.NodeValue8FromBigIntArray(x)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	x = utils.ScalarToArrayBig(nonce)
 	valueNonce, err := utils.NodeValue8FromBigIntArray(x)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
-	kvMap[keyBalance] = *valueBalance
-	kvMap[keyNonce] = *valueNonce
-
-	return nil
+	if !valueBalance.IsZero() {
+		keys = append(keys, keyBalance)
+		db.InsertAccountValue(keyBalance, *valueBalance)
+	}
+	if !valueNonce.IsZero() {
+		keys = append(keys, keyNonce)
+		db.InsertAccountValue(keyNonce, *valueNonce)
+	}
+	return keys, nil
 }
 
-func insertContractBytecodeToKV(kvMap map[utils.NodeKey]utils.NodeValue8, ethAddr string, bytecode string) error {
+func insertContractBytecodeToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, bytecode string) ([]utils.NodeKey, error) {
 	keyContractCode, err := utils.KeyContractCode(ethAddr)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	keyContractLength, err := utils.KeyContractLength(ethAddr)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	hashedBytecode, err := utils.HashContractBytecode(bytecode)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	var parsedBytecode string
@@ -236,22 +279,29 @@ func insertContractBytecodeToKV(kvMap map[utils.NodeKey]utils.NodeValue8, ethAdd
 	x := utils.ScalarToArrayBig(bi)
 	valueContractCode, err := utils.NodeValue8FromBigIntArray(x)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	x = utils.ScalarToArrayBig(big.NewInt(int64(bytecodeLength)))
 	valueContractLength, err := utils.NodeValue8FromBigIntArray(x)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
-	kvMap[keyContractCode] = *valueContractCode
-	kvMap[keyContractLength] = *valueContractLength
+	if !valueContractCode.IsZero() {
+		keys = append(keys, keyContractCode)
+		db.InsertAccountValue(keyContractCode, *valueContractCode)
+	}
 
-	return nil
+	if !valueContractLength.IsZero() {
+		keys = append(keys, keyContractLength)
+		db.InsertAccountValue(keyContractLength, *valueContractLength)
+	}
+
+	return keys, nil
 }
 
-func insertContractStorageToKV(kvMap map[utils.NodeKey]utils.NodeValue8, ethAddr string, storage map[string]string) error {
+func insertContractStorageToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, storage map[string]string) ([]utils.NodeKey, error) {
 	a := utils.ConvertHexToBigInt(ethAddr)
 	add := utils.ScalarToArrayBig(a)
 
@@ -262,7 +312,7 @@ func insertContractStorageToKV(kvMap map[utils.NodeKey]utils.NodeValue8, ethAddr
 
 		keyStoragePosition, err := utils.KeyContractStorage(add, k)
 		if err != nil {
-			return err
+			return []utils.NodeKey{}, err
 		}
 
 		base := 10
@@ -276,16 +326,19 @@ func insertContractStorageToKV(kvMap map[utils.NodeKey]utils.NodeValue8, ethAddr
 		x := utils.ScalarToArrayBig(val)
 		parsedValue, err := utils.NodeValue8FromBigIntArray(x)
 		if err != nil {
-			return err
+			return []utils.NodeKey{}, err
 		}
 
-		kvMap[keyStoragePosition] = *parsedValue
+		if !parsedValue.IsZero() {
+			keys = append(keys, keyStoragePosition)
+			db.InsertAccountValue(keyStoragePosition, *parsedValue)
+		}
 	}
 
-	return nil
+	return keys, nil
 }
 
-func processAccount(a *accounts.Account, as map[string]string, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address, kvMap map[utils.NodeKey]utils.NodeValue8) error {
+func processAccount(db smt.DB, a *accounts.Account, as map[string]string, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address, keys []utils.NodeKey) ([]utils.NodeKey, error) {
 
 	//fmt.Printf("addr: %x\n account: %+v\n storage: %+v\n", addr, a, as)
 	collection[addr] = &MyStruct{
@@ -295,50 +348,59 @@ func processAccount(a *accounts.Account, as map[string]string, inc uint64, psr *
 	}
 
 	// get the account balance and nonce
-	err := insertAccountStateToKV(kvMap, addr.String(), a.Balance.ToBig(), new(big.Int).SetUint64(a.Nonce))
+	keys, err := insertAccountStateToKV(db, keys, addr.String(), a.Balance.ToBig(), new(big.Int).SetUint64(a.Nonce))
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	// store the contract bytecode
 	cc, err := psr.ReadAccountCode(addr, inc, a.CodeHash)
 	if err != nil {
-		return err
+		return []utils.NodeKey{}, err
 	}
 
 	ach := hexutils.BytesToHex(cc)
 	if len(ach) > 0 {
 		hexcc := fmt.Sprintf("0x%s", ach)
-		err = insertContractBytecodeToKV(kvMap, addr.String(), hexcc)
+		keys, err = insertContractBytecodeToKV(db, keys, addr.String(), hexcc)
 		if err != nil {
-			return err
+			return []utils.NodeKey{}, err
 		}
 	}
 
 	if len(as) > 0 {
 		// store the account storage
-		err = insertContractStorageToKV(kvMap, addr.String(), as)
+		keys, err = insertContractStorageToKV(db, keys, addr.String(), as)
 		if err != nil {
-			return err
+			return []utils.NodeKey{}, err
 		}
 	}
 
-	return nil
+	return keys, nil
 }
 
 func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash *libcommon.Hash, ctx context.Context, quitCh <-chan struct{}) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 
-	_ = db.ClearBucket("HermezSmt")
-	_ = db.ClearBucket("HermezSmtLastRoot")
+	if err := stages.SaveStageProgress(db, stages.IntermediateHashes, 0); err != nil {
+		log.Warn(fmt.Sprint("regenerate SaveStageProgress to zero error: ", err))
+	}
+	if err := db.ClearBucket("HermezSmt"); err != nil {
+		log.Warn(fmt.Sprint("regenerate clear HermezSmt error: ", err))
+	}
+	if err := db.ClearBucket("HermezSmtLastRoot"); err != nil {
+		log.Warn(fmt.Sprint("regenerate clear HermezSmtLastRoot error: ", err))
+	}
+	if err := db.ClearBucket("HermezSmtAccountValues"); err != nil {
+		log.Warn(fmt.Sprint("regenerate clear HermezSmtAccountValues error: ", err))
+	}
 
-	// [zkEVM] - read back the stored transactions and process with SMT
-
-	eridb := db2.NewEriDb(db)
+	eridb, err := db2.NewEriDb(db)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
 	smtIn := smt.NewSMT(eridb)
-
-	eridb.OpenBatch(quitCh)
 
 	var a *accounts.Account
 	var addr libcommon.Address
@@ -350,13 +412,16 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 
 	dataCollectStartTime := time.Now()
 	log.Info(fmt.Sprintf("[%s] Collecting account data...", logPrefix))
-	kvMap := map[utils.NodeKey]utils.NodeValue8{}
+	keys := []utils.NodeKey{}
 
 	stateCt := 0
-	err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+	err = psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
 		stateCt++
 		return nil
 	})
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
 
 	progCt := 0
 	progress := make(chan int)
@@ -390,7 +455,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 		var err error
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
-				err = processAccount(a, as, inc, psr, addr, kvMap)
+				keys, err = processAccount(eridb, a, as, inc, psr, addr, keys)
 				if err != nil {
 					return err
 				}
@@ -416,7 +481,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 			sk := fmt.Sprintf("0x%032x", key)
 			v := fmt.Sprintf("0x%032x", acc)
 
-			as[sk] = fmt.Sprintf(trimHexString(v))
+			as[sk] = fmt.Sprint(trimHexString(v))
 		}
 		return nil
 	})
@@ -429,7 +494,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	}
 
 	// process the final account
-	err = processAccount(a, as, inc, psr, addr, kvMap)
+	keys, err = processAccount(eridb, a, as, inc, psr, addr, keys)
 	if err != nil {
 		return trie.EmptyRoot, err
 	}
@@ -438,8 +503,13 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	log.Info(fmt.Sprintf("[%s] Collecting account data finished in %v", logPrefix, dataCollectTime))
 
 	// generate tree
-	smtIn.GenerateFromKVBulk(logPrefix, kvMap)
+	_, err = smtIn.GenerateFromKVBulk(logPrefix, keys)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
 	root := smtIn.LastRoot()
+
+	_ = db.ClearBucket("HermezSmtAccountValues")
 
 	// [zkevm] - print state
 	// jsonData, err := json.MarshalIndent(collection, "", "    ")
@@ -994,10 +1064,16 @@ func UnwindIntermediateHashesStage(u *UnwindState, s *StageState, tx kv.RwTx, cf
 	}
 	expectedRootHash := syncHeadHeader.Root
 
-	logPrefix := s.LogPrefix()
-	if err := unwindIntermediateHashesStageImpl(logPrefix, u, s, tx, cfg, expectedRootHash, quit); err != nil {
+	root, err := UnwindZkSMT(s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, cfg, &expectedRootHash, quit)
+	if err != nil {
 		return err
 	}
+	_ = root
+
+	//logPrefix := s.LogPrefix()
+	//if err := unwindIntermediateHashesStageImpl(logPrefix, u, s, tx, cfg, expectedRootHash, quit); err != nil {
+	//	return err
+	//}
 	if err := u.Done(tx); err != nil {
 		return err
 	}
@@ -1157,10 +1233,13 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 	fmt.Println("[zkevm] interhashes - previous root @: ", s.BlockNumber)
 	fmt.Println("[zkevm] interhashes - calculating root @: ", to)
 
-	psr := state2.NewPlainStateReader(db)
-
-	eridb := db2.NewEriDb(db)
+	eridb, err := db2.NewEriDb(db)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
 	dbSmt := smt.NewSMT(eridb)
+
+	fmt.Println("last root: ", libcommon.BigToHash(dbSmt.LastRoot()))
 
 	eridb.OpenBatch(quit)
 
@@ -1186,6 +1265,11 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 		dupSortKey := dbutils.EncodeBlockNumber(i)
 
 		fmt.Println("[zkevm] interhashes - block: ", i)
+
+		// TODO [zkevm]: find out the contractcodelookup
+
+		// i+1 to get state at the beginning of the next batch
+		psr := state2.NewPlainState(db, i+1, systemcontracts.SystemContractCodeLookup["Hermez"])
 
 		// collect changes to accounts and code
 		for _, v, err := ac.SeekExact(dupSortKey); err == nil && v != nil; _, v, err = ac.NextDup() {
@@ -1265,28 +1349,33 @@ func ZkIncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, 
 		}
 	}
 
-	err = verifyLastHash(dbSmt, expectedRootHash, &cfg, psr, logPrefix)
+	err = verifyLastHash(dbSmt, expectedRootHash, &cfg, logPrefix)
 	if err != nil {
+		eridb.RollbackBatch()
 		log.Error("failed to verify hash")
 		return trie.EmptyRoot, err
 	}
 
-	// // TODO: provide batch rollback!
-	// err = eridb.CommitBatch()
-	// if err != nil {
-	// 	return trie.EmptyRoot, err
-	// }
+	err = eridb.CommitBatch()
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
 
-	// hash := libcommon.BigToHash(dbSmt.LastRoot())
+	lr := dbSmt.LastRoot()
 
-	// return hash, nil
+	hash := libcommon.BigToHash(lr)
+	return hash, nil
 
-	return trie.EmptyRoot, nil
 }
 
 func updateAccInTree(smt *smt.SMT, addr libcommon.Address, acc *accounts.Account) error {
-	n := new(big.Int).SetUint64(acc.Nonce)
-	_, err := smt.SetAccountState(addr.String(), acc.Balance.ToBig(), n)
+	if acc != nil {
+		n := new(big.Int).SetUint64(acc.Nonce)
+		_, err := smt.SetAccountState(addr.String(), acc.Balance.ToBig(), n)
+		return err
+	}
+
+	_, err := smt.SetAccountState(addr.String(), big.NewInt(0), big.NewInt(0))
 	return err
 }
 
@@ -1299,43 +1388,199 @@ func updateCodeInTree(smt *smt.SMT, addr string, code string) error {
 	return smt.SetContractBytecode(addr, code)
 }
 
-func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *TrieCfg, psr *state2.PlainStateReader, logPrefix string) error {
+func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *TrieCfg, logPrefix string) error {
 	hash := libcommon.BigToHash(dbSmt.LastRoot())
 
 	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
 	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
 
 	if cfg.checkRoot && hash != *expectedRootHash {
-		// [zkevm] - check against the rpc get block by number
-		// get block number
-		ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-		key := libcommon.HexToHash("0x0")
-
-		txno, err := psr.ReadAccountStorage(ss, 1, &key)
-		if err != nil {
-			return err
-		}
-		// convert txno to big int
-		bigTxNo := big.NewInt(0)
-		bigTxNo.SetBytes(txno)
-
-		fmt.Println("[zkevm] interhashes - txno: ", bigTxNo)
-
-		sr, err := stateRootByTxNo(bigTxNo)
-		if err != nil {
-			return err
-		}
-
-		*expectedRootHash = *sr
-
-		if hash != *sr {
-			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
-			return nil
-		}
-
-		log.Info("[zkevm] interhashes - trie root matches rpc get block by number")
-		err = nil
+		log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
+		return nil
 	}
 	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
 	return nil
+}
+
+func UnwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg TrieCfg, expectedRootHash *libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
+	log.Info(fmt.Sprintf("[%s] Unwind trie hashes started", logPrefix))
+	defer log.Info(fmt.Sprintf("[%s] Unwind ended", logPrefix))
+
+	eridb, err := db2.NewEriDb(db)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
+	dbSmt := smt.NewSMT(eridb)
+
+	fmt.Println("last root: ", libcommon.BigToHash(dbSmt.LastRoot()))
+
+	eridb.OpenBatch(quit)
+
+	ac, err := db.CursorDupSort(kv.AccountChangeSet)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
+	defer ac.Close()
+
+	sc, err := db.CursorDupSort(kv.StorageChangeSet)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
+	defer sc.Close()
+
+	accChanges := make(map[libcommon.Address]*accounts.Account)
+	accDeletes := make([]libcommon.Address, 0)
+	codeChanges := make(map[libcommon.Address]string)
+	storageChanges := make(map[libcommon.Address]map[string]string)
+
+	currentPsr := state2.NewPlainStateReader(db)
+
+	// walk backwards through the blocks, applying state changes, and deletes
+	// PlainState contains data AT the block
+	// History tables contain data BEFORE the block - so need a +1 offset
+
+	for i := from; i >= to+1; i-- {
+		dupSortKey := dbutils.EncodeBlockNumber(i)
+
+		fmt.Println("[zkevm] interhashes - block: ", i)
+
+		// collect changes to accounts and code
+		for _, v, err2 := ac.SeekExact(dupSortKey); err2 == nil && v != nil; _, v, err2 = ac.NextDup() {
+			addr := libcommon.BytesToAddress(v[:length.Addr])
+
+			// if the account was created in this changeset we should delete it
+			if len(v[length.Addr:]) == 0 {
+				codeChanges[addr] = ""
+				accDeletes = append(accDeletes, addr)
+				continue
+			}
+
+			// decode the old acc from the changeset
+			oldAcc := new(accounts.Account)
+			err = oldAcc.DecodeForStorage(v[length.Addr:])
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+
+			// currAcc at block we're unwinding from
+			currAcc, err := currentPsr.ReadAccountData(addr)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+
+			if oldAcc != nil {
+				if oldAcc.Incarnation > 0 {
+					if len(v) == 0 { // self-destructed
+						accDeletes = append(accDeletes, addr)
+					} else {
+						if currAcc.Incarnation > oldAcc.Incarnation {
+							accDeletes = append(accDeletes, addr)
+						}
+					}
+				}
+			}
+
+			if oldAcc != nil {
+				// store the account
+				fmt.Println("unwinding acc: ", addr.Hex())
+
+				//fmt.Printf("old acc nonce: %d, curr acc nonce: %d\n", oldAcc.Nonce, currAcc.Nonce)
+				//fmt.Printf("old acc balance: %d, curr acc balance: %d\n", oldAcc.Balance, currAcc.Balance)
+				//fmt.Printf("old acc incarnation: %d, curr acc incarnation: %d\n", oldAcc.Incarnation, currAcc.Incarnation)
+				//fmt.Printf("old acc codehash: %x, curr acc codehash: %x\n", oldAcc.CodeHash, currAcc.CodeHash)
+
+				accChanges[addr] = oldAcc
+
+				if oldAcc.CodeHash != currAcc.CodeHash {
+					cc, err := currentPsr.ReadAccountCode(addr, oldAcc.Incarnation, oldAcc.CodeHash)
+					if err != nil {
+						return trie.EmptyRoot, err
+					}
+
+					ach := hexutils.BytesToHex(cc)
+					if len(ach) > 0 {
+						hexcc := fmt.Sprintf("0x%s", ach)
+						codeChanges[addr] = hexcc
+						if err != nil {
+							return trie.EmptyRoot, err
+						}
+					}
+				}
+			}
+		}
+
+		err = db.ForPrefix(kv.StorageChangeSet, dupSortKey, func(sk, sv []byte) error {
+			changesetKey := sk[length.BlockNum:]
+			address, _ := dbutils.PlainParseStoragePrefix(changesetKey)
+
+			sstorageKey := sv[:length.Hash]
+			stk := libcommon.BytesToHash(sstorageKey)
+
+			value := []byte{0}
+			if len(sv[length.Hash:]) != 0 {
+				value = sv[length.Hash:]
+			}
+
+			stkk := fmt.Sprintf("0x%032x", stk)
+			v := fmt.Sprintf("0x%032x", libcommon.BytesToHash(value))
+
+			m := make(map[string]string)
+			m[stkk] = v
+
+			if storageChanges[address] == nil {
+				storageChanges[address] = make(map[string]string)
+			}
+			storageChanges[address][stkk] = v
+			return nil
+		})
+		if err != nil {
+			return trie.EmptyRoot, err
+		}
+
+		// update the tree
+		for addr, acc := range accChanges {
+			err := updateAccInTree(dbSmt, addr, acc)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+		}
+		for addr, code := range codeChanges {
+			err := updateCodeInTree(dbSmt, addr.String(), code)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+		}
+
+		for addr, storage := range storageChanges {
+			err := updateStorageInTree(dbSmt, addr, storage)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+		}
+	}
+
+	for _, k := range accDeletes {
+		fmt.Println("deleting acc: ", k.Hex())
+		err := updateAccInTree(dbSmt, k, nil)
+		if err != nil {
+			return trie.EmptyRoot, err
+		}
+	}
+
+	err = verifyLastHash(dbSmt, expectedRootHash, &cfg, logPrefix)
+	if err != nil {
+		eridb.RollbackBatch()
+		log.Error("failed to verify hash")
+		return trie.EmptyRoot, err
+	}
+
+	err = eridb.CommitBatch()
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
+
+	lr := dbSmt.LastRoot()
+
+	hash := libcommon.BigToHash(lr)
+	return hash, nil
 }

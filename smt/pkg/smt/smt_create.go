@@ -2,7 +2,6 @@ package smt
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
@@ -28,21 +27,21 @@ import (
 // this makes it so the left part of a node can be deleted once it's right part is inserted
 // this is because the left part is at its final spot
 // when deleting nodes, go down to the leaf and create and save hashes in the SMT
-func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils.NodeValue8) ([4]uint64, error) {
+func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4]uint64, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 
 	log.Info(fmt.Sprintf("[%s] Building temp binary tree started", logPrefix))
 
 	// get nodeKeys and sort them bitwise
-	nodeKeys := []utils.NodeKey{}
-	for k := range kvMap {
-		v := kvMap[k]
-		if v.IsZero() {
-			continue
-		}
-		nodeKeys = append(nodeKeys, k)
-	}
+	// nodeKeys := []utils.NodeKey{}
+	// for k := range kvMap {
+	// 	v := kvMap[k]
+	// 	if v.IsZero() {
+	// 		continue
+	// 	}
+	// 	nodeKeys = append(nodeKeys, k)
+	// }
 	totalKeysCount := len(nodeKeys)
 
 	log.Info(fmt.Sprintf("[%s] Total values to insert: %d", logPrefix, totalKeysCount))
@@ -90,25 +89,25 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 	}()
 
 	//start the node deletion worker
-	deletesQueue := utils.NewQueue(1000)
-	errChan := make(chan error)
-	deletesWorker := utils.NewWorker("hash and delete nodes worker", errChan, deletesQueue)
-	// deletes work group. Await this at end
-	var dwg sync.WaitGroup
-	dwg.Add(1)
+	// deletesQueue := utils.NewQueue(1000)
+	// errChan := make(chan error)
+	// deletesWorker := utils.NewWorker("hash and delete nodes worker", errChan, deletesQueue)
+	// // deletes work group. Await this at end
+	// var dwg sync.WaitGroup
+	// dwg.Add(1)
 
-	go func() {
-		deletesWorker.DoWork()
-		dwg.Done()
-	}()
+	// go func() {
+	// 	deletesWorker.DoWork()
+	// 	dwg.Done()
+	// }()
 
 	tempTreeBuildStart := time.Now()
 	for _, k := range nodeKeys {
-		select {
-		case err := <-errChan:
-			return [4]uint64{}, err
-		default:
-		}
+		// select {
+		// case err := <-errChan:
+		// 	return [4]uint64{}, err
+		// default:
+		// }
 
 		// split the key
 		keys := k.GetPath()
@@ -182,7 +181,7 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 				pathToDeleteFrom := make([]int, level+level2+1)
 				copy(pathToDeleteFrom, keys[:level+level2])
 				pathToDeleteFrom[level+level2] = 0
-				_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s, kvMap)
+				_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s)
 				if err != nil {
 					return err
 				}
@@ -192,7 +191,8 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 
 				return nil
 			}
-			deletesQueue.AddJob(utils.Job{Action: deleteFunc})
+			deleteFunc()
+			// deletesQueue.AddJob(utils.Job{Action: deleteFunc})
 		} else
 		// if it is not leaf
 		// insert the new leaf on the right side
@@ -241,7 +241,7 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 						pathToDeleteFrom := make([]int, level+1)
 						copy(pathToDeleteFrom, keys[:level])
 						pathToDeleteFrom[level] = 0
-						_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s, kvMap)
+						_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s)
 						if err != nil {
 							return err
 						}
@@ -249,8 +249,9 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 						nodeToDelFrom.node0 = nil
 						return nil
 					}
+					deleteFunc()
 
-					deletesQueue.AddJob(utils.Job{Action: deleteFunc})
+					// deletesQueue.AddJob(utils.Job{Action: deleteFunc})
 				}
 			}
 		}
@@ -266,8 +267,8 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 	log.Info(fmt.Sprintf("[%s] Finished the temp tree build in %v, hashing and saving the result...", logPrefix, tempTreeBuildTime))
 
 	//wait previous deletions
-	deletesQueue.Stop()
-	dwg.Wait()
+	// deletesQueue.Stop()
+	// dwg.Wait()
 
 	//special case where no values were inserted
 	if rootNode.isLeaf() {
@@ -292,7 +293,7 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, kvMap map[utils.NodeKey]utils
 		rootNode.rKey = newRkey
 	}
 
-	_, finalRoot, err := rootNode.deleteTree(pathToDeleteFrom, s, kvMap)
+	_, finalRoot, err := rootNode.deleteTree(pathToDeleteFrom, s)
 	if err != nil {
 		return [4]uint64{}, err
 	}
@@ -349,7 +350,7 @@ func (n *SmtNode) findLastNode(keys []int) ([]*SmtNode, int) {
 	return siblings, level
 }
 
-func (n *SmtNode) deleteTree(keyPath []int, s *SMT, kvMap map[utils.NodeKey]utils.NodeValue8) ([]utils.NodeKey, [4]uint64, error) {
+func (n *SmtNode) deleteTree(keyPath []int, s *SMT) ([]utils.NodeKey, [4]uint64, error) {
 	deletedKeys := []utils.NodeKey{}
 
 	if n.isLeaf() {
@@ -358,10 +359,12 @@ func (n *SmtNode) deleteTree(keyPath []int, s *SMT, kvMap map[utils.NodeKey]util
 		if err != nil {
 			return nil, [4]uint64{}, err
 		}
-		v := kvMap[k]
+		v, err := s.Db.GetAccountValue(k)
+		if err != nil {
+			return nil, [4]uint64{}, err
+		}
 
-		deletedKeys = append(deletedKeys, k)
-		delete(kvMap, k)
+		// deletedKeys = append(deletedKeys, k)
 
 		newKey := utils.RemoveKeyBits(k, len(keyPath))
 		//hash and save leaf
@@ -379,25 +382,25 @@ func (n *SmtNode) deleteTree(keyPath []int, s *SMT, kvMap map[utils.NodeKey]util
 			return nil, [4]uint64{}, fmt.Errorf("node has previously deleted left part")
 		}
 		localKeyPath := append(keyPath, 0)
-		keysFromBelow, leftHash, err := n.node0.deleteTree(localKeyPath, s, kvMap)
+		_, leftHash, err := n.node0.deleteTree(localKeyPath, s)
 		if err != nil {
 			return nil, [4]uint64{}, err
 		}
 
 		n.leftHash = leftHash
-		deletedKeys = append(deletedKeys, keysFromBelow...)
+		// deletedKeys = append(deletedKeys, keysFromBelow...)
 		n.node0 = nil
 	}
 
 	if n.node1 != nil {
 		localKeyPath := append(keyPath, 1)
-		keysFromBelow, rightHash, err := n.node1.deleteTree(localKeyPath, s, kvMap)
+		_, rightHash, err := n.node1.deleteTree(localKeyPath, s)
 		if err != nil {
 			return nil, [4]uint64{}, err
 		}
 		totalHash.SetHalfValue(rightHash, 1)
 
-		deletedKeys = append(deletedKeys, keysFromBelow...)
+		// deletedKeys = append(deletedKeys, keysFromBelow...)
 		n.node1 = nil
 	}
 

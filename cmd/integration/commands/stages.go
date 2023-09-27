@@ -540,7 +540,7 @@ func stageRpcRoots(db kv.RwDB, ctx context.Context) error {
 		}
 		log.Info("Progress", "rpc_roots", progress)
 		return nil
-	}
+	})
 }
 
 func stageSnapshots(db kv.RwDB, ctx context.Context) error {

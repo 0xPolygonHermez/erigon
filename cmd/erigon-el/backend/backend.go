@@ -175,7 +175,6 @@ func NewBackend(stack *node.Node, config *ethconfig.Config, logger log.Logger) (
 	if err != nil {
 		return nil, err
 	}
-
 	var currentBlock *types.Block
 
 	// Check if we have an already initialized chain and fall back to

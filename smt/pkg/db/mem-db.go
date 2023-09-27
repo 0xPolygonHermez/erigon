@@ -1,13 +1,15 @@
 package db
 
 import (
-	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"math/big"
 	"sync"
+
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
 type MemDb struct {
 	Db       map[string][]string
+	DbAccVal map[string][]string
 	LastRoot *big.Int
 
 	lock sync.RWMutex
@@ -16,6 +18,7 @@ type MemDb struct {
 func NewMemDb() *MemDb {
 	return &MemDb{
 		Db:       make(map[string][]string),
+		DbAccVal: make(map[string][]string),
 		LastRoot: big.NewInt(0),
 	}
 }
@@ -74,6 +77,38 @@ func (m *MemDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	}
 
 	m.Db[k] = values
+	return nil
+}
+
+func (m *MemDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
+	m.lock.RLock()         // Lock for reading
+	defer m.lock.RUnlock() // Make sure to unlock when done
+
+	keyConc := utils.ArrayToScalar(key[:])
+
+	k := utils.ConvertBigIntToHex(keyConc)
+
+	values := utils.NodeValue8{}
+	for i, v := range m.DbAccVal[k] {
+		values[i] = utils.ConvertHexToBigInt(v)
+	}
+
+	return values, nil
+}
+
+func (m *MemDb) InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+
+	values := make([]string, 8)
+	for i, v := range value {
+		values[i] = utils.ConvertBigIntToHex(v)
+	}
+
+	m.DbAccVal[k] = values
 	return nil
 }
 
