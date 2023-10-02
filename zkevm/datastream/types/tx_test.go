@@ -17,14 +17,8 @@ func TestL2TransactionDecode(t *testing.T) {
 	}
 	testCases := []testCase{
 		{
-			name: "Happy path",
-			input: L2Transaction{
-				BatchNumber:                 101,
-				EffectiveGasPricePercentage: 128,
-				IsValid:                     1,
-				EncodedLength:               5,
-				Encoded:                     []byte{1, 2, 3, 4, 5},
-			}.Encode(),
+			name:  "Happy path",
+			input: []byte{101, 0, 0, 0, 0, 0, 0, 0, 128, 1, 5, 0, 0, 0, 1, 2, 3, 4, 5},
 			expectedResult: L2Transaction{
 				BatchNumber:                 101,
 				EffectiveGasPricePercentage: 128,
@@ -42,13 +36,8 @@ func TestL2TransactionDecode(t *testing.T) {
 		},
 		{
 			name: "Invalid byte array length",
-			input: L2Transaction{
-				BatchNumber:                 101,
-				EffectiveGasPricePercentage: 128,
-				IsValid:                     1,
-				EncodedLength:               5,
-				Encoded:                     []byte{1, 2, 3, 4},
-			}.Encode(),
+
+			input:          []byte{101, 0, 0, 0, 0, 0, 0, 0, 128, 1, 5, 0, 0, 0, 1, 2, 3, 4},
 			expectedResult: L2Transaction{},
 			expectedError:  fmt.Errorf("expected encoded length: 5, got: 4"),
 		},

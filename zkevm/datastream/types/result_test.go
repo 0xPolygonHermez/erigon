@@ -80,13 +80,8 @@ func TestResultDecode(t *testing.T) {
 			expectedError:  fmt.Errorf("invalid result entry binary size. Expected: >=9, got: 6"),
 		},
 		{
-			name: "Invalid error length",
-			input: ResultEntry{
-				PacketType: 1,
-				Length:     10,
-				ErrorNum:   0,
-				ErrorStr:   []byte{20, 21},
-			}.Encode(),
+			name:           "Invalid error length",
+			input:          []byte{1, 0, 0, 0, 10, 0, 0, 0, 0, 20, 21},
 			expectedResult: ResultEntry{},
 			expectedError:  fmt.Errorf("invalid result entry error binary size. Expected: 1, got: 2"),
 		},
