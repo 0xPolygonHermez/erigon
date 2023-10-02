@@ -13,6 +13,7 @@ import (
 
 	"github.com/holiman/uint256"
 	ethereum "github.com/ledgerwatch/erigon"
+	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
@@ -125,6 +126,9 @@ type Client struct {
 
 	GasProviders externalGasProviders
 
+	L1ChainConfig *chain.Config
+	L2ChainConfig *chain.Config
+
 	cfg  Config
 	auth map[common.Address]bind.TransactOpts // empty in case of read-only client
 }
@@ -164,6 +168,13 @@ func NewClient(cfg Config) (*Client, error) {
 		gProviders = append(gProviders, ethgasstation.NewEthGasStationService())
 	}
 
+	l1Conf := params.MainnetChainConfig
+	l2Conf := params.HermezMainnetChainConfig
+	if cfg.L1ChainID == 5 {
+		l1Conf = params.GoerliChainConfig
+		l2Conf = params.HermezTestnetChainConfig
+	}
+
 	return &Client{
 		EthClient:             ethClient,
 		PoE:                   poe,
@@ -174,8 +185,10 @@ func NewClient(cfg Config) (*Client, error) {
 			MultiGasProvider: cfg.MultiGasProvider,
 			Providers:        gProviders,
 		},
-		cfg:  cfg,
-		auth: map[common.Address]bind.TransactOpts{},
+		cfg:           cfg,
+		L1ChainConfig: l1Conf,
+		L2ChainConfig: l2Conf,
+		auth:          map[common.Address]bind.TransactOpts{},
 	}, nil
 }
 
@@ -595,9 +608,9 @@ func (etherMan *Client) forcedBatchEvent(ctx context.Context, vLog types.Log, bl
 		return fmt.Errorf("error: tx is still pending. TxHash: %s", tx.Hash().String())
 	}
 
-	signer := types.MakeSigner(params.HermezMainnetChainConfig, 0)
+	signer := types.MakeSigner(etherMan.L2ChainConfig, 0)
 
-	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.HermezMainnetChainConfig.Rules(0, 0))
+	msg, err := tx.AsMessage(*signer, big.NewInt(0), etherMan.L2ChainConfig.Rules(0, 0))
 	if err != nil {
 		return err
 	}
@@ -665,7 +678,7 @@ func (etherMan *Client) sequencedBatchesEvent(ctx context.Context, vLog types.Lo
 		return fmt.Errorf("error tx is still pending. TxHash: %s", tx.Hash().String())
 	}
 
-	signer := types.MakeSigner(params.MainnetChainConfig, 0)
+	signer := types.MakeSigner(etherMan.L1ChainConfig, 0)
 	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.MainnetChainConfig.Rules(0, 0))
 	if err != nil {
 		return err
@@ -791,8 +804,8 @@ func (etherMan *Client) forceSequencedBatchesEvent(ctx context.Context, vLog typ
 	} else if isPending {
 		return fmt.Errorf("error: tx is still pending. TxHash: %s", tx.Hash().String())
 	}
-	signer := types.MakeSigner(params.HermezMainnetChainConfig, 0)
-	msg, err := tx.AsMessage(*signer, big.NewInt(0), params.HermezMainnetChainConfig.Rules(0, 0))
+	signer := types.MakeSigner(etherMan.L2ChainConfig, 0)
+	msg, err := tx.AsMessage(*signer, big.NewInt(0), etherMan.L2ChainConfig.Rules(0, 0))
 	if err != nil {
 		return err
 	}

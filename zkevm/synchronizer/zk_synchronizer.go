@@ -115,12 +115,12 @@ func (s *ClientSynchronizer) SyncTip(tx kv.RwTx, chunkSize uint64, progress stag
 	}
 
 	// get the l1 block number of the highest verified batch
-	l1BlockNo, err := adapter.GetHermezMeta(tx, "META_L1BlockOfHighestVerifiedBatch")
+	l1BlockNo, err := adapter.GetHermezMeta(tx, adapter.META_L1BlockOfHighestVerifiedBatch)
 	if err != nil {
 		return 0, false, err
 	}
 
-	log.Info("META_L1BlockOfHighestVerifiedBatch", "l1BlockNo", l1BlockNo)
+	log.Info(adapter.META_L1BlockOfHighestVerifiedBatch, "l1BlockNo", l1BlockNo)
 
 	err = tx.ForEach("HermezL1Block", state2.UintBytes(l1BlockNo), func(k, v []byte) error {
 		// unmarshal to the zkevm struct for the l1 block

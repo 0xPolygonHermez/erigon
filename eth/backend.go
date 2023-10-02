@@ -667,13 +667,24 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
 
-	etherMan := newEtherMan()
+	zkevmClientUrl := "https://rpc.eu-north-1.gateway.fm/v4/ethereum/non-archival/mainnet?apiKey=UDmvcERuIwHSpeH3dUb1XDr4QnGqzHxv.J0qONXx6TUa9RqGb"
+	clientUrl := "https://rpc.eu-north-1.gateway.fm/v4/polygon-zkevm/archival/mainnet?apiKey=DkrTDQVU0SkU0WvxyIYc4oxOCyyF9Mzd.9aqlbyImRuJiMlaQ"
+
+	testnet := backend.config.NetworkID == 1440
+
+	// hermez testnet endpoints
+	if testnet {
+		zkevmClientUrl = "https://rpc.eu-north-2.gateway.fm/v4/ethereum/non-archival/goerli?apiKey=lyREQ4AN6KS8wbPRL2S0GJpB6GoEbkmr.5sMHNNVF9OH6EdcT"
+		clientUrl = "https://rpc.internal.zkevm-test.net"
+	}
+
+	etherMan := newEtherMan(zkevmClientUrl, testnet)
 
 	zkSynchronizer, err := synchronizer.NewSynchronizer(
-		true,                      /*isTrustedSequencer*/
-		etherMan,                  //etherMan           ethermanInterface
-		adapter.NewStateAdapter(), //state              stateInterface
-		client.NewClient("https://rpc.eu-north-1.gateway.fm/v4/polygon-zkevm/archival/mainnet?apiKey=DkrTDQVU0SkU0WvxyIYc4oxOCyyF9Mzd.9aqlbyImRuJiMlaQ"), //zkEVMClient        zkEVMClientInterface
+		true,                             /*isTrustedSequencer*/
+		etherMan,                         //etherMan           ethermanInterface
+		adapter.NewStateAdapter(testnet), //state              stateInterface
+		client.NewClient(clientUrl),      //zkEVMClient        zkEVMClientInterface
 		synchronizer.Config{SyncChunkSize: 1000, GenBlockNumber: 16896721},
 		ctx,
 	)
@@ -691,15 +702,25 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 }
 
 // creates an EtherMan instance with default parameters
-func newEtherMan() *etherman.Client {
+func newEtherMan(clientUrl string, isTestNet bool) *etherman.Client {
 	// return defaults here
-	em, err := etherman.NewClient(etherman.Config{
-		URL:                       "https://rpc.eu-north-1.gateway.fm/v4/ethereum/non-archival/mainnet?apiKey=UDmvcERuIwHSpeH3dUb1XDr4QnGqzHxv.J0qONXx6TUa9RqGb",
+
+	ethmanConf := etherman.Config{
+		URL:                       clientUrl,
 		L1ChainID:                 1,
 		PoEAddr:                   libcommon.HexToAddress("0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"),
 		MaticAddr:                 libcommon.HexToAddress("0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0"),
 		GlobalExitRootManagerAddr: libcommon.HexToAddress("0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb"),
-	})
+	}
+
+	if isTestNet {
+		ethmanConf.L1ChainID = 5
+		ethmanConf.PoEAddr = libcommon.HexToAddress("0xa997cfD539E703921fD1e3Cf25b4c241a27a4c7A")
+		ethmanConf.MaticAddr = libcommon.HexToAddress("0x1319D23c2F7034F52Eb07399702B040bA278Ca49")
+		ethmanConf.GlobalExitRootManagerAddr = libcommon.HexToAddress("0x4d9427DCA0406358445bC0a8F88C26b704004f74")
+	}
+
+	em, err := etherman.NewClient(ethmanConf)
 	//panic on error
 	if err != nil {
 		panic(err)

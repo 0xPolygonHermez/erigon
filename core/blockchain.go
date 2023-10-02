@@ -39,7 +39,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/rlp"
-	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 )
 
 var (
@@ -83,17 +82,12 @@ func ExecuteBlockEphemerally(
 	chainReader consensus.ChainHeaderReader,
 	getTracer func(txIndex int, txHash libcommon.Hash) (vm.EVMLogger, error),
 	dbTx kv.RwTx,
-	spmt *smt.SMT,
 ) (*EphemeralExecResult, error) {
 
 	defer BlockExecutionTimer.UpdateDuration(time.Now())
 	block.Uncles()
 	ibs := state.New(stateReader)
 	header := block.Header()
-
-	// [zkevm] - setting the dbtx may be a bit hacky here
-	ibs.SetSmt(spmt)
-	ibs.SetDBTx(dbTx)
 
 	usedGas := new(uint64)
 	gp := new(GasPool)

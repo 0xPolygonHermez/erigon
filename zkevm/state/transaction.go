@@ -39,7 +39,8 @@ const (
 
 // GetSender gets the sender from the transaction's signature
 func GetSender(tx types.Transaction) (common.Address, error) {
-	signer := types.MakeSigner(params.HermezMainnetChainConfig, 0)
+	// TODO: fix the hardcoded chain config for the l2
+	signer := types.MakeSigner(params.HermezTestnetChainConfig, 0)
 
 	sender, err := signer.Sender(tx)
 	if err != nil {

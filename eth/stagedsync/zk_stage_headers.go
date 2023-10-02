@@ -5,12 +5,10 @@ import (
 
 	"fmt"
 
-	"encoding/json"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	state2 "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zkevm/adapter"
-	"github.com/ledgerwatch/erigon/zkevm/state"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -34,6 +32,14 @@ func HeadersZK(
 	initialCycle bool,
 	test bool,
 ) error {
+
+	// MODIFY THIS
+	/*
+		- get batches from the stream
+		- if we get a reorg - we should unwind the whole of erigon to the unwind point then resume forward
+		- if we detect a fork we should enable features (this should just happen at point of requirement by calling the hermez_db funcs)
+		- for a range of batches we should also retrieve the l1 logs and store sequences, verifications, and global exit roots
+	*/
 
 	useExternalTx := tx != nil
 
@@ -65,7 +71,7 @@ func HeadersZK(
 
 	saveEvery := 1
 	count := 0
-	restrictAtBatch := uint64(651068)
+	restrictAtBatch := uint64(20) //(858670)
 
 	for {
 		select {
@@ -143,48 +149,48 @@ func HeadersZK(
 		}
 
 		// sync beyond verified batches, checking for reorgs
-		if prg.HighestL2SequencedBatch > prg.LocalSyncedL2SequencedBatch {
-			l1Block, reorg, err := cfg.zkSynchronizer.SyncTip(tx, chunkSize, prg)
-			if err != nil {
-				log.Error("failed to sync tip", "err", err)
-			}
-
-			if reorg {
-				unwindBlock := l1Block
-				unwindBatch := &state.Batch{}
-				// not so efficient but should be rare
-				err = tx.ForEach("HermezBatch", []byte{}, func(k, v []byte) error {
-
-					_, l1BlockNo := adapter.ParseBatchKey(k)
-					if l1BlockNo != unwindBlock {
-						return nil
-					}
-
-					b := &state.Batch{}
-					err := json.Unmarshal(v, b)
-					if err != nil {
-						return err
-					}
-
-					unwindBatch = b
-
-					return nil
-				})
-
-				u.UnwindTo(unwindBatch.BatchNumber, unwindBatch.StateRoot)
-
-				fmt.Println("reorg: unwinding stages to l1block: ", l1Block)
-				return nil
-			}
-
-			err = stages.SaveStageProgress(tx, stages.L1Blocks, l1Block)
-			if err != nil {
-				if !useExternalTx {
-					tx.Rollback()
-				}
-				return err
-			}
-		}
+		//if prg.HighestL2SequencedBatch > prg.LocalSyncedL2SequencedBatch {
+		//	l1Block, reorg, err := cfg.zkSynchronizer.SyncTip(tx, chunkSize, prg)
+		//	if err != nil {
+		//		log.Error("failed to sync tip", "err", err)
+		//	}
+		//
+		//	if reorg {
+		//		unwindBlock := l1Block
+		//		unwindBatch := &state.Batch{}
+		//		// not so efficient but should be rare
+		//		err = tx.ForEach("HermezBatch", []byte{}, func(k, v []byte) error {
+		//
+		//			_, l1BlockNo := adapter.ParseBatchKey(k)
+		//			if l1BlockNo != unwindBlock {
+		//				return nil
+		//			}
+		//
+		//			b := &state.Batch{}
+		//			err := json.Unmarshal(v, b)
+		//			if err != nil {
+		//				return err
+		//			}
+		//
+		//			unwindBatch = b
+		//
+		//			return nil
+		//		})
+		//
+		//		u.UnwindTo(unwindBatch.BatchNumber, unwindBatch.StateRoot)
+		//
+		//		fmt.Println("reorg: unwinding stages to l1block: ", l1Block)
+		//		return nil
+		//	}
+		//
+		//	err = stages.SaveStageProgress(tx, stages.L1Blocks, l1Block)
+		//	if err != nil {
+		//		if !useExternalTx {
+		//			tx.Rollback()
+		//		}
+		//		return err
+		//	}
+		//}
 
 		if count%saveEvery == 0 && !useExternalTx {
 			var err error

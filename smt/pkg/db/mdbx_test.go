@@ -1,18 +1,18 @@
 package db
 
 import (
+	"context"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"math/big"
 	"testing"
-	"context"
 )
 
 func TestEriDb(t *testing.T) {
 	dbi, _ := mdbx.NewTemporaryMdbx()
 	tx, _ := dbi.BeginRw(context.Background())
-	db := NewEriDb(tx)
+	db, _ := NewEriDb(tx)
 
 	// The key and value we're going to test
 	key := utils.NodeKey{1, 2, 3, 4}
@@ -32,7 +32,7 @@ func TestEriDb(t *testing.T) {
 func TestEriDbBatch(t *testing.T) {
 	dbi, _ := mdbx.NewTemporaryMdbx()
 	tx, _ := dbi.BeginRw(context.Background())
-	db := NewEriDb(tx)
+	db, _ := NewEriDb(tx)
 
 	// The key and value we're going to test
 	key := utils.NodeKey{1, 2, 3, 4}

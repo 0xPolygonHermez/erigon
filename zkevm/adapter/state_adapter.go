@@ -69,12 +69,13 @@ type stateInterface interface {
 
 type StateInterfaceAdapter struct {
 	currentBatchNumber int64
+	testnet            bool
 }
 
 var _ stateInterface = (*StateInterfaceAdapter)(nil)
 
-func NewStateAdapter() stateInterface {
-	return &StateInterfaceAdapter{currentBatchNumber: 1}
+func NewStateAdapter(testnet bool) stateInterface {
+	return &StateInterfaceAdapter{currentBatchNumber: 1, testnet: testnet}
 }
 
 const GLOBAL_EXIT_ROOT_STORAGE_POS = 0
@@ -87,7 +88,11 @@ func (m *StateInterfaceAdapter) GetLastBlock(ctx context.Context, dbTx kv.RwTx) 
 	}
 
 	// makes no sense to process blocks before the deployment of the smart contract
-	if blockHeight < 16896700 {
+	if m.testnet && blockHeight < 8578537 {
+		blockHeight = 8578537
+	}
+
+	if !m.testnet && blockHeight < 16896700 {
 		blockHeight = 16896700
 	}
 
@@ -184,8 +189,6 @@ func (m *StateInterfaceAdapter) AddVirtualBatch(ctx context.Context, batch *stat
 func (m *StateInterfaceAdapter) AddSequencerBatch(ctx context.Context, batch *state.Batch, dbTx kv.RwTx) error {
 
 	fmt.Println("AddSequencerBatch: batch number", batch.BatchNumber)
-
-	WriteHeaderToDb(dbTx, nil, batch)
 
 	// write these to the DB - into headers + bodies tables, and hermezbatch - but also make sure that we can diff this with hermezverifiedbatch
 	// the dif should be the unwind point for a reorg

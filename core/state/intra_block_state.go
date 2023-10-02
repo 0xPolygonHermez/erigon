@@ -37,7 +37,6 @@ import (
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
-	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 )
@@ -93,20 +92,6 @@ type IntraBlockState struct {
 	trace          bool
 	accessList     *accessList
 	balanceInc     map[libcommon.Address]*BalanceIncrease // Map of balance increases (without first reading the account)
-
-	// SMT
-	/*
-		Create a SMT here and use it to calculate a root after each interaction with the state by doing CRUD on the tree
-
-		This should be more efficient than loading the whole state once per block. Once we start we can run down the whole chain
-		using only the tree.
-
-		Any funcs in this file which update the state should call the tree for the 3 entities: account, storage, code
-
-		The funcs to be updated are:
-	*/
-	smt  *smt.SMT
-	DbTx kv.RwTx
 }
 
 // Create a new state from a given trie
@@ -125,10 +110,6 @@ func New(stateReader StateReader) *IntraBlockState {
 
 func (sdb *IntraBlockState) SetTrace(trace bool) {
 	sdb.trace = trace
-}
-
-func (sdb *IntraBlockState) SetDBTx(tx kv.RwTx) {
-	sdb.DbTx = tx
 }
 
 // setErrorUnsafe sets error but should be called in medhods that already have locks
@@ -819,10 +800,6 @@ func (sdb *IntraBlockState) AddressInAccessList(addr libcommon.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (sdb *IntraBlockState) SlotInAccessList(addr libcommon.Address, slot libcommon.Hash) (addressPresent bool, slotPresent bool) {
 	return sdb.accessList.Contains(addr, slot)
-}
-
-func (sdb *IntraBlockState) SetSmt(spmt *smt.SMT) {
-	sdb.smt = spmt
 }
 
 func (sdb *IntraBlockState) ScalableSetTxNum() {
