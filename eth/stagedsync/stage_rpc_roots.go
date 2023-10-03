@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"github.com/ledgerwatch/erigon-lib/chain"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	scalable "github.com/ledgerwatch/erigon/cmd/hack/zkevm"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/ledgerwatch/erigon-lib/common/hexutility"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/chain"
+	scalable "github.com/ledgerwatch/erigon/cmd/hack/zkevm"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 type RpcRootsCfg struct {

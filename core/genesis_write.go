@@ -28,11 +28,12 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon-lib/chain"
+	erigonchain "github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
+	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
 
@@ -179,6 +180,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideShanghaiTime 
 	newCfg.ShanghaiTime = maxInt
 	newCfg.CancunTime = maxInt
 	newCfg.PragueTime = maxInt
+	newCfg.MordorBlock = maxInt
 
 	return newCfg, storedBlock, nil
 }
@@ -281,7 +283,7 @@ func write(tx kv.RwTx, g *types.Genesis, tmpDir string) (*types.Block, *state.In
 		return nil, nil, err
 	}
 	// We support ethash/serenity for issuance (for now)
-	if g.Config.Consensus != chain.EtHashConsensus {
+	if g.Config.Consensus != erigonchain.EtHashConsensus {
 		return block, statedb, nil
 	}
 	// Issuance is the sum of allocs

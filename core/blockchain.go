@@ -26,8 +26,9 @@ import (
 	"golang.org/x/crypto/sha3"
 	"golang.org/x/exp/slices"
 
-	"github.com/ledgerwatch/erigon-lib/chain"
+	erigonchain "github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -307,7 +308,7 @@ func ExecuteBlockEphemerallyBor(
 
 	blockLogs := ibs.Logs()
 	stateSyncReceipt := &types.Receipt{}
-	if chainConfig.Consensus == chain.BorConsensus && len(blockLogs) > 0 {
+	if chainConfig.Consensus == erigonchain.BorConsensus && len(blockLogs) > 0 {
 		slices.SortStableFunc(blockLogs, func(i, j *types.Log) bool { return i.Index < j.Index })
 
 		if len(blockLogs) > len(logs) {

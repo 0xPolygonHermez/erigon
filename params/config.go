@@ -23,9 +23,9 @@ import (
 	"math/big"
 	"path"
 
-	"github.com/ledgerwatch/erigon-lib/chain"
+	erigonchain "github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-
+	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/paths"
 	"github.com/ledgerwatch/erigon/params/networkname"
 )
@@ -85,7 +85,7 @@ var (
 	// and accepted by the Ethereum core developers into the main net protocol.
 	AllProtocolChanges = &chain.Config{
 		ChainID:                       big.NewInt(1337),
-		Consensus:                     chain.EtHashConsensus,
+		Consensus:                     erigonchain.EtHashConsensus,
 		HomesteadBlock:                big.NewInt(0),
 		TangerineWhistleBlock:         big.NewInt(0),
 		SpuriousDragonBlock:           big.NewInt(0),
@@ -101,14 +101,15 @@ var (
 		TerminalTotalDifficulty:       big.NewInt(0),
 		TerminalTotalDifficultyPassed: true,
 		ShanghaiTime:                  big.NewInt(0),
-		Ethash:                        new(chain.EthashConfig),
+		Ethash:                        new(erigonchain.EthashConfig),
+		MordorBlock:                   big.NewInt(0),
 	}
 
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Clique consensus.
 	AllCliqueProtocolChanges = &chain.Config{
 		ChainID:               big.NewInt(1337),
-		Consensus:             chain.CliqueConsensus,
+		Consensus:             erigonchain.CliqueConsensus,
 		HomesteadBlock:        big.NewInt(0),
 		TangerineWhistleBlock: big.NewInt(0),
 		SpuriousDragonBlock:   big.NewInt(0),
@@ -119,7 +120,8 @@ var (
 		MuirGlacierBlock:      big.NewInt(0),
 		BerlinBlock:           big.NewInt(0),
 		LondonBlock:           big.NewInt(0),
-		Clique:                &chain.CliqueConfig{Period: 0, Epoch: 30000},
+		Clique:                &erigonchain.CliqueConfig{Period: 0, Epoch: 30000},
+		MordorBlock:           big.NewInt(0),
 	}
 
 	MumbaiChainConfig = readChainSpec("chainspecs/mumbai.json")
@@ -140,7 +142,7 @@ var (
 
 	TestChainConfig = &chain.Config{
 		ChainID:               big.NewInt(1337),
-		Consensus:             chain.EtHashConsensus,
+		Consensus:             erigonchain.EtHashConsensus,
 		HomesteadBlock:        big.NewInt(0),
 		TangerineWhistleBlock: big.NewInt(0),
 		SpuriousDragonBlock:   big.NewInt(0),
@@ -150,12 +152,12 @@ var (
 		IstanbulBlock:         big.NewInt(0),
 		MuirGlacierBlock:      big.NewInt(0),
 		BerlinBlock:           big.NewInt(0),
-		Ethash:                new(chain.EthashConfig),
+		Ethash:                new(erigonchain.EthashConfig),
 	}
 
 	TestChainAuraConfig = &chain.Config{
 		ChainID:               big.NewInt(1),
-		Consensus:             chain.AuRaConsensus,
+		Consensus:             erigonchain.AuRaConsensus,
 		HomesteadBlock:        big.NewInt(0),
 		TangerineWhistleBlock: big.NewInt(0),
 		SpuriousDragonBlock:   big.NewInt(0),
@@ -166,7 +168,7 @@ var (
 		MuirGlacierBlock:      big.NewInt(0),
 		BerlinBlock:           big.NewInt(0),
 		LondonBlock:           big.NewInt(0),
-		Aura:                  &chain.AuRaConfig{},
+		Aura:                  &erigonchain.AuRaConfig{},
 	}
 
 	TestRules = TestChainConfig.Rules(0, 0)
