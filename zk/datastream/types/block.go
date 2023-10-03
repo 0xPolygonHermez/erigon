@@ -6,11 +6,12 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/holiman/uint256"
 )
 
 const (
 	startL2BlockDataLength = 78
-	endL2BlockDataLength   = 8
+	endL2BlockDataLength   = 64
 
 	// EntryTypeL2Block represents a L2 block
 	EntryTypeStartL2Block EntryType = 1
@@ -49,18 +50,26 @@ func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 }
 
 type EndL2Block struct {
-	L2Blockhash uint32 // 4 bytes
-	StateRoot   uint32 // 4 bytes
+	L2Blockhash uint256.Int // 32 bytes
+	StateRoot   uint256.Int // 32 bytes
 }
 
 func DecodeEndL2Block(data []byte) (*EndL2Block, error) {
 	if len(data) != endL2BlockDataLength {
 		return &EndL2Block{}, fmt.Errorf("expected data length: %d, got: %d", endL2BlockDataLength, len(data))
 	}
+	i1 := binary.LittleEndian.Uint64(data[:8])
+	i2 := binary.LittleEndian.Uint64(data[8:16])
+	i3 := binary.LittleEndian.Uint64(data[16:24])
+	i4 := binary.LittleEndian.Uint64(data[24:32])
+	i5 := binary.LittleEndian.Uint64(data[32:40])
+	i6 := binary.LittleEndian.Uint64(data[40:48])
+	i7 := binary.LittleEndian.Uint64(data[48:56])
+	i8 := binary.LittleEndian.Uint64(data[56:64])
 
 	return &EndL2Block{
-		L2Blockhash: binary.LittleEndian.Uint32(data[:4]),
-		StateRoot:   binary.LittleEndian.Uint32(data[4:8]),
+		L2Blockhash: uint256.Int{i1, i2, i3, i4},
+		StateRoot:   uint256.Int{i5, i6, i7, i8},
 	}, nil
 }
 
@@ -71,8 +80,8 @@ type FullL2Block struct {
 	GlobalExitRoot common.Hash
 	Coinbase       common.Address
 	ForkId         uint16
-	L2Blockhash    uint32
-	StateRoot      uint32
+	L2Blockhash    uint256.Int
+	StateRoot      uint256.Int
 	L2Txs          []L2Transaction
 }
 

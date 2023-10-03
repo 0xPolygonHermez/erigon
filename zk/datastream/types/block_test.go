@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )
@@ -55,11 +56,14 @@ func TestEndL2BlockDecode(t *testing.T) {
 	}
 	testCases := []testCase{
 		{
-			name:  "Happy path",
-			input: []byte{10, 0, 0, 0, 32, 0, 0, 0},
+			name: "Happy path",
+			input: []byte{
+				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			},
 			expectedResult: EndL2Block{
-				L2Blockhash: 10,
-				StateRoot:   32,
+				L2Blockhash: uint256.Int{10, 0, 0, 0},
+				StateRoot:   uint256.Int{32, 0, 0, 0},
 			},
 			expectedError: nil,
 		},
@@ -67,7 +71,7 @@ func TestEndL2BlockDecode(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{20, 2, 3},
 			expectedResult: EndL2Block{},
-			expectedError:  fmt.Errorf("expected data length: 8, got: 3"),
+			expectedError:  fmt.Errorf("expected data length: 64, got: 3"),
 		},
 	}
 

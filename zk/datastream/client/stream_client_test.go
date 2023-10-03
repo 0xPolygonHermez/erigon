@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
@@ -158,7 +159,7 @@ func Test_readFileEntry(t *testing.T) {
 			name:           "Invalid packet type",
 			input:          []byte{5, 0, 0, 0, 17, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45},
 			expectedResult: types.FileEntry{},
-			expectedError:  fmt.Errorf(" Error expecting data packet type 2 and received 5"),
+			expectedError:  fmt.Errorf("error expecting data packet type 2 and received 5"),
 		},
 		{
 			name:           "Invalid byte array length",
@@ -211,8 +212,10 @@ func Test_readFullL2Blocks(t *testing.T) {
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
 				2, 0, 0, 0, 28, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 2 - l2Transaction
 				128, 1, 5, 0, 0, 0, 1, 2, 3, 4, 5, // L2Transaction
-				2, 0, 0, 0, 25, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
-				10, 0, 0, 0, 32, 0, 0, 0, // endL2Block
+				2, 0, 0, 0, 81, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
+				// endL2Block
+				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 			},
 			expectedResult: []types.FullL2Block{
 				{
@@ -222,8 +225,8 @@ func Test_readFullL2Blocks(t *testing.T) {
 					GlobalExitRoot: [32]byte{10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17},
 					Coinbase:       [20]byte{20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24},
 					ForkId:         10,
-					L2Blockhash:    10,
-					StateRoot:      32,
+					L2Blockhash:    uint256.Int{10, 0, 0, 0},
+					StateRoot:      uint256.Int{32, 0, 0, 0},
 					L2Txs: []types.L2Transaction{
 						{
 							EffectiveGasPricePercentage: 128,
@@ -238,7 +241,7 @@ func Test_readFullL2Blocks(t *testing.T) {
 			expectedError:       nil,
 		},
 		{
-			name:        "Available to read less than asked",
+			name:        "Happy path: Available to read less than asked",
 			inputAmount: 2,
 			inputBytes: []byte{
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
@@ -246,8 +249,10 @@ func Test_readFullL2Blocks(t *testing.T) {
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
 				2, 0, 0, 0, 28, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 2 - l2Transaction
 				128, 1, 5, 0, 0, 0, 1, 2, 3, 4, 5, // L2Transaction
-				2, 0, 0, 0, 25, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
-				10, 0, 0, 0, 32, 0, 0, 0, // endL2Block
+				2, 0, 0, 0, 81, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
+				// endL2Block
+				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 			},
 			expectedResult: []types.FullL2Block{
 				{
@@ -257,8 +262,8 @@ func Test_readFullL2Blocks(t *testing.T) {
 					GlobalExitRoot: [32]byte{10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17},
 					Coinbase:       [20]byte{20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24},
 					ForkId:         10,
-					L2Blockhash:    10,
-					StateRoot:      32,
+					L2Blockhash:    uint256.Int{10, 0, 0, 0},
+					StateRoot:      uint256.Int{32, 0, 0, 0},
 					L2Txs: []types.L2Transaction{
 						{
 							EffectiveGasPricePercentage: 128,
@@ -280,7 +285,9 @@ func Test_readFullL2Blocks(t *testing.T) {
 				// startL2Block
 				128, 1, 5, 0, 0, 0, 1, 2, 3, 4, 5, // L2Transaction
 				2, 0, 0, 0, 25, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
-				10, 0, 0, 0, 32, 0, 0, 0, // endL2Block
+				// endL2Block
+				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 			},
 			expectedResult:      nil,
 			expectedEntriesRead: 0,
@@ -294,7 +301,9 @@ func Test_readFullL2Blocks(t *testing.T) {
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
 				2, 0, 0, 0, 25, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
-				10, 0, 0, 0, 32, 0, 0, 0, // endL2Block
+				// endL2Block
+				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 			},
 			expectedResult:      nil,
 			expectedEntriesRead: 0,
