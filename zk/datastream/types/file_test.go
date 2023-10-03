@@ -18,9 +18,9 @@ func TestFileEntryDecode(t *testing.T) {
 	testCases := []testCase{
 		{
 			name:  "Happy path",
-			input: []byte{101, 0, 0, 0, 29, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 64},
+			input: []byte{2, 0, 0, 0, 29, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 64},
 			expectedResult: FileEntry{
-				PacketType: 101,
+				PacketType: 2,
 				Length:     29,
 				EntryType:  EntryType(1),
 				EntryNum:   45,
@@ -29,9 +29,9 @@ func TestFileEntryDecode(t *testing.T) {
 			expectedError: nil,
 		}, {
 			name:  "Happy path - no data",
-			input: []byte{101, 0, 0, 0, 17, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45},
+			input: []byte{2, 0, 0, 0, 17, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45},
 			expectedResult: FileEntry{
-				PacketType: 101,
+				PacketType: 2,
 				Length:     17,
 				EntryType:  EntryType(1),
 				EntryNum:   45,
@@ -46,7 +46,7 @@ func TestFileEntryDecode(t *testing.T) {
 			expectedError:  fmt.Errorf("invalid FileEntry binary size. Expected: >=17, got: 6"),
 		}, {
 			name:           "Invalid data length",
-			input:          []byte{101, 0, 0, 0, 31, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 64},
+			input:          []byte{2, 0, 0, 0, 31, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 64},
 			expectedResult: FileEntry{},
 			expectedError:  fmt.Errorf("invalid FileEntry binary size. Expected: 31, got: 29"),
 		},

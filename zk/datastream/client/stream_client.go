@@ -7,7 +7,7 @@ import (
 	"net"
 	"reflect"
 
-	"github.com/ledgerwatch/erigon/zkevm/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/datastream/types"
 )
 
 type StreamType uint64
@@ -51,15 +51,20 @@ func NewClient(server string) StreamClient {
 		streamType: StSequencer,
 		id:         "",
 		entriesDefinition: map[types.EntryType]EntityDefinition{
-			types.EntryTypeL2Block: {
-				Name:       "L2Block",
+			types.EntryTypeStartL2Block: {
+				Name:       "StartL2Block",
 				StreamType: StSequencer,
-				Definition: reflect.TypeOf(types.L2Block{}),
+				Definition: reflect.TypeOf(types.StartL2Block{}),
 			},
 			types.EntryTypeL2Tx: {
 				Name:       "L2Transaction",
 				StreamType: StSequencer,
 				Definition: reflect.TypeOf(types.L2Transaction{}),
+			},
+			types.EntryTypeEndL2Block: {
+				Name:       "EndL2Block",
+				StreamType: StSequencer,
+				Definition: reflect.TypeOf(types.EndL2Block{}),
 			},
 		},
 	}
@@ -90,24 +95,24 @@ func (c *StreamClient) Stop() {
 // If started, terminate the connection.
 func (c *StreamClient) GetHeader() error {
 	if err := c.sendHeaderCmd(); err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
+		return fmt.Errorf("%s send header error: %v", c.id, err)
 	}
 
 	// Read packet
 	packet, err := readBuffer(c.conn, 1)
 	if err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
+		return fmt.Errorf("%s read buffer error: %v", c.id, err)
 	}
 
 	// Check packet type
 	if packet[0] != PtResult {
-		return fmt.Errorf("%s Error expecting result packet type %d and received %d", c.id, PtResult, packet[0])
+		return fmt.Errorf("%s error expecting result packet type %d and received %d", c.id, PtResult, packet[0])
 	}
 
 	// Read server result entry for the command
 	r, err := c.readResultEntry(packet)
 	if err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
+		return fmt.Errorf("%s read result entry error: %v", c.id, err)
 	}
 	if err := r.GetError(); err != nil {
 		return fmt.Errorf("%s got Result error code %d: %v", c.id, r.ErrorNum, err)
@@ -116,7 +121,7 @@ func (c *StreamClient) GetHeader() error {
 	// Read header entry
 	h, err := c.readHeaderEntry()
 	if err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
+		return fmt.Errorf("%s read header entry error: %v", c.id, err)
 	}
 
 	c.Header = *h
@@ -125,63 +130,96 @@ func (c *StreamClient) GetHeader() error {
 }
 
 // sends start command, reads entries until limit reached and sends end command
-func (c *StreamClient) ReadEntries(from, amount uint64) (*[]types.L2Block, *[]types.L2Transaction, error) {
+func (c *StreamClient) ReadEntries(fromEntry uint64, l2BlocksAmount int) (*[]types.FullL2Block, uint64, error) {
 	// send start command
-	if err := c.sendStartCmd(from); err != nil {
-		return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("%s %v", c.id, err)
+	if err := c.sendStartCmd(fromEntry); err != nil {
+		return nil, 0, fmt.Errorf("%s send start command error: %v", c.id, err)
 	}
 
 	// Read packet
 	packet, err := readBuffer(c.conn, 1)
 	if err != nil {
-		return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("%s %v", c.id, err)
+		return nil, 0, fmt.Errorf("%s read buffer error %v", c.id, err)
 	}
 
 	// Read server result entry for the command
 	r, err := c.readResultEntry(packet)
 	if err != nil {
-		return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("%s %v", c.id, err)
+		return nil, 0, fmt.Errorf("%s read result entry error: %v", c.id, err)
 	}
 
 	if err := r.GetError(); err != nil {
-		return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("got Result error code %d: %v", r.ErrorNum, err)
+		return nil, 0, fmt.Errorf("%s got Result error code %d: %v", c.id, r.ErrorNum, err)
 	}
 
-	l2Blocks := []types.L2Block{}
-	l2Txs := []types.L2Transaction{}
-	count := uint64(0)
+	fullL2Blocks, entriesRead, err := c.readFullL2Blocks(fromEntry, l2BlocksAmount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%s read full L2 blocks error: %v", c.id, err)
+	}
+
+	return fullL2Blocks, entriesRead, nil
+}
+
+func (c *StreamClient) readFullL2Blocks(fromEntry uint64, l2BlocksAmount int) (*[]types.FullL2Block, uint64, error) {
+	fullL2Blocks := []types.FullL2Block{}
+	entriesRead := uint64(0)
 	for {
+		if len(fullL2Blocks) >= l2BlocksAmount || entriesRead+fromEntry >= c.Header.TotalEntries {
+			break
+		}
+
 		// Wait next data entry streamed
 		file, err := c.readFileEntry()
 		if err != nil {
-			return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("%s %v", c.id, err)
+			return nil, 0, err
 		}
+		// should start with a StartL2Block entry, followed by
+		// txs entries and ending with a block endL2BlockEntry
+		if file.EntryType == types.EntryTypeStartL2Block {
+			startL2Block, err := types.DecodeStartL2Block(file.Data)
+			if err != nil {
+				return nil, 0, err
+			}
+			entriesRead++
 
-		if file.EntryType == types.EntryTypeL2Tx {
-			l2Tx, err := types.DecodeL2Transaction(file.Data)
-			if err != nil {
-				return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("%s %v", c.id, err)
+			l2Txs := []types.L2Transaction{}
+			endL2Block := &types.EndL2Block{}
+			for {
+				file, err := c.readFileEntry()
+				if err != nil {
+					return nil, 0, err
+				}
+				entriesRead++
+
+				if file.EntryType == types.EntryTypeL2Tx {
+					l2Tx, err := types.DecodeL2Transaction(file.Data)
+					if err != nil {
+						return nil, 0, err
+					}
+					l2Txs = append(l2Txs, *l2Tx)
+				} else if file.EntryType == types.EntryTypeEndL2Block {
+					if len(l2Txs) == 0 {
+						return nil, 0, errors.New("received EndL2Block with 0 parsed txs")
+					}
+					parsedEndL2Block, err := types.DecodeEndL2Block(file.Data)
+					if err != nil {
+						return nil, 0, fmt.Errorf("%s %v", c.id, err)
+					}
+					endL2Block = parsedEndL2Block
+					break
+				} else {
+					return nil, 0, fmt.Errorf("%s expected EndL2Block or L2Transaction type, got type: %d", c.id, file.EntryType)
+				}
 			}
-			l2Txs = append(l2Txs, *l2Tx)
-		} else if file.EntryType == types.EntryTypeL2Block {
-			l2Block, err := types.DecodeL2Block(file.Data)
-			if err != nil {
-				return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("%s %v", c.id, err)
-			}
-			l2Blocks = append(l2Blocks, *l2Block)
+
+			fullL2Block := types.ParseFullL2Block(startL2Block, endL2Block, &l2Txs)
+			fullL2Blocks = append(fullL2Blocks, fullL2Block)
 		} else {
-			if err != nil {
-				return &[]types.L2Block{}, &[]types.L2Transaction{}, fmt.Errorf("%s unknown Entry type: %d", c.id, file.EntryType)
-			}
-		}
-
-		count++
-		if count == amount {
-			break
+			return nil, 0, fmt.Errorf("%s expected StartL2Block, but got type: %d", c.id, file.EntryType)
 		}
 	}
 
-	return &l2Blocks, &l2Txs, nil
+	return &fullL2Blocks, entriesRead, nil
 }
 
 func (c *StreamClient) readFileEntry() (*types.FileEntry, error) {
@@ -203,7 +241,7 @@ func (c *StreamClient) readFileEntry() (*types.FileEntry, error) {
 		}
 		return &types.FileEntry{}, nil
 	} else if packet[0] != PtData {
-		return &types.FileEntry{}, fmt.Errorf("%s Error expecting data packet type %d and received %d", c.id, PtData, packet[0])
+		return &types.FileEntry{}, fmt.Errorf("error expecting data packet type %d and received %d", PtData, packet[0])
 	}
 
 	// Read the rest of fixed size fields
@@ -229,7 +267,7 @@ func (c *StreamClient) readFileEntry() (*types.FileEntry, error) {
 	// Decode binary data to data entry struct
 	file, err := types.DecodeFileEntry(buffer)
 	if err != nil {
-		return &types.FileEntry{}, fmt.Errorf("%s %v", c.id, err)
+		return &types.FileEntry{}, fmt.Errorf("decode file entry error: %v", err)
 	}
 
 	return file, nil
@@ -281,7 +319,7 @@ func (c *StreamClient) readResultEntry(packet []byte) (*types.ResultEntry, error
 	// Decode binary entry result
 	re, err := types.DecodeResultEntry(buffer)
 	if err != nil {
-		return &types.ResultEntry{}, err
+		return &types.ResultEntry{}, fmt.Errorf("decode result entry error: %v", err)
 	}
 
 	return re, nil

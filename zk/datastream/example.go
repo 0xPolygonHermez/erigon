@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/ledgerwatch/erigon/zkevm/datastream/client"
+	"github.com/ledgerwatch/erigon/zk/datastream/client"
 )
 
 func main() {
@@ -21,7 +21,7 @@ func main() {
 
 	totalEntries := c.Header.TotalEntries
 	fmt.Println("Total entries:", totalEntries)
-	l2Blocks, l2Txs, err := c.ReadEntries(0, 10)
+	l2Blocks, _, err := c.ReadEntries(0, 10)
 	if err != nil {
 		panic(err)
 	}
@@ -29,7 +29,5 @@ func main() {
 	fmt.Println((*l2Blocks)[0])
 	fmt.Println((*l2Blocks)[1])
 	fmt.Println((*l2Blocks)[2])
-	fmt.Println((*l2Txs)[0])
-	fmt.Println("Downloaded Txs count:", len(*l2Txs))
 	fmt.Println("Downloaded Blocks count: ", len(*l2Blocks))
 }
