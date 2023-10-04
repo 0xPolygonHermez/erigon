@@ -9,7 +9,7 @@ import (
 const TestDatastreamUrl = "stream.internal.zkevm-test.net:6900"
 
 // This code downloads headers and blocks from a datastream server.
-func DownloadHeaders(datastreamUrl string, blockChannel chan types.FullL2Block) (uint64, error) {
+func DownloadHeadersToChannel(datastreamUrl string, blockChannel chan types.FullL2Block) (uint64, error) {
 	// Create client
 	c := client.NewClient(datastreamUrl)
 

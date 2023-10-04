@@ -32,7 +32,7 @@ func DownloadHeaders(tx kv.RwTx) (uint64, error) {
 
 	// start client
 	go func() {
-		entriesRead, err := datastream.DownloadHeaders(datastream.TestDatastreamUrl, l2BlockChan)
+		entriesRead, err := datastream.DownloadHeadersToChannel(datastream.TestDatastreamUrl, l2BlockChan)
 		entriesReadChan <- entriesRead
 		errChan <- err
 	}()
