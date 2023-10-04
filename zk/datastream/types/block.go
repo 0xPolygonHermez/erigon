@@ -27,6 +27,7 @@ type StartL2Block struct {
 	ForkId         uint16         // 2 bytes
 }
 
+// decodes a StartL2Block from a byte array
 func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 	if len(data) != startL2BlockDataLength {
 		return &StartL2Block{}, fmt.Errorf("expected data length: %d, got: %d", startL2BlockDataLength, len(data))
@@ -54,6 +55,7 @@ type EndL2Block struct {
 	StateRoot     common.Hash // 32 bytes
 }
 
+// DecodeEndL2Block decodes a EndL2Block from a byte array
 func DecodeEndL2Block(data []byte) (*EndL2Block, error) {
 	if len(data) != endL2BlockDataLength {
 		return &EndL2Block{}, fmt.Errorf("expected data length: %d, got: %d", endL2BlockDataLength, len(data))
@@ -78,6 +80,7 @@ type FullL2Block struct {
 	L2Txs          []L2Transaction
 }
 
+// ParseFullL2Block parses a FullL2Block from a StartL2Block, EndL2Block and a slice of L2Transactions
 func ParseFullL2Block(startL2Block *StartL2Block, endL2Block *EndL2Block, l2Txs *[]L2Transaction) *FullL2Block {
 	return &FullL2Block{
 		BatchNumber:    startL2Block.BatchNumber,

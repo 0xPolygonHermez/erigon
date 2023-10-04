@@ -19,6 +19,7 @@ type L2Transaction struct {
 	Encoded                     []byte
 }
 
+// decodes a L2 transaction from a byte array
 func DecodeL2Transaction(data []byte) (*L2Transaction, error) {
 	dataLen := len(data)
 	if dataLen < l2TxMinDataLength {

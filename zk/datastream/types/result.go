@@ -26,26 +26,19 @@ type ResultEntry struct {
 	ErrorStr   []byte
 }
 
+// checks is the result error number is OK
 func (r ResultEntry) IsOk() bool {
 	return r.ErrorNum == CmdErrOK
 }
 
+// returns the error string if the result error number is not OK
+// returns nil otherwise
 func (r *ResultEntry) GetError() error {
 	if r.IsOk() {
 		return nil
 	}
 
 	return errors.New(string(r.ErrorStr))
-}
-
-// Encode/convert from an entry type to binary bytes slice
-func (r *ResultEntry) Encode() []byte {
-	be := make([]byte, 1)
-	be[0] = r.PacketType
-	be = binary.BigEndian.AppendUint32(be, r.Length)
-	be = binary.BigEndian.AppendUint32(be, r.ErrorNum)
-	be = append(be, r.ErrorStr...)
-	return be
 }
 
 // Decode/convert from binary bytes slice to an entry type

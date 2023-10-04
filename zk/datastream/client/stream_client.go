@@ -145,6 +145,7 @@ func (c *StreamClient) ReadEntries(fromEntry uint64, l2BlocksAmount int) (*[]typ
 }
 
 // sends start command, reads entries until limit reached and sends end command
+// sends the parsed FullL2Blocks with transactions to a channel
 func (c *StreamClient) ReadAllEntriesToChannel(l2BlockChan chan types.FullL2Block) (uint64, error) {
 	// send start command
 	if err := c.initiateDownload(0); err != nil {
@@ -159,6 +160,7 @@ func (c *StreamClient) ReadAllEntriesToChannel(l2BlockChan chan types.FullL2Bloc
 	return entriesRead, nil
 }
 
+// runs the prerequisites for entries download
 func (c *StreamClient) initiateDownload(fromEntry uint64) error {
 	// send start command
 	if err := c.sendStartCmd(fromEntry); err != nil {
@@ -184,6 +186,8 @@ func (c *StreamClient) initiateDownload(fromEntry uint64) error {
 	return nil
 }
 
+// reads all entries from the server and sends them to a channel
+// sends the parsed FullL2Blocks with transactions to a channel
 func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockChan chan types.FullL2Block) (uint64, error) {
 	entriesRead := uint64(0)
 	for {
@@ -203,6 +207,8 @@ func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockCha
 	return entriesRead, nil
 }
 
+// reads a set amount of l2blocks from the server and returns them
+// returns the parsed FullL2Blocks with transactions and the amount of entries read
 func (c *StreamClient) readFullL2Blocks(fromEntry uint64, l2BlocksAmount int) (*[]types.FullL2Block, uint64, error) {
 	fullL2Blocks := []types.FullL2Block{}
 	entriesRead := uint64(0)
@@ -222,6 +228,8 @@ func (c *StreamClient) readFullL2Blocks(fromEntry uint64, l2BlocksAmount int) (*
 	return &fullL2Blocks, entriesRead, nil
 }
 
+// reads a full block from the server
+// returns the parsed FullL2Block and the amount of entries read
 func (c *StreamClient) readFullBlock() (*types.FullL2Block, uint64, error) {
 	// Wait next data entry streamed
 	file, err := c.readFileEntry()
@@ -280,6 +288,8 @@ func (c *StreamClient) readFullBlock() (*types.FullL2Block, uint64, error) {
 	return fullL2Block, entriesRead, nil
 }
 
+// reads file bytes from socket and tries to parse them
+// returns the parsed FileEntry
 func (c *StreamClient) readFileEntry() (*types.FileEntry, error) {
 	// Read packet type
 	packet, err := readBuffer(c.conn, 1)
@@ -332,6 +342,7 @@ func (c *StreamClient) readFileEntry() (*types.FileEntry, error) {
 }
 
 // reads header bytes from socket and tries to parse them
+// returns the parsed HeaderEntry
 func (c *StreamClient) readHeaderEntry() (*types.HeaderEntry, error) {
 	// Read header stream bytes
 	binaryHeader, err := readBuffer(c.conn, types.HeaderSize)
@@ -349,6 +360,7 @@ func (c *StreamClient) readHeaderEntry() (*types.HeaderEntry, error) {
 }
 
 // reads result bytes and tries to parse them
+// returns the parsed ResultEntry
 func (c *StreamClient) readResultEntry(packet []byte) (*types.ResultEntry, error) {
 	if len(packet) != 1 {
 		return &types.ResultEntry{}, fmt.Errorf("expected packet size of 1, got: %d", len(packet))

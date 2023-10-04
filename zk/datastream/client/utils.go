@@ -8,6 +8,7 @@ import (
 	"net"
 )
 
+// writeFullUint64ToConn writes a uint64 to a connection
 func writeFullUint64ToConn(conn net.Conn, value uint64) error {
 	buffer := make([]byte, 8)
 	binary.BigEndian.PutUint64(buffer, uint64(value))
@@ -24,6 +25,7 @@ func writeFullUint64ToConn(conn net.Conn, value uint64) error {
 	return nil
 }
 
+// reads a set amount of bytes from a connection
 func readBuffer(conn net.Conn, n uint32) ([]byte, error) {
 	buffer := make([]byte, n)
 	rbc, err := io.ReadFull(conn, buffer)
@@ -38,6 +40,7 @@ func readBuffer(conn net.Conn, n uint32) ([]byte, error) {
 	return buffer, nil
 }
 
+// parseIoReadError parses an error returned from io.ReadFull and returns a more concrete one
 func parseIoReadError(err error) error {
 	if err == io.EOF {
 		return errors.New("server close connection")

@@ -8,42 +8,6 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-func TestResultEncode(t *testing.T) {
-	type testCase struct {
-		name           string
-		input          ResultEntry
-		expectedResult []byte
-	}
-	testCases := []testCase{
-		{
-			name: "Happy path",
-			input: ResultEntry{
-				PacketType: 1,
-				Length:     0,
-				ErrorNum:   3,
-				ErrorStr:   []byte{},
-			},
-			expectedResult: []byte{1, 0, 0, 0, 0, 0, 0, 0, 3},
-		}, {
-			name: "Error string length",
-			input: ResultEntry{
-				PacketType: 1,
-				Length:     19,
-				ErrorNum:   0,
-				ErrorStr:   []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-			},
-			expectedResult: []byte{1, 0, 0, 0, 19, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := testCase.input.Encode()
-			assert.DeepEqual(t, testCase.expectedResult, result)
-		})
-	}
-}
-
 func TestResultDecode(t *testing.T) {
 	type testCase struct {
 		name           string

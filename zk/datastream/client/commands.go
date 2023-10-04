@@ -10,6 +10,7 @@ const (
 	CmdHeader  Command = 3
 )
 
+// sendHeaderCmd sends the header command to the server.
 func (c *StreamClient) sendHeaderCmd() error {
 	err := c.sendCommand(CmdHeader)
 	if err != nil {
@@ -19,6 +20,9 @@ func (c *StreamClient) sendHeaderCmd() error {
 	return nil
 }
 
+// sendStartCmd sends a start command to the server, indicating
+// that the client wishes to start streaming from the given entry
+// number.
 func (c *StreamClient) sendStartCmd(from uint64) error {
 	err := c.sendCommand(CmdStart)
 	if err != nil {
