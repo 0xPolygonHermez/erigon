@@ -10,6 +10,7 @@ import (
 const L1VERIFICATIONS = "hermez_l1Verifications" // l1blockno, batchno -> l1txhash
 const L1SEQUENCES = "hermez_l1Sequences"         // l1blockno, batchno -> l1txhash
 const FORKIDS = "hermez_forkIds"                 // batchNo -> forkId
+const BLOCKBATCHES = "hermez_blockBatches"       // l2blockno -> batchno
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -39,7 +40,55 @@ func (db *HermezDb) CreateBuckets() error {
 	if err != nil {
 		return err
 	}
+	err = db.tx.CreateBucket(BLOCKBATCHES)
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+func (db *HermezDb) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) {
+	c, err := db.tx.Cursor(BLOCKBATCHES)
+	if err != nil {
+		return 0, err
+	}
+
+	k, v, err := c.Seek(UintBytes(l2BlockNo))
+	if err != nil {
+		return 0, err
+	}
+
+	if k == nil {
+		return 0, nil
+	}
+
+	if BytesUint(k) != l2BlockNo {
+		return 0, nil
+	}
+
+	return BytesUint(v), nil
+}
+
+func (db *HermezDb) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error) {
+	// TODO: not the most efficient way of doing this
+	c, err := db.tx.Cursor(BLOCKBATCHES)
+	if err != nil {
+		return nil, err
+	}
+
+	var blockNos []uint64
+	var k, v []byte
+
+	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			break
+		}
+		if BytesUint(v) == batchNo {
+			blockNos = append(blockNos, BytesUint(k))
+		}
+	}
+
+	return blockNos, err
 }
 
 func (db *HermezDb) GetSequenceByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
@@ -154,6 +203,10 @@ func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash common.Has
 
 func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common.Hash) error {
 	return db.tx.Put(L1VERIFICATIONS, ConcatKey(l1BlockNo, batchNo), l1TxHash.Bytes())
+}
+
+func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
+	return db.tx.Put(BLOCKBATCHES, UintBytes(l2BlockNo), UintBytes(batchNo))
 }
 
 func (db *HermezDb) GetForkId(batchNo uint64) (uint64, error) {

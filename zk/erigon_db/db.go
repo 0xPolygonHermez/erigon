@@ -30,6 +30,7 @@ func (db ErigonDb) WriteHeader(batchNo *big.Int, stateRoot, txHash common.Hash, 
 		Coinbase:   coinbase,
 		Time:       uint64(ts.Unix()),
 	}
+
 	rawdb.WriteHeader(db.tx, h)
 	err := rawdb.WriteCanonicalHash(db.tx, h.Hash(), batchNo.Uint64())
 	if err != nil {
