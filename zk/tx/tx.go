@@ -3,14 +3,15 @@ package tx
 import (
 	"errors"
 	"fmt"
+	"math/big"
+	"strconv"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/log/v3"
-	"math/big"
-	"strconv"
 )
 
 const (
@@ -32,24 +33,6 @@ const (
 	f7                             uint64 = 247 // 192 + 55 = c0 + shortRlp
 	efficiencyPercentageByteLength uint64 = 1
 )
-
-// TODO: import these from the data streamer package
-type L2Transaction struct {
-	BatchNumber                 uint64 // 8 bytes
-	EffectiveGasPricePercentage uint8  // 1 byte
-	IsValid                     uint8  // 1 byte
-	EncodedLength               uint32 // 4 bytes
-	Encoded                     []byte
-}
-
-// L2Block represents a zkEvm block
-type L2Block struct {
-	BatchNumber    uint64         // 8 bytes
-	L2BlockNumber  uint64         // 8 bytes
-	Timestamp      int64          // 8 bytes
-	GlobalExitRoot common.Hash    // 32 bytes
-	Coinbase       common.Address // 20 bytes
-}
 
 var (
 	ErrInvalidData = errors.New("invalid data")

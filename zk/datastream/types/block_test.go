@@ -2,9 +2,10 @@ package types
 
 import (
 	"fmt"
+	"math/big"
 	"testing"
 
-	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )
@@ -58,12 +59,14 @@ func TestEndL2BlockDecode(t *testing.T) {
 		{
 			name: "Happy path",
 			input: []byte{
-				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				10, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32,
 			},
 			expectedResult: EndL2Block{
-				L2Blockhash: uint256.Int{10, 0, 0, 0},
-				StateRoot:   uint256.Int{32, 0, 0, 0},
+				L2BlockNumber: 10,
+				L2Blockhash:   common.BigToHash(big.NewInt(10)),
+				StateRoot:     common.BigToHash(big.NewInt(32)),
 			},
 			expectedError: nil,
 		},
@@ -71,7 +74,7 @@ func TestEndL2BlockDecode(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{20, 2, 3},
 			expectedResult: EndL2Block{},
-			expectedError:  fmt.Errorf("expected data length: 64, got: 3"),
+			expectedError:  fmt.Errorf("expected data length: 72, got: 3"),
 		},
 	}
 

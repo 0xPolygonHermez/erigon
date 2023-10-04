@@ -2,12 +2,12 @@ package erigon_db
 
 import (
 	"fmt"
+	"math/big"
+
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"math/big"
-	"time"
 )
 
 type ErigonDb struct {
@@ -20,7 +20,7 @@ func NewErigonDb(tx kv.RwTx) *ErigonDb {
 	}
 }
 
-func (db ErigonDb) WriteHeader(batchNo *big.Int, stateRoot, txHash common.Hash, coinbase common.Address, ts time.Time) (*ethTypes.Header, error) {
+func (db ErigonDb) WriteHeader(batchNo *big.Int, stateRoot, txHash common.Hash, coinbase common.Address, ts uint64) (*ethTypes.Header, error) {
 	h := &ethTypes.Header{
 		Root:       stateRoot,
 		TxHash:     txHash,
@@ -28,7 +28,7 @@ func (db ErigonDb) WriteHeader(batchNo *big.Int, stateRoot, txHash common.Hash, 
 		Number:     batchNo,
 		GasLimit:   30_000_000,
 		Coinbase:   coinbase,
-		Time:       uint64(ts.Unix()),
+		Time:       ts,
 	}
 
 	rawdb.WriteHeader(db.tx, h)
