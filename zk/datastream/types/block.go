@@ -78,8 +78,8 @@ type FullL2Block struct {
 	L2Txs          []L2Transaction
 }
 
-func ParseFullL2Block(startL2Block *StartL2Block, endL2Block *EndL2Block, l2Txs *[]L2Transaction) FullL2Block {
-	return FullL2Block{
+func ParseFullL2Block(startL2Block *StartL2Block, endL2Block *EndL2Block, l2Txs *[]L2Transaction) *FullL2Block {
+	return &FullL2Block{
 		BatchNumber:    startL2Block.BatchNumber,
 		L2BlockNumber:  startL2Block.L2BlockNumber,
 		Timestamp:      startL2Block.Timestamp,
