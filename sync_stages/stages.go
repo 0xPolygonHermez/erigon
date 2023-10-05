@@ -57,7 +57,8 @@ var (
 	BeaconIndexes               SyncStage = "BeaconIndexes"               // Fills up Beacon indexes
 
 	// ZK stages
-	Batches SyncStage = "Batches"
+	L1Verifications SyncStage = "L1Verifications"
+	Batches         SyncStage = "Batches"
 )
 
 var AllStages = []SyncStage{

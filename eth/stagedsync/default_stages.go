@@ -291,8 +291,24 @@ func StateStages(ctx context.Context, headers HeadersCfg, bodies BodiesCfg, bloc
 	}
 }
 
-func DefaultZkStages(ctx context.Context, snapshots SnapshotsCfg, batches zkStages.BatchesCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*sync_stages.Stage {
+func DefaultZkStages(ctx context.Context, snapshots SnapshotsCfg, l1VerificationsCfg zkStages.L1VerificationsCfg, batchesCfg zkStages.BatchesCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, zkInterHashesCfg zkStages.ZkInterHashesCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*sync_stages.Stage {
 	return []*sync_stages.Stage{
+		{
+			ID:          sync_stages.L1Verifications,
+			Description: "Download L1 Verifications",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
+				if badBlockUnwind {
+					return nil
+				}
+				return zkStages.SpawnStageL1Verifications(s, u, ctx, tx, l1VerificationsCfg, firstCycle, test)
+			},
+			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
+				return zkStages.UnwindL1VerificationsStage(u, tx, l1VerificationsCfg, ctx)
+			},
+			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
+				return zkStages.PruneL1VerificationsStage(p, tx, l1VerificationsCfg, ctx)
+			},
+		},
 		{
 			ID:          sync_stages.Batches,
 			Description: "Download batches",
@@ -300,13 +316,13 @@ func DefaultZkStages(ctx context.Context, snapshots SnapshotsCfg, batches zkStag
 				if badBlockUnwind {
 					return nil
 				}
-				return zkStages.SpawnStageBatches(s, u, ctx, tx, batches, firstCycle, test)
+				return zkStages.SpawnStageBatches(s, u, ctx, tx, batchesCfg, firstCycle, test)
 			},
 			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return zkStages.UnwindBatchesStage(u, tx, batches, ctx)
+				return zkStages.UnwindBatchesStage(u, tx, batchesCfg, ctx)
 			},
 			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return zkStages.PruneBatchesStage(p, tx, batches, ctx)
+				return zkStages.PruneBatchesStage(p, tx, batchesCfg, ctx)
 			},
 		},
 		{
@@ -380,21 +396,15 @@ func DefaultZkStages(ctx context.Context, snapshots SnapshotsCfg, batches zkStag
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				if exec.chainConfig.IsPrague(0) {
-					_, err := SpawnVerkleTrie(s, u, tx, trieCfg, ctx)
-					return err
-				}
-				_, err := SpawnIntermediateHashesStage(s, u, tx, trieCfg, ctx, quiet)
+				_, err := zkStages.SpawnZkIntermediateHashesStage(s, u, tx, zkInterHashesCfg, ctx, quiet)
 				return err
 			},
 			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				if exec.chainConfig.IsPrague(0) {
-					return UnwindVerkleTrie(u, s, tx, trieCfg, ctx)
-				}
-				return UnwindIntermediateHashesStage(u, s, tx, trieCfg, ctx)
+				return zkStages.UnwindZkIntermediateHashesStage(u, s, tx, zkInterHashesCfg, ctx)
 			},
 			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return PruneIntermediateHashesStage(p, tx, trieCfg, ctx)
+				// TODO: implement this in zk interhashes
+				return nil
 			},
 		},
 		{
@@ -504,6 +514,7 @@ var DefaultForwardOrder = sync_stages.UnwindOrder{
 }
 
 var ZkUnwindOrder = sync_stages.UnwindOrder{
+	sync_stages.L1Verifications,
 	sync_stages.Batches,
 	sync_stages.BlockHashes,
 
