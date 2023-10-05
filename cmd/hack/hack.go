@@ -45,11 +45,11 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/cbor"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/sync_stages/stages"
 	"github.com/ledgerwatch/erigon/turbo/debug"
 	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
@@ -360,65 +360,6 @@ func printBuckets(chaindata, buckets string) {
 	for _, b := range strings.Split(buckets, ",") {
 		printBucket(chaindata, b)
 	}
-}
-
-func loadHermezRpcRoots(chaindata string) {
-	fmt.Println("Loading hermez rpc roots")
-
-	db := mdbx.MustOpen(chaindata)
-	defer db.Close()
-	tx, err1 := db.BeginRw(context.Background())
-	if err1 != nil {
-		panic(err1)
-	}
-	defer tx.Rollback()
-
-	err := tx.ClearBucket("HermezRpcRoot")
-	if err != nil {
-		panic(err)
-	}
-
-	rootsFile, err := os.Open("zkevm-roots.json")
-	if err != nil {
-		panic(err)
-	}
-	defer rootsFile.Close()
-
-	results := make(map[int64]string, 0)
-	jsonParser := json.NewDecoder(rootsFile)
-	err = jsonParser.Decode(&results)
-	if err != nil {
-		panic(err)
-	}
-
-	for k, v := range results {
-		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(k))
-		bv := hexutility.FromHex(trimHexString(v))
-		err = tx.Put("HermezRpcRoot", b, bv)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		panic(err)
-	}
-}
-
-func trimHexString(s string) string {
-	if strings.HasPrefix(s, "0x") {
-		s = s[2:]
-	}
-
-	for i := 0; i < len(s); i++ {
-		if s[i] != '0' {
-			return "0x" + s[i:]
-		}
-	}
-
-	return "0x0"
 }
 
 func searchChangeSet(chaindata string, key []byte, block uint64) error {
@@ -1507,9 +1448,6 @@ func main() {
 
 	case "buckets":
 		printBuckets(*chaindata, *bucket)
-
-	case "hermezRoots":
-		loadHermezRpcRoots(*chaindata)
 
 	case "slice":
 		dbSlice(*chaindata, *bucket, common.FromHex(*hash))

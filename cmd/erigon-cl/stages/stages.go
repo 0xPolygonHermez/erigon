@@ -8,42 +8,42 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/core/rawdb"
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/core/state"
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/execution_client"
-	"github.com/ledgerwatch/erigon/cmd/erigon-cl/forkchoice"
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/network"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/sync_stages"
+	"github.com/ledgerwatch/erigon/sync_stages/stages"
 )
 
 // StateStages are all stages necessary for basic unwind and stage computation, it is primarly used to process side forks and memory execution.
-func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReconstructionCfg, beaconState StageBeaconStateCfg, forkchoice StageForkChoiceCfg) []*stagedsync.Stage {
-	return []*stagedsync.Stage{
+func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReconstructionCfg, beaconsBlocks StageBeaconsBlockCfg, beaconState StageBeaconStateCfg) []*sync.Stage {
+	return []*sync.Stage{
 		{
 			ID:          stages.BeaconHistoryReconstruction,
 			Description: "Download beacon blocks backwards.",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync.StageState, u sync.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageHistoryReconstruction(historyReconstruction, s, tx, ctx)
 			},
-			Unwind: func(firstCycle bool, u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
-				return nil
-			},
-		},
-		{
-			ID:          stages.BeaconState,
-			Description: "Execute Consensus Layer transition",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnStageBeaconState(beaconState, tx, ctx)
-			},
-			Unwind: func(firstCycle bool, u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
+			Unwind: func(firstCycle bool, u *sync.UnwindState, s *sync.StageState, tx kv.RwTx) error {
 				return nil
 			},
 		},
 		{
 			ID:          stages.BeaconBlocks,
 			Description: "Download beacon blocks forward.",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnStageForkChoice(forkchoice, s, tx, ctx)
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync.StageState, u sync.Unwinder, tx kv.RwTx, quiet bool) error {
+				return SpawnStageBeaconsBlocks(beaconsBlocks, s, tx, ctx)
 			},
-			Unwind: func(firstCycle bool, u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
+			Unwind: func(firstCycle bool, u *sync.UnwindState, s *sync.StageState, tx kv.RwTx) error {
+				return nil
+			},
+		},
+		{
+			ID:          stages.BeaconState,
+			Description: "Execute Consensus Layer transition",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync.StageState, u sync.Unwinder, tx kv.RwTx, quiet bool) error {
+				return SpawnStageBeaconState(beaconState, tx, ctx)
+			},
+			Unwind: func(firstCycle bool, u *sync.UnwindState, s *sync.StageState, tx kv.RwTx) error {
 				return nil
 			},
 		},
@@ -70,15 +70,13 @@ func NewConsensusStagedSync(ctx context.Context,
 	tmpdir string,
 	executionClient *execution_client.ExecutionClient,
 	beaconDBCfg *rawdb.BeaconDataConfig,
-	gossipManager *network.GossipManager,
-	forkChoice *forkchoice.ForkChoiceStore,
-) (*stagedsync.Sync, error) {
-	return stagedsync.New(
+) (*sync.Sync, error) {
+	return sync.New(
 		ConsensusStages(
 			ctx,
 			StageHistoryReconstruction(db, backwardDownloader, genesisCfg, beaconCfg, beaconDBCfg, state, tmpdir, executionClient),
+			StageBeaconsBlock(db, forwardDownloader, genesisCfg, beaconCfg, state, executionClient),
 			StageBeaconState(db, beaconCfg, state, executionClient),
-			StageForkChoice(db, forwardDownloader, genesisCfg, beaconCfg, state, executionClient, gossipManager, forkChoice),
 		),
 		ConsensusUnwindOrder,
 		ConsensusPruneOrder,

@@ -1,4 +1,4 @@
-package stagedsync
+package sync_stages
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/dbg"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
-
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 type Sync struct {
@@ -29,29 +27,29 @@ type Sync struct {
 type Timing struct {
 	isUnwind bool
 	isPrune  bool
-	stage    stages.SyncStage
+	stage    SyncStage
 	took     time.Duration
 }
 
 func (s *Sync) Len() int                 { return len(s.stages) }
 func (s *Sync) PrevUnwindPoint() *uint64 { return s.prevUnwindPoint }
 
-func (s *Sync) NewUnwindState(id stages.SyncStage, unwindPoint, currentProgress uint64) *UnwindState {
+func (s *Sync) NewUnwindState(id SyncStage, unwindPoint, currentProgress uint64) *UnwindState {
 	return &UnwindState{id, unwindPoint, currentProgress, libcommon.Hash{}, s}
 }
 
-func (s *Sync) PruneStageState(id stages.SyncStage, forwardProgress uint64, tx kv.Tx, db kv.RwDB) (*PruneState, error) {
+func (s *Sync) PruneStageState(id SyncStage, forwardProgress uint64, tx kv.Tx, db kv.RwDB) (*PruneState, error) {
 	var pruneProgress uint64
 	var err error
 	useExternalTx := tx != nil
 	if useExternalTx {
-		pruneProgress, err = stages.GetStagePruneProgress(tx, id)
+		pruneProgress, err = GetStagePruneProgress(tx, id)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		if err = db.View(context.Background(), func(tx kv.Tx) error {
-			pruneProgress, err = stages.GetStagePruneProgress(tx, id)
+			pruneProgress, err = GetStagePruneProgress(tx, id)
 			if err != nil {
 				return err
 			}
@@ -72,7 +70,7 @@ func (s *Sync) NextStage() {
 }
 
 // IsBefore returns true if stage1 goes before stage2 in staged sync
-func (s *Sync) IsBefore(stage1, stage2 stages.SyncStage) bool {
+func (s *Sync) IsBefore(stage1, stage2 SyncStage) bool {
 	idx1 := -1
 	idx2 := -1
 	for i, stage := range s.stages {
@@ -89,7 +87,7 @@ func (s *Sync) IsBefore(stage1, stage2 stages.SyncStage) bool {
 }
 
 // IsAfter returns true if stage1 goes after stage2 in staged sync
-func (s *Sync) IsAfter(stage1, stage2 stages.SyncStage) bool {
+func (s *Sync) IsAfter(stage1, stage2 SyncStage) bool {
 	idx1 := -1
 	idx2 := -1
 	for i, stage := range s.stages {
@@ -122,7 +120,7 @@ func (s *Sync) LogPrefix() string {
 	return s.logPrefixes[s.currentStage]
 }
 
-func (s *Sync) SetCurrentStage(id stages.SyncStage) error {
+func (s *Sync) SetCurrentStage(id SyncStage) error {
 	for i, stage := range s.stages {
 		if stage.ID == id {
 			s.currentStage = uint(i)
@@ -165,18 +163,18 @@ func New(stagesList []*Stage, unwindOrder UnwindOrder, pruneOrder PruneOrder) *S
 	}
 }
 
-func (s *Sync) StageState(stage stages.SyncStage, tx kv.Tx, db kv.RoDB) (*StageState, error) {
+func (s *Sync) StageState(stage SyncStage, tx kv.Tx, db kv.RoDB) (*StageState, error) {
 	var blockNum uint64
 	var err error
 	useExternalTx := tx != nil
 	if useExternalTx {
-		blockNum, err = stages.GetStageProgress(tx, stage)
+		blockNum, err = GetStageProgress(tx, stage)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		if err = db.View(context.Background(), func(tx kv.Tx) error {
-			blockNum, err = stages.GetStageProgress(tx, stage)
+			blockNum, err = GetStageProgress(tx, stage)
 			if err != nil {
 				return err
 			}
@@ -437,8 +435,8 @@ func (s *Sync) pruneStage(firstCycle bool, stage *Stage, db kv.RwDB, tx kv.RwTx)
 }
 
 // DisableAllStages - including their unwinds
-func (s *Sync) DisableAllStages() []stages.SyncStage {
-	var backupEnabledIds []stages.SyncStage
+func (s *Sync) DisableAllStages() []SyncStage {
+	var backupEnabledIds []SyncStage
 	for i := range s.stages {
 		if !s.stages[i].Disabled {
 			backupEnabledIds = append(backupEnabledIds, s.stages[i].ID)
@@ -450,7 +448,7 @@ func (s *Sync) DisableAllStages() []stages.SyncStage {
 	return backupEnabledIds
 }
 
-func (s *Sync) DisableStages(ids ...stages.SyncStage) {
+func (s *Sync) DisableStages(ids ...SyncStage) {
 	for i := range s.stages {
 		for _, id := range ids {
 			if s.stages[i].ID != id {
@@ -461,7 +459,7 @@ func (s *Sync) DisableStages(ids ...stages.SyncStage) {
 	}
 }
 
-func (s *Sync) EnableStages(ids ...stages.SyncStage) {
+func (s *Sync) EnableStages(ids ...SyncStage) {
 	for i := range s.stages {
 		for _, id := range ids {
 			if s.stages[i].ID != id {
@@ -472,7 +470,7 @@ func (s *Sync) EnableStages(ids ...stages.SyncStage) {
 	}
 }
 
-func (s *Sync) MockExecFunc(id stages.SyncStage, f ExecFunc) {
+func (s *Sync) MockExecFunc(id SyncStage, f ExecFunc) {
 	for i := range s.stages {
 		if s.stages[i].ID == id {
 			s.stages[i].Forward = f

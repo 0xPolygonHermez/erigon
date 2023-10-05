@@ -15,9 +15,10 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/state/exec22"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/params"
+	"github.com/ledgerwatch/erigon/sync_stages"
+	"github.com/ledgerwatch/erigon/sync_stages/stages"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,8 +35,8 @@ func TestExec(t *testing.T) {
 		err := stages.SaveStageProgress(tx2, stages.Execution, 50)
 		require.NoError(err)
 
-		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &sync.UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &sync.StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -50,8 +51,8 @@ func TestExec(t *testing.T) {
 		err := stages.SaveStageProgress(tx2, stages.Execution, 50)
 		require.NoError(err)
 
-		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &sync.UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &sync.StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -68,8 +69,8 @@ func TestExec(t *testing.T) {
 		if err != nil {
 			t.Errorf("error while saving progress: %v", err)
 		}
-		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &sync.UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &sync.StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -87,7 +88,7 @@ func TestExec(t *testing.T) {
 		require.NoError(err)
 		require.Equal(uint64(1), available)
 
-		s := &PruneState{ID: stages.Execution, ForwardProgress: 20}
+		s := &sync.PruneState{ID: stages.Execution, ForwardProgress: 20}
 		// check pruning distance > than current stage progress
 		err = PruneExecutionStage(s, tx, ExecuteBlockCfg{prune: prune.Mode{History: prune.Distance(100), Receipts: prune.Distance(101), CallTraces: prune.Distance(200)}}, ctx, false)
 		require.NoError(err)
@@ -193,8 +194,8 @@ func TestExec22(t *testing.T) {
 			require.NoError(err)
 		}
 
-		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &sync.UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &sync.StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -217,8 +218,8 @@ func TestExec22(t *testing.T) {
 			require.NoError(err)
 		}
 
-		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &sync.UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &sync.StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 

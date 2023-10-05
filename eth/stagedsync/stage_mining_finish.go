@@ -9,6 +9,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/sync_stages"
 )
 
 type MiningFinishCfg struct {
@@ -35,7 +36,7 @@ func StageMiningFinishCfg(
 	}
 }
 
-func SpawnMiningFinishStage(s *StageState, tx kv.RwTx, cfg MiningFinishCfg, quit <-chan struct{}) error {
+func SpawnMiningFinishStage(s *sync_stages.StageState, tx kv.RwTx, cfg MiningFinishCfg, quit <-chan struct{}) error {
 	logPrefix := s.LogPrefix()
 	current := cfg.miningState.MiningBlock
 

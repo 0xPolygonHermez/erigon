@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package stages
+package sync_stages
 
 import (
 	"encoding/binary"
@@ -56,16 +56,11 @@ var (
 	BeaconState                 SyncStage = "BeaconState"                 // Beacon blocks are sent to the state transition function
 	BeaconIndexes               SyncStage = "BeaconIndexes"               // Fills up Beacon indexes
 
+	// ZK stages
+	Batches SyncStage = "Batches"
 )
 
-// "overrides" for zkEVM
-// "renaming" it here to minimize diff
-var L1Blocks SyncStage = "L1Blocks"
-var Transactions SyncStage = "Transactions"
-var RpcRoots SyncStage = "RpcRoots"
-
 var AllStages = []SyncStage{
-	RpcRoots,
 	Snapshots,
 	Headers,
 	BlockHashes,

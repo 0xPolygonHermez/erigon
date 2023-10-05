@@ -1,10 +1,8 @@
-package stagedsync
+package sync_stages
 
 import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 // ExecFunc is the execution function for the stage to move forward.
@@ -33,7 +31,7 @@ type Stage struct {
 	Unwind UnwindFunc
 	Prune  PruneFunc
 	// ID of the sync stage. Should not be empty and should be unique. It is recommended to prefix it with reverse domain to avoid clashes (`com.example.my-stage`).
-	ID stages.SyncStage
+	ID SyncStage
 	// Disabled defines if the stage is disabled. It sets up when the stage is build by its `StageBuilder`.
 	Disabled bool
 }
@@ -41,7 +39,7 @@ type Stage struct {
 // StageState is the state of the stage.
 type StageState struct {
 	state       *Sync
-	ID          stages.SyncStage
+	ID          SyncStage
 	BlockNumber uint64 // BlockNumber is the current block number of the stage at the beginning of the state execution.
 }
 
@@ -49,25 +47,25 @@ func (s *StageState) LogPrefix() string { return s.state.LogPrefix() }
 
 // Update updates the stage state (current block number) in the database. Can be called multiple times during stage execution.
 func (s *StageState) Update(db kv.Putter, newBlockNum uint64) error {
-	if m, ok := syncMetrics[s.ID]; ok {
+	if m, ok := Metrics[s.ID]; ok {
 		m.Set(newBlockNum)
 	}
-	return stages.SaveStageProgress(db, s.ID, newBlockNum)
+	return SaveStageProgress(db, s.ID, newBlockNum)
 }
 func (s *StageState) UpdatePrune(db kv.Putter, blockNum uint64) error {
-	return stages.SaveStagePruneProgress(db, s.ID, blockNum)
+	return SaveStagePruneProgress(db, s.ID, blockNum)
 }
 
 // ExecutionAt gets the current state of the "Execution" stage, which block is currently executed.
 func (s *StageState) ExecutionAt(db kv.Getter) (uint64, error) {
-	execution, err := stages.GetStageProgress(db, stages.Execution)
+	execution, err := GetStageProgress(db, Execution)
 	return execution, err
 }
 
 // IntermediateHashesAt gets the current state of the "IntermediateHashes" stage.
 // A block is fully validated after the IntermediateHashes stage is passed successfully.
 func (s *StageState) IntermediateHashesAt(db kv.Getter) (uint64, error) {
-	progress, err := stages.GetStageProgress(db, stages.IntermediateHashes)
+	progress, err := GetStageProgress(db, IntermediateHashes)
 	return progress, err
 }
 
@@ -79,7 +77,7 @@ type Unwinder interface {
 
 // UnwindState contains the information about unwind.
 type UnwindState struct {
-	ID stages.SyncStage
+	ID SyncStage
 	// UnwindPoint is the block to unwind to.
 	UnwindPoint        uint64
 	CurrentBlockNumber uint64
@@ -92,11 +90,11 @@ func (u *UnwindState) LogPrefix() string { return u.state.LogPrefix() }
 
 // Done updates the DB state of the stage.
 func (u *UnwindState) Done(db kv.Putter) error {
-	return stages.SaveStageProgress(db, u.ID, u.UnwindPoint)
+	return SaveStageProgress(db, u.ID, u.UnwindPoint)
 }
 
 type PruneState struct {
-	ID              stages.SyncStage
+	ID              SyncStage
 	ForwardProgress uint64 // progress of stage forward move
 	PruneProgress   uint64 // progress of stage prune move. after sync cycle it become equal to ForwardProgress by Done() method
 	state           *Sync
@@ -104,8 +102,8 @@ type PruneState struct {
 
 func (s *PruneState) LogPrefix() string { return s.state.LogPrefix() + " Prune" }
 func (s *PruneState) Done(db kv.Putter) error {
-	return stages.SaveStagePruneProgress(db, s.ID, s.ForwardProgress)
+	return SaveStagePruneProgress(db, s.ID, s.ForwardProgress)
 }
 func (s *PruneState) DoneAt(db kv.Putter, blockNum uint64) error {
-	return stages.SaveStagePruneProgress(db, s.ID, blockNum)
+	return SaveStagePruneProgress(db, s.ID, blockNum)
 }

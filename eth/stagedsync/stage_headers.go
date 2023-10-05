@@ -11,6 +11,7 @@ import (
 	"github.com/c2h5oh/datasize"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/dbg"
+	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/etl"
 	"github.com/ledgerwatch/erigon-lib/gointerfaces/remote"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -23,6 +24,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/ethdb/privateapi"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/turbo/engineapi"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
@@ -30,13 +32,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/stages/bodydownload"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 )
-
-type ZkSynchronizer interface {
-	Sync(kv.RwDB, kv.RwTx, bool, func(ctx context.Context, db kv.RwDB, tx kv.RwTx) (kv.RwTx, error)) (kv.RwTx, error)
-	SyncPreTip(tx kv.RwTx, chunkSize uint64, progress ZkProgress) (uint64, error)
-	SyncTip(tx kv.RwTx, fromBatch uint64, progress ZkProgress) (uint64, bool, error)
-	GetProgress(kv.RwTx) ZkProgress
-}
 
 // The number of blocks we should be able to re-org sub-second on commodity hardware.
 // See https://hackmd.io/TdJtNs0dS56q-In8h-ShSg
@@ -54,11 +49,10 @@ type HeadersCfg struct {
 	noP2PDiscovery    bool
 	tmpdir            string
 
-	snapshots      *snapshotsync.RoSnapshots
-	blockReader    services.FullBlockReader
-	forkValidator  *engineapi.ForkValidator
-	notifications  *shards.Notifications
-	zkSynchronizer ZkSynchronizer
+	snapshots     *snapshotsync.RoSnapshots
+	blockReader   services.FullBlockReader
+	forkValidator *engineapi.ForkValidator
+	notifications *shards.Notifications
 }
 
 func StageHeadersCfg(
@@ -75,9 +69,7 @@ func StageHeadersCfg(
 	blockReader services.FullBlockReader,
 	tmpdir string,
 	notifications *shards.Notifications,
-	forkValidator *engineapi.ForkValidator,
-	zkSynchronizer ZkSynchronizer,
-) HeadersCfg {
+	forkValidator *engineapi.ForkValidator) HeadersCfg {
 	return HeadersCfg{
 		db:                db,
 		hd:                headerDownload,
@@ -93,75 +85,72 @@ func StageHeadersCfg(
 		blockReader:       blockReader,
 		forkValidator:     forkValidator,
 		notifications:     notifications,
-		zkSynchronizer:    zkSynchronizer,
 	}
 }
 
 func SpawnStageHeaders(
-	s *StageState,
-	u Unwinder,
+	s *sync_stages.StageState,
+	u sync_stages.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
 	initialCycle bool,
 	test bool, // Set to true in tests, allows the stage to fail rather than wait indefinitely
 ) error {
-
-	// iiii
-	// zkEVM
-
-	// iiii
-
-	return HeadersZK(s, u, ctx, tx, cfg, initialCycle, test)
-
-	/*
-		defer dbi.Close()
-		if initialCycle && cfg.snapshots != nil && cfg.snapshots.Cfg().Enabled {
-			if err := cfg.hd.AddHeadersFromSnapshot(tx, cfg.snapshots.BlocksAvailable(), cfg.blockReader); err != nil {
-				return err
-			}
+	useExternalTx := tx != nil
+	if !useExternalTx {
+		var err error
+		tx, err = cfg.db.BeginRw(ctx)
+		if err != nil {
+			return err
 		}
-
-		var preProgress uint64
-		if s == nil {
-			preProgress = 0
-		} else {
-			preProgress = s.BlockNumber
+		defer tx.Rollback()
+	}
+	if initialCycle && cfg.snapshots != nil && cfg.snapshots.Cfg().Enabled {
+		if err := cfg.hd.AddHeadersFromSnapshot(tx, cfg.snapshots.BlocksAvailable(), cfg.blockReader); err != nil {
+			return err
 		}
+	}
 
-		notBor := cfg.chainConfig.Bor == nil
+	var preProgress uint64
+	if s == nil {
+		preProgress = 0
+	} else {
+		preProgress = s.BlockNumber
+	}
 
-		unsettledForkChoice, headHeight := cfg.hd.GetUnsettledForkChoice()
-		if notBor && unsettledForkChoice != nil { // some work left to do after unwind
-			return finishHandlingForkChoice(unsettledForkChoice, headHeight, s, tx, cfg, useExternalTx)
+	notBor := cfg.chainConfig.Bor == nil
+
+	unsettledForkChoice, headHeight := cfg.hd.GetUnsettledForkChoice()
+	if notBor && unsettledForkChoice != nil { // some work left to do after unwind
+		return finishHandlingForkChoice(unsettledForkChoice, headHeight, s, tx, cfg, useExternalTx)
+	}
+
+	transitionedToPoS := cfg.chainConfig.TerminalTotalDifficultyPassed
+	if notBor && !transitionedToPoS {
+		var err error
+		transitionedToPoS, err = rawdb.Transitioned(tx, preProgress, cfg.chainConfig.TerminalTotalDifficulty)
+		if err != nil {
+			return err
 		}
-
-		transitionedToPoS := cfg.chainConfig.TerminalTotalDifficultyPassed
-		if notBor && !transitionedToPoS {
-			var err error
-			transitionedToPoS, err = rawdb.Transitioned(tx, preProgress, cfg.chainConfig.TerminalTotalDifficulty)
-			if err != nil {
-				return err
-			}
-			if transitionedToPoS {
-				cfg.hd.SetFirstPoSHeight(preProgress)
-			}
-		}
-
 		if transitionedToPoS {
-			libcommon.SafeClose(cfg.hd.QuitPoWMining)
-			return HeadersPOS(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx, preProgress)
-		} else {
-			return HeadersPOW(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx)
+			cfg.hd.SetFirstPoSHeight(preProgress)
 		}
-	*/
+	}
+
+	if transitionedToPoS {
+		libcommon.SafeClose(cfg.hd.QuitPoWMining)
+		return HeadersPOS(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx, preProgress)
+	} else {
+		return HeadersPOW(s, u, ctx, tx, cfg, initialCycle, test, useExternalTx)
+	}
 }
 
 // HeadersPOS processes Proof-of-Stake requests (newPayload, forkchoiceUpdated).
 // It also saves PoS headers downloaded by (*HeaderDownload)StartPoSDownloader into the DB.
 func HeadersPOS(
-	s *StageState,
-	u Unwinder,
+	s *sync_stages.StageState,
+	u sync_stages.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -247,7 +236,7 @@ func HeadersPOS(
 
 func writeForkChoiceHashes(
 	forkChoice *engineapi.ForkChoiceMessage,
-	s *StageState,
+	s *sync_stages.StageState,
 	tx kv.RwTx,
 	cfg HeadersCfg,
 ) (bool, error) {
@@ -288,8 +277,8 @@ func startHandlingForkChoice(
 	forkChoice *engineapi.ForkChoiceMessage,
 	requestStatus engineapi.RequestStatus,
 	requestId int,
-	s *StageState,
-	u Unwinder,
+	s *sync_stages.StageState,
+	u sync_stages.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -440,7 +429,7 @@ func startHandlingForkChoice(
 func finishHandlingForkChoice(
 	forkChoice *engineapi.ForkChoiceMessage,
 	headHeight uint64,
-	s *StageState,
+	s *sync_stages.StageState,
 	tx kv.RwTx,
 	cfg HeadersCfg,
 	useExternalTx bool,
@@ -490,7 +479,7 @@ func handleNewPayload(
 	block *types.Block,
 	requestStatus engineapi.RequestStatus,
 	requestId int,
-	s *StageState,
+	s *sync_stages.StageState,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -557,7 +546,7 @@ func handleNewPayload(
 
 func verifyAndSaveNewPoSHeader(
 	requestStatus engineapi.RequestStatus,
-	s *StageState,
+	s *sync_stages.StageState,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -610,7 +599,7 @@ func schedulePoSDownload(
 	hashToDownload libcommon.Hash,
 	heightToDownload uint64,
 	downloaderTip libcommon.Hash,
-	s *StageState,
+	s *sync_stages.StageState,
 	cfg HeadersCfg,
 ) bool {
 	cfg.hd.BeaconRequestList.SetStatus(requestId, engineapi.DataWasMissing)
@@ -751,8 +740,8 @@ func handleInterrupt(interrupt engineapi.Interrupt, cfg HeadersCfg, tx kv.RwTx, 
 
 // HeadersPOW progresses Headers stage for Proof-of-Work headers
 func HeadersPOW(
-	s *StageState,
-	u Unwinder,
+	s *sync_stages.StageState,
+	u sync_stages.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -991,112 +980,109 @@ func fixCanonicalChain(logPrefix string, logEvery *time.Ticker, height uint64, h
 	return nil
 }
 
-func HeadersUnwind(u *UnwindState, s *StageState, tx kv.RwTx, cfg HeadersCfg, test bool) (err error) {
+func HeadersUnwind(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, cfg HeadersCfg, test bool) (err error) {
+	useExternalTx := tx != nil
+	if !useExternalTx {
+		tx, err = cfg.db.BeginRw(context.Background())
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
+	// Delete canonical hashes that are being unwound
+	badBlock := u.BadBlock != (libcommon.Hash{})
+	if badBlock {
+		cfg.hd.ReportBadHeader(u.BadBlock)
+		// Mark all descendants of bad block as bad too
+		headerCursor, cErr := tx.Cursor(kv.Headers)
+		if cErr != nil {
+			return cErr
+		}
+		defer headerCursor.Close()
+		var k, v []byte
+		for k, v, err = headerCursor.Seek(hexutility.EncodeTs(u.UnwindPoint + 1)); err == nil && k != nil; k, v, err = headerCursor.Next() {
+			var h types.Header
+			if err = rlp.DecodeBytes(v, &h); err != nil {
+				return err
+			}
+			if cfg.hd.IsBadHeader(h.ParentHash) {
+				cfg.hd.ReportBadHeader(h.Hash())
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("iterate over headers to mark bad headers: %w", err)
+		}
+	}
+	if err := rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, false /* deleteHeaders */); err != nil {
+		return err
+	}
+	if badBlock {
+		var maxTd big.Int
+		var maxHash libcommon.Hash
+		var maxNum uint64 = 0
 
-	return ZkHeadersUnwind(u, s, tx, cfg, test)
-
-	//useExternalTx := tx != nil
-	//if !useExternalTx {
-	//	tx, err = cfg.db.BeginRw(context.Background())
-	//	if err != nil {
-	//		return err
-	//	}
-	//	defer tx.Rollback()
-	//}
-	//// Delete canonical hashes that are being unwound
-	//badBlock := u.BadBlock != (libcommon.Hash{})
-	//if badBlock {
-	//	cfg.hd.ReportBadHeader(u.BadBlock)
-	//	// Mark all descendants of bad block as bad too
-	//	headerCursor, cErr := tx.Cursor(kv.Headers)
-	//	if cErr != nil {
-	//		return cErr
-	//	}
-	//	defer headerCursor.Close()
-	//	var k, v []byte
-	//	for k, v, err = headerCursor.Seek(hexutility.EncodeTs(u.UnwindPoint + 1)); err == nil && k != nil; k, v, err = headerCursor.Next() {
-	//		var h types.Header
-	//		if err = rlp.DecodeBytes(v, &h); err != nil {
-	//			return err
-	//		}
-	//		if cfg.hd.IsBadHeader(h.ParentHash) {
-	//			cfg.hd.ReportBadHeader(h.Hash())
-	//		}
-	//	}
-	//	if err != nil {
-	//		return fmt.Errorf("iterate over headers to mark bad headers: %w", err)
-	//	}
-	//}
-	//if err := rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, false /* deleteHeaders */); err != nil {
-	//	return err
-	//}
-	//if badBlock {
-	//	var maxTd big.Int
-	//	var maxHash libcommon.Hash
-	//	var maxNum uint64 = 0
-	//
-	//	if test { // If we are not in the test, we can do searching for the heaviest chain in the next cycle
-	//		// Find header with biggest TD
-	//		tdCursor, cErr := tx.Cursor(kv.HeaderTD)
-	//		if cErr != nil {
-	//			return cErr
-	//		}
-	//		defer tdCursor.Close()
-	//		var k, v []byte
-	//		k, v, err = tdCursor.Last()
-	//		if err != nil {
-	//			return err
-	//		}
-	//		for ; err == nil && k != nil; k, v, err = tdCursor.Prev() {
-	//			if len(k) != 40 {
-	//				return fmt.Errorf("key in TD table has to be 40 bytes long: %x", k)
-	//			}
-	//			var hash libcommon.Hash
-	//			copy(hash[:], k[8:])
-	//			if cfg.hd.IsBadHeader(hash) {
-	//				continue
-	//			}
-	//			var td big.Int
-	//			if err = rlp.DecodeBytes(v, &td); err != nil {
-	//				return err
-	//			}
-	//			if td.Cmp(&maxTd) > 0 {
-	//				maxTd.Set(&td)
-	//				copy(maxHash[:], k[8:])
-	//				maxNum = binary.BigEndian.Uint64(k[:8])
-	//			}
-	//		}
-	//		if err != nil {
-	//			return err
-	//		}
-	//	}
-	//	/* TODO(yperbasis): Is it safe?
-	//	if err := rawdb.TruncateTd(tx, u.UnwindPoint+1); err != nil {
-	//		return err
-	//	}
-	//	*/
-	//	if maxNum == 0 {
-	//		maxNum = u.UnwindPoint
-	//		if maxHash, err = rawdb.ReadCanonicalHash(tx, maxNum); err != nil {
-	//			return err
-	//		}
-	//	}
-	//	if err = rawdb.WriteHeadHeaderHash(tx, maxHash); err != nil {
-	//		return err
-	//	}
-	//	if err = u.Done(tx); err != nil {
-	//		return err
-	//	}
-	//	if err = s.Update(tx, maxNum); err != nil {
-	//		return err
-	//	}
-	//}
-	//if !useExternalTx {
-	//	if err := tx.Commit(); err != nil {
-	//		return err
-	//	}
-	//}
-	//return nil
+		if test { // If we are not in the test, we can do searching for the heaviest chain in the next cycle
+			// Find header with biggest TD
+			tdCursor, cErr := tx.Cursor(kv.HeaderTD)
+			if cErr != nil {
+				return cErr
+			}
+			defer tdCursor.Close()
+			var k, v []byte
+			k, v, err = tdCursor.Last()
+			if err != nil {
+				return err
+			}
+			for ; err == nil && k != nil; k, v, err = tdCursor.Prev() {
+				if len(k) != 40 {
+					return fmt.Errorf("key in TD table has to be 40 bytes long: %x", k)
+				}
+				var hash libcommon.Hash
+				copy(hash[:], k[8:])
+				if cfg.hd.IsBadHeader(hash) {
+					continue
+				}
+				var td big.Int
+				if err = rlp.DecodeBytes(v, &td); err != nil {
+					return err
+				}
+				if td.Cmp(&maxTd) > 0 {
+					maxTd.Set(&td)
+					copy(maxHash[:], k[8:])
+					maxNum = binary.BigEndian.Uint64(k[:8])
+				}
+			}
+			if err != nil {
+				return err
+			}
+		}
+		/* TODO(yperbasis): Is it safe?
+		if err := rawdb.TruncateTd(tx, u.UnwindPoint+1); err != nil {
+			return err
+		}
+		*/
+		if maxNum == 0 {
+			maxNum = u.UnwindPoint
+			if maxHash, err = rawdb.ReadCanonicalHash(tx, maxNum); err != nil {
+				return err
+			}
+		}
+		if err = rawdb.WriteHeadHeaderHash(tx, maxHash); err != nil {
+			return err
+		}
+		if err = u.Done(tx); err != nil {
+			return err
+		}
+		if err = s.Update(tx, maxNum); err != nil {
+			return err
+		}
+	}
+	if !useExternalTx {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func logProgressHeaders(logPrefix string, prev, now uint64) uint64 {
@@ -1164,7 +1150,7 @@ func (cr ChainReaderImpl) GetTd(hash libcommon.Hash, number uint64) *big.Int {
 	return td
 }
 
-func HeadersPrune(p *PruneState, tx kv.RwTx, cfg HeadersCfg, ctx context.Context) (err error) {
+func HeadersPrune(p *sync_stages.PruneState, tx kv.RwTx, cfg HeadersCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

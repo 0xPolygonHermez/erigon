@@ -14,16 +14,17 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/p2p"
+	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/turbo/engineapi"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 )
 
-func nullStage(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
+func nullStage(firstCycle bool, badBlockUnwind bool, s *sync.StageState, u sync.Unwinder, tx kv.RwTx, quiet bool) error {
 	return nil
 }
-func ExecutionStages(ctx context.Context, sm prune.Mode, snapshots stagedsync.SnapshotsCfg, rpcRootsCfg stagedsync.RpcRootsCfg, headers stagedsync.HeadersCfg, cumulativeIndex stagedsync.CumulativeIndexCfg, blockHashCfg stagedsync.BlockHashesCfg, bodies stagedsync.BodiesCfg, senders stagedsync.SendersCfg, exec stagedsync.ExecuteBlockCfg, hashState stagedsync.HashStateCfg, trieCfg stagedsync.TrieCfg, history stagedsync.HistoryCfg, logIndex stagedsync.LogIndexCfg, callTraces stagedsync.CallTracesCfg, txLookup stagedsync.TxLookupCfg, finish stagedsync.FinishCfg, test bool) []*stagedsync.Stage {
-	defaultStages := stagedsync.DefaultStages(ctx, snapshots, rpcRootsCfg, headers, cumulativeIndex, blockHashCfg, bodies, senders, exec, hashState, trieCfg, history, logIndex, callTraces, txLookup, finish, test)
+func ExecutionStages(ctx context.Context, sm prune.Mode, snapshots stagedsync.SnapshotsCfg, headers stagedsync.HeadersCfg, cumulativeIndex stagedsync.CumulativeIndexCfg, blockHashCfg stagedsync.BlockHashesCfg, bodies stagedsync.BodiesCfg, senders stagedsync.SendersCfg, exec stagedsync.ExecuteBlockCfg, hashState stagedsync.HashStateCfg, trieCfg stagedsync.TrieCfg, history stagedsync.HistoryCfg, logIndex stagedsync.LogIndexCfg, callTraces stagedsync.CallTracesCfg, txLookup stagedsync.TxLookupCfg, finish stagedsync.FinishCfg, test bool) []*sync.Stage {
+	defaultStages := stagedsync.DefaultStages(ctx, snapshots, headers, cumulativeIndex, blockHashCfg, bodies, senders, exec, hashState, trieCfg, history, logIndex, callTraces, txLookup, finish, test)
 	// Remove body/headers stages
 	defaultStages[1].Forward = nullStage
 	defaultStages[4].Forward = nullStage
@@ -42,7 +43,7 @@ func NewStagedSync(ctx context.Context,
 	forkValidator *engineapi.ForkValidator,
 	engine consensus.Engine,
 	transactionsV3 bool,
-) (*stagedsync.Sync, error) {
+) (*sync.Sync, error) {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, transactionsV3)
 	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, snapshots, db, snapDownloader, notifications.Events)
@@ -51,7 +52,7 @@ func NewStagedSync(ctx context.Context,
 	// Hence we run it in the test mode.
 	runInTestMode := cfg.ImportMode
 
-	return stagedsync.New(
+	return sync.New(
 		ExecutionStages(ctx, cfg.Prune,
 			stagedsync.StageSnapshotsCfg(
 				db,
@@ -66,7 +67,6 @@ func NewStagedSync(ctx context.Context,
 				cfg.HistoryV3,
 				agg,
 			),
-			stagedsync.StageRpcRootsCfg(db, controlServer.ChainConfig),
 			stagedsync.StageHeadersCfg(
 				db,
 				controlServer.Hd,
