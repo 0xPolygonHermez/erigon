@@ -72,7 +72,17 @@ func SpawnStageBatches(
 	go func() {
 		log.Info("Started downloading L2Blocks routine")
 		defer log.Info("Finished downloading L2Blocks routine")
-		entriesRead, err := datastream.DownloadHeadersToChannel(datastream.TestDatastreamUrl, l2BlockChan)
+
+		// this will download all blocks from datastream and push them in a channel
+		// entriesRead, err := datastream.DownloadHeadersToChannel(datastream.TestDatastreamUrl, l2BlockChan)
+
+		// download a few blocks for test purposes
+		l2Blocks, entriesRead, err := datastream.DownloadL2Blocks(datastream.TestDatastreamUrl, 0, 10)
+		for _, l2Block := range *l2Blocks {
+			l2BlockChan <- l2Block
+		}
+		// test coe end
+
 		entriesReadChan <- entriesRead
 		errChan <- err
 	}()
