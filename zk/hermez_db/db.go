@@ -209,6 +209,17 @@ func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
 	return db.tx.Put(BLOCKBATCHES, UintBytes(l2BlockNo), UintBytes(batchNo))
 }
 
+func (db *HermezDb) DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error {
+	for i := fromBatchNum; i <= toBatchNum; i++ {
+		err := db.tx.Delete(FORKIDS, UintBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (db *HermezDb) GetForkId(batchNo uint64) (uint64, error) {
 	c, err := db.tx.Cursor(FORKIDS)
 	if err != nil {
@@ -235,4 +246,15 @@ func (db *HermezDb) GetForkId(batchNo uint64) (uint64, error) {
 
 func (db *HermezDb) WriteForkId(batchNo, forkId uint64) error {
 	return db.tx.Put(FORKIDS, UintBytes(batchNo), UintBytes(forkId))
+}
+
+func (db *HermezDb) DeleteForkIds(fromBatchNum, toBatchNum uint64) error {
+	for i := fromBatchNum; i <= toBatchNum; i++ {
+		err := db.tx.Delete(FORKIDS, UintBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
