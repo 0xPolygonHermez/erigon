@@ -316,22 +316,6 @@ func Test_readFullL2Blocks(t *testing.T) {
 			expectedError:       errors.New("failed to read full block: expected StartL2Block, but got type: 2"),
 		},
 		{
-			name:        "No txs in the parsed block",
-			inputAmount: 1,
-			inputBytes: []byte{
-				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
-				// startL2Block
-				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
-				2, 0, 0, 0, 25, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
-				// endL2Block
-				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-			},
-			expectedResult:      nil,
-			expectedEntriesRead: 0,
-			expectedError:       errors.New("failed to read full block: received EndL2Block with 0 parsed txs"),
-		},
-		{
 			name:        "Unexpected startL1Block in the middle of previous block",
 			inputAmount: 1,
 			inputBytes: []byte{
@@ -455,22 +439,6 @@ func Test_readFullBlock(t *testing.T) {
 			expectedResult:      types.FullL2Block{},
 			expectedEntriesRead: 0,
 			expectedError:       errors.New("expected StartL2Block, but got type: 2"),
-		},
-		{
-			name:        "No txs in the parsed block",
-			inputAmount: 1,
-			inputBytes: []byte{
-				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
-				// startL2Block
-				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
-				2, 0, 0, 0, 25, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 3 - endL2Block
-				// endL2Block
-				10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-				32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-			},
-			expectedResult:      types.FullL2Block{},
-			expectedEntriesRead: 0,
-			expectedError:       errors.New("received EndL2Block with 0 parsed txs"),
 		},
 		{
 			name:        "Unexpected startL1Block in the middle of previous block",

@@ -264,9 +264,6 @@ func (c *StreamClient) readFullBlock() (*types.FullL2Block, uint64, error) {
 				}
 				l2Txs = append(l2Txs, *l2Tx)
 			} else if file.EntryType == types.EntryTypeEndL2Block {
-				if len(l2Txs) == 0 {
-					return nil, 0, errors.New("received EndL2Block with 0 parsed txs")
-				}
 				endL2Block, err = types.DecodeEndL2Block(file.Data)
 				if err != nil {
 					return nil, 0, fmt.Errorf("parse endL2Block error: %v", err)

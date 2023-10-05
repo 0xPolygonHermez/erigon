@@ -2,18 +2,42 @@ package stages
 
 import (
 	"context"
+	"fmt"
+	"math/big"
+	"time"
+
+	"github.com/ledgerwatch/erigon-lib/common"
+
 	"github.com/ledgerwatch/erigon-lib/kv"
+	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/sync_stages"
+	"github.com/ledgerwatch/erigon/zk/datastream"
+	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/erigon_db"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	txtype "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/log/v3"
 )
 
 type ISyncer interface {
 }
 
+type ErigonDb interface {
+	WriteHeader(batchNo *big.Int, stateRoot, txHash common.Hash, coinbase common.Address, ts uint64) (*ethTypes.Header, error)
+	WriteBody(batchNumber *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
+}
+
+type HermezDb interface {
+	WriteForkId(batchNumber uint64, forkId uint64) error
+	WriteBlockBatch(l2BlockNumber uint64, batchNumber uint64) error
+}
+
 type BatchesCfg struct {
 	db     kv.RwDB
 	syncer ISyncer
 }
+
+const BatchesEntries = "BatchesEntries"
 
 func StageBatchesCfg(db kv.RwDB, syncer ISyncer) BatchesCfg {
 	return BatchesCfg{
@@ -31,9 +55,103 @@ func SpawnStageBatches(
 	firstCycle bool,
 	quiet bool,
 ) error {
-	// TODO: implement batches stage!
-
 	log.Info("Batches stage")
+	defer log.Info("Finished Batches stage")
+
+	eriDb := erigon_db.NewErigonDb(tx)
+	hermezDb, err := hermez_db.NewHermezDb(tx)
+	if err != nil {
+		return fmt.Errorf("failed to create hermezDb: %v", err)
+	}
+
+	l2BlockChan := make(chan types.FullL2Block, 100000)
+	entriesReadChan := make(chan uint64, 2)
+	errChan := make(chan error, 2)
+
+	// start routine to download blocks and push them in a channel
+	go func() {
+		log.Info("Started downloading L2Blocks routine")
+		defer log.Info("Finished downloading L2Blocks routine")
+		entriesRead, err := datastream.DownloadHeadersToChannel(datastream.TestDatastreamUrl, l2BlockChan)
+		entriesReadChan <- entriesRead
+		errChan <- err
+	}()
+
+	// start a routine to print blocks written progress
+	l2BlockWritten := make(chan uint64)
+	ctx, cancelCtx := context.WithCancel(ctx)
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		log.Info("Started printing blocks written progress routine")
+		defer log.Info("Finished printing blocks written progress routine")
+		count := uint64(0)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				log.Info("Blocks written: ", count)
+			case <-l2BlockWritten:
+				count++
+			}
+		}
+	}(ctx)
+
+	writeFinished := false
+	stopLoop := false
+	entriesRead := uint64(0)
+	var routineErr error
+	lastBlockHeight := uint64(0)
+	for {
+		// get block
+		// if no blocks available shold block
+		// if download routine finished, should continue to read from channel until it's empty
+		// if both download routine stopped and channel empty - stop loop
+		var l2Block types.FullL2Block
+		select {
+		case a := <-l2BlockChan:
+			l2Block = a
+		case entriesReadFromChan := <-entriesReadChan:
+			routineErr = <-errChan
+			if routineErr != nil {
+				return fmt.Errorf("l2blocks download routine error: %v", err)
+			}
+			entriesRead = entriesReadFromChan
+			writeFinished = true
+		default:
+			if writeFinished {
+				stopLoop = true
+			}
+		}
+
+		if stopLoop {
+			break
+		}
+
+		// writes header, body, forkId and blockBatch
+		if err := writeL2Block(eriDb, hermezDb, &l2Block); err != nil {
+			return fmt.Errorf("writeL2Block error: %v", err)
+		}
+
+		lastBlockHeight = l2Block.L2BlockNumber
+		l2BlockWritten <- 1
+	}
+
+	// stop printing blocks written progress routine
+	cancelCtx()
+
+	log.Info("Saving stage progress: %d", entriesRead)
+	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, lastBlockHeight); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+
+	log.Info("Saving datastream entries progress: %d", entriesRead)
+	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, entriesRead); err != nil {
+		return fmt.Errorf("save stage datastream progress error: %v", err)
+	}
+
 	return nil
 }
 
@@ -77,5 +195,39 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 			return err
 		}
 	}
+	return nil
+}
+
+// writeL2Block writes L2Block to ErigonDb and HermezDb
+// writes header, body, forkId and blockBatch
+func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block) error {
+	bn := new(big.Int).SetUint64(l2Block.BatchNumber)
+	h, err := eriDb.WriteHeader(bn, l2Block.GlobalExitRoot, l2Block.L2Blockhash, l2Block.Coinbase, uint64(l2Block.Timestamp))
+	if err != nil {
+		return fmt.Errorf("write header error: %v", err)
+	}
+
+	batchTxData := []byte{}
+	for _, transaction := range l2Block.L2Txs {
+		batchTxData = append(batchTxData, transaction.Encoded...)
+	}
+
+	txs, _, _, err := txtype.DecodeTxs(batchTxData, uint64(l2Block.ForkId))
+	if err != nil {
+		return fmt.Errorf("decode txs error: %v", err)
+	}
+
+	if err := eriDb.WriteBody(bn, h.Hash(), txs); err != nil {
+		return fmt.Errorf("write body error: %v", err)
+	}
+
+	if err := hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId)); err != nil {
+		return fmt.Errorf("write block batch error: %v", err)
+	}
+
+	if err := hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber); err != nil {
+		return fmt.Errorf("write block batch error: %v", err)
+	}
+
 	return nil
 }
