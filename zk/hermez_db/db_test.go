@@ -12,8 +12,8 @@ import (
 )
 
 type IHermezDb interface {
-	WriteSequence(uint64, uint64, common.Hash) error
-	WriteVerification(uint64, uint64, common.Hash) error
+	WriteSequence(uint64, uint64, common.Hash, common.Hash) error
+	WriteVerification(uint64, uint64, common.Hash, common.Hash) error
 }
 
 func GetDbTx() (tx kv.RwTx, cleanup func()) {
@@ -46,8 +46,8 @@ func TestGetSequenceByL1Block(t *testing.T) {
 	db, err := NewHermezDb(tx)
 	require.NoError(t, err)
 
-	require.NoError(t, db.WriteSequence(1, 1001, common.HexToHash("0xabc")))
-	require.NoError(t, db.WriteSequence(2, 1002, common.HexToHash("0xdef")))
+	require.NoError(t, db.WriteSequence(1, 1001, common.HexToHash("0xabc"), common.HexToHash("0xabc")))
+	require.NoError(t, db.WriteSequence(2, 1002, common.HexToHash("0xdef"), common.HexToHash("0xdef")))
 
 	info, err := db.GetSequenceByL1Block(1)
 	require.NoError(t, err)
@@ -68,20 +68,22 @@ func TestGetSequenceByBatchNo(t *testing.T) {
 	db, err := NewHermezDb(tx)
 	require.NoError(t, err)
 
-	require.NoError(t, db.WriteSequence(1, 1001, common.HexToHash("0xabc")))
-	require.NoError(t, db.WriteSequence(2, 1002, common.HexToHash("0xdef")))
+	require.NoError(t, db.WriteSequence(1, 1001, common.HexToHash("0xabc"), common.HexToHash("0xabcd")))
+	require.NoError(t, db.WriteSequence(2, 1002, common.HexToHash("0xdef"), common.HexToHash("0xdefg")))
 
 	info, err := db.GetSequenceByBatchNo(1001)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), info.L1BlockNo)
 	assert.Equal(t, uint64(1001), info.BatchNo)
 	assert.Equal(t, common.HexToHash("0xabc"), info.L1TxHash)
+	assert.Equal(t, common.HexToHash("0xabcd"), info.StateRoot)
 
 	info, err = db.GetSequenceByBatchNo(1002)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), info.L1BlockNo)
 	assert.Equal(t, uint64(1002), info.BatchNo)
 	assert.Equal(t, common.HexToHash("0xdef"), info.L1TxHash)
+	assert.Equal(t, common.HexToHash("0xdefg"), info.StateRoot)
 }
 
 func TestGetVerificationByL1BlockAndBatchNo(t *testing.T) {
@@ -90,20 +92,22 @@ func TestGetVerificationByL1BlockAndBatchNo(t *testing.T) {
 	db, err := NewHermezDb(tx)
 	require.NoError(t, err)
 
-	require.NoError(t, db.WriteVerification(3, 1003, common.HexToHash("0xghi")))
-	require.NoError(t, db.WriteVerification(4, 1004, common.HexToHash("0xjkl")))
+	require.NoError(t, db.WriteVerification(3, 1003, common.HexToHash("0xghi"), common.HexToHash("0x333lll")))
+	require.NoError(t, db.WriteVerification(4, 1004, common.HexToHash("0xjkl"), common.HexToHash("0x444mmm")))
 
 	info, err := db.GetVerificationByL1Block(3)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(3), info.L1BlockNo)
 	assert.Equal(t, uint64(1003), info.BatchNo)
 	assert.Equal(t, common.HexToHash("0xghi"), info.L1TxHash)
+	assert.Equal(t, common.HexToHash("0x333lll"), info.StateRoot)
 
 	info, err = db.GetVerificationByBatchNo(1004)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(4), info.L1BlockNo)
 	assert.Equal(t, uint64(1004), info.BatchNo)
 	assert.Equal(t, common.HexToHash("0xjkl"), info.L1TxHash)
+	assert.Equal(t, common.HexToHash("0x444mmm"), info.StateRoot)
 }
 
 func TestGetAndSetLatest(t *testing.T) {
@@ -111,15 +115,16 @@ func TestGetAndSetLatest(t *testing.T) {
 	testCases := []struct {
 		desc          string
 		table         string
-		writeMethod   func(IHermezDb, uint64, uint64, common.Hash) error
+		writeMethod   func(IHermezDb, uint64, uint64, common.Hash, common.Hash) error
 		l1BlockNo     uint64
 		batchNo       uint64
 		l1TxHashBytes common.Hash
+		stateRoot     common.Hash
 	}{
-		{"sequence 1", L1SEQUENCES, IHermezDb.WriteSequence, 1, 1001, common.HexToHash("0xabc")},
-		{"sequence 2", L1SEQUENCES, IHermezDb.WriteSequence, 2, 1002, common.HexToHash("0xdef")},
-		{"verification 1", L1VERIFICATIONS, IHermezDb.WriteVerification, 3, 1003, common.HexToHash("0xghi")},
-		{"verification 2", L1VERIFICATIONS, IHermezDb.WriteVerification, 4, 1004, common.HexToHash("0xjkl")},
+		{"sequence 1", L1SEQUENCES, IHermezDb.WriteSequence, 1, 1001, common.HexToHash("0xabc"), common.HexToHash("0xabc")},
+		{"sequence 2", L1SEQUENCES, IHermezDb.WriteSequence, 2, 1002, common.HexToHash("0xdef"), common.HexToHash("0xdef")},
+		{"verification 1", L1VERIFICATIONS, IHermezDb.WriteVerification, 3, 1003, common.HexToHash("0xghi"), common.HexToHash("0xghi")},
+		{"verification 2", L1VERIFICATIONS, IHermezDb.WriteVerification, 4, 1004, common.HexToHash("0xjkl"), common.HexToHash("0xjkl")},
 	}
 
 	for _, tc := range testCases {
@@ -127,7 +132,7 @@ func TestGetAndSetLatest(t *testing.T) {
 			tx, cleanup := GetDbTx()
 			db, err := NewHermezDb(tx)
 			require.NoError(t, err)
-			err = tc.writeMethod(db, tc.l1BlockNo, tc.batchNo, tc.l1TxHashBytes)
+			err = tc.writeMethod(db, tc.l1BlockNo, tc.batchNo, tc.l1TxHashBytes, tc.stateRoot)
 			assert.Nil(t, err)
 
 			info, err := db.getLatest(tc.table)
@@ -135,6 +140,7 @@ func TestGetAndSetLatest(t *testing.T) {
 			assert.Equal(t, tc.batchNo, info.BatchNo)
 			assert.Equal(t, tc.l1BlockNo, info.L1BlockNo)
 			assert.Equal(t, tc.l1TxHashBytes, info.L1TxHash)
+			assert.Equal(t, tc.stateRoot, info.StateRoot)
 			cleanup()
 		})
 	}
@@ -255,7 +261,7 @@ func BenchmarkWriteSequence(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		err := db.WriteSequence(uint64(i), uint64(i+1000), common.HexToHash("0xabc"))
+		err := db.WriteSequence(uint64(i), uint64(i+1000), common.HexToHash("0xabc"), common.HexToHash("0xabc"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -271,7 +277,7 @@ func BenchmarkWriteVerification(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		err := db.WriteVerification(uint64(i), uint64(i+2000), common.HexToHash("0xdef"))
+		err := db.WriteVerification(uint64(i), uint64(i+2000), common.HexToHash("0xdef"), common.HexToHash("0xdef"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -285,7 +291,7 @@ func BenchmarkGetSequenceByL1Block(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < 1000; i++ {
-		err := db.WriteSequence(uint64(i), uint64(i+1000), common.HexToHash("0xabc"))
+		err := db.WriteSequence(uint64(i), uint64(i+1000), common.HexToHash("0xabc"), common.HexToHash("0xabc"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -308,7 +314,7 @@ func BenchmarkGetVerificationByL1Block(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < 1000; i++ {
-		err := db.WriteVerification(uint64(i), uint64(i+2000), common.HexToHash("0xdef"))
+		err := db.WriteVerification(uint64(i), uint64(i+2000), common.HexToHash("0xdef"), common.HexToHash("0xdef"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -331,7 +337,7 @@ func BenchmarkGetSequenceByBatchNo(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < 1000; i++ {
-		err := db.WriteSequence(uint64(i), uint64(i+1000), common.HexToHash("0xabc"))
+		err := db.WriteSequence(uint64(i), uint64(i+1000), common.HexToHash("0xabc"), common.HexToHash("0xabc"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -354,7 +360,7 @@ func BenchmarkGetVerificationByBatchNo(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < 1000; i++ {
-		err := db.WriteVerification(uint64(i), uint64(i+2000), common.HexToHash("0xdef"))
+		err := db.WriteVerification(uint64(i), uint64(i+2000), common.HexToHash("0xdef"), common.HexToHash("0xdef"))
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -1,6 +1,7 @@
 package hermez_db
 
 import (
+	"fmt"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/zk/types"
@@ -125,10 +126,18 @@ func (db *HermezDb) getByL1Block(table string, l1BlockNo uint64) (*types.L1Batch
 		}
 
 		if l1Block == l1BlockNo {
+			if len(v) != 64 {
+				return nil, fmt.Errorf("invalid hash length")
+			}
+
+			l1TxHash := common.BytesToHash(v[:32])
+			stateRoot := common.BytesToHash(v[32:])
+
 			return &types.L1BatchInfo{
 				BatchNo:   batchNo,
 				L1BlockNo: l1Block,
-				L1TxHash:  common.BytesToHash(v),
+				StateRoot: stateRoot,
+				L1TxHash:  l1TxHash,
 			}, nil
 		}
 	}
@@ -154,10 +163,18 @@ func (db *HermezDb) getByBatchNo(table string, batchNo uint64) (*types.L1BatchIn
 		}
 
 		if batch == batchNo {
+			if len(v) != 64 {
+				return nil, fmt.Errorf("invalid hash length")
+			}
+
+			l1TxHash := common.BytesToHash(v[:32])
+			stateRoot := common.BytesToHash(v[32:])
+
 			return &types.L1BatchInfo{
-				BatchNo:   batch,
+				BatchNo:   batchNo,
 				L1BlockNo: l1Block,
-				L1TxHash:  common.BytesToHash(v),
+				StateRoot: stateRoot,
+				L1TxHash:  l1TxHash,
 			}, nil
 		}
 	}
@@ -189,20 +206,27 @@ func (db *HermezDb) getLatest(table string) (*types.L1BatchInfo, error) {
 		return nil, err
 	}
 
+	if len(v) != 64 {
+		return nil, fmt.Errorf("invalid hash length")
+	}
+
+	l1TxHash := common.BytesToHash(v[:32])
+	stateRoot := common.BytesToHash(v[32:])
+
 	return &types.L1BatchInfo{
 		BatchNo:   batchNo,
 		L1BlockNo: l1BlockNo,
-		L1TxHash:  common.BytesToHash(v),
+		L1TxHash:  l1TxHash,
+		StateRoot: stateRoot,
 	}, nil
-
 }
 
-func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash common.Hash) error {
-	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), l1TxHash.Bytes())
+func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash common.Hash, stateRoot common.Hash) error {
+	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), append(l1TxHash.Bytes(), stateRoot.Bytes()...))
 }
 
-func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common.Hash) error {
-	return db.tx.Put(L1VERIFICATIONS, ConcatKey(l1BlockNo, batchNo), l1TxHash.Bytes())
+func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common.Hash, stateRoot common.Hash) error {
+	return db.tx.Put(L1VERIFICATIONS, ConcatKey(l1BlockNo, batchNo), append(l1TxHash.Bytes(), stateRoot.Bytes()...))
 }
 
 func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {

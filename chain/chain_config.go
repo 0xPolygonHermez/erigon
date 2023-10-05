@@ -22,6 +22,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 )
 
 // Config is the core config which determines the blockchain settings.
@@ -260,6 +261,10 @@ func (c *Config) forkBlockNumbers() []forkBlockNumber {
 func (c *Config) CheckConfigForkOrder() error {
 	if c != nil && c.ChainID != nil && c.ChainID.Uint64() == 77 {
 		return nil
+	}
+
+	if c != nil && zkchainconfig.IsZk(c.ChainID) {
+		return zkchainconfig.CheckForkOrder()
 	}
 
 	var lastFork forkBlockNumber

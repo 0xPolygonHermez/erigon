@@ -500,6 +500,7 @@ func NewDefaultZkStages(ctx context.Context,
 	forkValidator *engineapi.ForkValidator,
 	engine consensus.Engine,
 	syncer *syncer.Syncer,
+	firstL1Block uint64,
 ) []*sync_stages.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
@@ -522,7 +523,7 @@ func NewDefaultZkStages(ctx context.Context,
 			cfg.HistoryV3,
 			agg,
 		),
-		zkStages.StageL1VerificationsCfg(db, syncer),
+		zkStages.StageL1VerificationsCfg(db, syncer, firstL1Block),
 		zkStages.StageBatchesCfg(db, syncer),
 		stagedsync.StageCumulativeIndexCfg(db),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig),

@@ -673,16 +673,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	if isZk {
 		testnet := backend.config.NetworkID == 1440
+		firstL1Block := uint64(16896700)
 		zkEthMainnetRpcUrl := "https://rpc.eu-north-1.gateway.fm/v4/ethereum/non-archival/mainnet?apiKey=UDmvcERuIwHSpeH3dUb1XDr4QnGqzHxv.J0qONXx6TUa9RqGb"
 		// hermez testnet endpoints
 		if testnet {
 			zkEthMainnetRpcUrl = "https://rpc.eu-north-2.gateway.fm/v4/ethereum/non-archival/goerli?apiKey=lyREQ4AN6KS8wbPRL2S0GJpB6GoEbkmr.5sMHNNVF9OH6EdcT"
+			firstL1Block = uint64(8577775)
 		}
 
 		etherMan := newEtherMan(zkEthMainnetRpcUrl, testnet)
-		zkSyncer := syncer.NewSyncer(etherMan)
+		zkSyncer := syncer.NewSyncer(etherMan.EthClient)
 
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block)
 		backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 		// TODO: prune order
 	} else {
