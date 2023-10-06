@@ -146,9 +146,9 @@ func (c *StreamClient) ReadEntries(fromEntry uint64, l2BlocksAmount int) (*[]typ
 
 // sends start command, reads entries until limit reached and sends end command
 // sends the parsed FullL2Blocks with transactions to a channel
-func (c *StreamClient) ReadAllEntriesToChannel(l2BlockChan chan types.FullL2Block) (uint64, error) {
+func (c *StreamClient) ReadAllEntriesToChannel(l2BlockChan chan types.FullL2Block, fromEntry uint64) (uint64, error) {
 	// send start command
-	if err := c.initiateDownload(0); err != nil {
+	if err := c.initiateDownload(fromEntry); err != nil {
 		return 0, fmt.Errorf("%s initiate download error: %v", c.id, err)
 	}
 

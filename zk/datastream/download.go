@@ -9,7 +9,7 @@ import (
 const TestDatastreamUrl = "stream.internal.zkevm-test.net:6900"
 
 // Download all available blocks from datastream server to channel
-func DownloadAllL2BlocksToChannel(datastreamUrl string, blockChannel chan types.FullL2Block) (uint64, error) {
+func DownloadAllL2BlocksToChannel(datastreamUrl string, blockChannel chan types.FullL2Block, fromEntry uint64) (uint64, error) {
 	// Create client
 	c := client.NewClient(datastreamUrl)
 
@@ -25,7 +25,7 @@ func DownloadAllL2BlocksToChannel(datastreamUrl string, blockChannel chan types.
 	}
 
 	// Read all entries from server
-	entriesRead, err := c.ReadAllEntriesToChannel(blockChannel)
+	entriesRead, err := c.ReadAllEntriesToChannel(blockChannel, fromEntry)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to read all entries to channel")
 	}

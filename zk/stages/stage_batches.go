@@ -72,13 +72,18 @@ func SpawnStageBatches(
 	entriesReadChan := make(chan uint64, 2)
 	errChan := make(chan error, 2)
 
+	// currentDatastreamPoint, err := sync_stages.GetStageProgress(tx, BatchesEntries)
+	// if err != nil {
+	// 	return fmt.Errorf("get stage datastream progress error: %v", err)
+	// }
+
 	// start routine to download blocks and push them in a channel
 	go func() {
 		log.Info("Started downloading L2Blocks routine")
 		defer log.Info("Finished downloading L2Blocks routine")
 
 		// this will download all blocks from datastream and push them in a channel
-		// entriesRead, err := datastream.DownloadHeadersToChannel(datastream.TestDatastreamUrl, l2BlockChan)
+		// entriesRead, err := datastream.DownloadHeadersToChannel(datastream.TestDatastreamUrl, l2BlockChanm, currentDatastreamPoint)
 
 		// download a few blocks for test purposes
 		l2Blocks, entriesRead, err := datastream.DownloadL2Blocks(datastream.TestDatastreamUrl, 0, 10)
