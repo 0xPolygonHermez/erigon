@@ -61,6 +61,7 @@ var (
 	ChiadoGenesisHash        = libcommon.HexToHash("0xada44fd8d2ecab8b08f256af07ad3e777f17fb434f8f8e678b312f576212ba9a")
 	HermezMainnetGenesisHash = libcommon.HexToHash("0x3f86b09b43e3e49a41fc20a07579b79eba044253367817d5c241d23c0e2bc5c9")
 	HermezTestnetGenesisHash = libcommon.HexToHash("0x13a14c4a8288e782863d7ce916d224546c69dc428fbfa7115a0cc33a27a05b26")
+	HermezDevnetGenesisHash  = libcommon.HexToHash("0x45cff376044a08f8f33f0244d589f2178ea4f4c5234d912daa2ff3c496b17862")
 )
 
 var (
@@ -137,6 +138,8 @@ var (
 	HermezMainnetChainConfig = readChainSpec("chainspecs/hermez.json")
 
 	HermezTestnetChainConfig = readChainSpec("chainspecs/hermez-testnet.json")
+
+	HermezDevnetChainConfig = readChainSpec("chainspecs/hermez-devnet.json")
 
 	CliqueSnapshot = NewSnapshotConfig(10, 1024, 16384, true, "")
 
@@ -222,6 +225,8 @@ func ChainConfigByChainName(chain string) *chain.Config {
 		return HermezMainnetChainConfig
 	case networkname.HermezTestnetChainName:
 		return HermezTestnetChainConfig
+	case networkname.HermezDevnetChainName:
+		return HermezDevnetChainConfig
 	default:
 		return nil
 	}
@@ -251,6 +256,8 @@ func GenesisHashByChainName(chain string) *libcommon.Hash {
 		return &HermezMainnetGenesisHash
 	case networkname.HermezTestnetChainName:
 		return &HermezTestnetGenesisHash
+	case networkname.HermezDevnetChainName:
+		return &HermezDevnetGenesisHash
 	default:
 		return nil
 	}
@@ -280,6 +287,8 @@ func ChainConfigByGenesisHash(genesisHash libcommon.Hash) *chain.Config {
 		return HermezMainnetChainConfig
 	case genesisHash == HermezTestnetGenesisHash:
 		return HermezTestnetChainConfig
+	case genesisHash == HermezDevnetGenesisHash:
+		return HermezDevnetChainConfig
 	default:
 		return nil
 	}

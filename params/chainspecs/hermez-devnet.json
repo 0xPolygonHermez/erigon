@@ -1,6 +1,6 @@
 {
-  "ChainName": "testnet",
-  "chainId": 1442,
+  "ChainName": "devnet",
+  "chainId": 1440,
   "consensus": "ethash",
   "homesteadBlock": 0,
   "daoForkBlock": 0,

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
+	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/cmp"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
@@ -24,7 +25,6 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/log/v3"
 
-	"encoding/json"
 	"math/big"
 
 	"github.com/holiman/uint256"
@@ -49,7 +49,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
-	zkstate "github.com/ledgerwatch/erigon/zkevm/state"
 )
 
 const (
@@ -57,6 +56,9 @@ const (
 
 	// stateStreamLimit - don't accumulate state changes if jump is bigger than this amount of blocks
 	stateStreamLimit uint64 = 1_000
+
+	GLOBAL_EXIT_ROOT_STORAGE_POS        = 0
+	ADDRESS_GLOBAL_EXIT_ROOT_MANAGER_L2 = "0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA"
 )
 
 type HasChangeSetWriter interface {
@@ -137,6 +139,7 @@ func StageExecuteBlocksCfg(
 
 func executeBlock(
 	block *types.Block,
+	header *types.Header,
 	tx kv.RwTx,
 	batch ethdb.Database,
 	cfg ExecuteBlockCfg,
@@ -157,42 +160,14 @@ func executeBlock(
 	// [zkevm] push the global exit root for the related batch into the db ahead of batch execution
 	blockNoBytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(blockNoBytes, blockNum)
-
-	gp, err := tx.GetOne("HermezGlobalExitRoot", blockNoBytes)
-	if err != nil {
-		return err
-	}
+	// gp, err := tx.GetOne("HermezGlobalExitRoot", blockNoBytes)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// [zkevm] - add GER if there is one for this batch
-	if gp != nil {
-		gerdb := &zkstate.GlobalExitRootDb{}
-		err = json.Unmarshal(gp, &gerdb)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
-
-		old := common.Hash{}.Big()
-		oldUint256, overflow := uint256.FromBig(old)
-		if overflow {
-			return errors.New("AddGlobalExitRoot: overflow")
-		}
-
-		exitBig := new(big.Int).SetInt64(gerdb.Timestamp)
-		exitUint256, overflow := uint256.FromBig(exitBig)
-		if overflow {
-			return errors.New("AddGlobalExitRoot: overflow")
-		}
-
-		fmt.Printf("%x, %d, %x, %d\n", gerdb.GlobalExitRoot, gerdb.Timestamp, gerdb.GlobalExitRootPosition, blockNum)
-
-		addr := common.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
-
-		err = stateWriter.WriteAccountStorage(addr, uint64(1), &gerdb.GlobalExitRootPosition, oldUint256, exitUint256)
-		if err != nil {
-			return err
-		}
+	if err := writeGlobalExitRoot(stateWriter, *header); err != nil {
+		return err
 	}
 
 	// [zkevm] - finished writing global exit root to state
@@ -251,6 +226,43 @@ func executeBlock(
 	if writeCallTraces {
 		return callTracer.WriteToDb(tx, block, *cfg.vmConfig)
 	}
+	return nil
+}
+
+func writeGlobalExitRoot(stateWriter state.WriterWithChangeSets, header types.Header) error {
+	ger := header.Root
+	empty := common.Hash{}
+	if ger == empty {
+		return errors.New("empty Global Exit Root")
+	}
+
+	old := common.Hash{}.Big()
+	oldUint256, overflow := uint256.FromBig(old)
+	if overflow {
+		return errors.New("AddGlobalExitRoot: overflow")
+	}
+
+	exitBig := new(big.Int).SetInt64(int64(header.Time))
+	exitUint256, overflow := uint256.FromBig(exitBig)
+	if overflow {
+		return errors.New("AddGlobalExitRoot: overflow")
+	}
+
+	//get Global Exit Root position
+	gerb := make([]byte, 32)
+	binary.BigEndian.PutUint64(gerb, GLOBAL_EXIT_ROOT_STORAGE_POS)
+
+	// concat global exit root and global_exit_root_storage_pos
+	rootPlusStorage := append(ger[:], gerb...)
+	globalExitRootPosBytes := keccak256.Hash(rootPlusStorage)
+	gerp := common.BytesToHash(globalExitRootPosBytes[:])
+
+	addr := common.HexToAddress(ADDRESS_GLOBAL_EXIT_ROOT_MANAGER_L2)
+
+	if err := stateWriter.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -472,7 +484,9 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 	}()
 
 Loop:
-	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
+	for blockNum := stageProgress + 1; blockNum <= 50; blockNum++ {
+		stageProgress = blockNum
+
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}
@@ -487,7 +501,16 @@ Loop:
 		}
 		if block == nil {
 			log.Error(fmt.Sprintf("[%s] Empty block", logPrefix), "blocknum", blockNum)
-			break
+			continue
+		}
+
+		header, err := cfg.blockReader.Header(ctx, tx, blockHash, blockNum)
+		if err != nil {
+			return err
+		}
+		if header == nil {
+			log.Error(fmt.Sprintf("[%s] Empty header", logPrefix), "blocknum", blockNum)
+			continue
 		}
 
 		lastLogTx += uint64(block.Transactions().Len())
@@ -496,7 +519,7 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		if err = executeBlock(block, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream); err != nil {
+		if err = executeBlock(block, header, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {
@@ -509,7 +532,6 @@ Loop:
 			u.UnwindTo(blockNum-1, block.Hash())
 			break Loop
 		}
-		stageProgress = blockNum
 
 		shouldUpdateProgress := false
 		if shouldUpdateProgress {

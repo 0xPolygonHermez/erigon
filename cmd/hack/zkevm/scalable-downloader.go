@@ -15,13 +15,14 @@ import (
 	"time"
 
 	"bytes"
+	"sync/atomic"
+
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	ericommon "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/time/rate"
-	"sync/atomic"
 )
 
 func UintBytes(no uint64) []byte {
@@ -30,15 +31,13 @@ func UintBytes(no uint64) []byte {
 	return noBytes
 }
 
-func getRpcRoot(ctx context.Context, txNum int64) (common.Hash, error) {
+func getRpcRoot(ctx context.Context, rpcEndpoint string, txNum int64) (common.Hash, error) {
 	// int64 to bytes
 	txnb := UintBytes(uint64(txNum))
 	d1 := ericommon.LeftPadBytes(txnb, 32)
 	d2 := ericommon.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := common.BytesToHash(mapKey)
-
-	url := "https://zkevm-rpc.com"
 
 	payload := map[string]interface{}{
 		"method": "eth_getStorageAt",
@@ -56,7 +55,7 @@ func getRpcRoot(ctx context.Context, txNum int64) (common.Hash, error) {
 		return common.Hash{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", rpcEndpoint, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -106,13 +105,13 @@ const (
 	rateLimit  = 250 // requests per second
 )
 
-func worker(ctx context.Context, id int, jobs <-chan int64, results chan<- map[int64]string, rl *rate.Limiter, wg *sync.WaitGroup, processedTxNum *int64) {
+func worker(ctx context.Context, logPrefix, rpcEndpoint string, id int, jobs <-chan int64, results chan<- map[int64]string, rl *rate.Limiter, wg *sync.WaitGroup, processedTxNum *int64) {
 	defer wg.Done()
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Worker exiting due to cancelled context", "id", id)
+			log.Info(fmt.Sprintf("[%s] Worker exiting due to cancelled context", logPrefix), "id", id)
 			return
 		case txNum, ok := <-jobs:
 			if !ok {
@@ -123,7 +122,7 @@ func worker(ctx context.Context, id int, jobs <-chan int64, results chan<- map[i
 				log.Error("Error waiting for rate limiter:", "err", err)
 				continue
 			}
-			hash, err := getRpcRoot(ctx, txNum)
+			hash, err := getRpcRoot(ctx, rpcEndpoint, txNum)
 			if err != nil {
 				log.Error("Error getting hash for txNum", "txNum", txNum, "err", err)
 				continue
@@ -135,7 +134,7 @@ func worker(ctx context.Context, id int, jobs <-chan int64, results chan<- map[i
 	}
 }
 
-func logProcessedTxNumEvery(ctx context.Context, processedTxNum *int64, totalTxNumToProcess *int64, duration time.Duration, startTime time.Time, doneCh chan struct{}) {
+func logProcessedTxNumEvery(ctx context.Context, logPrefix string, processedTxNum *int64, totalTxNumToProcess *int64, duration time.Duration, startTime time.Time, doneCh chan struct{}) {
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
@@ -151,20 +150,20 @@ func logProcessedTxNumEvery(ctx context.Context, processedTxNum *int64, totalTxN
 			total := float64(*totalTxNumToProcess) // de-reference the pointer to get the value
 
 			if completed == 0 {
-				log.Info("Processed transaction number so far: 0. Total number of transactions to process: ", total, ". Time estimation is not available yet.")
+				log.Info(fmt.Sprintf("[%s] Processed transaction number so far: 0. Total number of transactions to process: ", logPrefix), total, ". Time estimation is not available yet.")
 			} else {
 				averageTxPerSec := completed / elapsed.Seconds()
 				estimatedRemainingTime := time.Duration((total - completed) / averageTxPerSec * float64(time.Second))
 				percentageCompleted := (completed / total) * 100 // calculate percentage of completed transactions
 
 				// log.info takes a message and then a set of key value pairs
-				log.Info("RpcRoot Download Progress", "processed", *processedTxNum, "of", *totalTxNumToProcess, "% complete", percentageCompleted, "time remaining", estimatedRemainingTime)
+				log.Info(fmt.Sprintf("[%s] RpcRoot Download Progress", logPrefix), "processed", *processedTxNum, "of", *totalTxNumToProcess, "% complete", percentageCompleted, "time remaining", estimatedRemainingTime)
 			}
 		}
 	}
 }
 
-func verifyTxNums(totalTxNum, startFrom int64, hashResults map[int64]string) []int64 {
+func verifyTxNums(logPrefix string, totalTxNum, startFrom int64, hashResults map[int64]string) []int64 {
 	missing := make([]int64, 0)
 
 	for i := startFrom; i <= totalTxNum; i++ {
@@ -172,7 +171,7 @@ func verifyTxNums(totalTxNum, startFrom int64, hashResults map[int64]string) []i
 			missing = append(missing, i)
 		}
 	}
-	log.Info("Missing txNums:", "count", len(missing))
+	log.Info(fmt.Sprintf("[%s] Missing txNums:", logPrefix), "count", len(missing))
 	return missing
 }
 
@@ -185,12 +184,12 @@ func main() {
 	fileName := os.Args[1]
 
 	totalTxNum := 2827625 // edit with highest txnum you want to download hashes up to
-
+	rpcEndpoint := "https://zkevm-rpc.com"
 	ctx := context.Background()
-	DownloadScalableHashes(ctx, fileName, int64(totalTxNum), true, 1)
+	DownloadScalableHashes(ctx, rpcEndpoint, "test", fileName, int64(totalTxNum), true, 1)
 }
 
-func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int64, saveResultsToFile bool, startFrom int64) map[int64]string {
+func DownloadScalableHashes(ctxInput context.Context, rpcEndpoint, logPrefix, fileName string, totalTxNum int64, saveResultsToFile bool, startFrom int64) map[int64]string {
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -204,23 +203,23 @@ func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int
 	if saveResultsToFile {
 		hashResults = loadExistingData(fileName)
 	}
-	missingTxNums := verifyTxNums(totalTxNum, startFrom, hashResults)
+	missingTxNums := verifyTxNums(logPrefix, totalTxNum, startFrom, hashResults)
 	missingCount := int64(len(missingTxNums))
 
 	if missingCount == 0 {
-		log.Info("No missing RPC Roots to download")
+		log.Info(fmt.Sprintf("[%s] No missing RPC Roots to download", logPrefix))
 		return nil
 	}
 
 	var doneCh = make(chan struct{})
 	var processedTxNum int64
 	startTime := time.Now()
-	go logProcessedTxNumEvery(ctx, &processedTxNum, &missingCount, 3*time.Second, startTime, doneCh)
+	go logProcessedTxNumEvery(ctx, logPrefix, &processedTxNum, &missingCount, 3*time.Second, startTime, doneCh)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go worker(ctx, i, jobs, results, rl, &wg, &processedTxNum)
+		go worker(ctx, logPrefix, rpcEndpoint, i, jobs, results, rl, &wg, &processedTxNum)
 	}
 
 	go func() {
@@ -235,8 +234,8 @@ func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		for _ = range signals {
-			log.Warn("Received signal, cancelling context...")
+		for range signals {
+			log.Warn(fmt.Sprintf("[%s] Received signal, cancelling context...", logPrefix))
 			cancel()
 			break
 		}
@@ -259,14 +258,14 @@ func DownloadScalableHashes(ctx context.Context, fileName string, totalTxNum int
 					hashResults[k] = v
 				}
 			} else {
-				log.Info("Results channel was closed - we should be done!")
+				log.Info(fmt.Sprintf("[%s] Results channel was closed - we should be done!", logPrefix))
 
 				if saveResultsToFile {
 					saveData(hashResults, fileName)
 				}
 
-				log.Info("Verifying all transactions...")
-				missingTxNums = verifyTxNums(totalTxNum, startFrom, hashResults)
+				log.Info(fmt.Sprintf("[%s] Verifying all transactions...", logPrefix))
+				missingTxNums = verifyTxNums(logPrefix, totalTxNum, startFrom, hashResults)
 				return hashResults
 			}
 		case <-saveTicker.C:

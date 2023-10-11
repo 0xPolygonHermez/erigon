@@ -24,10 +24,19 @@ func main() {
 	}
 
 	// Read all entries from server
-	entriesRead, _, err := c.ReadEntries(0, 100)
+	blocksRead, entriesReadAmount, err := c.ReadEntries(0, 500000)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(entriesRead)
+	fmt.Println("Entries read amount: ", entriesReadAmount)
+	fmt.Println("Blocks read amount: ", len(*blocksRead))
+
+	for i, block := range *blocksRead {
+		if i + +1 != int(block.L2BlockNumber) {
+			fmt.Println("Block #", i)
+			fmt.Println("BatchNumber: ", block.L2BlockNumber)
+		}
+	}
+	// fmt.Println("Blocks: ", (*blocksRead))
 }

@@ -59,8 +59,19 @@ func SpawnStageBatches(
 	firstCycle bool,
 	quiet bool,
 ) error {
-	log.Info("Batches stage")
-	defer log.Info("Finished Batches stage")
+	logPrefix := s.LogPrefix()
+	log.Info(fmt.Sprintf("[%s] Starting batches stage", logPrefix))
+	defer log.Info(fmt.Sprintf("[%s] Finished Batches stage", logPrefix))
+
+	if tx == nil {
+		log.Debug(fmt.Sprintf("[%s] batches: no tx provided, creating a new one", logPrefix))
+		var err error
+		tx, err = cfg.db.BeginRw(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to open tx, %w", err)
+		}
+		defer tx.Rollback()
+	}
 
 	eriDb := erigon_db.NewErigonDb(tx)
 	hermezDb, err := hermez_db.NewHermezDb(tx)
@@ -72,57 +83,52 @@ func SpawnStageBatches(
 	entriesReadChan := make(chan uint64, 2)
 	errChan := make(chan error, 2)
 
-	// currentDatastreamPoint, err := sync_stages.GetStageProgress(tx, BatchesEntries)
-	// if err != nil {
-	// 	return fmt.Errorf("get stage datastream progress error: %v", err)
-	// }
+	currentDatastreamPoint, err := sync_stages.GetStageProgress(tx, BatchesEntries)
+	if err != nil {
+		return fmt.Errorf("get stage datastream progress error: %v", err)
+	}
 
+	startSyncTime := time.Now()
 	// start routine to download blocks and push them in a channel
 	go func() {
-		log.Info("Started downloading L2Blocks routine")
-		defer log.Info("Finished downloading L2Blocks routine")
+		log.Info(fmt.Sprintf("[%s] Started downloading L2Blocks routine", logPrefix))
+		defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
 
 		// this will download all blocks from datastream and push them in a channel
-		// entriesRead, err := datastream.DownloadHeadersToChannel(datastream.TestDatastreamUrl, l2BlockChanm, currentDatastreamPoint)
-
-		// download a few blocks for test purposes
-		l2Blocks, entriesRead, err := datastream.DownloadL2Blocks(datastream.TestDatastreamUrl, 0, 10)
-		for _, l2Block := range *l2Blocks {
-			l2BlockChan <- l2Block
-		}
-		// test coe end
+sssssssssssssssssssssssssssssss
+		entriesRead, err := datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, currentDatastreamPoint)
 
 		entriesReadChan <- entriesRead
 		errChan <- err
 	}()
 
 	// start a routine to print blocks written progress
-	l2BlockWritten := make(chan uint64)
+	l2BlockWrittenChan := make(chan uint64)
 	ctx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
 	go func(ctx context.Context) {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
-
-		log.Info("Started printing blocks written progress routine")
-		defer log.Info("Finished printing blocks written progress routine")
 		count := uint64(0)
+		log.Info(fmt.Sprintf("[%s] Started printing blocks written progress routine", logPrefix))
+		defer log.Info(fmt.Sprintf("[%s] Finished printing blocks written progress routine", logPrefix))
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				log.Info("Blocks written: ", count)
-			case <-l2BlockWritten:
-				count++
+				log.Info(fmt.Sprintf("[%s] Blocks written", logPrefix), "count", count)
+			case a := <-l2BlockWrittenChan:
+				count = a
 			}
 		}
 	}(ctx)
 
-	writeFinished := false
-	stopLoop := false
 	entriesRead := uint64(0)
-	var routineErr error
 	lastBlockHeight := uint64(0)
+	endLoop := false
+	blocksWritten := uint64(0)
+
 	for {
 		// get block
 		// if no blocks available shold block
@@ -131,50 +137,56 @@ func SpawnStageBatches(
 		var l2Block types.FullL2Block
 		select {
 		case a := <-l2BlockChan:
-			l2Block = a
-		case entriesReadFromChan := <-entriesReadChan:
-			routineErr = <-errChan
-			if routineErr != nil {
+			l2Block = a // writes header, body, forkId and blockBatch
+			if err := writeL2Block(eriDb, hermezDb, &l2Block); err != nil {
+				return fmt.Errorf("writeL2Block error: %v", err)
+			}
+
+			lastBlockHeight = l2Block.L2BlockNumber
+			blocksWritten++
+			l2BlockWrittenChan <- blocksWritten
+		case err := <-errChan:
+			if err != nil {
 				return fmt.Errorf("l2blocks download routine error: %v", err)
 			}
+			entriesReadFromChan := <-entriesReadChan
 			entriesRead = entriesReadFromChan
-			writeFinished = true
-		default:
-			if writeFinished {
-				stopLoop = true
-			}
+			endLoop = true
 		}
 
-		if stopLoop {
+		if endLoop {
 			break
 		}
-
-		// writes header, body, forkId and blockBatch
-		if err := writeL2Block(eriDb, hermezDb, &l2Block); err != nil {
-			return fmt.Errorf("writeL2Block error: %v", err)
-		}
-
-		lastBlockHeight = l2Block.L2BlockNumber
-		l2BlockWritten <- 1
 	}
 
 	// stop printing blocks written progress routine
-	cancelCtx()
+	elapsed := time.Since(startSyncTime)
+	log.Info(fmt.Sprintf("[%s] Finished writing blocks", logPrefix), "blocksWritten", blocksWritten, "elapsed", elapsed)
 
-	log.Info("Saving stage progress: %d", entriesRead)
+	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "lastBlockHeight", lastBlockHeight)
 	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, lastBlockHeight); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	log.Info("Saving datastream entries progress: %d", entriesRead)
+	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "entriesRead", entriesRead)
 	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, entriesRead); err != nil {
 		return fmt.Errorf("save stage datastream progress error: %v", err)
+	}
+
+	if firstCycle {
+		log.Debug(fmt.Sprintf("[%s] batches: first cycle, committing tx", logPrefix))
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit tx, %w", err)
+		}
 	}
 
 	return nil
 }
 
 func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
+	logPrefix := u.LogPrefix()
+
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -186,8 +198,9 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 
 	fromBlock := u.UnwindPoint
 	toBlock := u.CurrentBlockNumber
-	log.Info("Unwinding batches stage from block number %d to %d", fromBlock, toBlock)
-	defer log.Info("Unwinding batches complete")
+
+	log.Info(fmt.Sprintf("[%s] Unwinding batches stage from block number", logPrefix), "fromBlock", fromBlock, "toBlock", toBlock)
+	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
 
 	eriDb := erigon_db.NewErigonDb(tx)
 	hermezDb, err := hermez_db.NewHermezDb(tx)
@@ -200,9 +213,11 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 	hermezDb.DeleteForkIds(fromBlock, toBlock)
 	hermezDb.DeleteBlockBatches(fromBlock, toBlock)
 
-	log.Info("Deleted headers, bodies, forkIds and blockBatches.")
-	log.Info("Saving stage progress: %d", fromBlock)
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, fromBlock); err != nil {
+
+	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
+	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", fromBlock)
+
+  if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, fromBlock); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
@@ -216,7 +231,8 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 	}
 
 	dup := currentDatastreamPoint - blocksUnwound
-	log.Info("Saving datastream entries progress: %d", dup)
+
+	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "datastreamUnwindProgress", dup)
 	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, dup); err != nil {
 		return fmt.Errorf("save stage datastream progress error: %v", err)
 	}
@@ -233,6 +249,7 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 }
 
 func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
+	logPrefix := s.LogPrefix()
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -242,8 +259,9 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 		defer tx.Rollback()
 	}
 
-	log.Info("Pruning barches...")
-	defer log.Info("Unwinding batches complete")
+
+	log.Info(fmt.Sprintf("[%s] Pruning barches...", logPrefix))
+	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
 
 	eriDb := erigon_db.NewErigonDb(tx)
 	hermezDb, err := hermez_db.NewHermezDb(tx)
@@ -261,13 +279,15 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 	hermezDb.DeleteForkIds(0, toBlock)
 	hermezDb.DeleteBlockBatches(0, toBlock)
 
-	log.Info("Deleted headers, bodies, forkIds and blockBatches.")
-	log.Info("Saving stage progress: %d", 0)
+
+	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
+	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "stageProgress", 0)
 	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, 0); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	log.Info("Saving datastream entries progress: %d", 0)
+
+	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "datastreamEntriesProgress", 0)
 	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, 0); err != nil {
 		return fmt.Errorf("save stage datastream progress error: %v", err)
 	}
@@ -289,16 +309,19 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 		return fmt.Errorf("write header error: %v", err)
 	}
 
-	batchTxData := []byte{}
+	// if len(l2Block.L2Txs) == 0 {
+	// 	log.Info(fmt.Sprintf("[%s] l2 block has no transactions", logPrefix), "block number", l2Block.L2BlockNumber)
+	// 	return nil
+	// }
+
+	txs := []ethTypes.Transaction{}
 	for _, transaction := range l2Block.L2Txs {
-		batchTxData = append(batchTxData, transaction.Encoded...)
+		ltx, err := txtype.DecodeTx(string(transaction.Encoded))
+		if err != nil {
+			return fmt.Errorf("decode tx error: %v", err)
+		}
+		txs = append(txs, ltx)
 	}
-
-	txs, _, _, err := txtype.DecodeTxs(batchTxData, uint64(l2Block.ForkId))
-	if err != nil {
-		return fmt.Errorf("decode txs error: %v", err)
-	}
-
 	if err := eriDb.WriteBody(bn, h.Hash(), txs); err != nil {
 		return fmt.Errorf("write body error: %v", err)
 	}

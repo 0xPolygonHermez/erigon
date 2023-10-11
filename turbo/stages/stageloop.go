@@ -501,6 +501,8 @@ func NewDefaultZkStages(ctx context.Context,
 	engine consensus.Engine,
 	syncer *syncer.Syncer,
 	firstL1Block uint64,
+	rpcEndpoint string,
+	isTestnet bool,
 ) []*sync_stages.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
@@ -523,6 +525,7 @@ func NewDefaultZkStages(ctx context.Context,
 			cfg.HistoryV3,
 			agg,
 		),
+		zkStages.StageRpcRootsCfg(db, controlServer.ChainConfig, rpcEndpoint, isTestnet),
 		zkStages.StageL1VerificationsCfg(db, syncer, firstL1Block),
 		zkStages.StageBatchesCfg(db, syncer),
 		stagedsync.StageCumulativeIndexCfg(db),

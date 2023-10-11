@@ -13,6 +13,7 @@ const (
 	ChiadoChainName        = "chiado"
 	HermezMainnetChainName = "hermez-mainnet"
 	HermezTestnetChainName = "hermez-testnet"
+	HermezDevnetChainName  = "hermez-devnet"
 )
 
 var All = []string{
@@ -27,4 +28,5 @@ var All = []string{
 	ChiadoChainName,
 	HermezMainnetChainName,
 	HermezTestnetChainName,
+	HermezDevnetChainName,
 }

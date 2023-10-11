@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"strconv"
 
+	"bytes"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -131,6 +133,22 @@ func DecodeTxs(txsData []byte, forkID uint64) ([]types.Transaction, []byte, []ui
 		txs = append(txs, legacyTx)
 	}
 	return txs, txsData, efficiencyPercentages, nil
+}
+
+func DecodeTx(encodedTx string) (types.Transaction, error) {
+	if len(encodedTx) >= 2 && encodedTx[:2] == "0x" {
+		encodedTx = encodedTx[2:]
+	}
+
+	encodedTxBytes, err := hex.DecodeString(encodedTx)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := types.DecodeTransaction(rlp.NewStream(bytes.NewReader(encodedTxBytes), 0))
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
 }
 
 // RlpFieldsToLegacyTx parses the rlp fields slice into a type.LegacyTx

@@ -46,6 +46,10 @@ func StageTxLookupCfg(
 }
 
 func SpawnTxLookup(s *sync_stages.StageState, tx kv.RwTx, toBlock uint64, cfg TxLookupCfg, ctx context.Context) (err error) {
+
+	// TODO: abstract
+	return nil
+
 	quitCh := ctx.Done()
 	useExternalTx := tx != nil
 	if !useExternalTx {

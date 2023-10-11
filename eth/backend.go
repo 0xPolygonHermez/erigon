@@ -108,6 +108,7 @@ import (
 	stages2 "github.com/ledgerwatch/erigon/turbo/stages"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/syncer"
+	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
 )
 
@@ -239,11 +240,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	log.Info("Initialised chain configuration", "config", chainConfig, "genesis", genesis.Hash())
 
-	isZk := false
-
-	if chainConfig.ChainID.Cmp(big.NewInt(1101)) == 0 {
-		isZk = true
-	}
+	isZk := zkchainconfig.IsZk(chainConfig.ChainID.Uint64())
 
 	if err := chainKv.Update(context.Background(), func(tx kv.RwTx) error {
 		if err = sync_stages.UpdateMetrics(tx); err != nil {
@@ -672,19 +669,30 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
 
 	if isZk {
+		devnet := zkchainconfig.IsDevnet(backend.config.NetworkID)
+
+		addr := zkchainconfig.GetContractAddress(backend.config.NetworkID)
+
 		testnet := backend.config.NetworkID == 1440
 		firstL1Block := uint64(16896700)
 		zkEthMainnetRpcUrl := "https://rpc.eu-north-1.gateway.fm/v4/ethereum/non-archival/mainnet?apiKey=UDmvcERuIwHSpeH3dUb1XDr4QnGqzHxv.J0qONXx6TUa9RqGb"
+		rpcEndpoint := "https://zkevm-rpc.com"
 		// hermez testnet endpoints
 		if testnet {
 			zkEthMainnetRpcUrl = "https://rpc.eu-north-2.gateway.fm/v4/ethereum/non-archival/goerli?apiKey=lyREQ4AN6KS8wbPRL2S0GJpB6GoEbkmr.5sMHNNVF9OH6EdcT"
 			firstL1Block = uint64(8577775)
+			rpcEndpoint = "https://rpc.internal.zkevm-test.net"
+
+		}
+
+		if devnet {
+			firstL1Block = uint64(8577775)
 		}
 
 		etherMan := newEtherMan(zkEthMainnetRpcUrl, testnet)
-		zkSyncer := syncer.NewSyncer(etherMan.EthClient)
+		zkSyncer := syncer.NewSyncer(etherMan.EthClient, addr)
 
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block, rpcEndpoint, testnet)
 		backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 		// TODO: prune order
 	} else {

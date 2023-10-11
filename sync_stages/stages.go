@@ -59,6 +59,7 @@ var (
 	// ZK stages
 	L1Verifications SyncStage = "L1Verifications"
 	Batches         SyncStage = "Batches"
+	RpcRoots        SyncStage = "RpcRoots"
 )
 
 var AllStages = []SyncStage{

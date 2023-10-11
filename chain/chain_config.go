@@ -263,7 +263,7 @@ func (c *Config) CheckConfigForkOrder() error {
 		return nil
 	}
 
-	if c != nil && zkchainconfig.IsZk(c.ChainID) {
+	if c != nil && zkchainconfig.IsZk(c.ChainID.Uint64()) {
 		return zkchainconfig.CheckForkOrder()
 	}
 

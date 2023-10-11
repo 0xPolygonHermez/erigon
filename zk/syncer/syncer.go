@@ -2,17 +2,17 @@ package syncer
 
 import (
 	"context"
-	"fmt"
+	"math/big"
+	"sort"
+	"sync"
+	"time"
+
 	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon-lib/common"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/time/rate"
-	"math/big"
-	"sort"
-	"sync"
-	"time"
 )
 
 type IEtherman interface {
@@ -21,7 +21,8 @@ type IEtherman interface {
 }
 
 type Syncer struct {
-	em IEtherman
+	em                IEtherman
+	l1ContractAddress common.Address
 }
 
 type Result struct {
@@ -31,9 +32,10 @@ type Result struct {
 	L1TxHash      common.Hash
 }
 
-func NewSyncer(etherMan IEtherman) *Syncer {
+func NewSyncer(etherMan IEtherman, l1ContractAddr common.Address) *Syncer {
 	return &Syncer{
-		em: etherMan,
+		em:                etherMan,
+		l1ContractAddress: l1ContractAddr,
 	}
 }
 
@@ -46,7 +48,6 @@ func (s *Syncer) GetVerifications(startBlock uint64) (verifications []types.L1Ba
 	}
 	latestL1Block := latestBlock.NumberU64()
 
-	contractAddress := common.HexToAddress("0x5132a183e9f3cb7c848b0aac5ae0c4f0491b7ab2")
 	eventTopic := common.HexToHash("0xcb339b570a7f0b25afa7333371ff11192092a0aeace12b671f4c212f2815c6fe")
 
 	numWorkers := 5
@@ -64,7 +65,7 @@ func (s *Syncer) GetVerifications(startBlock uint64) (verifications []types.L1Ba
 
 	for w := 1; w <= numWorkers; w++ {
 		wg.Add(1)
-		go worker(w, jobs, results, s.em, contractAddress, eventTopic, limiter, &wg)
+		go worker(w, jobs, results, s.em, s.l1ContractAddress, eventTopic, limiter, &wg)
 	}
 
 	verifications = []types.L1BatchInfo{}
@@ -144,8 +145,6 @@ func worker(id int, jobs <-chan *big.Int, results chan<- Result, client IEtherma
 			stateRoot := common.BytesToHash(stateRootData)
 
 			res := Result{BatchNumber: batchNumber, L1BlockNumber: logEntry.BlockNumber, StateRoot: stateRoot, L1TxHash: l1TxHash}
-
-			fmt.Println(res)
 
 			results <- res
 		}
