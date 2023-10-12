@@ -190,8 +190,9 @@ func (c *StreamClient) initiateDownload(fromEntry uint64) error {
 // sends the parsed FullL2Blocks with transactions to a channel
 func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockChan chan types.FullL2Block) (uint64, error) {
 	entriesRead := uint64(0)
+	blocksRead := 0
 	for {
-		if entriesRead+fromEntry >= c.Header.TotalEntries {
+		if blocksRead > 1000 || entriesRead+fromEntry >= c.Header.TotalEntries {
 			break
 		}
 
@@ -231,39 +232,49 @@ func (c *StreamClient) readFullL2Blocks(fromEntry uint64, l2BlocksAmount int) (*
 // reads a full block from the server
 // returns the parsed FullL2Block and the amount of entries read
 func (c *StreamClient) readFullBlock() (*types.FullL2Block, uint64, error) {
+	entriesRead := uint64(0)
+
+	// read bookmark
+	// TODO: maybe parse it and return it if needed
+	bookmarkFile, err := c.readFileEntry()
+	if !bookmarkFile.IsBookmark() {
+		return nil, 0, fmt.Errorf("expected to find a bookmark: %v", err)
+	}
+	entriesRead++
+
 	// Wait next data entry streamed
 	file, err := c.readFileEntry()
 	if err != nil {
 		return nil, 0, fmt.Errorf("read file entry error: %v", err)
 	}
-	entriesRead := uint64(0)
+	entriesRead++
 	// should start with a StartL2Block entry, followed by
 	// txs entries and ending with a block endL2BlockEntry
 	var startL2Block *types.StartL2Block
 	l2Txs := []types.L2Transaction{}
 	var endL2Block *types.EndL2Block
 
-	if file.EntryType == types.EntryTypeStartL2Block {
+	if file.IsBlockStart() {
 		startL2Block, err = types.DecodeStartL2Block(file.Data)
 		if err != nil {
 			return nil, 0, fmt.Errorf("read start of block error: %v", err)
 		}
-		entriesRead++
 
 		for {
 			file, err := c.readFileEntry()
 			if err != nil {
 				return nil, 0, fmt.Errorf("read file entry error: %v", err)
 			}
+
 			entriesRead++
 
-			if file.EntryType == types.EntryTypeL2Tx {
+			if file.IsTx() {
 				l2Tx, err := types.DecodeL2Transaction(file.Data)
 				if err != nil {
 					return nil, 0, fmt.Errorf("parse l2Transaction error: %v", err)
 				}
 				l2Txs = append(l2Txs, *l2Tx)
-			} else if file.EntryType == types.EntryTypeEndL2Block {
+			} else if file.IsBlockEnd() {
 				endL2Block, err = types.DecodeEndL2Block(file.Data)
 				if err != nil {
 					return nil, 0, fmt.Errorf("parse endL2Block error: %v", err)

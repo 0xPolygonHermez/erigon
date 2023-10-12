@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 
 	"io/ioutil"
 	"net/http"
@@ -42,9 +43,9 @@ func SpawnStageRpcRoots(
 	quiet bool,
 ) error {
 
-  logPrefix := s.LogPrefix()
+	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting Rpc rotos download stage", logPrefix))
-	defer log.Info(fmt.Sprintf("[%s] Finished Rpc rotos download stage ", logPrefix))
+	defer log.Info(fmt.Sprintf("[%s] Finished Rpc roots download stage ", logPrefix))
 
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -69,7 +70,7 @@ func SpawnStageRpcRoots(
 	}
 
 	if prog >= txNo {
-ssssssssssssssssssssssssssssssssss		log.Info(fmt.Sprintf("[%s] Already have the roots", logPrefix), "savedTxNo", prog, "highestTxNo", txNo)
+		log.Info(fmt.Sprintf("[%s] Already have the roots", logPrefix), "savedTxNo", prog, "highestTxNo", txNo)
 
 		return nil
 	}

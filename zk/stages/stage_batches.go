@@ -8,6 +8,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/sync_stages"
@@ -95,7 +96,6 @@ func SpawnStageBatches(
 		defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
 
 		// this will download all blocks from datastream and push them in a channel
-sssssssssssssssssssssssssssssss
 		entriesRead, err := datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, currentDatastreamPoint)
 
 		entriesReadChan <- entriesRead
@@ -198,7 +198,6 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 
 	fromBlock := u.UnwindPoint
 	toBlock := u.CurrentBlockNumber
-
 	log.Info(fmt.Sprintf("[%s] Unwinding batches stage from block number", logPrefix), "fromBlock", fromBlock, "toBlock", toBlock)
 	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
 
@@ -213,11 +212,10 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 	hermezDb.DeleteForkIds(fromBlock, toBlock)
 	hermezDb.DeleteBlockBatches(fromBlock, toBlock)
 
-
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", fromBlock)
 
-  if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, fromBlock); err != nil {
+	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, fromBlock); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
@@ -231,7 +229,6 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 	}
 
 	dup := currentDatastreamPoint - blocksUnwound
-
 	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "datastreamUnwindProgress", dup)
 	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, dup); err != nil {
 		return fmt.Errorf("save stage datastream progress error: %v", err)
@@ -259,7 +256,6 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 		defer tx.Rollback()
 	}
 
-
 	log.Info(fmt.Sprintf("[%s] Pruning barches...", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
 
@@ -279,13 +275,11 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 	hermezDb.DeleteForkIds(0, toBlock)
 	hermezDb.DeleteBlockBatches(0, toBlock)
 
-
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "stageProgress", 0)
 	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, 0); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
-
 
 	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "datastreamEntriesProgress", 0)
 	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, 0); err != nil {
@@ -303,7 +297,7 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 // writeL2Block writes L2Block to ErigonDb and HermezDb
 // writes header, body, forkId and blockBatch
 func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block) error {
-	bn := new(big.Int).SetUint64(l2Block.BatchNumber)
+	bn := new(big.Int).SetUint64(l2Block.L2BlockNumber)
 	h, err := eriDb.WriteHeader(bn, l2Block.GlobalExitRoot, l2Block.L2Blockhash, l2Block.Coinbase, uint64(l2Block.Timestamp))
 	if err != nil {
 		return fmt.Errorf("write header error: %v", err)
@@ -316,7 +310,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 
 	txs := []ethTypes.Transaction{}
 	for _, transaction := range l2Block.L2Txs {
-		ltx, err := txtype.DecodeTx(string(transaction.Encoded))
+		ltx, err := txtype.DecodeTx(ethcommon.Bytes2Hex(transaction.Encoded))
 		if err != nil {
 			return fmt.Errorf("decode tx error: %v", err)
 		}

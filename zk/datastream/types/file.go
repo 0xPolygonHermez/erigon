@@ -7,14 +7,36 @@ import (
 
 type EntryType uint32
 
-const FileEntryMinSize uint32 = 17 // 1+4+4+8
+const (
+	FileEntryMinSize    uint32    = 17 // 1+4+4+8
+	BlockStartEntryType EntryType = 1
+	TxEntryType         EntryType = 2
+	BlockEndEntryType   EntryType = 3
+	BookmarkEntryType   EntryType = 176
+)
 
 type FileEntry struct {
 	PacketType uint8     // 2:Data entry, 0:Padding, (1:Header)
 	Length     uint32    // Length of the entry
-	EntryType  EntryType // e.g. 1:L2 block, 2:L2 tx,...
+	EntryType  EntryType // e.g. 1:L2 block, 2:L2 tx, 176: bookmark
 	EntryNum   uint64    // Entry number (sequential starting with 0)
 	Data       []byte
+}
+
+func (f *FileEntry) IsBlockStart() bool {
+	return f.EntryType == BlockStartEntryType
+}
+
+func (f *FileEntry) IsTx() bool {
+	return f.EntryType == TxEntryType
+}
+
+func (f *FileEntry) IsBlockEnd() bool {
+	return f.EntryType == BlockEndEntryType
+}
+
+func (f *FileEntry) IsBookmark() bool {
+	return f.EntryType == BookmarkEntryType
 }
 
 // Decode/convert from binary bytes slice to FileEntry type
