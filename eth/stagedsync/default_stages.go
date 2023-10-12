@@ -311,22 +311,6 @@ func DefaultZkStages(ctx context.Context, snapshots SnapshotsCfg, rpcRootsCfg zk
 		},
 		{
 			ID:          sync_stages.L1Verifications,
-			Description: "Download RPC roots",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				if badBlockUnwind {
-					return nil
-				}
-				return zkStages.SpawnStageRpcRoots(s, u, ctx, tx, rpcRootsCfg, test, firstCycle, quiet)
-			},
-			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return zkStages.UnwindRpcRootsStage(u, tx, rpcRootsCfg, ctx)
-			},
-			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return zkStages.PruneRpcRootsStage(p, tx, rpcRootsCfg, ctx)
-			},
-		},
-		{
-			ID:          sync_stages.L1Verifications,
 			Description: "Download L1 Verifications",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				if badBlockUnwind {

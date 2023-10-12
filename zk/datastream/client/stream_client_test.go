@@ -208,6 +208,7 @@ func Test_readFullL2Blocks(t *testing.T) {
 			name:        "Happy path",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
@@ -239,13 +240,14 @@ func Test_readFullL2Blocks(t *testing.T) {
 					},
 				},
 			},
-			expectedEntriesRead: 3,
+			expectedEntriesRead: 4,
 			expectedError:       nil,
 		},
 		{
 			name:        "Happy path: Available to read less than asked",
 			inputAmount: 2,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
@@ -277,13 +279,14 @@ func Test_readFullL2Blocks(t *testing.T) {
 					},
 				},
 			},
-			expectedEntriesRead: 3,
+			expectedEntriesRead: 4,
 			expectedError:       nil,
 		},
 		{
 			name:        "Not matching start block number and end block number",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
@@ -303,6 +306,7 @@ func Test_readFullL2Blocks(t *testing.T) {
 			name:        "Not starting with a startL2Block",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 28, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				128, 1, 5, 0, 0, 0, 1, 2, 3, 4, 5, // L2Transaction
@@ -319,6 +323,7 @@ func Test_readFullL2Blocks(t *testing.T) {
 			name:        "Unexpected startL1Block in the middle of previous block",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
@@ -373,6 +378,7 @@ func Test_readFullBlock(t *testing.T) {
 			name:        "Happy path",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
@@ -402,13 +408,14 @@ func Test_readFullBlock(t *testing.T) {
 					},
 				},
 			},
-			expectedEntriesRead: 3,
+			expectedEntriesRead: 4,
 			expectedError:       nil,
 		},
 		{
 			name:        "Not matching start block number and end block number",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,
@@ -428,6 +435,7 @@ func Test_readFullBlock(t *testing.T) {
 			name:        "Not starting with a startL2Block",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 28, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				128, 1, 5, 0, 0, 0, 1, 2, 3, 4, 5, // L2Transaction
@@ -444,6 +452,7 @@ func Test_readFullBlock(t *testing.T) {
 			name:        "Unexpected startL1Block in the middle of previous block",
 			inputAmount: 1,
 			inputBytes: []byte{
+				2, 0, 0, 0, 17, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 176 - bookmark
 				2, 0, 0, 0, 95, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, // fileEntry with entrytype 1 - startL2Block
 				// startL2Block
 				101, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 20, 21, 22, 23, 24, 10, 0,

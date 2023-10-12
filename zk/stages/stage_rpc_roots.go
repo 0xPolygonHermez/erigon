@@ -44,7 +44,7 @@ func SpawnStageRpcRoots(
 ) error {
 
 	logPrefix := s.LogPrefix()
-	log.Info(fmt.Sprintf("[%s] Starting Rpc rotos download stage", logPrefix))
+	log.Info(fmt.Sprintf("[%s] Starting Rpc roots download stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished Rpc roots download stage ", logPrefix))
 
 	useExternalTx := tx != nil

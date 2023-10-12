@@ -128,6 +128,7 @@ func SpawnStageBatches(
 	endLoop := false
 	blocksWritten := uint64(0)
 
+	writeThreadFinished := false
 	for {
 		// get block
 		// if no blocks available shold block
@@ -150,7 +151,11 @@ func SpawnStageBatches(
 			}
 			entriesReadFromChan := <-entriesReadChan
 			entriesRead = entriesReadFromChan
-			endLoop = true
+			writeThreadFinished = true
+		default:
+			if writeThreadFinished {
+				endLoop = true
+			}
 		}
 
 		if endLoop {

@@ -201,6 +201,7 @@ func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockCha
 			return 0, fmt.Errorf("failed to read full block: %v", err)
 		}
 
+		blocksRead++
 		l2BlockChan <- *fullBlock
 		entriesRead += er
 	}
@@ -237,8 +238,11 @@ func (c *StreamClient) readFullBlock() (*types.FullL2Block, uint64, error) {
 	// read bookmark
 	// TODO: maybe parse it and return it if needed
 	bookmarkFile, err := c.readFileEntry()
+	if err != nil {
+		return nil, 0, fmt.Errorf("read file entry error: %v", err)
+	}
 	if !bookmarkFile.IsBookmark() {
-		return nil, 0, fmt.Errorf("expected to find a bookmark: %v", err)
+		return nil, 0, fmt.Errorf("expected to find a bookmark but got: %d", bookmarkFile.EntryType)
 	}
 	entriesRead++
 
