@@ -135,20 +135,18 @@ func DecodeTxs(txsData []byte, forkID uint64) ([]types.Transaction, []byte, []ui
 	return txs, txsData, efficiencyPercentages, nil
 }
 
-func DecodeTx(encodedTx string) (types.Transaction, error) {
-	if len(encodedTx) >= 2 && encodedTx[:2] == "0x" {
-		encodedTx = encodedTx[2:]
+func DecodeTx(encodedTx []byte, forkId uint16) (types.Transaction, uint8, error) {
+	efficiencyPercentage := uint8(0)
+	if forkId >= forkID5 {
+		efficiencyPercentage = encodedTx[len(encodedTx)-1:][0]
+		encodedTx = encodedTx[:len(encodedTx)-1]
 	}
 
-	encodedTxBytes, err := hex.DecodeString(encodedTx)
+	tx, err := types.DecodeTransaction(rlp.NewStream(bytes.NewReader(encodedTx), 0))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	tx, err := types.DecodeTransaction(rlp.NewStream(bytes.NewReader(encodedTxBytes), 0))
-	if err != nil {
-		return nil, err
-	}
-	return tx, nil
+	return tx, efficiencyPercentage, nil
 }
 
 // RlpFieldsToLegacyTx parses the rlp fields slice into a type.LegacyTx

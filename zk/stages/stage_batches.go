@@ -8,7 +8,6 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/sync_stages"
@@ -310,7 +309,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 
 	txs := []ethTypes.Transaction{}
 	for _, transaction := range l2Block.L2Txs {
-		ltx, err := txtype.DecodeTx(ethcommon.Bytes2Hex(transaction.Encoded))
+		ltx, _, err := txtype.DecodeTx(transaction.Encoded, l2Block.ForkId)
 		if err != nil {
 			return fmt.Errorf("decode tx error: %v", err)
 		}
