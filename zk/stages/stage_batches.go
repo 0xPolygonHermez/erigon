@@ -42,6 +42,7 @@ type BatchesCfg struct {
 }
 
 const BatchesEntries = "BatchesEntries"
+const BatchesBookmark = "BatchesBookmark"
 
 func StageBatchesCfg(db kv.RwDB, syncer ISyncer) BatchesCfg {
 	return BatchesCfg{
@@ -81,11 +82,16 @@ func SpawnStageBatches(
 
 	l2BlockChan := make(chan types.FullL2Block, 100000)
 	entriesReadChan := make(chan uint64, 2)
+	bookmarksChan := make(chan map[uint64][]byte, 2)
 	errChan := make(chan error, 2)
 
-	currentDatastreamPoint, err := sync_stages.GetStageProgress(tx, BatchesEntries)
+	bookmark, err := sync_stages.GetStageData(tx, BatchesBookmark)
 	if err != nil {
 		return fmt.Errorf("get stage datastream progress error: %v", err)
+	}
+
+	if len(bookmark) == 0 {
+		bookmark = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0}
 	}
 
 	startSyncTime := time.Now()
@@ -95,9 +101,10 @@ func SpawnStageBatches(
 		defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
 
 		// this will download all blocks from datastream and push them in a channel
-		entriesRead, err := datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, currentDatastreamPoint)
+		entriesRead, bookmarks, err := datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, bookmark)
 
 		entriesReadChan <- entriesRead
+		bookmarksChan <- bookmarks
 		errChan <- err
 	}()
 
@@ -123,7 +130,13 @@ func SpawnStageBatches(
 		}
 	}(ctx)
 
+	highestL2BatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
+	if err != nil {
+		return fmt.Errorf("failed to get l1 verifications batch number, %w", err)
+	}
+	highestL2BlockInLastVerifiedBatch := uint64(0)
 	entriesRead := uint64(0)
+	bookmarks := map[uint64][]byte{}
 	lastBlockHeight := uint64(0)
 	endLoop := false
 	blocksWritten := uint64(0)
@@ -142,6 +155,10 @@ func SpawnStageBatches(
 				return fmt.Errorf("writeL2Block error: %v", err)
 			}
 
+			if l2Block.BatchNumber == highestL2BatchNo && highestL2BlockInLastVerifiedBatch < l2Block.L2BlockNumber {
+				highestL2BlockInLastVerifiedBatch = l2Block.L2BlockNumber
+			}
+
 			lastBlockHeight = l2Block.L2BlockNumber
 			blocksWritten++
 			l2BlockWrittenChan <- blocksWritten
@@ -150,7 +167,9 @@ func SpawnStageBatches(
 				return fmt.Errorf("l2blocks download routine error: %v", err)
 			}
 			entriesReadFromChan := <-entriesReadChan
+			bookmarksFromChan := <-bookmarksChan
 			entriesRead = entriesReadFromChan
+			bookmarks = bookmarksFromChan
 			writeThreadFinished = true
 		default:
 			if writeThreadFinished {
@@ -169,6 +188,17 @@ func SpawnStageBatches(
 
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "lastBlockHeight", lastBlockHeight)
 	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, lastBlockHeight); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+
+	// save bookmark
+	log.Info(fmt.Sprintf("[%s] Saving bookmark for last verified batch progress", logPrefix),
+		"lastBlockHeight", lastBlockHeight,
+		"blockNumber", highestL2BlockInLastVerifiedBatch,
+		"batchNumber", highestL2BatchNo,
+	)
+	fmt.Println(bookmarks[highestL2BlockInLastVerifiedBatch])
+	if err := sync_stages.SaveStageData(tx, BatchesBookmark, bookmarks[highestL2BlockInLastVerifiedBatch]); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 

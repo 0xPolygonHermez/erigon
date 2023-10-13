@@ -484,7 +484,7 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 	}()
 
 Loop:
-	for blockNum := stageProgress + 1; blockNum <= 50; blockNum++ {
+	for blockNum := stageProgress + 1; blockNum <= 100; blockNum++ {
 		stageProgress = blockNum
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {

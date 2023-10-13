@@ -57,9 +57,10 @@ var (
 	BeaconIndexes               SyncStage = "BeaconIndexes"               // Fills up Beacon indexes
 
 	// ZK stages
-	L1Verifications SyncStage = "L1Verifications"
-	Batches         SyncStage = "Batches"
-	RpcRoots        SyncStage = "RpcRoots"
+	L1Verifications        SyncStage = "L1Verifications"
+	L1VerificationsBatchNo SyncStage = "L1VerificationsBatchNo"
+	Batches                SyncStage = "Batches"
+	RpcRoots               SyncStage = "RpcRoots"
 )
 
 var AllStages = []SyncStage{
@@ -91,6 +92,14 @@ func GetStageProgress(db kv.Getter, stage SyncStage) (uint64, error) {
 
 func SaveStageProgress(db kv.Putter, stage SyncStage, progress uint64) error {
 	return db.Put(kv.SyncStageProgress, []byte(stage), marshalData(progress))
+}
+
+func GetStageData(db kv.Getter, stage SyncStage) ([]byte, error) {
+	return db.GetOne(kv.SyncStageProgress, []byte(stage))
+}
+
+func SaveStageData(db kv.Putter, stage SyncStage, data []byte) error {
+	return db.Put(kv.SyncStageProgress, []byte(stage), data)
 }
 
 // GetStagePruneProgress retrieves saved progress of given sync stage from the database

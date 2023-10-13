@@ -25,6 +25,37 @@ func writeFullUint64ToConn(conn net.Conn, value uint64) error {
 	return nil
 }
 
+// writeFullUint64ToConn writes a uint64 to a connection
+func writeBytesToConn(conn net.Conn, value []byte) error {
+	if conn == nil {
+		return errors.New("error nil connection")
+	}
+
+	_, err := conn.Write(value)
+	if err != nil {
+		return fmt.Errorf("%s Error sending to server: %v", conn.RemoteAddr().String(), err)
+	}
+
+	return nil
+}
+
+// writeFullUint64ToConn writes a uint64 to a connection
+func writeFullUint32ToConn(conn net.Conn, value uint32) error {
+	buffer := make([]byte, 8)
+	binary.BigEndian.PutUint32(buffer, value)
+
+	if conn == nil {
+		return errors.New("error nil connection")
+	}
+
+	_, err := conn.Write(buffer)
+	if err != nil {
+		return fmt.Errorf("%s Error sending to server: %v", conn.RemoteAddr().String(), err)
+	}
+
+	return nil
+}
+
 // reads a set amount of bytes from a connection
 func readBuffer(conn net.Conn, n uint32) ([]byte, error) {
 	buffer := make([]byte, n)
