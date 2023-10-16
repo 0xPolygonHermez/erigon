@@ -23,6 +23,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/temporal/historyv2"
 	libstate "github.com/ledgerwatch/erigon-lib/state"
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/log/v3"
 
 	"math/big"
@@ -73,6 +74,10 @@ type WithSnapshots interface {
 
 type headerDownloader interface {
 	ReportBadHeaderPoS(badHeader, lastValidAncestor common.Hash)
+}
+
+type HermezDb interface {
+	GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error)
 }
 
 type ExecuteBlockCfg struct {
@@ -155,6 +160,10 @@ func executeBlock(
 	if err != nil {
 		return err
 	}
+	hermezDb, err := hermez_db.NewHermezDb(tx)
+	if err != nil {
+		return fmt.Errorf("failed to create hermezDb: %v", err)
+	}
 
 	// [zkevm] - write the global exit root inside the batch so we can unwind it
 	// [zkevm] push the global exit root for the related batch into the db ahead of batch execution
@@ -166,7 +175,7 @@ func executeBlock(
 	// }
 
 	// [zkevm] - add GER if there is one for this batch
-	if err := writeGlobalExitRoot(stateWriter, *header); err != nil {
+	if err := writeGlobalExitRoot(stateReader, stateWriter, hermezDb, *header); err != nil {
 		return err
 	}
 
@@ -179,7 +188,7 @@ func executeBlock(
 	}
 
 	getTracer := func(txIndex int, txHash common.Hash) (vm.EVMLogger, error) {
-		//return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
+		// return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
 		return logger.NewStructLogger(&logger.LogConfig{}), nil
 	}
 
@@ -229,21 +238,25 @@ func executeBlock(
 	return nil
 }
 
-func writeGlobalExitRoot(stateWriter state.WriterWithChangeSets, header types.Header) error {
-	ger := header.Root
+func writeGlobalExitRoot(stateReader state.StateReader, stateWriter state.WriterWithChangeSets, hermezDb HermezDb, header types.Header) error {
+	ger, err := hermezDb.GetBlockGlobalExitRoot(header.Number.Uint64())
+	if err != nil {
+		return err
+	}
+
 	empty := common.Hash{}
 	if ger == empty {
 		return errors.New("empty Global Exit Root")
 	}
 
 	old := common.Hash{}.Big()
-	oldUint256, overflow := uint256.FromBig(old)
+	emptyUint256, overflow := uint256.FromBig(old)
 	if overflow {
 		return errors.New("AddGlobalExitRoot: overflow")
 	}
 
 	exitBig := new(big.Int).SetInt64(int64(header.Time))
-	exitUint256, overflow := uint256.FromBig(exitBig)
+	headerTime, overflow := uint256.FromBig(exitBig)
 	if overflow {
 		return errors.New("AddGlobalExitRoot: overflow")
 	}
@@ -259,7 +272,18 @@ func writeGlobalExitRoot(stateWriter state.WriterWithChangeSets, header types.He
 
 	addr := common.HexToAddress(ADDRESS_GLOBAL_EXIT_ROOT_MANAGER_L2)
 
-	if err := stateWriter.WriteAccountStorage(addr, uint64(1), &gerp, oldUint256, exitUint256); err != nil {
+	// if root already has a timestamp - don't update it
+	prevTs, err := stateReader.ReadAccountStorage(addr, uint64(1), &gerp)
+	if err != nil {
+		return err
+	}
+	a := new(big.Int).SetBytes(prevTs)
+	if a.Cmp(big.NewInt(0)) != 0 {
+		return nil
+	}
+
+	// write global exit root to state
+	if err := stateWriter.WriteAccountStorage(addr, uint64(1), &gerp, emptyUint256, headerTime); err != nil {
 		return err
 	}
 
@@ -484,7 +508,7 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 	}()
 
 Loop:
-	for blockNum := stageProgress + 1; blockNum <= 100; blockNum++ {
+	for blockNum := stageProgress + 1; blockNum <= 3; blockNum++ {
 		stageProgress = blockNum
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
