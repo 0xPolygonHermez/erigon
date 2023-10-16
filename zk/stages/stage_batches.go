@@ -148,14 +148,13 @@ func SpawnStageBatches(
 	lastGer := common.Hash{}
 	for {
 		// get block
-		// if no blocks available shold block
+		// if no blocks available should block
 		// if download routine finished, should continue to read from channel until it's empty
 		// if both download routine stopped and channel empty - stop loop
 		var l2Block types.FullL2Block
 		select {
 		case a := <-l2BlockChan:
 			l2Block = a // writes header, body, forkId and blockBatch
-
 			zeroHash := common.Hash{}
 			if l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 {
 				if lastGer == zeroHash {

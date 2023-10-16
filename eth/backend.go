@@ -672,7 +672,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		devnet := zkchainconfig.IsDevnet(backend.config.NetworkID)
 
 		addr := zkchainconfig.GetContractAddress(backend.config.NetworkID)
-
 		testnet := backend.config.NetworkID == 1440
 		firstL1Block := uint64(16896700)
 		zkEthMainnetRpcUrl := "https://rpc.eu-north-1.gateway.fm/v4/ethereum/non-archival/mainnet?apiKey=UDmvcERuIwHSpeH3dUb1XDr4QnGqzHxv.J0qONXx6TUa9RqGb"
@@ -692,7 +691,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		etherMan := newEtherMan(zkEthMainnetRpcUrl, testnet)
 		zkSyncer := syncer.NewSyncer(etherMan.EthClient, addr)
 
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block, rpcEndpoint, testnet)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block, rpcEndpoint, testnet || devnet)
 		backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 		// TODO: prune order
 	} else {

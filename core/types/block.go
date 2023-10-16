@@ -531,6 +531,10 @@ func (h *Header) Hash() libcommon.Hash {
 	return rlpHash(h)
 }
 
+func (h *Header) ZkHash() libcommon.Hash {
+	return h.TxHash
+}
+
 var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
 
 // Size returns the approximate memory used by all internal contents. It is used

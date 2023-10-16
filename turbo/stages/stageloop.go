@@ -82,53 +82,6 @@ func StageLoop(
 	defer close(waitForDone)
 	initialCycle := true
 
-	// TODO [zkevm] - table creation: move to erigon lib
-	trw, err := db.BeginRw(ctx)
-	if err != nil {
-		log.Error("Failed to start transaction to add new zkevm batch tables", "err", err)
-		return
-	}
-	defer trw.Rollback()
-	err = trw.CreateBucket("HermezMeta")
-	if err != nil {
-		log.Error("Failed to create HermezMeta bucket", "err", err)
-		return
-	}
-	err = trw.CreateBucket("HermezL1Block")
-	if err != nil {
-		log.Error("Failed to create HermezL1Block bucket", "err", err)
-		return
-	}
-	err = trw.CreateBucket("HermezBatch")
-	if err != nil {
-		log.Error("Failed to create HermezBatch bucket", "err", err)
-		return
-	}
-	err = trw.CreateBucket("HermezVerifiedBatch")
-	if err != nil {
-		log.Error("Failed to create HermezVerifiedBatch bucket", "err", err)
-		return
-	}
-	err = trw.CreateBucket("HermezGlobalExitRootTemp")
-	if err != nil {
-		log.Error("Failed to create HermezGlobalExitRootTemp bucket", "err", err)
-		return
-	}
-	err = trw.CreateBucket("HermezGlobalExitRoot")
-	if err != nil {
-		log.Error("Failed to create HermezGlobalExitRoot bucket", "err", err)
-		return
-	}
-	err = trw.CreateBucket("HermezRpcRoot")
-	if err != nil {
-		log.Error("Failed to create HermezRpcRoot bucket", "err", err)
-		return
-	}
-	if err := trw.Commit(); err != nil {
-		log.Error("Failed to commit transaction to add new zkevm batch tables", "err", err)
-		return
-	}
-
 	for {
 		start := time.Now()
 

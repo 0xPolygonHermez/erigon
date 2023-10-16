@@ -35,6 +35,15 @@ import (
 	"github.com/status-im/keycard-go/hexutils"
 )
 
+// TODO: remove debugging structs
+type MyStruct struct {
+	Storage map[string]string
+	Balance *big.Int
+	Nonce   *big.Int
+}
+
+var collection = make(map[libcommon.Address]*MyStruct)
+
 type ZkInterHashesCfg struct {
 	db                kv.RwDB
 	checkRoot         bool
@@ -66,6 +75,9 @@ func StageZkInterHashesCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHal
 func SpawnZkIntermediateHashesStage(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context, quiet bool) (libcommon.Hash, error) {
 	quit := ctx.Done()
 	_ = quit
+
+	//log.Warn("Interhashes turned off!!!")
+	//return trie.EmptyRoot, nil
 
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -321,6 +333,12 @@ func insertContractStorageToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, 
 
 func processAccount(db smt.DB, a *accounts.Account, as map[string]string, inc uint64, psr *state2.PlainStateReader, addr libcommon.Address, keys []utils.NodeKey) ([]utils.NodeKey, error) {
 
+	collection[addr] = &MyStruct{
+		Storage: as,
+		Balance: a.Balance.ToBig(),
+		Nonce:   new(big.Int).SetUint64(a.Nonce),
+	}
+
 	// get the account balance and nonce
 	keys, err := insertAccountStateToKV(db, keys, addr.String(), a.Balance.ToBig(), new(big.Int).SetUint64(a.Nonce))
 	if err != nil {
@@ -497,6 +515,14 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg ZkInterHashe
 	}
 
 	hash = libcommon.BigToHash(root)
+
+	// [zkevm] - print state
+	//jsonData, err := json.MarshalIndent(collection, "", "    ")
+	//if err != nil {
+	//	fmt.Printf("error: %v\n", err)
+	//}
+	//_ = jsonData
+	//fmt.Println(string(jsonData))
 
 	err = eridb.CommitBatch()
 	if err != nil {

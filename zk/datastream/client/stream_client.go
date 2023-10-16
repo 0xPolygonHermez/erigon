@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type StreamType uint64
@@ -212,7 +213,6 @@ func (c *StreamClient) afterStartCommand() error {
 // sends the parsed FullL2Blocks with transactions to a channel
 func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockChan chan types.FullL2Block) (uint64, map[uint64][]byte, error) {
 	entriesRead := uint64(0)
-	blocksRead := 0
 	bookmarks := map[uint64][]byte{}
 	for {
 		if entriesRead+fromEntry >= c.Header.TotalEntries {
@@ -224,7 +224,12 @@ func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockCha
 			return 0, nil, fmt.Errorf("failed to read full block: %v", err)
 		}
 		bookmarks[fullBlock.L2BlockNumber] = bookmark
-		blocksRead++
+
+		if fullBlock.L2BlockNumber > 3325 {
+			log.Info("readAllFullL2BlocksToChannel - override hit", "fullBlock.L2BlockNumber", fullBlock.L2BlockNumber)
+			return entriesRead, bookmarks, nil
+		}
+
 		l2BlockChan <- *fullBlock
 		entriesRead += er
 	}

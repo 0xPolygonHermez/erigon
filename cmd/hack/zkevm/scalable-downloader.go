@@ -208,7 +208,7 @@ func DownloadScalableHashes(ctxInput context.Context, rpcEndpoint, logPrefix, fi
 
 	if missingCount == 0 {
 		log.Info(fmt.Sprintf("[%s] No missing RPC Roots to download", logPrefix))
-		return nil
+		return hashResults
 	}
 
 	var doneCh = make(chan struct{})
