@@ -2,16 +2,18 @@ package hermez_db
 
 import (
 	"fmt"
+
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
 )
 
-const L1VERIFICATIONS = "hermez_l1Verifications" // l1blockno, batchno -> l1txhash
-const L1SEQUENCES = "hermez_l1Sequences"         // l1blockno, batchno -> l1txhash
-const FORKIDS = "hermez_forkIds"                 // batchNo -> forkId
-const BLOCKBATCHES = "hermez_blockBatches"       // l2blockno -> batchno
+const L1VERIFICATIONS = "hermez_l1Verifications"   // l1blockno, batchno -> l1txhash
+const L1SEQUENCES = "hermez_l1Sequences"           // l1blockno, batchno -> l1txhash
+const FORKIDS = "hermez_forkIds"                   // batchNo -> forkId
+const BLOCKBATCHES = "hermez_blockBatches"         // l2blockno -> batchno
+const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots" // l2blockno -> GER
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -42,6 +44,10 @@ func (db *HermezDb) CreateBuckets() error {
 		return err
 	}
 	err = db.tx.CreateBucket(BLOCKBATCHES)
+	if err != nil {
+		return err
+	}
+	err = db.tx.CreateBucket(GLOBAL_EXIT_ROOTS)
 	if err != nil {
 		return err
 	}
@@ -231,6 +237,30 @@ func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common
 
 func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
 	return db.tx.Put(BLOCKBATCHES, UintBytes(l2BlockNo), UintBytes(batchNo))
+}
+
+func (db *HermezDb) WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) error {
+	return db.tx.Put(GLOBAL_EXIT_ROOTS, UintBytes(l2BlockNo), ger.Bytes())
+}
+
+func (db *HermezDb) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error) {
+	data, err := db.tx.GetOne(GLOBAL_EXIT_ROOTS, UintBytes(l2BlockNo))
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return common.BytesToHash(data), nil
+}
+
+func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) error {
+	for i := fromBlockNum; i <= toBlockNum; i++ {
+		err := db.tx.Delete(GLOBAL_EXIT_ROOTS, UintBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (db *HermezDb) DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error {

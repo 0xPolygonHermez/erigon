@@ -135,11 +135,10 @@ func DecodeTxs(txsData []byte, forkID uint64) ([]types.Transaction, []byte, []ui
 	return txs, txsData, efficiencyPercentages, nil
 }
 
-func DecodeTx(encodedTx []byte, forkId uint16) (types.Transaction, uint8, error) {
-	efficiencyPercentage := uint8(0)
+func DecodeTx(encodedTx []byte, efficiencyPercentage byte, forkId uint16) (types.Transaction, uint8, error) {
+	// efficiencyPercentage := uint8(0)
 	if forkId >= forkID5 {
-		efficiencyPercentage = encodedTx[len(encodedTx)-1:][0]
-		encodedTx = encodedTx[:len(encodedTx)-1]
+		encodedTx = append(encodedTx, efficiencyPercentage)
 	}
 
 	tx, err := types.DecodeTransaction(rlp.NewStream(bytes.NewReader(encodedTx), 0))

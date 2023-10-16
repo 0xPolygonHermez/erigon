@@ -22,6 +22,9 @@ import (
 	"strings"
 
 	"context"
+	"math/big"
+	"time"
+
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
@@ -30,8 +33,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"
-	"math/big"
-	"time"
 )
 
 type ZkInterHashesCfg struct {
@@ -422,12 +423,14 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg ZkInterHashe
 		}
 	}()
 
+	// storageDump := make(map[string]map[string]string)
 	err = psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
 		progCt++
 		progress <- progCt
 		var err error
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
+				// storageDump[addr.String()] = as
 				keys, err = processAccount(eridb, a, as, inc, psr, addr, keys)
 				if err != nil {
 					return err
@@ -465,6 +468,12 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg ZkInterHashe
 	if err != nil {
 		return trie.EmptyRoot, err
 	}
+
+	// storageDump[addr.String()] = as
+	// json, _ := json.Marshal(storageDump)
+	// if err = os.WriteFile("addrDump.json", json, 0644); err != nil {
+	// 	return trie.EmptyRoot, err
+	// }
 
 	// process the final account
 	keys, err = processAccount(eridb, a, as, inc, psr, addr, keys)
@@ -520,7 +529,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg ZkInterHashe
 		}
 
 		if hash != *sr {
-			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
+			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x, from rpc: %x", logPrefix, hash, expectedRootHash, *sr))
 			return hash, nil
 		}
 
@@ -546,7 +555,7 @@ func stateRootByTxNo(txNo *big.Int) (*libcommon.Hash, error) {
 		return nil, err
 	}
 
-	response, err := http.Post("https://zkevm-rpc.com", "application/json", bytes.NewBuffer(requestBytes))
+	response, err := http.Post("https://rpc.internal.zkevm-test.net/", "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
 		return nil, err
 	}

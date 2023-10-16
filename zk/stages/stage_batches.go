@@ -34,6 +34,9 @@ type HermezDb interface {
 	WriteBlockBatch(l2BlockNumber uint64, batchNumber uint64) error
 	DeleteForkIds(fromBatchNum, toBatchNum uint64) error
 	DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error
+	WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) error
+	DeleteBlockGlobalExitRoots(fromBatchNum, toBatchNum uint64) error
+	GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error)
 }
 
 type BatchesCfg struct {
@@ -142,6 +145,7 @@ func SpawnStageBatches(
 	blocksWritten := uint64(0)
 
 	writeThreadFinished := false
+	lastGer := common.Hash{}
 	for {
 		// get block
 		// if no blocks available shold block
@@ -151,6 +155,24 @@ func SpawnStageBatches(
 		select {
 		case a := <-l2BlockChan:
 			l2Block = a // writes header, body, forkId and blockBatch
+
+			zeroHash := common.Hash{}
+			if l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 {
+				if lastGer == zeroHash {
+					prevGer, err := hermezDb.GetBlockGlobalExitRoot(l2Block.L2BlockNumber - 1)
+					if err != nil {
+						return fmt.Errorf("failed to get previous GER, %w", err)
+					}
+					if prevGer == zeroHash {
+						return fmt.Errorf("there is no previous GER saved")
+					}
+
+					lastGer = prevGer
+				}
+
+				l2Block.GlobalExitRoot = lastGer
+			}
+
 			if err := writeL2Block(eriDb, hermezDb, &l2Block); err != nil {
 				return fmt.Errorf("writeL2Block error: %v", err)
 			}
@@ -245,6 +267,7 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 	eriDb.DeleteHeaders(fromBlock)
 	hermezDb.DeleteForkIds(fromBlock, toBlock)
 	hermezDb.DeleteBlockBatches(fromBlock, toBlock)
+	hermezDb.DeleteBlockGlobalExitRoots(fromBlock, toBlock)
 
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", fromBlock)
@@ -308,7 +331,7 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 	eriDb.DeleteHeaders(0)
 	hermezDb.DeleteForkIds(0, toBlock)
 	hermezDb.DeleteBlockBatches(0, toBlock)
-
+	hermezDb.DeleteBlockGlobalExitRoots(0, toBlock)
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "stageProgress", 0)
 	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, 0); err != nil {
@@ -332,9 +355,13 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 // writes header, body, forkId and blockBatch
 func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block) error {
 	bn := new(big.Int).SetUint64(l2Block.L2BlockNumber)
-	h, err := eriDb.WriteHeader(bn, l2Block.GlobalExitRoot, l2Block.L2Blockhash, l2Block.Coinbase, uint64(l2Block.Timestamp))
+	h, err := eriDb.WriteHeader(bn, l2Block.StateRoot, l2Block.L2Blockhash, l2Block.Coinbase, uint64(l2Block.Timestamp))
 	if err != nil {
 		return fmt.Errorf("write header error: %v", err)
+	}
+
+	if err := hermezDb.WriteBlockGlobalExitRoot(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
+		return fmt.Errorf("write block global exit root error: %v", err)
 	}
 
 	// if len(l2Block.L2Txs) == 0 {
@@ -344,7 +371,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 
 	txs := []ethTypes.Transaction{}
 	for _, transaction := range l2Block.L2Txs {
-		ltx, _, err := txtype.DecodeTx(transaction.Encoded, l2Block.ForkId)
+		ltx, _, err := txtype.DecodeTx(transaction.Encoded, transaction.EffectiveGasPricePercentage, l2Block.ForkId)
 		if err != nil {
 			return fmt.Errorf("decode tx error: %v", err)
 		}
