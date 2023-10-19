@@ -225,7 +225,11 @@ func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockCha
 		}
 		bookmarks[fullBlock.L2BlockNumber] = bookmark
 
-		if fullBlock.L2BlockNumber > 3325 {
+		//if fullBlock.L2BlockNumber == 3299 {
+		//	fmt.Println("block")
+		//}
+		//
+		if fullBlock.L2BlockNumber > 3300 {
 			log.Info("readAllFullL2BlocksToChannel - override hit", "fullBlock.L2BlockNumber", fullBlock.L2BlockNumber)
 			return entriesRead, bookmarks, nil
 		}

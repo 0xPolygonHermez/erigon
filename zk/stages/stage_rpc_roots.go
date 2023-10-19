@@ -29,7 +29,6 @@ type RpcRootsCfg struct {
 
 func StageRpcRootsCfg(db kv.RwDB, chainConfig *chain.Config, rpcEndpoint string, isTestnet bool) RpcRootsCfg {
 	return RpcRootsCfg{db: db, chainConfig: chainConfig, rpcEndpoint: rpcEndpoint, isTestnet: isTestnet}
-
 }
 
 func SpawnStageRpcRoots(

@@ -359,6 +359,10 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 		return fmt.Errorf("write header error: %v", err)
 	}
 
+	if l2Block.L2BlockNumber >= 3290 {
+		fmt.Println("Block")
+	}
+
 	if err := hermezDb.WriteBlockGlobalExitRoot(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
 		return fmt.Errorf("write block global exit root error: %v", err)
 	}

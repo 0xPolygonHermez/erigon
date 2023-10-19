@@ -678,10 +678,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		rpcEndpoint := "https://zkevm-rpc.com"
 		// hermez testnet endpoints
 		if testnet {
-			zkEthMainnetRpcUrl = "https://rpc.eu-north-2.gateway.fm/v4/ethereum/non-archival/goerli?apiKey=lyREQ4AN6KS8wbPRL2S0GJpB6GoEbkmr.5sMHNNVF9OH6EdcT"
+			zkEthMainnetRpcUrl = "https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/goerli?apiKey=2LVJmsyRvOfhxFutspKT0wnTVyMCYc4L.swK5wk5pCrfipEg5"
 			firstL1Block = uint64(8577775)
 			rpcEndpoint = "https://rpc.internal.zkevm-test.net"
-
 		}
 
 		if devnet {

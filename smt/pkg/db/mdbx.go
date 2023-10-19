@@ -1,13 +1,15 @@
 package db
 
 import (
-	"fmt"
 	"math/big"
 
+	"fmt"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/olddb"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/log/v3"
+	"strings"
 )
 
 type SmtDbTx interface {
@@ -182,21 +184,45 @@ func (m *EriDb) PrintDb() {
 	}
 }
 
-func (m *EriDb) GetDb() map[string]string {
-	db := make(map[string]string)
+func (m *EriDb) GetDb() map[string][]string {
+	transformedDb := make(map[string][]string)
 
 	err := m.tx.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
-		kStr := string(k)
-		vStr := string(v)
+		hk := string(k)
 
-		db[kStr] = vStr
+		vConc := utils.ConvertHexToBigInt(string(v))
+		val := utils.ScalarToNodeValue(vConc)
 
+		truncationLength := 12
+
+		allFirst8PaddedWithZeros := true
+		for i := 0; i < 8; i++ {
+			if !strings.HasPrefix(fmt.Sprintf("%016s", val[i].Text(16)), "00000000") {
+				allFirst8PaddedWithZeros = false
+				break
+			}
+		}
+
+		if allFirst8PaddedWithZeros {
+			truncationLength = 8
+		}
+
+		outputArr := make([]string, truncationLength)
+		for i := 0; i < truncationLength; i++ {
+			if i < len(val) {
+				outputArr[i] = fmt.Sprintf("%016s", val[i].Text(16))
+			} else {
+				outputArr[i] = "0000000000000000"
+			}
+		}
+
+		transformedDb[hk] = outputArr
 		return nil
 	})
 
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Error(err.Error())
 	}
 
-	return db
+	return transformedDb
 }

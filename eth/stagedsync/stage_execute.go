@@ -244,6 +244,10 @@ func writeGlobalExitRoot(stateReader state.StateReader, stateWriter state.Writer
 		return err
 	}
 
+	if header.Number.Uint64() >= 3290 {
+		fmt.Println("block")
+	}
+
 	empty := common.Hash{}
 	if ger == empty {
 		return errors.New("empty Global Exit Root")

@@ -533,6 +533,18 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg ZkInterHashe
 	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
 	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
 
+	toPrint := eridb.GetDb()
+	op, err := json.Marshal(toPrint)
+	if err != nil {
+		fmt.Println(err)
+	}
+	//fmt.Println(string(op))
+	// write to file
+	err = ioutil.WriteFile("db.json", op, 0644)
+	if err != nil {
+		fmt.Println(err)
+	}
+
 	if cfg.checkRoot && hash != *expectedRootHash {
 		// [zkevm] - check against the rpc get block by number
 		// get block number
