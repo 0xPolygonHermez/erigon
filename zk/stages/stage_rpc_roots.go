@@ -77,7 +77,7 @@ func SpawnStageRpcRoots(
 	if cfg.isTestnet {
 		rpcFileName = "zkevm-roots-testnet.json"
 	}
-	log.Info(fmt.Sprintf("[%s] Starting to wodnload roots", logPrefix), "savedTxNo", prog, "highestTxNo", txNo)
+	log.Info(fmt.Sprintf("[%s] Starting to download roots", logPrefix), "savedTxNo", prog, "highestTxNo", txNo)
 	if !firstCycle || prog != 0 {
 		res := scalable.DownloadScalableHashes(ctx, logPrefix, cfg.rpcEndpoint, rpcFileName, int64(txNo), false, int64(prog))
 

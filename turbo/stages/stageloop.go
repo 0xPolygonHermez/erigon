@@ -81,6 +81,20 @@ func StageLoop(
 ) {
 	defer close(waitForDone)
 	initialCycle := true
+	trw, err := db.BeginRw(ctx)
+	if err != nil {
+		log.Error("Failed to start transaction to add new zkevm batch tables", "err", err)
+		return
+	}
+	err = trw.CreateBucket("HermezRpcRoot")
+	if err != nil {
+		log.Error("Failed to create HermezRpcRoot bucket", "err", err)
+		return
+	}
+	if err := trw.Commit(); err != nil {
+		log.Error("Failed to commit transaction to add new zkevm batch tables", "err", err)
+		return
+	}
 
 	for {
 		start := time.Now()

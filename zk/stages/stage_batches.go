@@ -13,9 +13,11 @@ import (
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
+
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -32,11 +34,17 @@ type ErigonDb interface {
 type HermezDb interface {
 	WriteForkId(batchNumber uint64, forkId uint64) error
 	WriteBlockBatch(l2BlockNumber uint64, batchNumber uint64) error
+
 	DeleteForkIds(fromBatchNum, toBatchNum uint64) error
 	DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error
+
 	WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) error
 	DeleteBlockGlobalExitRoots(fromBatchNum, toBatchNum uint64) error
 	GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error)
+
+	WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error
+	GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error)
+	DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) error
 }
 
 type BatchesCfg struct {
@@ -84,6 +92,7 @@ func SpawnStageBatches(
 	}
 
 	l2BlockChan := make(chan types.FullL2Block, 100000)
+	gerUpdatesChan := make(chan types.GerUpdate, 1000)
 	entriesReadChan := make(chan uint64, 2)
 	bookmarksChan := make(chan map[uint64][]byte, 2)
 	errChan := make(chan error, 2)
@@ -104,7 +113,7 @@ func SpawnStageBatches(
 		defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
 
 		// this will download all blocks from datastream and push them in a channel
-		entriesRead, bookmarks, err := datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, bookmark)
+		entriesRead, bookmarks, err := datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, gerUpdatesChan, bookmark)
 
 		entriesReadChan <- entriesRead
 		bookmarksChan <- bookmarks
@@ -153,8 +162,8 @@ func SpawnStageBatches(
 		// if both download routine stopped and channel empty - stop loop
 		var l2Block types.FullL2Block
 		select {
-		case a := <-l2BlockChan:
-			l2Block = a // writes header, body, forkId and blockBatch
+		case l2BlockIncomming := <-l2BlockChan:
+			l2Block = l2BlockIncomming // writes header, body, forkId and blockBatch
 			zeroHash := common.Hash{}
 			if l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 {
 				if lastGer == zeroHash {
@@ -183,6 +192,10 @@ func SpawnStageBatches(
 			lastBlockHeight = l2Block.L2BlockNumber
 			blocksWritten++
 			l2BlockWrittenChan <- blocksWritten
+		case gerUpdate := <-gerUpdatesChan:
+			if err := hermezDb.WriteBatchGBatchGlobalExitRoot(gerUpdate.BatchNumber, gerUpdate); err != nil {
+				return fmt.Errorf("write batch global exit root error: %v", err)
+			}
 		case err := <-errChan:
 			if err != nil {
 				return fmt.Errorf("l2blocks download routine error: %v", err)

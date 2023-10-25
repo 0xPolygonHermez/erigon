@@ -50,6 +50,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
+	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 )
 
 const (
@@ -147,6 +148,7 @@ func executeBlock(
 	header *types.Header,
 	tx kv.RwTx,
 	batch ethdb.Database,
+	gers []*dstypes.GerUpdate,
 	cfg ExecuteBlockCfg,
 	vmConfig vm.Config, // emit copy, because will modify it
 	writeChangesets bool,
@@ -156,13 +158,10 @@ func executeBlock(
 	stateStream bool,
 ) error {
 	blockNum := block.NumberU64()
+
 	stateReader, stateWriter, err := newStateReaderWriter(batch, tx, block, writeChangesets, cfg.accumulator, initialCycle, stateStream)
 	if err != nil {
 		return err
-	}
-	hermezDb, err := hermez_db.NewHermezDb(tx)
-	if err != nil {
-		return fmt.Errorf("failed to create hermezDb: %v", err)
 	}
 
 	// [zkevm] - write the global exit root inside the batch so we can unwind it
@@ -174,9 +173,11 @@ func executeBlock(
 	// 	return err
 	// }
 
-	// [zkevm] - add GER if there is one for this batch
-	if err := writeGlobalExitRoot(stateReader, stateWriter, hermezDb, *header); err != nil {
-		return err
+	for _, ger := range gers {
+		// [zkevm] - add GER if there is one for this batch
+		if err := writeGlobalExitRoot(stateReader, stateWriter, ger.GlobalExitRoot, ger.Timestamp); err != nil {
+			return err
+		}
 	}
 
 	// [zkevm] - finished writing global exit root to state
@@ -238,16 +239,7 @@ func executeBlock(
 	return nil
 }
 
-func writeGlobalExitRoot(stateReader state.StateReader, stateWriter state.WriterWithChangeSets, hermezDb HermezDb, header types.Header) error {
-	ger, err := hermezDb.GetBlockGlobalExitRoot(header.Number.Uint64())
-	if err != nil {
-		return err
-	}
-
-	if header.Number.Uint64() >= 3290 {
-		fmt.Println("block")
-	}
-
+func writeGlobalExitRoot(stateReader state.StateReader, stateWriter state.WriterWithChangeSets, ger common.Hash, timestamp uint64) error {
 	empty := common.Hash{}
 	if ger == empty {
 		return errors.New("empty Global Exit Root")
@@ -259,7 +251,7 @@ func writeGlobalExitRoot(stateReader state.StateReader, stateWriter state.Writer
 		return errors.New("AddGlobalExitRoot: overflow")
 	}
 
-	exitBig := new(big.Int).SetInt64(int64(header.Time))
+	exitBig := new(big.Int).SetInt64(int64(timestamp))
 	headerTime, overflow := uint256.FromBig(exitBig)
 	if overflow {
 		return errors.New("AddGlobalExitRoot: overflow")
@@ -503,6 +495,11 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 
 	var stoppedErr error
 
+	hermezDb, err := hermez_db.NewHermezDb(tx)
+	if err != nil {
+		return fmt.Errorf("failed to create hermezDb: %v", err)
+	}
+
 	var batch ethdb.DbWithPendingMutations
 	// state is stored through ethdb batches
 	batch = olddb.NewHashBatch(tx, quit, cfg.dirs.Tmp)
@@ -512,12 +509,34 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 	}()
 
 Loop:
-	for blockNum := stageProgress + 1; blockNum <= prevStageProgress; blockNum++ {
+	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		stageProgress = blockNum
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}
+
+		//[zkevm] - get the last batch number so we can check for empty batches in between it and the new one
+		lastBatchInserted, err := hermezDb.GetBatchNoByL2Block(stageProgress - 1)
+		if err != nil {
+			return fmt.Errorf("failed to get last batch inserted: %v", err)
+		}
+
+		// write batches between last block and this if they exist
+		currentBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
+		if err != nil {
+			return err
+		}
+
+		//[zkevm] - limit by batch
+		limitBatch := uint64(32095)
+		if currentBatch >= limitBatch {
+			log.Info(fmt.Sprintf("[%s] Limited to batch %d", logPrefix, limitBatch))
+
+			break
+		}
+
+		gers := []*dstypes.GerUpdate{}
 
 		blockHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 		if err != nil {
@@ -541,13 +560,36 @@ Loop:
 			continue
 		}
 
+		//[zkevm] get batches between last block and this one
+		// plus this blocks ger
+		gersInBetween, err := hermezDb.GetBatchGlobalExitRoots(lastBatchInserted, currentBatch)
+		if err != nil {
+			return err
+		}
+
+		if gersInBetween != nil {
+			gers = append(gers, gersInBetween...)
+		}
+
+		blockGer, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
+		if err != nil {
+			return err
+		}
+
+		blockGerUpdate := dstypes.GerUpdate{
+			GlobalExitRoot: blockGer,
+			Timestamp:      header.Time,
+		}
+		gers = append(gers, &blockGerUpdate)
+		//[zkevm] finished getting gers
+
 		lastLogTx += uint64(block.Transactions().Len())
 
 		// Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		if err = executeBlock(block, header, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream); err != nil {
+		if err = executeBlock(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {
@@ -561,7 +603,7 @@ Loop:
 			break Loop
 		}
 
-		shouldUpdateProgress := false
+		shouldUpdateProgress := batch.BatchSize() >= int(cfg.batchSize)
 		if shouldUpdateProgress {
 			log.Info("Committed State", "gas reached", currentStateGas, "gasTarget", gasState)
 			currentStateGas = 0
@@ -583,6 +625,10 @@ Loop:
 				defer tx.Rollback()
 			}
 			batch = olddb.NewHashBatch(tx, quit, cfg.dirs.Tmp)
+			hermezDb, err = hermez_db.NewHermezDb(tx)
+			if err != nil {
+				return fmt.Errorf("failed to create hermezDb: %v", err)
+			}
 		}
 
 		gas = gas + block.GasUsed()
@@ -610,6 +656,8 @@ Loop:
 	}
 
 	if !useExternalTx {
+		log.Info(fmt.Sprintf("[%s] Commiting DB transaction...", logPrefix), "block", stageProgress)
+
 		if err = tx.Commit(); err != nil {
 			return err
 		}

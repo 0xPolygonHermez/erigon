@@ -5,15 +5,17 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
 )
 
-const L1VERIFICATIONS = "hermez_l1Verifications"   // l1blockno, batchno -> l1txhash
-const L1SEQUENCES = "hermez_l1Sequences"           // l1blockno, batchno -> l1txhash
-const FORKIDS = "hermez_forkIds"                   // batchNo -> forkId
-const BLOCKBATCHES = "hermez_blockBatches"         // l2blockno -> batchno
-const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots" // l2blockno -> GER
+const L1VERIFICATIONS = "hermez_l1Verifications"                   // l1blockno, batchno -> l1txhash
+const L1SEQUENCES = "hermez_l1Sequences"                           // l1blockno, batchno -> l1txhash
+const FORKIDS = "hermez_forkIds"                                   // batchNo -> forkId
+const BLOCKBATCHES = "hermez_blockBatches"                         // l2blockno -> batchno
+const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"                 // l2blockno -> GER
+const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // l2blockno -> GER
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -51,6 +53,10 @@ func (db *HermezDb) CreateBuckets() error {
 	if err != nil {
 		return err
 	}
+	err = db.tx.CreateBucket(GLOBAL_EXIT_ROOTS_BATCHES)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -59,6 +65,7 @@ func (db *HermezDb) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer c.Close()
 
 	k, v, err := c.Seek(UintBytes(l2BlockNo))
 	if err != nil {
@@ -82,6 +89,7 @@ func (db *HermezDb) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	var blockNos []uint64
 	var k, v []byte
@@ -119,6 +127,7 @@ func (db *HermezDb) getByL1Block(table string, l1BlockNo uint64) (*types.L1Batch
 	if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	var k, v []byte
 	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
@@ -156,6 +165,7 @@ func (db *HermezDb) getByBatchNo(table string, batchNo uint64) (*types.L1BatchIn
 	if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	var k, v []byte
 	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
@@ -201,6 +211,7 @@ func (db *HermezDb) getLatest(table string) (*types.L1BatchInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	k, v, err := c.Last()
 	if err != nil {
@@ -252,6 +263,48 @@ func (db *HermezDb) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error
 	return common.BytesToHash(data), nil
 }
 
+func (db *HermezDb) WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error {
+	return db.tx.Put(GLOBAL_EXIT_ROOTS_BATCHES, UintBytes(batchNumber), ger.EncodeToBytes())
+}
+
+func (db *HermezDb) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error) {
+	c, err := db.tx.Cursor(GLOBAL_EXIT_ROOTS_BATCHES)
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+
+	var gers []*dstypes.GerUpdate
+	var k, v []byte
+
+	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			break
+		}
+		currentBatchNo := BytesUint(k)
+		if currentBatchNo >= fromBatchNum && currentBatchNo <= toBatchNum {
+			gerUpdate, err := dstypes.DecodeGerUpdate(v)
+			if err != nil {
+				return nil, err
+			}
+			gers = append(gers, gerUpdate)
+		}
+	}
+
+	return gers, err
+}
+
+func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) error {
+	for i := fromBatchNum; i <= toBatchNum; i++ {
+		err := db.tx.Delete(GLOBAL_EXIT_ROOTS_BATCHES, UintBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) error {
 	for i := fromBlockNum; i <= toBlockNum; i++ {
 		err := db.tx.Delete(GLOBAL_EXIT_ROOTS, UintBytes(i))
@@ -279,6 +332,7 @@ func (db *HermezDb) GetForkId(batchNo uint64) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer c.Close()
 
 	var forkId uint64 = 0
 	var k, v []byte

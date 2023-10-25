@@ -86,7 +86,7 @@ func validateAndFillMaxStack(jt *JumpTable) {
 func newMordorInstructionSet() JumpTable {
 	instructionSet := newRohanInstructionSet()
 
-	instructionSet[CALLDATACOPY].execute = opCallDataCopy
+	instructionSet[CALLDATACOPY].execute = opCallDataCopyFixed
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet

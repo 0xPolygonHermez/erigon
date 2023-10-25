@@ -12,7 +12,7 @@ import (
 )
 
 type IVerificationsSyncer interface {
-	GetVerifications(startBlock uint64) (verifications []types.L1BatchInfo, highestL1Block uint64, err error)
+	GetVerifications(logPrefix string, startBlock uint64) (verifications []types.L1BatchInfo, highestL1Block uint64, err error)
 }
 
 type L1VerificationsCfg struct {
@@ -71,10 +71,15 @@ func SpawnStageL1Verifications(
 	}
 
 	// get as many verifications as we can from the network
-	verifications, highestL1Block, err := cfg.syncer.GetVerifications(l1BlockProgress + 1)
+	log.Info(fmt.Sprintf("[%s] Downloading verifications from L1...", logPrefix))
+
+	verifications, highestL1Block, err := cfg.syncer.GetVerifications(logPrefix, l1BlockProgress+1)
 	if err != nil {
 		return fmt.Errorf("failed to get l1 verifications from network, %w", err)
 	}
+
+	log.Info(fmt.Sprintf("[%s] L1 verifications downlaoded", logPrefix), "count", len(verifications))
+	log.Info(fmt.Sprintf("[%s] Saving verifications...", logPrefix))
 
 	highestL2BatchNo := uint64(0)
 	// write verifications to the hermezdb
@@ -84,14 +89,20 @@ func SpawnStageL1Verifications(
 		}
 		err = hermezDb.WriteVerification(verification.L1BlockNo, verification.BatchNo, verification.L1TxHash, verification.StateRoot)
 		if err != nil {
-			return fmt.Errorf("failed to write verification for block %s, %w", verification.L1BlockNo, err)
+			return fmt.Errorf("failed to write verification for block %d, %w", verification.L1BlockNo, err)
 		}
 	}
+	log.Info(fmt.Sprintf("[%s] Finished saving verifications to DB.", logPrefix))
 
 	// update stage progress - highest l1 block containing a verification
 	err = sync_stages.SaveStageProgress(tx, s.ID, highestL1Block)
+	if err != nil {
+		return fmt.Errorf("failed to save stage progress, %w", err)
+	}
 	err = sync_stages.SaveStageProgress(tx, sync_stages.L1VerificationsBatchNo, highestL2BatchNo)
-
+	if err != nil {
+		return fmt.Errorf("failed to save stage progress, %w", err)
+	}
 	// TODO: check the latest interhashed block and compare the stateroot if we have one for it
 
 	if firstCycle {

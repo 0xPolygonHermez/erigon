@@ -3,6 +3,7 @@ package stages
 import (
 	"bytes"
 	"fmt"
+	"os"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
@@ -441,14 +442,27 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg ZkInterHashe
 		}
 	}()
 
-	// storageDump := make(map[string]map[string]string)
+	type AccountDump struct {
+		Balance  string
+		Nonce    uint64
+		Storage  map[string]string
+		Codehash libcommon.Hash
+	}
+
+	storageDump := make(map[string]AccountDump)
 	err = psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
 		progCt++
 		progress <- progCt
 		var err error
 		if len(k) == 20 {
 			if a != nil { // don't run process on first loop for first account (or it will miss collecting storage)
-				// storageDump[addr.String()] = as
+				storageDump[addr.String()] = AccountDump{
+					Balance:  a.Balance.Hex(),
+					Nonce:    a.Nonce,
+					Storage:  as,
+					Codehash: a.CodeHash,
+				}
+
 				keys, err = processAccount(eridb, a, as, inc, psr, addr, keys)
 				if err != nil {
 					return err
@@ -487,11 +501,17 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg ZkInterHashe
 		return trie.EmptyRoot, err
 	}
 
-	// storageDump[addr.String()] = as
-	// json, _ := json.Marshal(storageDump)
-	// if err = os.WriteFile("addrDump.json", json, 0644); err != nil {
-	// 	return trie.EmptyRoot, err
-	// }
+	storageDump[addr.String()] = AccountDump{
+		Balance:  a.Balance.Hex(),
+		Nonce:    a.Nonce,
+		Storage:  as,
+		Codehash: a.CodeHash,
+	}
+
+	json, _ := json.Marshal(storageDump)
+	if err = os.WriteFile("addrDump.json", json, 0644); err != nil {
+		return trie.EmptyRoot, err
+	}
 
 	// process the final account
 	keys, err = processAccount(eridb, a, as, inc, psr, addr, keys)

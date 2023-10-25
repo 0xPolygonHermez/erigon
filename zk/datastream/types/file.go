@@ -8,11 +8,8 @@ import (
 type EntryType uint32
 
 const (
-	FileEntryMinSize    uint32    = 17 // 1+4+4+8
-	BlockStartEntryType EntryType = 1
-	TxEntryType         EntryType = 2
-	BlockEndEntryType   EntryType = 3
-	BookmarkEntryType   EntryType = 176
+	FileEntryMinSize  uint32    = 17 // 1+4+4+8
+	BookmarkEntryType EntryType = 176
 )
 
 type FileEntry struct {
@@ -24,19 +21,23 @@ type FileEntry struct {
 }
 
 func (f *FileEntry) IsBlockStart() bool {
-	return f.EntryType == BlockStartEntryType
+	return f.EntryType == EntryTypeStartL2Block
 }
 
 func (f *FileEntry) IsTx() bool {
-	return f.EntryType == TxEntryType
+	return f.EntryType == EntryTypeL2Tx
 }
 
 func (f *FileEntry) IsBlockEnd() bool {
-	return f.EntryType == BlockEndEntryType
+	return f.EntryType == EntryTypeEndL2Block
 }
 
 func (f *FileEntry) IsBookmark() bool {
 	return f.EntryType == BookmarkEntryType
+}
+
+func (f *FileEntry) IsGerUpdate() bool {
+	return f.EntryType == EntryTypeGerUpdate
 }
 
 // Decode/convert from binary bytes slice to FileEntry type

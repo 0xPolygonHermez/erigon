@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"sort"
 	"sync"
@@ -39,7 +40,7 @@ func NewSyncer(etherMan IEtherman, l1ContractAddr common.Address) *Syncer {
 	}
 }
 
-func (s *Syncer) GetVerifications(startBlock uint64) (verifications []types.L1BatchInfo, highestL1Block uint64, err error) {
+func (s *Syncer) GetVerifications(logPrefix string, startBlock uint64) (verifications []types.L1BatchInfo, highestL1Block uint64, err error) {
 	log.Debug("GetVerifications", "startBlock", startBlock)
 
 	latestBlock, err := s.em.BlockByNumber(context.Background(), nil)
@@ -47,12 +48,43 @@ func (s *Syncer) GetVerifications(startBlock uint64) (verifications []types.L1Ba
 		return nil, 0, err
 	}
 	latestL1Block := latestBlock.NumberU64()
+	log.Info(fmt.Sprintf("[%s] Latest block: %d", logPrefix, latestL1Block))
 
 	eventTopic := common.HexToHash("0xcb339b570a7f0b25afa7333371ff11192092a0aeace12b671f4c212f2815c6fe")
 
 	numWorkers := 5
 	rateLimit := rate.Limit(2)
 	limiter := rate.NewLimiter(rateLimit, 1)
+
+	// progress printer
+	stateCt := latestL1Block - startBlock
+	progress := make(chan uint64)
+	ctDone := make(chan bool)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		var pc uint64
+		var pct uint64
+
+		for {
+			select {
+			case newPc := <-progress:
+				pc += newPc
+				if pc > stateCt {
+					return
+				}
+				if stateCt > 0 {
+					pct = (pc * 100) / stateCt
+				}
+			case <-ticker.C:
+				log.Info(fmt.Sprintf("[%s] Progress: %d/%d (%d%%)", logPrefix, pc, stateCt, pct))
+			case <-ctDone:
+				return
+			}
+		}
+	}()
 
 	var wg sync.WaitGroup
 
@@ -65,7 +97,7 @@ func (s *Syncer) GetVerifications(startBlock uint64) (verifications []types.L1Ba
 
 	for w := 1; w <= numWorkers; w++ {
 		wg.Add(1)
-		go worker(w, jobs, results, s.em, s.l1ContractAddress, eventTopic, limiter, &wg)
+		go worker(w, jobs, results, progress, s.em, s.l1ContractAddress, eventTopic, limiter, &wg)
 	}
 
 	verifications = []types.L1BatchInfo{}
@@ -90,6 +122,9 @@ func (s *Syncer) GetVerifications(startBlock uint64) (verifications []types.L1Ba
 	wg.Wait()
 	close(results)
 
+	close(progress)
+	close(ctDone)
+
 	sort.Slice(verifications, func(i, j int) bool {
 		return verifications[i].L1BlockNo < verifications[j].L1BlockNo
 	})
@@ -101,10 +136,10 @@ func (s *Syncer) GetVerifications(startBlock uint64) (verifications []types.L1Ba
 	// get the highest l1 block with verification from the slice
 	highestL1Block = verifications[len(verifications)-1].L1BlockNo
 
-	return verifications, latestL1Block, nil
+	return verifications, highestL1Block, nil
 }
 
-func worker(id int, jobs <-chan *big.Int, results chan<- Result, client IEtherman, contractAddress common.Address, eventTopic common.Hash, limiter *rate.Limiter, wg *sync.WaitGroup) {
+func worker(id int, jobs <-chan *big.Int, results chan<- Result, progress chan<- uint64, client IEtherman, contractAddress common.Address, eventTopic common.Hash, limiter *rate.Limiter, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for startBlock := range jobs {
@@ -148,5 +183,6 @@ func worker(id int, jobs <-chan *big.Int, results chan<- Result, client IEtherma
 
 			results <- res
 		}
+		progress <- 20000
 	}
 }

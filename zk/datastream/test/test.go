@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zk/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/test/utils"
@@ -27,34 +28,39 @@ func main() {
 		panic(err)
 	}
 
-	// Read all entries from server 38006
-	blocksRead, bookmarks, entriesReadAmount, err := c.ReadEntries(0, 1)
+	// Read all entries from server
+	blocksRead, _, _, entriesReadAmount, err := c.ReadEntries(0, 3301)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(bookmarks)
 	fmt.Println("Entries read amount: ", entriesReadAmount)
 	fmt.Println("Blocks read amount: ", len(*blocksRead))
 
+	lastGer := common.Hash{}
 	for i, dsBlock := range *blocksRead {
 		if i == 0 {
 			continue
 		}
-		log.Info("Block number: ", dsBlock.L2BlockNumber)
+		// log.Info("Block number: ", dsBlock.L2BlockNumber)
 		rpcBlock, err := utils.GetBlockByHash(dsBlock.L2Blockhash.String())
 		if err != nil {
 			panic(err)
 		}
 
-		match := matchBlocks(dsBlock, rpcBlock)
+		match := matchBlocks(dsBlock, rpcBlock, lastGer)
 		if !match {
 			log.Error("Blocks don't match")
 			return
 		}
+		fmt.Println(dsBlock.GlobalExitRoot.Hex())
+		if lastGer.Hex() != dsBlock.GlobalExitRoot.Hex() {
+			fmt.Println("New get!")
+			lastGer = dsBlock.GlobalExitRoot
+		}
 	}
 }
 
-func matchBlocks(dsBlock types.FullL2Block, rpcBlock utils.Result) bool {
+func matchBlocks(dsBlock types.FullL2Block, rpcBlock utils.Result, lastGer common.Hash) bool {
 	decimal_num, err := strconv.ParseUint(rpcBlock.Number[2:], 16, 64)
 	if err != nil {
 		log.Errorf("Error parsing block number. Error: %v, BlockNumber: %d, rpcBlockNumber: %d", err, dsBlock.L2BlockNumber, rpcBlock.Number)
@@ -87,6 +93,15 @@ func matchBlocks(dsBlock types.FullL2Block, rpcBlock utils.Result) bool {
 		return false
 	}
 
+	bloxkNumHex := fmt.Sprintf("%x", dsBlock.L2BlockNumber)
+	txHex := fmt.Sprintf("%x", dsBlock.Timestamp)
+
+	if lastGer.Hex() != dsBlock.GlobalExitRoot.Hex() {
+		if err := utils.CompareValuesString(bloxkNumHex, txHex, dsBlock.GlobalExitRoot); err != nil {
+			log.Error("Error comparing values: ", err)
+			return false
+		}
+	}
 	// for i, tx := range dsBlock.L2Txs {
 	// 	if tx..String() != rpcBlock.Transactions[i] {
 	// 		log.Error("Block txs don't match", "blockNumber", dsBlock.L2BlockNumber, "dsBlockTx", tx.String(), "rpcBlockTx", rpcBlock.Transactions[i])
