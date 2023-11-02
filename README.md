@@ -6,6 +6,17 @@ This is an alpha version.
 
 zkevm-specific API Support
 
+## How to run
+
+### 1. zkEVM Mainnet
+
+TBD
+
+### 2. zkEVM Public Testnet
+
+TBD
+
+---
 
 
 ## Erigon
