@@ -5,14 +5,17 @@ import (
 	"fmt"
 )
 
-func UintBytes(n uint64) []byte {
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, n)
-	return b
+func BytesToUint64(b []byte) uint64 {
+	if len(b) < 8 {
+		return 0
+	}
+	return binary.BigEndian.Uint64(b)
 }
 
-func BytesUint(b []byte) uint64 {
-	return binary.LittleEndian.Uint64(b)
+func Uint64ToBytes(i uint64) []byte {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, i)
+	return buf
 }
 
 func SplitKey(data []byte) (uint64, uint64, error) {
@@ -20,12 +23,15 @@ func SplitKey(data []byte) (uint64, uint64, error) {
 		return 0, 0, fmt.Errorf("data length is not 16 bytes")
 	}
 
-	l1blockno := BytesUint(data[:8])
-	batchno := BytesUint(data[8:])
+	l1blockno := BytesToUint64(data[:8])
+	batchno := BytesToUint64(data[8:])
 
 	return l1blockno, batchno, nil
 }
 
-func ConcatKey(l1blockno, batchno uint64) []byte {
-	return append(UintBytes(l1blockno), UintBytes(batchno)...)
+func ConcatKey(l1BlockNo, batchNo uint64) []byte {
+	buf := make([]byte, 16)
+	binary.BigEndian.PutUint64(buf[:8], l1BlockNo)
+	binary.BigEndian.PutUint64(buf[8:], batchNo)
+	return buf
 }

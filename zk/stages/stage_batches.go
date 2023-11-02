@@ -11,9 +11,10 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/sync_stages"
+	"github.com/ledgerwatch/erigon/zk"
 	"github.com/ledgerwatch/erigon/zk/datastream"
+	dsclient "github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
@@ -27,8 +28,6 @@ type ISyncer interface {
 type ErigonDb interface {
 	WriteHeader(batchNo *big.Int, stateRoot, txHash common.Hash, coinbase common.Address, ts uint64) (*ethTypes.Header, error)
 	WriteBody(batchNumber *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
-	DeleteHeaders(blockFrom uint64) error
-	DeleteBodies(blockFrom uint64) error
 }
 
 type HermezDb interface {
@@ -39,21 +38,14 @@ type HermezDb interface {
 	DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error
 
 	WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) error
-	DeleteBlockGlobalExitRoots(fromBatchNum, toBatchNum uint64) error
-	GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error)
 
-	WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error
-	GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error)
-	DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) error
+	WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger types.GerUpdate) error
 }
 
 type BatchesCfg struct {
 	db     kv.RwDB
 	syncer ISyncer
 }
-
-const BatchesEntries = "BatchesEntries"
-const BatchesBookmark = "BatchesBookmark"
 
 func StageBatchesCfg(db kv.RwDB, syncer ISyncer) BatchesCfg {
 	return BatchesCfg{
@@ -91,67 +83,56 @@ func SpawnStageBatches(
 		return fmt.Errorf("failed to create hermezDb: %v", err)
 	}
 
+	log.Info(fmt.Sprintf("[%s] Getting stage progress...", logPrefix))
+	batchesProgress, err := sync_stages.GetStageProgress(tx, sync_stages.Batches)
+	if err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+	batchesProgress++
+	log.Info(fmt.Sprintf("[%s] Starting stream", logPrefix), "startBlock", batchesProgress)
+
 	l2BlockChan := make(chan types.FullL2Block, 100000)
 	gerUpdatesChan := make(chan types.GerUpdate, 1000)
-	entriesReadChan := make(chan uint64, 2)
-	bookmarksChan := make(chan map[uint64][]byte, 2)
 	errChan := make(chan error, 2)
-
-	bookmark, err := sync_stages.GetStageData(tx, BatchesBookmark)
-	if err != nil {
-		return fmt.Errorf("get stage datastream progress error: %v", err)
-	}
-
-	if len(bookmark) == 0 {
-		bookmark = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0}
-	}
 
 	startSyncTime := time.Now()
 	// start routine to download blocks and push them in a channel
 	go func() {
 		log.Info(fmt.Sprintf("[%s] Started downloading L2Blocks routine", logPrefix))
 		defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
+		var err error
 
-		// this will download all blocks from datastream and push them in a channel
-		entriesRead, bookmarks, err := datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, gerUpdatesChan, bookmark)
+		for {
+			// this will download all blocks from datastream and push them in a channel
+			// if no error, break, else continue trying to get them
+			if _, _, err = datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, gerUpdatesChan, batchesProgress); err == nil {
+				break
+			}
 
-		entriesReadChan <- entriesRead
-		bookmarksChan <- bookmarks
+			//[zkevm] - this is expected to be returned only when given block number is higher than the highest block number in datastream
+			if err == dsclient.ErrBadBookmark {
+				log.Debug(fmt.Sprintf("[%s] Invalid bookmark. Probably ahead of stream.", logPrefix))
+
+				errChan <- nil
+				return
+			}
+
+			log.Warn(fmt.Sprintf("[%s] Error from the datastream client, retrying... Error: %s", logPrefix, err))
+		}
+
 		errChan <- err
 	}()
 
 	// start a routine to print blocks written progress
-	l2BlockWrittenChan := make(chan uint64)
-	ctx, cancelCtx := context.WithCancel(ctx)
-	defer cancelCtx()
-	go func(ctx context.Context) {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		count := uint64(0)
-		log.Info(fmt.Sprintf("[%s] Started printing blocks written progress routine", logPrefix))
-		defer log.Info(fmt.Sprintf("[%s] Finished printing blocks written progress routine", logPrefix))
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				log.Info(fmt.Sprintf("[%s] Blocks written", logPrefix), "count", count)
-			case a := <-l2BlockWrittenChan:
-				count = a
-			}
-		}
-	}(ctx)
+	progressChan, stopProgressPrinter := zk.ProgressPrinter(logPrefix, 0)
+	defer stopProgressPrinter()
 
-	highestL2BatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
-	if err != nil {
-		return fmt.Errorf("failed to get l1 verifications batch number, %w", err)
-	}
-	highestL2BlockInLastVerifiedBatch := uint64(0)
-	entriesRead := uint64(0)
-	bookmarks := map[uint64][]byte{}
-	lastBlockHeight := uint64(0)
+	lastBlockHeight := batchesProgress
 	endLoop := false
 	blocksWritten := uint64(0)
+
+	highestSeenBatchNo := uint64(0)
+	highestHashableL2BlockNo := uint64(0)
 
 	writeThreadFinished := false
 	lastGer := common.Hash{}
@@ -172,7 +153,8 @@ func SpawnStageBatches(
 						return fmt.Errorf("failed to get previous GER, %w", err)
 					}
 					if prevGer == zeroHash {
-						return fmt.Errorf("there is no previous GER saved")
+						//return fmt.Errorf("there is no previous GER saved")
+						log.Info("no previous GER saved")
 					}
 
 					lastGer = prevGer
@@ -181,17 +163,19 @@ func SpawnStageBatches(
 				l2Block.GlobalExitRoot = lastGer
 			}
 
+			// batch boundary - record the highest hashable block number (last block in last full batch)
+			if l2Block.BatchNumber > highestSeenBatchNo {
+				highestHashableL2BlockNo = l2Block.L2BlockNumber - 1
+			}
+			highestSeenBatchNo = l2Block.BatchNumber
+
 			if err := writeL2Block(eriDb, hermezDb, &l2Block); err != nil {
 				return fmt.Errorf("writeL2Block error: %v", err)
 			}
 
-			if l2Block.BatchNumber == highestL2BatchNo && highestL2BlockInLastVerifiedBatch < l2Block.L2BlockNumber {
-				highestL2BlockInLastVerifiedBatch = l2Block.L2BlockNumber
-			}
-
 			lastBlockHeight = l2Block.L2BlockNumber
 			blocksWritten++
-			l2BlockWrittenChan <- blocksWritten
+			progressChan <- blocksWritten
 		case gerUpdate := <-gerUpdatesChan:
 			if err := hermezDb.WriteBatchGBatchGlobalExitRoot(gerUpdate.BatchNumber, gerUpdate); err != nil {
 				return fmt.Errorf("write batch global exit root error: %v", err)
@@ -200,10 +184,6 @@ func SpawnStageBatches(
 			if err != nil {
 				return fmt.Errorf("l2blocks download routine error: %v", err)
 			}
-			entriesReadFromChan := <-entriesReadChan
-			bookmarksFromChan := <-bookmarksChan
-			entriesRead = entriesReadFromChan
-			bookmarks = bookmarksFromChan
 			writeThreadFinished = true
 		default:
 			if writeThreadFinished {
@@ -216,6 +196,16 @@ func SpawnStageBatches(
 		}
 	}
 
+	if lastBlockHeight == batchesProgress {
+		log.Info(fmt.Sprintf("[%s] No new progress. Continue.", logPrefix), "lastBlockHeight", lastBlockHeight)
+		return nil
+	}
+
+	// store the highest hashable block number
+	if err := sync_stages.SaveStageProgress(tx, sync_stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+
 	// stop printing blocks written progress routine
 	elapsed := time.Since(startSyncTime)
 	log.Info(fmt.Sprintf("[%s] Finished writing blocks", logPrefix), "blocksWritten", blocksWritten, "elapsed", elapsed)
@@ -225,26 +215,9 @@ func SpawnStageBatches(
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	// save bookmark
-	log.Info(fmt.Sprintf("[%s] Saving bookmark for last verified batch progress", logPrefix),
-		"lastBlockHeight", lastBlockHeight,
-		"blockNumber", highestL2BlockInLastVerifiedBatch,
-		"batchNumber", highestL2BatchNo,
-	)
-	fmt.Println(bookmarks[highestL2BlockInLastVerifiedBatch])
-	if err := sync_stages.SaveStageData(tx, BatchesBookmark, bookmarks[highestL2BlockInLastVerifiedBatch]); err != nil {
-		return fmt.Errorf("save stage progress error: %v", err)
-	}
-
-	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "entriesRead", entriesRead)
-	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, entriesRead); err != nil {
-		return fmt.Errorf("save stage datastream progress error: %v", err)
-	}
-
 	if firstCycle {
 		log.Debug(fmt.Sprintf("[%s] batches: first cycle, committing tx", logPrefix))
-		err = tx.Commit()
-		if err != nil {
+		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("failed to commit tx, %w", err)
 		}
 	}
@@ -288,26 +261,11 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	// TODO: get somehow the datastream point of the block we unwinded to
-	// current implementation counts on the fact that there is currently only 1 tx per block
-	// might not work properly in the future
-	blocksUnwound := toBlock - fromBlock
-	currentDatastreamPoint, err := sync_stages.GetStageProgress(tx, BatchesEntries)
-	if err != nil {
-		return fmt.Errorf("get stage datastream progress error: %v", err)
-	}
-
-	dup := currentDatastreamPoint - blocksUnwound
-	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "datastreamUnwindProgress", dup)
-	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, dup); err != nil {
-		return fmt.Errorf("save stage datastream progress error: %v", err)
-	}
-
-	if err = u.Done(tx); err != nil {
+	if err := u.Done(tx); err != nil {
 		return err
 	}
 	if !useExternalTx {
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			return err
 		}
 	}
@@ -341,22 +299,19 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 
 	eriDb.DeleteBodies(0)
 	eriDb.DeleteHeaders(0)
+
 	hermezDb.DeleteForkIds(0, toBlock)
 	hermezDb.DeleteBlockBatches(0, toBlock)
 	hermezDb.DeleteBlockGlobalExitRoots(0, toBlock)
+
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "stageProgress", 0)
 	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, 0); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	log.Info(fmt.Sprintf("[%s] Saving datastream entries progress", logPrefix), "datastreamEntriesProgress", 0)
-	if err := sync_stages.SaveStageProgress(tx, BatchesEntries, 0); err != nil {
-		return fmt.Errorf("save stage datastream progress error: %v", err)
-	}
-
 	if !useExternalTx {
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			return err
 		}
 	}
@@ -372,18 +327,9 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 		return fmt.Errorf("write header error: %v", err)
 	}
 
-	if l2Block.L2BlockNumber >= 3290 {
-		fmt.Println("Block")
-	}
-
 	if err := hermezDb.WriteBlockGlobalExitRoot(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
 		return fmt.Errorf("write block global exit root error: %v", err)
 	}
-
-	// if len(l2Block.L2Txs) == 0 {
-	// 	log.Info(fmt.Sprintf("[%s] l2 block has no transactions", logPrefix), "block number", l2Block.L2BlockNumber)
-	// 	return nil
-	// }
 
 	txs := []ethTypes.Transaction{}
 	for _, transaction := range l2Block.L2Txs {

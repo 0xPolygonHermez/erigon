@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/zk"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -62,53 +63,13 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4
 	}
 
 	//start a progress checker
-	insertedKeysCount := 0
-	keysInserted := make(chan int)
-	ctDone := make(chan bool)
+	progressChan, stopProgressPrinter := zk.ProgressPrinter(logPrefix, uint64(totalKeysCount))
+	defer stopProgressPrinter()
 
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-
-		var pc int
-		var pct int
-
-		for {
-			select {
-			case newPc := <-keysInserted:
-				pc = newPc
-				if totalKeysCount > 0 {
-					pct = (pc * 100) / totalKeysCount
-				}
-			case <-ticker.C:
-				log.Info(fmt.Sprintf("[%s] Progress: %d/%d (%d%%)", logPrefix, pc, totalKeysCount, pct))
-			case <-ctDone:
-				return
-			}
-		}
-	}()
-
-	//start the node deletion worker
-	// deletesQueue := utils.NewQueue(1000)
-	// errChan := make(chan error)
-	// deletesWorker := utils.NewWorker("hash and delete nodes worker", errChan, deletesQueue)
-	// // deletes work group. Await this at end
-	// var dwg sync.WaitGroup
-	// dwg.Add(1)
-
-	// go func() {
-	// 	deletesWorker.DoWork()
-	// 	dwg.Done()
-	// }()
+	insertedKeysCount := uint64(0)
 
 	tempTreeBuildStart := time.Now()
 	for _, k := range nodeKeys {
-		// select {
-		// case err := <-errChan:
-		// 	return [4]uint64{}, err
-		// default:
-		// }
-
 		// split the key
 		keys := k.GetPath()
 		// find last node
@@ -257,18 +218,12 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4
 		}
 
 		insertedKeysCount++
-		keysInserted <- insertedKeysCount
+		progressChan <- insertedKeysCount
 	}
 
 	tempTreeBuildTime := time.Since(tempTreeBuildStart)
-	close(keysInserted)
-	close(ctDone)
 
 	log.Info(fmt.Sprintf("[%s] Finished the temp tree build in %v, hashing and saving the result...", logPrefix, tempTreeBuildTime))
-
-	//wait previous deletions
-	// deletesQueue.Stop()
-	// dwg.Wait()
 
 	//special case where no values were inserted
 	if rootNode.isLeaf() {

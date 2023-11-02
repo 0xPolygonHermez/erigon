@@ -80,10 +80,17 @@ func SpawnRecoverSendersStage(cfg SendersCfg, s *sync_stages.StageState, u sync_
 		defer tx.Rollback()
 	}
 
-	// TODO: abstract this so we don't have to fully clone this stage!
+	// zk
 	prevStageProgress, errStart := sync_stages.GetStageProgress(tx, sync_stages.Batches)
 	if errStart != nil {
 		return errStart
+	}
+
+	if prevStageProgress == 0 {
+		prevStageProgress, errStart = sync_stages.GetStageProgress(tx, sync_stages.Headers)
+		if errStart != nil {
+			return errStart
+		}
 	}
 
 	var to = prevStageProgress

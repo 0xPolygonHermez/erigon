@@ -24,6 +24,7 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/sentry/sentry"
 	"github.com/ledgerwatch/erigon/consensus/misc"
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	corestate "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -86,9 +87,9 @@ func StageLoop(
 		log.Error("Failed to start transaction to add new zkevm batch tables", "err", err)
 		return
 	}
-	err = trw.CreateBucket("HermezRpcRoot")
+	err = trw.CreateBucket(corestate.RpcRootsBucketName)
 	if err != nil {
-		log.Error("Failed to create HermezRpcRoot bucket", "err", err)
+		log.Error(fmt.Sprintf("Failed to create %s bucket", corestate.RpcRootsBucketName), "err", err)
 		return
 	}
 	if err := trw.Commit(); err != nil {
@@ -492,12 +493,12 @@ func NewDefaultZkStages(ctx context.Context,
 			cfg.HistoryV3,
 			agg,
 		),
-		zkStages.StageRpcRootsCfg(db, controlServer.ChainConfig, rpcEndpoint, isTestnet),
 		zkStages.StageL1VerificationsCfg(db, syncer, firstL1Block),
 		zkStages.StageBatchesCfg(db, syncer),
 		stagedsync.StageCumulativeIndexCfg(db),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig),
 		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockRetire, controlServer.Hd),
+		zkStages.StageRpcRootsCfg(db, controlServer.ChainConfig, rpcEndpoint, isTestnet),
 		stagedsync.StageExecuteBlocksCfg(
 			db,
 			cfg.Prune,

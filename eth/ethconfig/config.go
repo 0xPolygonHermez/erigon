@@ -250,6 +250,9 @@ type Config struct {
 	OverrideShanghaiTime *big.Int `toml:",omitempty"`
 
 	DropUselessPeers bool
+
+	//[zkevm]
+	RpcUrl string
 }
 
 type Sync struct {

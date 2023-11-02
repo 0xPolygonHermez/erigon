@@ -146,6 +146,43 @@ func TestGetAndSetLatest(t *testing.T) {
 	}
 }
 
+func TestGetAndSetLatestUnordered(t *testing.T) {
+	testCases := []struct {
+		desc          string
+		table         string
+		writeMethod   func(IHermezDb, uint64, uint64, common.Hash, common.Hash) error
+		l1BlockNo     uint64
+		batchNo       uint64
+		l1TxHashBytes common.Hash
+		stateRoot     common.Hash
+	}{
+		{"verification 2", L1VERIFICATIONS, IHermezDb.WriteVerification, 4, 1004, common.HexToHash("0xjkl"), common.HexToHash("0xjkl")},
+		{"verification 3", L1VERIFICATIONS, IHermezDb.WriteVerification, 6, 1007, common.HexToHash("0xrst"), common.HexToHash("0xrst")},
+		{"verification 1", L1VERIFICATIONS, IHermezDb.WriteVerification, 3, 1003, common.HexToHash("0xghi"), common.HexToHash("0xghi")},
+	}
+
+	var highestBatchNo uint64
+
+	tx, cleanup := GetDbTx()
+	db, err := NewHermezDb(tx)
+	require.NoError(t, err)
+
+	for _, tc := range testCases {
+		err = tc.writeMethod(db, tc.l1BlockNo, tc.batchNo, tc.l1TxHashBytes, tc.stateRoot)
+		assert.Nil(t, err)
+
+		if tc.batchNo > highestBatchNo {
+			highestBatchNo = tc.batchNo
+		}
+	}
+
+	info, err := db.getLatest(L1VERIFICATIONS)
+	assert.Nil(t, err)
+	assert.Equal(t, highestBatchNo, info.BatchNo)
+
+	cleanup()
+}
+
 func TestGetAndSetForkId(t *testing.T) {
 
 	testCases := []struct {

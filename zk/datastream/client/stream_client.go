@@ -135,15 +135,20 @@ func (c *StreamClient) GetHeader() error {
 }
 
 // sends start command, reads entries until limit reached and sends end command
-func (c *StreamClient) ReadEntries(fromEntry uint64, l2BlocksAmount int) (*[]types.FullL2Block, *[]types.GerUpdate, map[uint64][]byte, uint64, error) {
-	// send start command
-	if err := c.initiateDownload(fromEntry); err != nil {
-		return nil, nil, nil, 0, fmt.Errorf("%s initiate download error: %v", c.id, err)
+func (c *StreamClient) ReadEntries(bookmark *types.Bookmark, l2BlocksAmount int) (*[]types.FullL2Block, *[]types.GerUpdate, map[uint64][]byte, uint64, error) {
+	// Get header from server
+	if err := c.GetHeader(); err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("%s get header error: %v", c.id, err)
 	}
 
-	fullL2Blocks, gerUpates, bookmarks, entriesRead, err := c.readFullL2Blocks(fromEntry, l2BlocksAmount)
+	// send start command
+	if err := c.initiateDownloadBookmark(bookmark.Encode()); err != nil {
+		return nil, nil, nil, 0, ErrBadBookmark
+	}
+
+	fullL2Blocks, gerUpates, bookmarks, entriesRead, err := c.readFullL2Blocks(l2BlocksAmount)
 	if err != nil {
-		return nil, nil, nil, 0, fmt.Errorf("%s read full L2 blocks error: %v", c.id, err)
+		return nil, nil, nil, 0, err
 	}
 
 	return fullL2Blocks, gerUpates, bookmarks, entriesRead, nil
@@ -152,14 +157,22 @@ func (c *StreamClient) ReadEntries(fromEntry uint64, l2BlocksAmount int) (*[]typ
 // sends start command, reads entries until limit reached and sends end command
 // sends the parsed FullL2Blocks with transactions to a channel
 func (c *StreamClient) ReadAllEntriesToChannel(l2BlockChan chan types.FullL2Block, gerUpdateChan chan types.GerUpdate, bookmark []byte) (uint64, map[uint64][]byte, error) {
+	// Get header from server
+	if err := c.GetHeader(); err != nil {
+		return 0, nil, fmt.Errorf("%s get header error: %v", c.id, err)
+	}
 	// send start command
 	if err := c.initiateDownloadBookmark(bookmark); err != nil {
-		return 0, nil, fmt.Errorf("%s initiate download error: %v", c.id, err)
+		return 0, nil, ErrBadBookmark
 	}
 
-	entriesRead, bookmarks, err := c.readAllFullL2BlocksToChannel(0, l2BlockChan, gerUpdateChan)
+	entriesRead, bookmarks, err := c.readAllFullL2BlocksToChannel(l2BlockChan, gerUpdateChan)
 	if err != nil {
 		return 0, nil, fmt.Errorf("%s read full L2 blocks error: %v", c.id, err)
+	}
+
+	if err := c.sendStopCmd(); err != nil {
+		return 0, nil, fmt.Errorf("%s send stop command error: %v", c.id, err)
 	}
 
 	return entriesRead, bookmarks, nil
@@ -215,18 +228,25 @@ func (c *StreamClient) afterStartCommand() error {
 
 // reads all entries from the server and sends them to a channel
 // sends the parsed FullL2Blocks with transactions to a channel
-func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockChan chan types.FullL2Block, gerUpdateChan chan types.GerUpdate) (uint64, map[uint64][]byte, error) {
+func (c *StreamClient) readAllFullL2BlocksToChannel(l2BlockChan chan types.FullL2Block, gerUpdateChan chan types.GerUpdate) (uint64, map[uint64][]byte, error) {
 	entriesRead := uint64(0)
 	bookmarks := map[uint64][]byte{}
+	fromEntry := uint64(0)
 	for {
 		if entriesRead+fromEntry >= c.Header.TotalEntries {
 			break
 		}
 
-		fullBlock, gerUpdates, bookmark, er, err := c.readFullBlock()
+		fullBlock, gerUpdates, bookmark, fe, er, err := c.readFullBlock()
 		if err != nil {
 			return 0, nil, fmt.Errorf("failed to read full block: %v", err)
 		}
+
+		// set it only the first time - this is the entry num of the first entry after the bookmark
+		if fromEntry == 0 {
+			fromEntry = fe
+		}
+
 		bookmarks[fullBlock.L2BlockNumber] = bookmark
 
 		// if fullBlock.L2BlockNumber > 200000 {
@@ -249,19 +269,26 @@ func (c *StreamClient) readAllFullL2BlocksToChannel(fromEntry uint64, l2BlockCha
 
 // reads a set amount of l2blocks from the server and returns them
 // returns the parsed FullL2Blocks with transactions and the amount of entries read
-func (c *StreamClient) readFullL2Blocks(fromEntry uint64, l2BlocksAmount int) (*[]types.FullL2Block, *[]types.GerUpdate, map[uint64][]byte, uint64, error) {
+func (c *StreamClient) readFullL2Blocks(l2BlocksAmount int) (*[]types.FullL2Block, *[]types.GerUpdate, map[uint64][]byte, uint64, error) {
 	fullL2Blocks := []types.FullL2Block{}
 	totalGerUpdates := []types.GerUpdate{}
 	entriesRead := uint64(0)
 	bookmarks := map[uint64][]byte{}
+	fromEntry := uint64(0)
+
 	for {
 		if len(fullL2Blocks) >= l2BlocksAmount || entriesRead+fromEntry >= c.Header.TotalEntries {
 			break
 		}
-		fullBlock, gerUpdates, bookmark, er, err := c.readFullBlock()
+		fullBlock, gerUpdates, bookmark, fe, er, err := c.readFullBlock()
 		if err != nil {
 			return nil, nil, nil, 0, fmt.Errorf("failed to read full block: %v", err)
 		}
+
+		if fromEntry == 0 {
+			fromEntry = fe
+		}
+
 		if gerUpdates != nil {
 			totalGerUpdates = append(totalGerUpdates, *gerUpdates...)
 		}
@@ -275,14 +302,16 @@ func (c *StreamClient) readFullL2Blocks(fromEntry uint64, l2BlocksAmount int) (*
 
 // reads a full block from the server
 // returns the parsed FullL2Block and the amount of entries read
-func (c *StreamClient) readFullBlock() (*types.FullL2Block, *[]types.GerUpdate, []byte, uint64, error) {
+func (c *StreamClient) readFullBlock() (*types.FullL2Block, *[]types.GerUpdate, []byte, uint64, uint64, error) {
 	entriesRead := uint64(0)
+
 	// TODO: maybe parse it and return it if needed
 	file, err := c.readFileEntry()
 	if err != nil {
-		return nil, nil, []byte{}, 0, fmt.Errorf("read file entry error: %v", err)
+		return nil, nil, []byte{}, 0, 0, fmt.Errorf("read file entry error: %v", err)
 	}
 	entriesRead++
+	fromEntry := file.EntryNum
 
 	// read whatever might be between current position and block start
 	gerUpdates := []types.GerUpdate{}
@@ -297,16 +326,16 @@ func (c *StreamClient) readFullBlock() (*types.FullL2Block, *[]types.GerUpdate, 
 		} else if file.IsGerUpdate() {
 			gerUpdate, err := types.DecodeGerUpdate(file.Data)
 			if err != nil {
-				return nil, nil, []byte{}, 0, fmt.Errorf("parse gerUpdate error: %v", err)
+				return nil, nil, []byte{}, 0, 0, fmt.Errorf("parse gerUpdate error: %v", err)
 			}
 			gerUpdates = append(gerUpdates, *gerUpdate)
 		} else {
-			return nil, nil, []byte{}, 0, fmt.Errorf("expected GerUpdate or Bookmark type, got type: %d", file.EntryType)
+			return nil, nil, []byte{}, 0, 0, fmt.Errorf("expected GerUpdate or Bookmark type, got type: %d", file.EntryType)
 		}
 
 		file, err = c.readFileEntry()
 		if err != nil {
-			return nil, nil, []byte{}, 0, fmt.Errorf("read file entry error: %v", err)
+			return nil, nil, []byte{}, 0, 0, fmt.Errorf("read file entry error: %v", err)
 		}
 		entriesRead++
 	}
@@ -319,13 +348,13 @@ func (c *StreamClient) readFullBlock() (*types.FullL2Block, *[]types.GerUpdate, 
 	if file.IsBlockStart() {
 		startL2Block, err = types.DecodeStartL2Block(file.Data)
 		if err != nil {
-			return nil, nil, []byte{}, 0, fmt.Errorf("read start of block error: %v", err)
+			return nil, nil, []byte{}, 0, 0, fmt.Errorf("read start of block error: %v", err)
 		}
 
 		for {
 			file, err := c.readFileEntry()
 			if err != nil {
-				return nil, nil, []byte{}, 0, fmt.Errorf("read file entry error: %v", err)
+				return nil, nil, []byte{}, 0, 0, fmt.Errorf("read file entry error: %v", err)
 			}
 
 			entriesRead++
@@ -333,29 +362,29 @@ func (c *StreamClient) readFullBlock() (*types.FullL2Block, *[]types.GerUpdate, 
 			if file.IsTx() {
 				l2Tx, err := types.DecodeL2Transaction(file.Data)
 				if err != nil {
-					return nil, nil, []byte{}, 0, fmt.Errorf("parse l2Transaction error: %v", err)
+					return nil, nil, []byte{}, 0, 0, fmt.Errorf("parse l2Transaction error: %v", err)
 				}
 				l2Txs = append(l2Txs, *l2Tx)
 			} else if file.IsBlockEnd() {
 				endL2Block, err = types.DecodeEndL2Block(file.Data)
 				if err != nil {
-					return nil, nil, []byte{}, 0, fmt.Errorf("parse endL2Block error: %v", err)
+					return nil, nil, []byte{}, 0, 0, fmt.Errorf("parse endL2Block error: %v", err)
 				}
 				if startL2Block.L2BlockNumber != endL2Block.L2BlockNumber {
-					return nil, nil, []byte{}, 0, fmt.Errorf("start block block number different than endBlock block number. StartBlock: %d, EndBlock: %d", startL2Block.L2BlockNumber, endL2Block.L2BlockNumber)
+					return nil, nil, []byte{}, 0, 0, fmt.Errorf("start block block number different than endBlock block number. StartBlock: %d, EndBlock: %d", startL2Block.L2BlockNumber, endL2Block.L2BlockNumber)
 				}
 				break
 			} else {
-				return nil, nil, []byte{}, 0, fmt.Errorf("expected EndL2Block or L2Transaction type, got type: %d", file.EntryType)
+				return nil, nil, []byte{}, 0, 0, fmt.Errorf("expected EndL2Block or L2Transaction type, got type: %d", file.EntryType)
 			}
 		}
 	} else {
-		return nil, nil, []byte{}, 0, fmt.Errorf("expected StartL2Block, but got type: %d", file.EntryType)
+		return nil, nil, []byte{}, 0, 0, fmt.Errorf("expected StartL2Block, but got type: %d", file.EntryType)
 	}
 
 	fullL2Block := types.ParseFullL2Block(startL2Block, endL2Block, &l2Txs)
 
-	return fullL2Block, &gerUpdates, bookmark, entriesRead, nil
+	return fullL2Block, &gerUpdates, bookmark, fromEntry, entriesRead, nil
 }
 
 // reads file bytes from socket and tries to parse them

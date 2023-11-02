@@ -57,10 +57,12 @@ var (
 	BeaconIndexes               SyncStage = "BeaconIndexes"               // Fills up Beacon indexes
 
 	// ZK stages
-	L1Verifications        SyncStage = "L1Verifications"
-	L1VerificationsBatchNo SyncStage = "L1VerificationsBatchNo"
-	Batches                SyncStage = "Batches"
-	RpcRoots               SyncStage = "RpcRoots"
+	L1Verifications             SyncStage = "L1Verifications"
+	L1VerificationsBatchNo      SyncStage = "L1VerificationsBatchNo"
+	Batches                     SyncStage = "Batches"
+	RpcRoots                    SyncStage = "RpcRoots"
+	HighestHashableL2BlockNo    SyncStage = "HighestHashableL2BlockNo"
+	VerificationsStateRootCheck SyncStage = "VerificationStateRootCheck"
 )
 
 var AllStages = []SyncStage{

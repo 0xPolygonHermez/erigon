@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"sync/atomic"
 
+	"math/rand"
+
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -29,6 +31,33 @@ func UintBytes(no uint64) []byte {
 	noBytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(noBytes, no)
 	return noBytes
+}
+
+func requestWithRetry(ctx context.Context, rpcEndpoint string, payload []byte, maxRetries int) (*http.Response, error) {
+	client := &http.Client{}
+	var resp *http.Response
+	var err error
+
+	req, err := http.NewRequestWithContext(ctx, "POST", rpcEndpoint, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	for i := 0; i <= maxRetries; i++ {
+		resp, err = client.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		log.Debug("retrying request for rpc root", "retryNo", i)
+
+		sleepTime := time.Millisecond * time.Duration(100<<i)
+		jitter := time.Millisecond * time.Duration(rand.Intn(50))
+		time.Sleep(sleepTime + jitter)
+	}
+
+	return nil, err
 }
 
 func getRpcRoot(ctx context.Context, rpcEndpoint string, txNum int64) (common.Hash, error) {
@@ -55,15 +84,7 @@ func getRpcRoot(ctx context.Context, rpcEndpoint string, txNum int64) (common.Ha
 		return common.Hash{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", rpcEndpoint, bytes.NewBuffer(payloadBytes))
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := requestWithRetry(ctx, rpcEndpoint, payloadBytes, 10)
 	if err != nil {
 		return common.Hash{}, err
 	}

@@ -12,8 +12,8 @@ var chainIds = []uint64{
 
 var contractAddresses = map[uint64]libcommon.Address{
 	1101: libcommon.HexToAddress("0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"),
-	1440: libcommon.HexToAddress("0xa997cfD539E703921fD1e3Cf25b4c241a27a4c7A"),
-	1442: libcommon.HexToAddress("0xEfF10DB3c6445FB06411c6fc74fDCC8D1019aC7d"),
+	1440: libcommon.HexToAddress("0xEfF10DB3c6445FB06411c6fc74fDCC8D1019aC7d"),
+	1442: libcommon.HexToAddress("0xa997cfD539E703921fD1e3Cf25b4c241a27a4c7A"),
 }
 
 func GetContractAddress(chainId uint64) libcommon.Address {

@@ -346,6 +346,11 @@ var (
 		Usage: "API's offered over the HTTP-RPC interface",
 		Value: "eth,erigon,engine",
 	}
+	RpcUrlFlag = cli.StringFlag{
+		Name:  "zkevm.centralized-sequencer-rpc",
+		Usage: "Upstream node rpc endpoint",
+		Value: "",
+	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",
 		Usage: "Does limit amount of goroutines to process 1 batch request. Means 1 bach request can't overload server. 1 batch still can have unlimited amount of request",

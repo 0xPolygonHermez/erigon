@@ -118,9 +118,7 @@ func ExecuteBlockEphemerally(
 		misc.ApplyDAOHardFork(ibs)
 	}
 	noop := state.NewNoopWriter()
-	//fmt.Printf("====txs processing start: %d====\n", block.NumberU64())
 	for i, tx := range block.Transactions() {
-		fmt.Printf("====txs processing start: %d-%d====\n", block.NumberU64(), i)
 		ibs.Prepare(tx.Hash(), block.Hash(), i)
 		writeTrace := false
 		if vmConfig.Debug && vmConfig.Tracer == nil {
@@ -243,7 +241,6 @@ func ExecuteBlockEphemerallyBor(
 		misc.ApplyDAOHardFork(ibs)
 	}
 	noop := state.NewNoopWriter()
-	//fmt.Printf("====txs processing start: %d====\n", block.NumberU64())
 	for i, tx := range block.Transactions() {
 		ibs.Prepare(tx.Hash(), block.Hash(), i)
 		writeTrace := false

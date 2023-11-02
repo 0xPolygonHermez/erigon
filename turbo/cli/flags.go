@@ -276,6 +276,10 @@ func ApplyFlagsForEthConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.Bool(utils.DisableIPV4.Name) {
 		cfg.Downloader.ClientConfig.DisableIPv4 = true
 	}
+
+	if rpcUrl := ctx.String(utils.RpcUrlFlag.Name); rpcUrl != "" {
+		cfg.RpcUrl = rpcUrl
+	}
 }
 
 func ApplyFlagsForEthConfigCobra(f *pflag.FlagSet, cfg *ethconfig.Config) {

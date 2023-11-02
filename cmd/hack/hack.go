@@ -1444,7 +1444,7 @@ func main() {
 		printCurrentBlockNumber(*chaindata)
 
 	case "bucket":
-		printBucket(*chaindata, "HermezRpcRoot")
+		printBucket(*chaindata, state.RpcRootsBucketName)
 
 	case "buckets":
 		printBuckets(*chaindata, *bucket)

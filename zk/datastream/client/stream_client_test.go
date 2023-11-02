@@ -352,7 +352,7 @@ func Test_readFullL2Blocks(t *testing.T) {
 				server.Close()
 			}()
 
-			result, _, _, entriesRead, err := c.readFullL2Blocks(0, testCase.inputAmount)
+			result, _, _, entriesRead, err := c.readFullL2Blocks(testCase.inputAmount)
 			require.Equal(t, testCase.expectedError, err)
 			require.Equal(t, testCase.expectedEntriesRead, entriesRead)
 			if testCase.expectedResult == nil {
@@ -481,7 +481,7 @@ func Test_readFullBlock(t *testing.T) {
 				server.Close()
 			}()
 
-			result, _, _, entriesRead, err := c.readFullBlock()
+			result, _, _, _, entriesRead, err := c.readFullBlock()
 			require.Equal(t, testCase.expectedError, err)
 			require.Equal(t, testCase.expectedEntriesRead, entriesRead)
 			if testCase.expectedError != nil {

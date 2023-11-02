@@ -51,6 +51,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/stages"
 )
 
 const (
@@ -458,6 +459,14 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 		defer tx.Rollback()
 	}
 
+	shouldShortCircuit, noProgressTo, err := stages.ShouldShortCircuitExecution(tx)
+	if err != nil {
+		return err
+	}
+	if shouldShortCircuit {
+		return nil
+	}
+
 	prevStageProgress, errStart := sync_stages.GetStageProgress(tx, sync_stages.Senders)
 	if errStart != nil {
 		return errStart
@@ -508,6 +517,12 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 		batch.Rollback()
 	}()
 
+	if s.BlockNumber == 0 {
+		to = noProgressTo
+	}
+
+	total := to - stageProgress
+	initialBlock := stageProgress + 1
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		stageProgress = blockNum
@@ -526,14 +541,6 @@ Loop:
 		currentBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
 		if err != nil {
 			return err
-		}
-
-		//[zkevm] - limit by batch
-		limitBatch := uint64(32095)
-		if currentBatch >= limitBatch {
-			log.Info(fmt.Sprintf("[%s] Limited to batch %d", logPrefix, limitBatch))
-
-			break
 		}
 
 		gers := []*dstypes.GerUpdate{}
@@ -636,7 +643,7 @@ Loop:
 		select {
 		default:
 		case <-logEvery.C:
-			logBlock, logTx, logTime = logProgress(logPrefix, logBlock, logTime, blockNum, logTx, lastLogTx, gas, float64(currentStateGas)/float64(gasState), batch)
+			logBlock, logTx, logTime = logProgress(logPrefix, total, initialBlock, logBlock, logTime, blockNum, logTx, lastLogTx, gas, float64(currentStateGas)/float64(gasState), batch)
 			gas = 0
 			tx.CollectMetrics()
 			sync_stages.Metrics[sync_stages.Execution].Set(blockNum)
@@ -669,17 +676,19 @@ Loop:
 	return stoppedErr
 }
 
-func logProgress(logPrefix string, prevBlock uint64, prevTime time.Time, currentBlock uint64, prevTx, currentTx uint64, gas uint64, gasState float64, batch ethdb.DbWithPendingMutations) (uint64, uint64, time.Time) {
+func logProgress(logPrefix string, total, initialBlock, prevBlock uint64, prevTime time.Time, currentBlock uint64, prevTx, currentTx uint64, gas uint64, gasState float64, batch ethdb.DbWithPendingMutations) (uint64, uint64, time.Time) {
 	currentTime := time.Now()
 	interval := currentTime.Sub(prevTime)
 	speed := float64(currentBlock-prevBlock) / (float64(interval) / float64(time.Second))
 	speedTx := float64(currentTx-prevTx) / (float64(interval) / float64(time.Second))
 	speedMgas := float64(gas) / 1_000_000 / (float64(interval) / float64(time.Second))
+	percent := float64(currentBlock-initialBlock) / float64(total) * 100
 
 	var m runtime.MemStats
 	dbg.ReadMemStats(&m)
 	var logpairs = []interface{}{
 		"number", currentBlock,
+		"%", percent,
 		"blk/s", fmt.Sprintf("%.1f", speed),
 		"tx/s", fmt.Sprintf("%.1f", speedTx),
 		"Mgas/s", fmt.Sprintf("%.1f", speedMgas),

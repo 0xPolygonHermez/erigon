@@ -23,13 +23,11 @@ func main() {
 		panic(err)
 	}
 
-	// Get header from server
-	if err := c.GetHeader(); err != nil {
-		panic(err)
-	}
+	// create bookmark
+	bookmark := types.NewL2BlockBookmark(0)
 
 	// Read all entries from server
-	blocksRead, _, _, entriesReadAmount, err := c.ReadEntries(0, 3301)
+	blocksRead, _, _, entriesReadAmount, err := c.ReadEntries(bookmark, 3000)
 	if err != nil {
 		panic(err)
 	}
@@ -41,7 +39,6 @@ func main() {
 		if i == 0 {
 			continue
 		}
-		// log.Info("Block number: ", dsBlock.L2BlockNumber)
 		rpcBlock, err := utils.GetBlockByHash(dsBlock.L2Blockhash.String())
 		if err != nil {
 			panic(err)
@@ -52,9 +49,8 @@ func main() {
 			log.Error("Blocks don't match")
 			return
 		}
-		fmt.Println(dsBlock.GlobalExitRoot.Hex())
 		if lastGer.Hex() != dsBlock.GlobalExitRoot.Hex() {
-			fmt.Println("New get!")
+			fmt.Println("New ger!")
 			lastGer = dsBlock.GlobalExitRoot
 		}
 	}

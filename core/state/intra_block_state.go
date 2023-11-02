@@ -49,6 +49,8 @@ type revision struct {
 // SystemAddress - sender address for internal state updates.
 var SystemAddress = libcommon.HexToAddress("0xfffffffffffffffffffffffffffffffffffffffe")
 
+const RpcRootsBucketName = "HermezRpcRoot"
+
 // BalanceIncrease represents the increase of balance of an account that did not require
 // reading the account first
 type BalanceIncrease struct {
@@ -809,9 +811,7 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 	txNum := uint256.NewInt(0)
 	sdb.GetState(saddr, &sl0, txNum)
 
-	fmt.Printf("txNum inc from : %v", txNum)
 	txNum.Add(txNum, uint256.NewInt(1))
-	fmt.Printf(" to : %v\n", txNum)
 
 	if !sdb.Exist(saddr) {
 		// create account if not exists
@@ -828,8 +828,6 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 
 	txNum := uint256.NewInt(0)
 	sdb.GetState(saddr, &sl0, txNum)
-
-	fmt.Printf("reading txNum: %v\n", txNum)
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
@@ -898,7 +896,7 @@ func verifyRoot(dbTx kv.RwTx, hash string, txNum uint64) (*libcommon.Hash, error
 }
 
 func getDbRoot(dbTx kv.RwTx, txNum uint64) (*libcommon.Hash, error) {
-	rootHash, err := dbTx.GetOne("HermezRpcRoot", UintBytes(txNum))
+	rootHash, err := dbTx.GetOne(RpcRootsBucketName, UintBytes(txNum))
 	if err != nil {
 		return nil, err
 	}

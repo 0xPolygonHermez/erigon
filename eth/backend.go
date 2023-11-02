@@ -240,7 +240,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	log.Info("Initialised chain configuration", "config", chainConfig, "genesis", genesis.Hash())
 
-	isZk := zkchainconfig.IsZk(chainConfig.ChainID.Uint64())
+	isZk := zkchainconfig.IsZk(config.NetworkID)
 
 	if err := chainKv.Update(context.Background(), func(tx kv.RwTx) error {
 		if err = sync_stages.UpdateMetrics(tx); err != nil {
@@ -675,12 +675,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		testnet := backend.config.NetworkID == 1440
 		firstL1Block := uint64(16896700)
 		zkEthMainnetRpcUrl := "https://rpc.eu-north-1.gateway.fm/v4/ethereum/non-archival/mainnet?apiKey=UDmvcERuIwHSpeH3dUb1XDr4QnGqzHxv.J0qONXx6TUa9RqGb"
-		rpcEndpoint := "https://zkevm-rpc.com"
+		rpcEndpoint := config.RpcUrl
+
 		// hermez testnet endpoints
 		if testnet {
 			zkEthMainnetRpcUrl = "https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/goerli?apiKey=2LVJmsyRvOfhxFutspKT0wnTVyMCYc4L.swK5wk5pCrfipEg5"
 			firstL1Block = uint64(8577775)
-			rpcEndpoint = "https://rpc.internal.zkevm-test.net"
 		}
 
 		if devnet {
@@ -781,7 +781,7 @@ func (backend *Ethereum) Init(stack *node.Node, config *ethconfig.Config) error 
 	if casted, ok := backend.engine.(*bor.Bor); ok {
 		borDb = casted.DB
 	}
-	apiList := commands.APIList(chainKv, borDb, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine)
+	apiList := commands.APIList(chainKv, borDb, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config.RpcUrl)
 	authApiList := commands.AuthAPIList(chainKv, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine)
 	go func() {
 		if err := cli.StartRpcServer(ctx, httpRpcCfg, apiList, authApiList); err != nil {

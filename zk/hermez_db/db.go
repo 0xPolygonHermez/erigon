@@ -67,7 +67,7 @@ func (db *HermezDb) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) {
 	}
 	defer c.Close()
 
-	k, v, err := c.Seek(UintBytes(l2BlockNo))
+	k, v, err := c.Seek(Uint64ToBytes(l2BlockNo))
 	if err != nil {
 		return 0, err
 	}
@@ -76,11 +76,11 @@ func (db *HermezDb) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) {
 		return 0, nil
 	}
 
-	if BytesUint(k) != l2BlockNo {
+	if BytesToUint64(k) != l2BlockNo {
 		return 0, nil
 	}
 
-	return BytesUint(v), nil
+	return BytesToUint64(v), nil
 }
 
 func (db *HermezDb) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error) {
@@ -98,12 +98,55 @@ func (db *HermezDb) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error) {
 		if err != nil {
 			break
 		}
-		if BytesUint(v) == batchNo {
-			blockNos = append(blockNos, BytesUint(k))
+		if BytesToUint64(v) == batchNo {
+			blockNos = append(blockNos, BytesToUint64(k))
 		}
 	}
 
 	return blockNos, err
+}
+
+func (db *HermezDb) GetHighestBlockInBatch(batchNo uint64) (uint64, error) {
+	blocks, err := db.GetL2BlockNosByBatch(batchNo)
+	if err != nil {
+		return 0, err
+	}
+
+	max := uint64(0)
+	for _, block := range blocks {
+		if block > max {
+			max = block
+		}
+	}
+
+	return max, nil
+}
+
+func (db *HermezDb) GetHighestVerifiedBlockNo() (uint64, error) {
+	v, err := db.GetLatestVerification()
+	if err != nil {
+		return 0, err
+	}
+
+	if v == nil {
+		return 0, nil
+	}
+
+	blockNo, err := db.GetHighestBlockInBatch(v.BatchNo)
+	if err != nil {
+		return 0, err
+	}
+
+	return blockNo, nil
+}
+
+func (db *HermezDb) GetVerificationByL2BlockNo(blockNo uint64) (*types.L1BatchInfo, error) {
+	batchNo, err := db.GetBatchNoByL2Block(blockNo)
+	if err != nil {
+		return nil, err
+	}
+
+	return db.GetVerificationByBatchNo(batchNo)
 }
 
 func (db *HermezDb) GetSequenceByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
@@ -247,15 +290,15 @@ func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common
 }
 
 func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
-	return db.tx.Put(BLOCKBATCHES, UintBytes(l2BlockNo), UintBytes(batchNo))
+	return db.tx.Put(BLOCKBATCHES, Uint64ToBytes(l2BlockNo), Uint64ToBytes(batchNo))
 }
 
 func (db *HermezDb) WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) error {
-	return db.tx.Put(GLOBAL_EXIT_ROOTS, UintBytes(l2BlockNo), ger.Bytes())
+	return db.tx.Put(GLOBAL_EXIT_ROOTS, Uint64ToBytes(l2BlockNo), ger.Bytes())
 }
 
 func (db *HermezDb) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error) {
-	data, err := db.tx.GetOne(GLOBAL_EXIT_ROOTS, UintBytes(l2BlockNo))
+	data, err := db.tx.GetOne(GLOBAL_EXIT_ROOTS, Uint64ToBytes(l2BlockNo))
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -264,7 +307,7 @@ func (db *HermezDb) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error
 }
 
 func (db *HermezDb) WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error {
-	return db.tx.Put(GLOBAL_EXIT_ROOTS_BATCHES, UintBytes(batchNumber), ger.EncodeToBytes())
+	return db.tx.Put(GLOBAL_EXIT_ROOTS_BATCHES, Uint64ToBytes(batchNumber), ger.EncodeToBytes())
 }
 
 func (db *HermezDb) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error) {
@@ -281,7 +324,7 @@ func (db *HermezDb) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]
 		if err != nil {
 			break
 		}
-		currentBatchNo := BytesUint(k)
+		currentBatchNo := BytesToUint64(k)
 		if currentBatchNo >= fromBatchNum && currentBatchNo <= toBatchNum {
 			gerUpdate, err := dstypes.DecodeGerUpdate(v)
 			if err != nil {
@@ -296,7 +339,7 @@ func (db *HermezDb) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]
 
 func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) error {
 	for i := fromBatchNum; i <= toBatchNum; i++ {
-		err := db.tx.Delete(GLOBAL_EXIT_ROOTS_BATCHES, UintBytes(i))
+		err := db.tx.Delete(GLOBAL_EXIT_ROOTS_BATCHES, Uint64ToBytes(i))
 		if err != nil {
 			return err
 		}
@@ -307,7 +350,7 @@ func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) 
 
 func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) error {
 	for i := fromBlockNum; i <= toBlockNum; i++ {
-		err := db.tx.Delete(GLOBAL_EXIT_ROOTS, UintBytes(i))
+		err := db.tx.Delete(GLOBAL_EXIT_ROOTS, Uint64ToBytes(i))
 		if err != nil {
 			return err
 		}
@@ -318,7 +361,7 @@ func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) 
 
 func (db *HermezDb) DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error {
 	for i := fromBatchNum; i <= toBatchNum; i++ {
-		err := db.tx.Delete(FORKIDS, UintBytes(i))
+		err := db.tx.Delete(FORKIDS, Uint64ToBytes(i))
 		if err != nil {
 			return err
 		}
@@ -341,9 +384,9 @@ func (db *HermezDb) GetForkId(batchNo uint64) (uint64, error) {
 		if err != nil {
 			break
 		}
-		currentBatchNo := BytesUint(k)
+		currentBatchNo := BytesToUint64(k)
 		if currentBatchNo <= batchNo {
-			forkId = BytesUint(v)
+			forkId = BytesToUint64(v)
 		} else {
 			break
 		}
@@ -353,12 +396,12 @@ func (db *HermezDb) GetForkId(batchNo uint64) (uint64, error) {
 }
 
 func (db *HermezDb) WriteForkId(batchNo, forkId uint64) error {
-	return db.tx.Put(FORKIDS, UintBytes(batchNo), UintBytes(forkId))
+	return db.tx.Put(FORKIDS, Uint64ToBytes(batchNo), Uint64ToBytes(forkId))
 }
 
 func (db *HermezDb) DeleteForkIds(fromBatchNum, toBatchNum uint64) error {
 	for i := fromBatchNum; i <= toBatchNum; i++ {
-		err := db.tx.Delete(FORKIDS, UintBytes(i))
+		err := db.tx.Delete(FORKIDS, Uint64ToBytes(i))
 		if err != nil {
 			return err
 		}
