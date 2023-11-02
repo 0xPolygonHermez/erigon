@@ -1,4 +1,14 @@
-# Erigon
+# zkevm-erigon
+
+A Polygon zkEVM RPC node based off Erigon.
+
+This is an alpha version.
+
+zkevm-specific API Support
+
+
+
+## Erigon
 
 Erigon is an implementation of Ethereum (execution client with light client for consensus layer), on the efficiency
 frontier. [Archive Node](https://ethereum.org/en/developers/docs/nodes-and-clients/archive-nodes/#what-is-an-archive-node)
