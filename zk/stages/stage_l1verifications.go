@@ -211,6 +211,7 @@ func verifyAgainstLocalBlocks(tx kv.RwTx, hermezDb *hermez_db.HermezDb, logPrefi
 	err = blockComparison(tx, hermezDb, blockToCheck, logPrefix)
 
 	if err == nil {
+		log.Info(fmt.Sprintf("[%s] State root verified in block %d", logPrefix, blockToCheck))
 		if err := sync_stages.SaveStageProgress(tx, sync_stages.VerificationsStateRootCheck, verifiedBlockNo); err != nil {
 			return fmt.Errorf("failed to save stage progress, %w", err)
 		}
