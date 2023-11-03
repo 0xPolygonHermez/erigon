@@ -1,0 +1,7 @@
+datadir : '/Path/to/your/datadirs/hermez-mainnet'
+chain : "hermez-mainnet"
+http : true
+private.api.addr : "localhost:9091"
+zkevm.centralized-sequencer-rpc: "https://zkevm-rpc.com/"
+externalcl: true
+http.api : ["eth","debug","net","trace","web3","erigon"]

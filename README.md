@@ -1,25 +1,87 @@
-# zkevm-erigon
+# zkEVM-Erigon
 
-A Polygon zkEVM RPC node based off Erigon.
+zkEVM-Erigon is a fork of Erigon, currently in Alpha, optimized for syncing with the Polygon Hermez zkEVM network.
 
-This is an alpha version.
+***
 
-zkevm-specific API Support
+## Prerequisites
 
-## How to run
+- [Git LFS](https://git-lfs.com/)
 
-### 1. zkEVM Mainnet
+For syncing different networks, you will need the corresponding network-specific files e.g. `zkevm-roots-testnet.json`. To do this run the following commands:
+- `git lfs install` - Initializes the Git LFS
+- `git lfs pull` - Downloads the actual LFS files
 
-TBD
+These contain some pre-calculated roots from the RPC which are later validated by this node in the intermediate hashes stage.
 
-### 2. zkEVM Public Testnet
+***
 
-TBD
+## Limitations/Warnings
 
----
+- The golden poseidon hashing will be much faster on x86, so developers on Mac may experience slowness on Apple silicone
+- Falling behind by > 20 blocks (at some point this will be configurable) will cause a SMT rebuild - which will take some time for longer chains
 
+***
 
-## Erigon
+## Chain Configs
+- Testnet - this is the formal testnet
+  - chain: `hermez-testnet`
+- Mainnet - this runs against L1 Ethereum Mainnet
+  - chain: `hermez-mainnet`
+
+***
+
+## Configuration Files
+Config files are the easiest way to configure zKEVM-Erigon, there are examples in the repository for each network e.g. `hermezconfig-testnet.yaml.example`
+
+Here is an example of the devnet (Blueberry) config `hermezconfig-devnet.yaml`:
+
+```yaml
+datadir: '/Path/to/your/datadir'
+chain: "hermez-testnet"
+http: true
+externalcl: true
+private.api.addr: "localhost:9091"
+zkevm.centralized-sequencer-rpc: "https://rpc.public.zkevm-test.net/"
+http.api: ["eth","debug","net","trace","web3","erigon"]
+```
+
+***
+
+## Running zKEVM Erigon
+- Build using  ``'make zkevm-erigon'`
+- Set up your config file (copy an example and edit as required)
+- run `./build/bin/zkevm-erigon --config="./hermezconfig-{network}.yaml"` (complete the name of your config file as required)
+
+NB: `--externalcl` flag is removed in upstream erigon so beware of re-using commands/config
+
+***
+
+## Networks
+
+| Network Name        | Chain ID | ForkID | Genesis File | RPC URL | Rootchain  | Smart Contract Address |
+|---------------------|----------|--------|--------------|---------|------------|------------------------|
+| zkEVM Mainnet       | 1101     | 5      | [Link](https://hackmd.io/bpmxb5QaSFafV0nB4i-KZA) | [Mainnet RPC](https://zkevm-rpc.com/) | Ethereum Mainnet | `0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2` |
+| zkEVM Public Testnet| 1442     | 5      | [Link](https://hackmd.io/Ug9pB613SvevJgnXRC4YJA) | [Testnet RPC](https://rpc.public.zkevm-test.net/) | Goerli | `0xa997cfD539E703921fD1e3Cf25b4c241a27a4c7A` |
+
+***
+
+## Additional Resources
+
+- Block Explorers:
+  - Testnet: [PolygonScan Testnet](https://testnet-zkevm.polygonscan.com/)
+  - Mainnet: [PolygonScan Mainnet](https://zkevm.polygonscan.com/)
+
+***
+## Funding for Testing
+
+Use the Goerli faucet to obtain ETH for testing: [Goerli Faucet](https://goerlifaucet.com). Transfer ETH to L2 using the bridge contract page. ENS is not supported on the L2.
+<br><br>
+
+***
+***
+
+# Upstream Erigon README
 
 Erigon is an implementation of Ethereum (execution client with light client for consensus layer), on the efficiency
 frontier. [Archive Node](https://ethereum.org/en/developers/docs/nodes-and-clients/archive-nodes/#what-is-an-archive-node)

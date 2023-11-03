@@ -669,6 +669,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
 
 	if isZk {
+		chainId := backend.config.NetworkID // TODO: temporary fix for alpha
 		devnet := zkchainconfig.IsDevnet(backend.config.NetworkID)
 
 		addr := zkchainconfig.GetContractAddress(backend.config.NetworkID)
@@ -690,7 +691,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		etherMan := newEtherMan(zkEthMainnetRpcUrl, testnet)
 		zkSyncer := syncer.NewSyncer(etherMan.EthClient, addr)
 
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block, rpcEndpoint, testnet || devnet)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block, rpcEndpoint, chainId)
 		backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 		// TODO: prune order
 	} else {
