@@ -426,7 +426,7 @@ func zkIncrementIntermediateHashes(logPrefix string, s *sync_stages.StageState, 
 			}
 		}
 
-		progressChan <- i
+		progressChan <- i - s.BlockNumber + 1
 	}
 
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes finished", logPrefix))
