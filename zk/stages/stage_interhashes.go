@@ -105,16 +105,8 @@ func SpawnZkIntermediateHashesStage(s *sync_stages.StageState, u sync_stages.Unw
 	}
 
 	var root libcommon.Hash
-	//shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > 10 // RetainList is in-memory structure and it will OOM if jump is too big, such big jump anyway invalidate most of existing Intermediate hashes
-	//if !shouldRegenerate && cfg.historyV3 && to-s.BlockNumber > 10 {
-	//	//incremental can work only on DB data, not on snapshots
-	//	_, n, err := rawdbv3.TxNums.FindBlockNum(tx, cfg.agg.EndTxNumMinimax())
-	//	if err != nil {
-	//		return trie.EmptyRoot, err
-	//	}
-	//	shouldRegenerate = s.BlockNumber < n
-	//}
-	shouldRegenerate := false
+
+	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > 20
 
 	eridb, err := db2.NewEriDb(tx)
 	if err != nil {
