@@ -19,6 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -45,12 +46,14 @@ type HermezDb interface {
 type BatchesCfg struct {
 	db     kv.RwDB
 	syncer ISyncer
+	zkCfg  *ethconfig.Zk
 }
 
-func StageBatchesCfg(db kv.RwDB, syncer ISyncer) BatchesCfg {
+func StageBatchesCfg(db kv.RwDB, syncer ISyncer, zkCfg *ethconfig.Zk) BatchesCfg {
 	return BatchesCfg{
 		db:     db,
 		syncer: syncer,
+		zkCfg:  zkCfg,
 	}
 }
 
@@ -105,7 +108,7 @@ func SpawnStageBatches(
 		for {
 			// this will download all blocks from datastream and push them in a channel
 			// if no error, break, else continue trying to get them
-			if _, _, err = datastream.DownloadAllL2BlocksToChannel(datastream.TestDatastreamUrl, l2BlockChan, gerUpdatesChan, batchesProgress); err == nil {
+			if _, _, err = datastream.DownloadAllL2BlocksToChannel(cfg.zkCfg.L2DataStreamerUrl, l2BlockChan, gerUpdatesChan, batchesProgress); err == nil {
 				break
 			}
 
@@ -136,6 +139,11 @@ func SpawnStageBatches(
 
 	writeThreadFinished := false
 	lastGer := common.Hash{}
+	lastForkId64, err := sync_stages.GetStageProgress(tx, sync_stages.ForkId)
+	lastForkId := uint16(lastForkId64)
+	if err != nil {
+		return fmt.Errorf("failed to get last fork id, %w", err)
+	}
 	for {
 		// get block
 		// if no blocks available should block
@@ -146,6 +154,17 @@ func SpawnStageBatches(
 		case l2BlockIncomming := <-l2BlockChan:
 			l2Block = l2BlockIncomming // writes header, body, forkId and blockBatch
 			zeroHash := common.Hash{}
+
+			// update forkid
+			if l2Block.ForkId > lastForkId {
+				lastForkId = l2Block.ForkId
+				err = hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId))
+				if err != nil {
+					return fmt.Errorf("write fork id error: %v", err)
+				}
+			}
+
+			// update GER
 			if l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 {
 				if lastGer == zeroHash {
 					prevGer, err := hermezDb.GetBlockGlobalExitRoot(l2Block.L2BlockNumber - 1)
@@ -203,6 +222,11 @@ func SpawnStageBatches(
 
 	// store the highest hashable block number
 	if err := sync_stages.SaveStageProgress(tx, sync_stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+
+	// store the highest seen forkid
+	if err := sync_stages.SaveStageProgress(tx, sync_stages.ForkId, uint64(lastForkId)); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 

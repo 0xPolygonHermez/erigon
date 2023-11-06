@@ -9,15 +9,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"bytes"
 	"sync/atomic"
-
-	"math/rand"
 
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
@@ -33,10 +30,8 @@ func UintBytes(no uint64) []byte {
 	return noBytes
 }
 
-func requestWithRetry(ctx context.Context, rpcEndpoint string, payload []byte, maxRetries int) (*http.Response, error) {
+func requestWithRetry(ctx context.Context, rpcEndpoint string, payload []byte, maxRetries int) (*common.Hash, error) {
 	client := &http.Client{}
-	var resp *http.Response
-	var err error
 
 	req, err := http.NewRequestWithContext(ctx, "POST", rpcEndpoint, bytes.NewBuffer(payload))
 	if err != nil {
@@ -44,17 +39,38 @@ func requestWithRetry(ctx context.Context, rpcEndpoint string, payload []byte, m
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	var body []byte
 	for i := 0; i <= maxRetries; i++ {
-		resp, err = client.Do(req)
-		if err == nil {
-			return resp, nil
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Debug("retrying request for rpc root due to network error", "retryNo", i)
+			continue
 		}
 
-		log.Debug("retrying request for rpc root", "retryNo", i)
+		func() {
+			defer resp.Body.Close()
+			body, err = io.ReadAll(resp.Body)
+		}()
 
-		sleepTime := time.Millisecond * time.Duration(100<<i)
-		jitter := time.Millisecond * time.Duration(rand.Intn(50))
-		time.Sleep(sleepTime + jitter)
+		if err != nil {
+			log.Debug("retrying request for rpc root due to read error", "retryNo", i)
+			continue
+		}
+
+		var result map[string]interface{}
+		err = json.Unmarshal(body, &result)
+		if err != nil {
+			log.Debug("retrying request for rpc root due to unmarshal error", "retryNo", i)
+			continue
+		}
+
+		rpcHashString, ok := result["result"].(string)
+		if !ok {
+			return nil, err
+		}
+
+		rpcHash := common.HexToHash(rpcHashString)
+		return &rpcHash, nil
 	}
 
 	return nil, err
@@ -84,46 +100,16 @@ func getRpcRoot(ctx context.Context, rpcEndpoint string, txNum int64) (common.Ha
 		return common.Hash{}, err
 	}
 
-	resp, err := requestWithRetry(ctx, rpcEndpoint, payloadBytes, 10)
-	if err != nil {
+	rpcHash, err := requestWithRetry(ctx, rpcEndpoint, payloadBytes, 10)
+	if err != nil || rpcHash == nil {
 		return common.Hash{}, err
 	}
 
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	rpcHash := trimHexString(result["result"].(string))
-
-	h := common.HexToHash(rpcHash)
-	return h, nil
-}
-
-func trimHexString(s string) string {
-	if strings.HasPrefix(s, "0x") {
-		s = s[2:]
-	}
-
-	for i := 0; i < len(s); i++ {
-		if s[i] != '0' {
-			return "0x" + s[i:]
-		}
-	}
-
-	return "0x0"
+	return *rpcHash, nil
 }
 
 const (
-	numWorkers = 50  // number of concurrent workers
-	rateLimit  = 250 // requests per second
+	numWorkers = 50 // number of concurrent workers
 )
 
 func worker(ctx context.Context, logPrefix, rpcEndpoint string, id int, jobs <-chan int64, results chan<- map[int64]string, rl *rate.Limiter, wg *sync.WaitGroup, processedTxNum *int64) {
@@ -207,10 +193,10 @@ func main() {
 	totalTxNum := 2827625 // edit with highest txnum you want to download hashes up to
 	rpcEndpoint := "https://zkevm-rpc.com"
 	ctx := context.Background()
-	DownloadScalableHashes(ctx, rpcEndpoint, "test", fileName, int64(totalTxNum), true, 1)
+	DownloadScalableHashes(ctx, rpcEndpoint, "test", fileName, int64(totalTxNum), true, 1, 250)
 }
 
-func DownloadScalableHashes(ctxInput context.Context, rpcEndpoint, logPrefix, fileName string, totalTxNum int64, saveResultsToFile bool, startFrom int64) map[int64]string {
+func DownloadScalableHashes(ctxInput context.Context, rpcEndpoint, logPrefix, fileName string, totalTxNum int64, saveResultsToFile bool, startFrom int64, rateLimit int) map[int64]string {
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -218,7 +204,7 @@ func DownloadScalableHashes(ctxInput context.Context, rpcEndpoint, logPrefix, fi
 	jobs := make(chan int64, totalTxNum)
 	results := make(chan map[int64]string, totalTxNum)
 
-	rl := rate.NewLimiter(rateLimit, numWorkers)
+	rl := rate.NewLimiter(rate.Limit(rateLimit), numWorkers)
 
 	hashResults := make(map[int64]string)
 	if saveResultsToFile {

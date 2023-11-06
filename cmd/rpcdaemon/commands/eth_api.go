@@ -123,7 +123,7 @@ type BaseAPI struct {
 
 	evmCallTimeout time.Duration
 	dirs           datadir.Dirs
-	RpcUrl         string
+	L2RpcUrl       string
 }
 
 func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.AggregatorV3, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs, rpcUrl string) *BaseAPI {
@@ -136,7 +136,7 @@ func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader serv
 		panic(err)
 	}
 
-	return &BaseAPI{filters: f, stateCache: stateCache, blocksLRU: blocksLRU, _blockReader: blockReader, _txnReader: blockReader, _agg: agg, evmCallTimeout: evmCallTimeout, _engine: engine, dirs: dirs, RpcUrl: rpcUrl}
+	return &BaseAPI{filters: f, stateCache: stateCache, blocksLRU: blocksLRU, _blockReader: blockReader, _txnReader: blockReader, _agg: agg, evmCallTimeout: evmCallTimeout, _engine: engine, dirs: dirs, L2RpcUrl: rpcUrl}
 }
 
 func (api *BaseAPI) chainConfig(tx kv.Tx) (*chain.Config, error) {

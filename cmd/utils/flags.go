@@ -346,10 +346,55 @@ var (
 		Usage: "API's offered over the HTTP-RPC interface",
 		Value: "eth,erigon,engine",
 	}
-	RpcUrlFlag = cli.StringFlag{
-		Name:  "zkevm.centralized-sequencer-rpc",
-		Usage: "Upstream node rpc endpoint",
+	L2ChainIdFlag = cli.Uint64Flag{
+		Name:  "zkevm.l2-chain-id",
+		Usage: "L2 chain ID",
+		Value: 0,
+	}
+	L2RpcUrlFlag = cli.StringFlag{
+		Name:  "zkevm.l2-sequencer-rpc-url",
+		Usage: "Upstream L2 node RPC endpoint",
 		Value: "",
+	}
+	L2DataStreamerUrlFlag = cli.StringFlag{
+		Name:  "zkevm.l2-datastreamer-url",
+		Usage: "L2 datastreamer endpoint",
+		Value: "",
+	}
+	L1ChainIdFlag = cli.Uint64Flag{
+		Name:  "zkevm.l1-chain-id",
+		Usage: "Ethereum L1 chain ID",
+		Value: 0,
+	}
+	L1RpcUrlFlag = cli.StringFlag{
+		Name:  "zkevm.l1-rpc-url",
+		Usage: "Ethereum L1 RPC endpoint",
+		Value: "",
+	}
+	L1ContractAddressFlag = cli.StringFlag{
+		Name:  "zkevm.l1-contract-address",
+		Usage: "Ethereum L1 contract address",
+		Value: "",
+	}
+	L1MaticContractAddressFlag = cli.StringFlag{
+		Name:  "zkevm.l1-matic-contract-address",
+		Usage: "Ethereum L1 Matic contract address",
+		Value: "",
+	}
+	L1GERManagerContractAddressFlag = cli.StringFlag{
+		Name:  "zkevm.l1-ger-manager-contract-address",
+		Usage: "Ethereum L1 GER Manager contract address",
+		Value: "",
+	}
+	L1FirstBlockFlag = cli.Uint64Flag{
+		Name:  "zkevm.l1-first-block",
+		Usage: "First block to start syncing from on the L1",
+		Value: 0,
+	}
+	RpcRateLimitsFlag = cli.IntFlag{
+		Name:  "zkevm.rpc-ratelimit",
+		Usage: "RPC rate limit in requests per second.",
+		Value: 0,
 	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",

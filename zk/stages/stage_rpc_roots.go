@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	scalable "github.com/ledgerwatch/erigon/cmd/hack/zkevm"
 	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 	"github.com/ledgerwatch/log/v3"
@@ -18,12 +19,11 @@ import (
 type RpcRootsCfg struct {
 	db          kv.RwDB
 	chainConfig *chain.Config
-	rpcEndpoint string
-	chainId     uint64
+	zkCfg       *ethconfig.Zk
 }
 
-func StageRpcRootsCfg(db kv.RwDB, chainConfig *chain.Config, rpcEndpoint string, chainId uint64) RpcRootsCfg {
-	return RpcRootsCfg{db: db, chainConfig: chainConfig, rpcEndpoint: rpcEndpoint, chainId: chainId}
+func StageRpcRootsCfg(db kv.RwDB, chainConfig *chain.Config, zkCfg *ethconfig.Zk) RpcRootsCfg {
+	return RpcRootsCfg{db: db, chainConfig: chainConfig, zkCfg: zkCfg}
 }
 
 func SpawnStageRpcRoots(
@@ -52,7 +52,7 @@ func SpawnStageRpcRoots(
 	}
 
 	// call rpc to get latest block no
-	txNo, err := RpcGetHighestTxNo(cfg.rpcEndpoint)
+	txNo, err := RpcGetHighestTxNo(cfg.zkCfg.L2RpcUrl)
 	if err != nil {
 		return err
 	}
@@ -68,15 +68,15 @@ func SpawnStageRpcRoots(
 		return nil
 	}
 	rpcFileName := "zkevm-roots.json"
-	if zkchainconfig.IsTestnet(cfg.chainId) {
+	if zkchainconfig.IsTestnet(cfg.zkCfg.L2ChainId) {
 		rpcFileName = "zkevm-roots-testnet.json"
 	}
-	if zkchainconfig.IsDevnet(cfg.chainId) {
+	if zkchainconfig.IsDevnet(cfg.zkCfg.L2ChainId) {
 		rpcFileName = "zkevm-roots-devnet.json"
 	}
 	log.Info(fmt.Sprintf("[%s] Starting to download roots", logPrefix), "savedTxNo", prog, "highestTxNo", txNo)
 	if !firstCycle || prog != 0 {
-		res := scalable.DownloadScalableHashes(ctx, cfg.rpcEndpoint, logPrefix, rpcFileName, int64(txNo), false, int64(prog))
+		res := scalable.DownloadScalableHashes(ctx, cfg.zkCfg.L2RpcUrl, logPrefix, rpcFileName, int64(txNo), false, int64(prog), cfg.zkCfg.RpcRateLimits)
 
 		if err := putRootsInDb(tx, res); err != nil {
 			return err
@@ -93,7 +93,7 @@ func SpawnStageRpcRoots(
 	}
 
 	// checks for missing rpc hashes up to max. tx num and downloads them from the rpc
-	res := scalable.DownloadScalableHashes(ctx, cfg.rpcEndpoint, logPrefix, rpcFileName, int64(txNo), true, 1)
+	res := scalable.DownloadScalableHashes(ctx, cfg.zkCfg.L2RpcUrl, logPrefix, rpcFileName, int64(txNo), true, 1, cfg.zkCfg.RpcRateLimits)
 
 	if err := putRootsInDb(tx, res); err != nil {
 		return err

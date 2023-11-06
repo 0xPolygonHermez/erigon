@@ -63,6 +63,7 @@ var (
 	RpcRoots                    SyncStage = "RpcRoots"
 	HighestHashableL2BlockNo    SyncStage = "HighestHashableL2BlockNo"
 	VerificationsStateRootCheck SyncStage = "VerificationStateRootCheck"
+	ForkId                      SyncStage = "ForkId"
 )
 
 var AllStages = []SyncStage{

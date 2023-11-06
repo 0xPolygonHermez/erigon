@@ -252,7 +252,20 @@ type Config struct {
 	DropUselessPeers bool
 
 	//[zkevm]
-	RpcUrl string
+	Zk *Zk
+}
+
+type Zk struct {
+	L2ChainId                   uint64
+	L2RpcUrl                    string
+	L2DataStreamerUrl           string
+	L1ChainId                   uint64
+	L1RpcUrl                    string
+	L1ContractAddress           common.Address
+	L1MaticContractAddress      common.Address
+	L1GERManagerContractAddress common.Address
+	L1FirstBlock                uint64
+	RpcRateLimits               int
 }
 
 type Sync struct {

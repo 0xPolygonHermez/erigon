@@ -108,7 +108,6 @@ import (
 	stages2 "github.com/ledgerwatch/erigon/turbo/stages"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/syncer"
-	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
 )
 
@@ -239,8 +238,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	config.Snapshot.Enabled = config.Sync.UseSnapshots
 
 	log.Info("Initialised chain configuration", "config", chainConfig, "genesis", genesis.Hash())
-
-	isZk := zkchainconfig.IsZk(config.NetworkID)
 
 	if err := chainKv.Update(context.Background(), func(tx kv.RwTx) error {
 		if err = sync_stages.UpdateMetrics(tx); err != nil {
@@ -668,30 +665,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
 
-	if isZk {
-		chainId := backend.config.NetworkID // TODO: temporary fix for alpha
-		devnet := zkchainconfig.IsDevnet(backend.config.NetworkID)
+	if backend.config.Zk != nil {
+		cfg := backend.config.Zk
 
-		addr := zkchainconfig.GetContractAddress(backend.config.NetworkID)
-		testnet := backend.config.NetworkID == 1440
-		firstL1Block := uint64(16896700)
-		zkEthMainnetRpcUrl := "https://rpc.eu-north-1.gateway.fm/v4/ethereum/non-archival/mainnet?apiKey=UDmvcERuIwHSpeH3dUb1XDr4QnGqzHxv.J0qONXx6TUa9RqGb"
-		rpcEndpoint := config.RpcUrl
+		etherMan := newEtherMan(cfg)
+		zkSyncer := syncer.NewSyncer(etherMan.EthClient, cfg.L1ContractAddress)
 
-		// hermez testnet endpoints
-		if testnet {
-			zkEthMainnetRpcUrl = "https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/goerli?apiKey=2LVJmsyRvOfhxFutspKT0wnTVyMCYc4L.swK5wk5pCrfipEg5"
-			firstL1Block = uint64(8577775)
-		}
-
-		if devnet {
-			firstL1Block = uint64(8577775)
-		}
-
-		etherMan := newEtherMan(zkEthMainnetRpcUrl, testnet)
-		zkSyncer := syncer.NewSyncer(etherMan.EthClient, addr)
-
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer, firstL1Block, rpcEndpoint, chainId)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer)
 		backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 		// TODO: prune order
 	} else {
@@ -704,22 +684,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 }
 
 // creates an EtherMan instance with default parameters
-func newEtherMan(clientUrl string, isTestNet bool) *etherman.Client {
-	// return defaults here
-
+func newEtherMan(cfg *ethconfig.Zk) *etherman.Client {
 	ethmanConf := etherman.Config{
-		URL:                       clientUrl,
-		L1ChainID:                 1,
-		PoEAddr:                   libcommon.HexToAddress("0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"),
-		MaticAddr:                 libcommon.HexToAddress("0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0"),
-		GlobalExitRootManagerAddr: libcommon.HexToAddress("0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb"),
-	}
-
-	if isTestNet {
-		ethmanConf.L1ChainID = 5
-		ethmanConf.PoEAddr = libcommon.HexToAddress("0xa997cfD539E703921fD1e3Cf25b4c241a27a4c7A")
-		ethmanConf.MaticAddr = libcommon.HexToAddress("0x1319D23c2F7034F52Eb07399702B040bA278Ca49")
-		ethmanConf.GlobalExitRootManagerAddr = libcommon.HexToAddress("0x4d9427DCA0406358445bC0a8F88C26b704004f74")
+		URL:                       cfg.L1RpcUrl,
+		L1ChainID:                 cfg.L1ChainId,
+		PoEAddr:                   cfg.L1ContractAddress,
+		MaticAddr:                 cfg.L1MaticContractAddress,
+		GlobalExitRootManagerAddr: cfg.L1GERManagerContractAddress,
 	}
 
 	em, err := etherman.NewClient(ethmanConf)
@@ -782,7 +753,7 @@ func (backend *Ethereum) Init(stack *node.Node, config *ethconfig.Config) error 
 	if casted, ok := backend.engine.(*bor.Bor); ok {
 		borDb = casted.DB
 	}
-	apiList := commands.APIList(chainKv, borDb, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config.RpcUrl)
+	apiList := commands.APIList(chainKv, borDb, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config.Zk.L2RpcUrl)
 	authApiList := commands.AuthAPIList(chainKv, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine)
 	go func() {
 		if err := cli.StartRpcServer(ctx, httpRpcCfg, apiList, authApiList); err != nil {

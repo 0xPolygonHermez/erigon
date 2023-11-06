@@ -8,8 +8,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const TestDatastreamUrl = "stream.internal.zkevm-test.net:6900"
-
 // Download all available blocks from datastream server to channel
 func DownloadAllL2BlocksToChannel(datastreamUrl string, blockChannel chan types.FullL2Block, gerUpdateChan chan types.GerUpdate, fromBlock uint64) (uint64, map[uint64][]byte, error) {
 	// Create client

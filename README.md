@@ -12,7 +12,7 @@ For syncing different networks, you will need the corresponding network-specific
 - `git lfs install` - Initializes the Git LFS
 - `git lfs pull` - Downloads the actual LFS files
 
-These contain some pre-calculated roots from the RPC which are later validated by this node in the intermediate hashes stage.
+These contain some pre-calculated roots from the RPC which are later validated by the local node in the intermediate hashes stage.
 
 ***
 
@@ -32,18 +32,30 @@ These contain some pre-calculated roots from the RPC which are later validated b
 ***
 
 ## Configuration Files
-Config files are the easiest way to configure zKEVM-Erigon, there are examples in the repository for each network e.g. `hermezconfig-testnet.yaml.example`
+Config files are the easiest way to configure zKEVM-Erigon, there are examples in the repository for each network e.g. `hermezconfig-testnet.yaml.example`.
 
-Here is an example of the devnet (Blueberry) config `hermezconfig-devnet.yaml`:
+Depending on the RPC provider you are using, you may wish to alter `zkevm.rpc-ratelimit`.
+
+Here is an example of the testnet config `hermezconfig-testnet.yaml`:
 
 ```yaml
-datadir: '/Path/to/your/datadir'
-chain: "hermez-testnet"
-http: true
+datadir : '/Path/to/your/datadirs/hermez-testnet'
+chain : "hermez-testnet"
+http : true
+private.api.addr : "localhost:9091"
+zkevm.l2-chain-id: 1442
+zkevm.l2-sequencer-rpc-url: "https://rpc.public.zkevm-test.net"
+zkevm.l2-datastreamer-url: "stream.zkevm-test.net:6900"
+zkevm.l1-chain-id: 5
+zkevm.l1-rpc-url: "https://rpc.goerli.eth.gateway.fm"
+zkevm.l1-contract-address: "0xa997cfD539E703921fD1e3Cf25b4c241a27a4c7A"
+zkevm.l1-matic-contract-address: "0x1319D23c2F7034F52Eb07399702B040bA278Ca49"
+zkevm.l1-ger-manager-contract-address: "0x4d9427DCA0406358445bC0a8F88C26b704004f74"
+zkevm.l1-first-block: 8577775
+zkevm.rpc-ratelimit: 250
+
 externalcl: true
-private.api.addr: "localhost:9091"
-zkevm.centralized-sequencer-rpc: "https://rpc.public.zkevm-test.net/"
-http.api: ["eth","debug","net","trace","web3","erigon"]
+http.api : ["eth","debug","net","trace","web3","erigon"]
 ```
 
 ***

@@ -276,10 +276,44 @@ func ApplyFlagsForEthConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.Bool(utils.DisableIPV4.Name) {
 		cfg.Downloader.ClientConfig.DisableIPv4 = true
 	}
+}
 
-	if rpcUrl := ctx.String(utils.RpcUrlFlag.Name); rpcUrl != "" {
-		cfg.RpcUrl = rpcUrl
+func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
+	checkFlag := func(flagName string, value interface{}) {
+		switch v := value.(type) {
+		case string:
+			if v == "" {
+				panic(fmt.Sprintf("Flag not set: %s", flagName))
+			}
+		case uint64:
+			if v == 0 {
+				panic(fmt.Sprintf("Flag not set: %s", flagName))
+			}
+		}
 	}
+
+	cfg.Zk = &ethconfig.Zk{
+		L2ChainId:                   ctx.Uint64(utils.L2ChainIdFlag.Name),
+		L2RpcUrl:                    ctx.String(utils.L2RpcUrlFlag.Name),
+		L2DataStreamerUrl:           ctx.String(utils.L2DataStreamerUrlFlag.Name),
+		L1ChainId:                   ctx.Uint64(utils.L1ChainIdFlag.Name),
+		L1RpcUrl:                    ctx.String(utils.L1RpcUrlFlag.Name),
+		L1ContractAddress:           libcommon.HexToAddress(ctx.String(utils.L1ContractAddressFlag.Name)),
+		L1MaticContractAddress:      libcommon.HexToAddress(ctx.String(utils.L1MaticContractAddressFlag.Name)),
+		L1GERManagerContractAddress: libcommon.HexToAddress(ctx.String(utils.L1GERManagerContractAddressFlag.Name)),
+		L1FirstBlock:                ctx.Uint64(utils.L1FirstBlockFlag.Name),
+		RpcRateLimits:               ctx.Int(utils.RpcRateLimitsFlag.Name),
+	}
+
+	checkFlag(utils.L2ChainIdFlag.Name, cfg.Zk.L2ChainId)
+	checkFlag(utils.L2RpcUrlFlag.Name, cfg.Zk.L2RpcUrl)
+	checkFlag(utils.L2DataStreamerUrlFlag.Name, cfg.Zk.L2DataStreamerUrl)
+	checkFlag(utils.L1ChainIdFlag.Name, cfg.Zk.L1ChainId)
+	checkFlag(utils.L1RpcUrlFlag.Name, cfg.Zk.L1RpcUrl)
+	checkFlag(utils.L1ContractAddressFlag.Name, cfg.Zk.L1ContractAddress.Hex())
+	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.Zk.L1MaticContractAddress.Hex())
+	checkFlag(utils.L1GERManagerContractAddressFlag.Name, cfg.Zk.L1GERManagerContractAddress.Hex())
+	checkFlag(utils.L1FirstBlockFlag.Name, cfg.Zk.L1FirstBlock)
 }
 
 func ApplyFlagsForEthConfigCobra(f *pflag.FlagSet, cfg *ethconfig.Config) {

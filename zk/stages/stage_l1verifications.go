@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/types"
@@ -23,14 +24,14 @@ type L1VerificationsCfg struct {
 	db     kv.RwDB
 	syncer IVerificationsSyncer
 
-	firstL1Block uint64
+	zkCfg *ethconfig.Zk
 }
 
-func StageL1VerificationsCfg(db kv.RwDB, syncer IVerificationsSyncer, firstL1Block uint64) L1VerificationsCfg {
+func StageL1VerificationsCfg(db kv.RwDB, syncer IVerificationsSyncer, zkCfg *ethconfig.Zk) L1VerificationsCfg {
 	return L1VerificationsCfg{
-		db:           db,
-		syncer:       syncer,
-		firstL1Block: firstL1Block,
+		db:     db,
+		syncer: syncer,
+		zkCfg:  zkCfg,
 	}
 }
 
@@ -71,7 +72,7 @@ func SpawnStageL1Verifications(
 	}
 
 	if l1BlockProgress == 0 {
-		l1BlockProgress = cfg.firstL1Block - 1
+		l1BlockProgress = cfg.zkCfg.L1FirstBlock - 1
 	}
 
 	// get as many verifications as we can from the network
