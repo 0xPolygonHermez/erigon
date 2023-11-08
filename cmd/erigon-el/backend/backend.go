@@ -46,6 +46,7 @@ import (
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/chain"
 
+	chain2 "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/cmd/erigon-el/eth1"
 	stages3 "github.com/ledgerwatch/erigon/cmd/erigon-el/stages"
 	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/cli"
@@ -192,7 +193,7 @@ func NewBackend(stack *node.Node, config *ethconfig.Config, logger log.Logger) (
 		}
 		var genesisErr error
 		chainConfig, genesis, genesisErr = core.WriteGenesisBlock(tx, genesisSpec, config.OverrideShanghaiTime, tmpdir)
-		if _, ok := genesisErr.(*chain.ConfigCompatError); genesisErr != nil && !ok {
+		if _, ok := genesisErr.(*chain2.ConfigCompatError); genesisErr != nil && !ok {
 			return genesisErr
 		}
 

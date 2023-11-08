@@ -77,10 +77,10 @@ func printStages(tx kv.Tx, snapshots *snapshotsync.RoSnapshots, agg *state.Aggre
 	fmt.Fprintf(w, "Note: prune_at doesn't mean 'all data before were deleted' - it just mean stage.Prune function were run to this block. Because 1 stage may prune multiple data types to different prune distance.\n")
 	fmt.Fprint(w, "\n \t\t stage_at \t prune_at\n")
 	for _, stage := range sync_stages.AllStages {
-		if progress, err = sync_stages.stages.GetStageProgress(tx, stage); err != nil {
+		if progress, err = sync_stages.GetStageProgress(tx, stage); err != nil {
 			return err
 		}
-		prunedTo, err := sync_stages.stages.GetStagePruneProgress(tx, stage)
+		prunedTo, err := sync_stages.GetStagePruneProgress(tx, stage)
 		if err != nil {
 			return err
 		}

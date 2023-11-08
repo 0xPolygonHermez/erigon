@@ -27,6 +27,7 @@ import (
 	libstate "github.com/ledgerwatch/erigon-lib/state"
 	chain2 "github.com/ledgerwatch/erigon/chain"
 
+	chain3 "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/cmd/hack/tool/fromdb"
 	"github.com/ledgerwatch/erigon/cmd/sentry/sentry"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -1287,7 +1288,7 @@ func newDomains(ctx context.Context, db kv.RwDB, stepSize uint64, mode libstate.
 	chainConfig, genesisBlock, genesisErr := core.CommitGenesisBlock(db, genesis, "")
 	_ = genesisBlock // TODO apply if needed here
 
-	if _, ok := genesisErr.(*chain2.ConfigCompatError); genesisErr != nil && !ok {
+	if _, ok := genesisErr.(*chain3.ConfigCompatError); genesisErr != nil && !ok {
 		panic(genesisErr)
 	}
 	//log.Info("Initialised chain configuration", "config", chainConfig)
@@ -1322,7 +1323,7 @@ func newSync(ctx context.Context, db kv.RwDB, miningConfig *params.MiningConfig)
 
 	genesis := core.GenesisBlockByChainName(chain)
 	chainConfig, genesisBlock, genesisErr := core.CommitGenesisBlock(db, genesis, "")
-	if _, ok := genesisErr.(*chain2.ConfigCompatError); genesisErr != nil && !ok {
+	if _, ok := genesisErr.(*chain3.ConfigCompatError); genesisErr != nil && !ok {
 		panic(genesisErr)
 	}
 	//log.Info("Initialised chain configuration", "config", chainConfig)

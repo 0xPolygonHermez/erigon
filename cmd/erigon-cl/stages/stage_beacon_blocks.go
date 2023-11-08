@@ -41,7 +41,7 @@ func StageBeaconsBlock(db kv.RwDB, downloader *network.ForwardBeaconDownloader, 
 }
 
 // SpawnStageBeaconsForward spawn the beacon forward stage
-func SpawnStageBeaconsBlocks(cfg StageBeaconsBlockCfg, s *sync.StageState, tx kv.RwTx, ctx context.Context) error {
+func SpawnStageBeaconsBlocks(cfg StageBeaconsBlockCfg, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context) error {
 	useExternalTx := tx != nil
 	var err error
 	if !useExternalTx {

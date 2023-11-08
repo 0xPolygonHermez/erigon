@@ -44,7 +44,7 @@ func StageHistoryReconstruction(db kv.RwDB, downloader *network.BackwardBeaconDo
 }
 
 // SpawnStageBeaconsForward spawn the beacon forward stage
-func SpawnStageHistoryReconstruction(cfg StageHistoryReconstructionCfg, s *sync.StageState, tx kv.RwTx, ctx context.Context) error {
+func SpawnStageHistoryReconstruction(cfg StageHistoryReconstructionCfg, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context) error {
 	// This stage must be done only once.
 	progress := s.BlockNumber
 	if progress != 0 {
