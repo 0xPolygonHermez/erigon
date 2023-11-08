@@ -98,11 +98,8 @@ dbg:
 	@cd ./cmd/$* && $(GOBUILD) -o $(GOBIN)/$*
 	@echo "Run \"$(GOBIN)/$*\" to launch $*."
 
-## geth:                              run erigon (TODO: remove?)
-geth: erigon
-
 ## erigon:                            build erigon
-erigon: go-version erigon.cmd
+erigon-zkevm: go-version erigon-zkevm.cmd
 	@rm -f $(GOBIN)/tg # Remove old binary to prevent confusion where users still use it because of the scripts
 
 COMMANDS += devnet
@@ -128,7 +125,7 @@ COMMANDS += caplin-phase1
 $(COMMANDS): %: %.cmd
 
 ## all:                               run erigon with all commands
-all: erigon $(COMMANDS)
+all: erigon-zkevm $(COMMANDS)
 
 ## db-tools:                          build db tools
 db-tools:
@@ -214,7 +211,7 @@ git-submodules:
 	@git submodule sync --quiet --recursive || true
 	@git submodule update --quiet --init --recursive --force || true
 
-PACKAGE_NAME          := github.com/ledgerwatch/erigon
+PACKAGE_NAME          := github.com/gateway-fm/erigon-zkevm
 GOLANG_CROSS_VERSION  ?= v1.20.2
 
 .PHONY: release-dry-run
