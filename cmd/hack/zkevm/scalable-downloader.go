@@ -69,6 +69,10 @@ func requestWithRetry(ctx context.Context, rpcEndpoint string, payload []byte, m
 			return nil, err
 		}
 
+		if rpcHashString == "0x0000000000000000000000000000000000000000000000000000000000000000" {
+			continue
+		}
+
 		rpcHash := common.HexToHash(rpcHashString)
 		return &rpcHash, nil
 	}
@@ -174,7 +178,7 @@ func verifyTxNums(logPrefix string, totalTxNum, startFrom int64, hashResults map
 	missing := make([]int64, 0)
 
 	for i := startFrom; i <= totalTxNum; i++ {
-		if _, ok := hashResults[i]; !ok {
+		if hash, ok := hashResults[i]; !ok || hash == "0x0000000000000000000000000000000000000000000000000000000000000000" {
 			missing = append(missing, i)
 		}
 	}
