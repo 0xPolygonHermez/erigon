@@ -12,6 +12,7 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
@@ -34,15 +35,23 @@ func ShouldShortCircuitExecution(tx kv.RwTx) (bool, uint64, error) {
 		if err != nil {
 			return false, 0, err
 		}
-		verifiedBatchHighestBlockNos, err := hermezDb.GetL2BlockNosByBatch(highestVerifiedBatchNo)
-		if err != nil {
-			return false, 0, err
-		}
 
+		// we could find ourselves with a batch with no blocks here, so we want to go back one batch at
+		// a time until we find a batch with blocks
 		max := uint64(0)
-		for _, no := range verifiedBatchHighestBlockNos {
-			if no > max {
-				max = no
+		killSwitch := 0
+		for {
+			max, err = hermezDb.GetHighestBlockInBatch(highestVerifiedBatchNo)
+			if err != nil {
+				return false, 0, err
+			}
+			if max != 0 {
+				break
+			}
+			highestVerifiedBatchNo--
+			killSwitch++
+			if killSwitch > 100 {
+				return false, 0, fmt.Errorf("could not find a batch with blocks when checking short circuit")
 			}
 		}
 
