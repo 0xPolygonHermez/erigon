@@ -925,7 +925,11 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 
 	scope.Contract.Gas += returnGas
 
-	interpreter.returnData = ret
+	//[zkevm] do not overryde returnData if reverted
+	if err != ErrExecutionReverted {
+		interpreter.returnData = ret
+	}
+
 	return ret, nil
 }
 

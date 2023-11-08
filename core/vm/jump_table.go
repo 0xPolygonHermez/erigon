@@ -107,8 +107,8 @@ func newRohanInstructionSet() JumpTable {
 	instructionSet[SENDALL] = &operation{
 		execute:    opSendAll,
 		dynamicGas: gasSelfdestruct,
-		numPop:     2,
-		numPush:    1,
+		numPop:     1,
+		numPush:    0,
 	}
 
 	validateAndFillMaxStack(&instructionSet)
