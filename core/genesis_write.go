@@ -180,7 +180,6 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideShanghaiTime 
 	newCfg.ShanghaiTime = maxInt
 	newCfg.CancunTime = maxInt
 	newCfg.PragueTime = maxInt
-	newCfg.MordorBlock = maxInt
 
 	return newCfg, storedBlock, nil
 }

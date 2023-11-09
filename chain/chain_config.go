@@ -418,7 +418,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsPrague:              c.IsPrague(time),
 		IsEip1559FeeCollector: c.IsEip1559FeeCollector(num),
 		IsAura:                c.Aura != nil,
-		IsMordor:              c.IsMordor(time),
+		IsMordor:              c.IsMordor(num),
 	}
 }
 
