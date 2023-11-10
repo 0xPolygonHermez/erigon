@@ -232,6 +232,11 @@ func blockComparison(tx kv.RwTx, hermezDb *hermez_db.HermezDb, blockNo uint64, l
 		return fmt.Errorf("failed to read block by number, %w", err)
 	}
 
+	if v == nil || block == nil {
+		log.Info("block or verification is nil", "block", block, "verification", v)
+		return nil
+	}
+
 	if v.StateRoot != block.Root() {
 		log.Error(fmt.Sprintf("[%s] State root mismatch in block %d", logPrefix, blockNo))
 		return ErrStateRootMismatch
