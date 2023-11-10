@@ -49,7 +49,7 @@ RUN mkdir -p ~/.local/share/erigon
 ## then give each binary its own layer
 COPY --from=builder /app/build/bin/devnet /usr/local/bin/devnet
 COPY --from=builder /app/build/bin/downloader /usr/local/bin/downloader
-COPY --from=builder /app/build/bin/erigon-zkevm /usr/local/bin/erigon-zkevm
+COPY --from=builder /app/build/bin/zkevm-erigon /usr/local/bin/zkevm-erigon
 COPY --from=builder /app/build/bin/erigon-cl /usr/local/bin/erigon-cl
 COPY --from=builder /app/build/bin/evm /usr/local/bin/evm
 COPY --from=builder /app/build/bin/hack /usr/local/bin/hack
@@ -83,7 +83,7 @@ ARG VCS_REF
 ARG VERSION
 LABEL org.label-schema.build-date=$BUILD_DATE \
       org.label-schema.description="Erigon ZKEVM Client" \
-      org.label-schema.name="Erigon ZKEVM" \
+      org.label-schema.name="ZKEVM Erigon" \
       org.label-schema.schema-version="1.0" \
       org.label-schema.url="https://torquem.ch" \
       org.label-schema.vcs-ref=$VCS_REF \
@@ -91,4 +91,4 @@ LABEL org.label-schema.build-date=$BUILD_DATE \
       org.label-schema.vendor="Torquem" \
       org.label-schema.version=$VERSION
 
-ENTRYPOINT ["erigon-zkevm"]
+ENTRYPOINT ["zkevm-erigon"]
