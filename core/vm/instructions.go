@@ -972,6 +972,7 @@ func opSendAll(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 
 	if beneficiaryAddr != callerAddr {
 		interpreter.evm.IntraBlockState().AddBalance(beneficiaryAddr, balance)
+		interpreter.evm.IntraBlockState().SubBalance(callerAddr, balance)
 	}
 	return nil, errStopToken
 }
