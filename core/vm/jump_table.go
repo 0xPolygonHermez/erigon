@@ -87,6 +87,7 @@ func newMordorInstructionSet() JumpTable {
 	instructionSet := newRohanInstructionSet()
 
 	instructionSet[CALLDATACOPY].execute = opCallDataCopyFixed
+	instructionSet[CALLDATALOAD].execute = opCallDataLoadFixed
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet

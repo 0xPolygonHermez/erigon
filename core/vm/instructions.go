@@ -314,6 +314,20 @@ func opCallDataLoad(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	x := scope.Stack.Peek()
 	if offset, overflow := x.Uint64WithOverflow(); !overflow {
 		data := getData(scope.Contract.Input, offset, 32)
+		if len(scope.Contract.Input) == 0 {
+			data = getData(scope.Contract.Code, offset, 32)
+		}
+		x.SetBytes(data)
+	} else {
+		x.Clear()
+	}
+	return nil, nil
+}
+
+func opCallDataLoadFixed(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	x := scope.Stack.Peek()
+	if offset, overflow := x.Uint64WithOverflow(); !overflow {
+		data := getData(scope.Contract.Input, offset, 32)
 		x.SetBytes(data)
 	} else {
 		x.Clear()
