@@ -18,6 +18,7 @@ package vm
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/holiman/uint256"
@@ -165,6 +166,12 @@ func (c *ecrecover) RequiredGas(input []byte) uint64 {
 func (c *ecrecover) Run(input []byte) ([]byte, error) {
 	const ecRecoverInputLength = 128
 
+	// [zkevm] - this was a bug prior to forkId6
+	// this is the address that belongs to pvtKey = 0
+	// occurs on testnet block number 2963608
+	if fmt.Sprintf("%x", input) == "0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000001bc6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee57fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a1" {
+		return libcommon.HexToHash("0x3f17f1962b36e491b30a40b2405849e597ba5fb5").Bytes(), nil
+	}
 	input = common.RightPadBytes(input, ecRecoverInputLength)
 	// "input" is (hash, v, r, s), each 32 bytes
 	// but for ecrecover we want (r, s, v)
