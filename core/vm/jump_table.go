@@ -89,6 +89,8 @@ func newMordorInstructionSet() JumpTable {
 	instructionSet[CALLDATACOPY].execute = opCallDataCopyFixed
 	instructionSet[CALLDATALOAD].execute = opCallDataLoadFixed
 
+	enable3855(&instructionSet) // EIP-3855: Enable PUSH0 opcode
+
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }
