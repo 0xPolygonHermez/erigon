@@ -1,5 +1,5 @@
 {
-  "ChainName": "mainnet",
+  "ChainName": "hermez-mainnet",
   "chainId": 1101,
   "consensus": "ethash",
   "homesteadBlock": 0,
