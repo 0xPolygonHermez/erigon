@@ -106,7 +106,7 @@ func SpawnZkIntermediateHashesStage(s *sync_stages.StageState, u sync_stages.Unw
 
 	var root libcommon.Hash
 
-	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > 20
+	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > 250
 
 	eridb, err := db2.NewEriDb(tx)
 	if err != nil {
