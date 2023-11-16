@@ -40,11 +40,12 @@ type ZkInterHashesCfg struct {
 	blockReader       services.FullBlockReader
 	hd                *headerdownload.HeaderDownload
 
-	historyV3 bool
-	agg       *state.AggregatorV3
+	historyV3        bool
+	agg              *state.AggregatorV3
+	rebuildTreeAfter uint64
 }
 
-func StageZkInterHashesCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHalt bool, tmpDir string, blockReader services.FullBlockReader, hd *headerdownload.HeaderDownload, historyV3 bool, agg *state.AggregatorV3) ZkInterHashesCfg {
+func StageZkInterHashesCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHalt bool, tmpDir string, blockReader services.FullBlockReader, hd *headerdownload.HeaderDownload, historyV3 bool, agg *state.AggregatorV3, rebuildTreeAfter uint64) ZkInterHashesCfg {
 	return ZkInterHashesCfg{
 		db:                db,
 		checkRoot:         checkRoot,
@@ -54,8 +55,9 @@ func StageZkInterHashesCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHal
 		blockReader:       blockReader,
 		hd:                hd,
 
-		historyV3: historyV3,
-		agg:       agg,
+		historyV3:        historyV3,
+		agg:              agg,
+		rebuildTreeAfter: rebuildTreeAfter,
 	}
 }
 
@@ -106,7 +108,7 @@ func SpawnZkIntermediateHashesStage(s *sync_stages.StageState, u sync_stages.Unw
 
 	var root libcommon.Hash
 
-	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > 250
+	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > cfg.rebuildTreeAfter
 
 	eridb, err := db2.NewEriDb(tx)
 	if err != nil {

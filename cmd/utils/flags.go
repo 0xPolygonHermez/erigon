@@ -391,6 +391,11 @@ var (
 		Usage: "First block to start syncing from on the L1",
 		Value: 0,
 	}
+	RebuildTreeAfterFlag = cli.Uint64Flag{
+		Name:  "zkevm.rebuild-tree-after",
+		Usage: "Rebuild the state tree after this many blocks behind",
+		Value: 500,
+	}
 	RpcRateLimitsFlag = cli.IntFlag{
 		Name:  "zkevm.rpc-ratelimit",
 		Usage: "RPC rate limit in requests per second.",

@@ -303,6 +303,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1GERManagerContractAddress: libcommon.HexToAddress(ctx.String(utils.L1GERManagerContractAddressFlag.Name)),
 		L1FirstBlock:                ctx.Uint64(utils.L1FirstBlockFlag.Name),
 		RpcRateLimits:               ctx.Int(utils.RpcRateLimitsFlag.Name),
+		RebuildTreeAfter:            ctx.Uint64(utils.RebuildTreeAfterFlag.Name),
 	}
 
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.Zk.L2ChainId)
@@ -314,6 +315,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.Zk.L1MaticContractAddress.Hex())
 	checkFlag(utils.L1GERManagerContractAddressFlag.Name, cfg.Zk.L1GERManagerContractAddress.Hex())
 	checkFlag(utils.L1FirstBlockFlag.Name, cfg.Zk.L1FirstBlock)
+	checkFlag(utils.RpcRateLimitsFlag.Name, cfg.Zk.RpcRateLimits)
+	checkFlag(utils.RebuildTreeAfterFlag.Name, cfg.Zk.RebuildTreeAfter)
 }
 
 func ApplyFlagsForEthConfigCobra(f *pflag.FlagSet, cfg *ethconfig.Config) {
