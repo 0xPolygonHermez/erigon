@@ -74,6 +74,10 @@ func SpawnStageRpcRoots(
 	if zkchainconfig.IsDevnet(cfg.zkCfg.L2ChainId) {
 		rpcFileName = "zkevm-roots-devnet.json"
 	}
+	// if a custom file is provided, use it
+	if len(cfg.zkCfg.RpcRootsFile) > 0 {
+		rpcFileName = cfg.zkCfg.RpcRootsFile
+	}
 	log.Info(fmt.Sprintf("[%s] Starting to download roots", logPrefix), "savedTxNo", prog, "highestTxNo", txNo)
 	if !firstCycle || prog != 0 {
 		res := scalable.DownloadScalableHashes(ctx, cfg.zkCfg.L2RpcUrl, logPrefix, rpcFileName, int64(txNo), false, int64(prog), cfg.zkCfg.RpcRateLimits)

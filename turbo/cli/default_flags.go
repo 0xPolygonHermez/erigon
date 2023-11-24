@@ -175,4 +175,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.L1FirstBlockFlag,
 	&utils.RpcRateLimitsFlag,
 	&utils.RebuildTreeAfterFlag,
+	&utils.RpcRootsFileFlag,
 }

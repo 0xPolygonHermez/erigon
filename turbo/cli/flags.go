@@ -304,6 +304,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1FirstBlock:                ctx.Uint64(utils.L1FirstBlockFlag.Name),
 		RpcRateLimits:               ctx.Int(utils.RpcRateLimitsFlag.Name),
 		RebuildTreeAfter:            ctx.Uint64(utils.RebuildTreeAfterFlag.Name),
+		RpcRootsFile:                ctx.String(utils.RpcRootsFileFlag.Name),
 	}
 
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.Zk.L2ChainId)
@@ -317,6 +318,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.L1FirstBlockFlag.Name, cfg.Zk.L1FirstBlock)
 	checkFlag(utils.RpcRateLimitsFlag.Name, cfg.Zk.RpcRateLimits)
 	checkFlag(utils.RebuildTreeAfterFlag.Name, cfg.Zk.RebuildTreeAfter)
+	// don't check RpcRootsFile as it will get set by network as a default if not overriden by flag
 }
 
 func ApplyFlagsForEthConfigCobra(f *pflag.FlagSet, cfg *ethconfig.Config) {
