@@ -20,6 +20,8 @@ import (
 	"math/big"
 	"time"
 
+	"bytes"
+	"encoding/json"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
@@ -29,6 +31,8 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/zk"
 	"github.com/status-im/keycard-go/hexutils"
+	"io"
+	"net/http"
 )
 
 type ZkInterHashesCfg struct {
@@ -143,6 +147,11 @@ func SpawnZkIntermediateHashesStage(s *sync_stages.StageState, u sync_stages.Unw
 
 	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", root.Hex())
 
+	hashErr := verifyStateRoot(smt, &expectedRootHash, &cfg, logPrefix, to, tx)
+	if hashErr != nil {
+		panic(fmt.Errorf("state root mismatch (checking state and RPC): %w, %s", hashErr, root.Hex()))
+	}
+
 	if cfg.checkRoot && root != expectedRootHash {
 		log.Error(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
 		if cfg.badBlockHalt {
@@ -152,9 +161,9 @@ func SpawnZkIntermediateHashesStage(s *sync_stages.StageState, u sync_stages.Unw
 			cfg.hd.ReportBadHeaderPoS(headerHash, syncHeadHeader.ParentHash)
 		}
 		if to > s.BlockNumber {
-			unwindTo := (to + s.BlockNumber) / 2 // Binary search for the correct block, biased to the lower numbers
-			log.Warn("Unwinding due to incorrect root hash", "to", unwindTo)
-			u.UnwindTo(unwindTo, headerHash)
+			//unwindTo := (to + s.BlockNumber) / 2 // Binary search for the correct block, biased to the lower numbers
+			//log.Warn("Unwinding due to incorrect root hash", "to", unwindTo)
+			//u.UnwindTo(unwindTo, headerHash)
 		}
 	} else if err = s.Update(tx, to); err != nil {
 		return trie.EmptyRoot, err
@@ -776,4 +785,88 @@ func insertAccountStateToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, bal
 		db.InsertAccountValue(keyNonce, *valueNonce)
 	}
 	return keys, nil
+}
+
+// RPC Debug
+func verifyStateRoot(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *ZkInterHashesCfg, logPrefix string, blockNo uint64, tx kv.RwTx) error {
+	hash := libcommon.BigToHash(dbSmt.LastRoot())
+	//psr := state2.NewPlainStateReader(tx)
+
+	fmt.Println("[zkevm] interhashes - expected root: ", expectedRootHash.Hex())
+	fmt.Println("[zkevm] interhashes - actual root: ", hash.Hex())
+
+	if cfg.checkRoot && hash != *expectedRootHash {
+		// [zkevm] - check against the rpc get block by number
+		// get block number
+		//ss := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+		//key := libcommon.HexToHash("0x0")
+		//
+		//txno, err := psr.ReadAccountStorage(ss, 1, &key)
+		//if err != nil {
+		//	return err
+		//}
+		// convert txno to big int
+		bigTxNo := big.NewInt(0)
+		bigTxNo.SetUint64(blockNo)
+
+		fmt.Println("[zkevm] interhashes - txno: ", bigTxNo)
+
+		sr, err := stateRootByTxNo(bigTxNo)
+		if err != nil {
+			return err
+		}
+
+		if hash != *sr {
+			log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x, from rpc: %x", logPrefix, hash, expectedRootHash, *sr))
+			return fmt.Errorf("wrong trie root at %d: %x, expected (from header): %x, from rpc: %x", blockNo, hash, expectedRootHash, *sr)
+		}
+
+		log.Info("[zkevm] interhashes - trie root matches rpc get block by number")
+		*expectedRootHash = *sr
+	}
+	return nil
+}
+
+func stateRootByTxNo(txNo *big.Int) (*libcommon.Hash, error) {
+	requestBody := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "eth_getBlockByNumber",
+		"params":  []interface{}{txNo.Uint64(), true},
+		"id":      1,
+	}
+
+	requestBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := http.Post("https://rpc.internal.zkevm-test.net/", "application/json", bytes.NewBuffer(requestBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	defer response.Body.Close()
+
+	responseBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	responseMap := make(map[string]interface{})
+	if err := json.Unmarshal(responseBytes, &responseMap); err != nil {
+		return nil, err
+	}
+
+	result, ok := responseMap["result"].(map[string]interface{})
+	if !ok {
+		return nil, err
+	}
+
+	stateRoot, ok := result["stateRoot"].(string)
+	if !ok {
+		return nil, err
+	}
+	h := libcommon.HexToHash(stateRoot)
+
+	return &h, nil
 }
