@@ -16,6 +16,28 @@ These contain some pre-calculated roots from the RPC which are later validated b
 
 ***
 
+## zkevm-specific API Support
+
+In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag (see the example config below).
+
+### Supported
+- `zkevm_batchNumber`
+- `zkevm_batchNumberByBlockNumber`
+- `zkevm_consolidatedBlockNumber`
+- `zkevm_getBatchByNumber`
+- `zkevm_isBlockConsolidated`
+- `zkevm_verifiedBatchNumber`
+
+
+### Not yet supported
+- `zkevm_isBlockVirtualized`
+- `zkevm_virtualBatchNumber`
+- `zkevm_getFullBlockByHash`
+- `zkevm_getFullBlockByNumber`
+- `zkevm_getNativeBlockHashesInRange`
+
+***
+
 ## Limitations/Warnings
 
 - The golden poseidon hashing will be much faster on x86, so developers on Mac may experience slowness on Apple silicone
@@ -55,7 +77,7 @@ zkevm.l1-first-block: 8577775
 zkevm.rpc-ratelimit: 250
 
 externalcl: true
-http.api : ["eth","debug","net","trace","web3","erigon"]
+http.api : ["eth","debug","net","trace","web3","erigon", "zkevm"]
 ```
 
 ***

@@ -9,6 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
+
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk"
@@ -19,15 +20,16 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/log/v3"
+
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 )
 
 type ISyncer interface {
 }
 
 type ErigonDb interface {
-	WriteHeader(batchNo *big.Int, stateRoot, txHash common.Hash, coinbase common.Address, ts uint64) (*ethTypes.Header, error)
+	WriteHeader(batchNo *big.Int, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts uint64) (*ethTypes.Header, error)
 	WriteBody(batchNumber *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
 }
 
@@ -56,6 +58,8 @@ func StageBatchesCfg(db kv.RwDB, syncer ISyncer, zkCfg *ethconfig.Zk) BatchesCfg
 		zkCfg:  zkCfg,
 	}
 }
+
+var emptyHash = common.Hash{0}
 
 func SpawnStageBatches(
 	s *sync_stages.StageState,
@@ -144,6 +148,7 @@ func SpawnStageBatches(
 	if err != nil {
 		return fmt.Errorf("failed to get last fork id, %w", err)
 	}
+	lastHash := emptyHash
 	for {
 		// get block
 		// if no blocks available should block
@@ -188,9 +193,22 @@ func SpawnStageBatches(
 			}
 			highestSeenBatchNo = l2Block.BatchNumber
 
+			if lastHash != emptyHash {
+				l2Block.ParentHash = lastHash
+			} else {
+				// block 1 so get genesis detail
+				genesisHash, err := eriDb.ReadCanonicalHash(0)
+				if err != nil {
+					return fmt.Errorf("failed to get genesis header: %v", err)
+				}
+				l2Block.ParentHash = genesisHash
+			}
+
 			if err := writeL2Block(eriDb, hermezDb, &l2Block); err != nil {
 				return fmt.Errorf("writeL2Block error: %v", err)
 			}
+
+			lastHash = l2Block.L2Blockhash
 
 			lastBlockHeight = l2Block.L2BlockNumber
 			blocksWritten++
@@ -346,7 +364,17 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 // writes header, body, forkId and blockBatch
 func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block) error {
 	bn := new(big.Int).SetUint64(l2Block.L2BlockNumber)
-	h, err := eriDb.WriteHeader(bn, l2Block.StateRoot, l2Block.L2Blockhash, l2Block.Coinbase, uint64(l2Block.Timestamp))
+	var txs []ethTypes.Transaction
+	for _, transaction := range l2Block.L2Txs {
+		ltx, _, err := txtype.DecodeTx(transaction.Encoded, transaction.EffectiveGasPricePercentage, l2Block.ForkId)
+		if err != nil {
+			return fmt.Errorf("decode tx error: %v", err)
+		}
+		txs = append(txs, ltx)
+	}
+	txCollection := ethTypes.Transactions(txs)
+	txHash := ethTypes.DeriveSha(txCollection)
+	h, err := eriDb.WriteHeader(bn, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp))
 	if err != nil {
 		return fmt.Errorf("write header error: %v", err)
 	}
@@ -355,14 +383,6 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 		return fmt.Errorf("write block global exit root error: %v", err)
 	}
 
-	txs := []ethTypes.Transaction{}
-	for _, transaction := range l2Block.L2Txs {
-		ltx, _, err := txtype.DecodeTx(transaction.Encoded, transaction.EffectiveGasPricePercentage, l2Block.ForkId)
-		if err != nil {
-			return fmt.Errorf("decode tx error: %v", err)
-		}
-		txs = append(txs, ltx)
-	}
 	if err := eriDb.WriteBody(bn, h.Hash(), txs); err != nil {
 		return fmt.Errorf("write body error: %v", err)
 	}

@@ -8,12 +8,13 @@ import (
 	"sync"
 	"time"
 
-	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon-lib/common"
-	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/time/rate"
+
+	ethereum "github.com/ledgerwatch/erigon"
+	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zk/types"
 )
 
 type IEtherman interface {
@@ -21,7 +22,7 @@ type IEtherman interface {
 	FilterLogs(ctx context.Context, query ethereum.FilterQuery) ([]ethTypes.Log, error)
 }
 
-type Syncer struct {
+type VerificationsSyncer struct {
 	em                IEtherman
 	l1ContractAddress common.Address
 }
@@ -33,14 +34,14 @@ type Result struct {
 	L1TxHash      common.Hash
 }
 
-func NewSyncer(etherMan IEtherman, l1ContractAddr common.Address) *Syncer {
-	return &Syncer{
+func NewVerificationsSyncer(etherMan IEtherman, l1ContractAddr common.Address) *VerificationsSyncer {
+	return &VerificationsSyncer{
 		em:                etherMan,
 		l1ContractAddress: l1ContractAddr,
 	}
 }
 
-func (s *Syncer) GetVerifications(logPrefix string, startBlock uint64) (verifications []types.L1BatchInfo, highestL1Block uint64, err error) {
+func (s *VerificationsSyncer) GetVerifications(logPrefix string, startBlock uint64) (verifications []types.L1BatchInfo, highestL1Block uint64, err error) {
 	log.Debug("GetVerifications", "startBlock", startBlock)
 
 	latestBlock, err := s.em.BlockByNumber(context.Background(), nil)

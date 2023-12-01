@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
+
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
@@ -291,7 +292,26 @@ func StateStages(ctx context.Context, headers HeadersCfg, bodies BodiesCfg, bloc
 	}
 }
 
-func DefaultZkStages(ctx context.Context, snapshots SnapshotsCfg, l1VerificationsCfg zkStages.L1VerificationsCfg, batchesCfg zkStages.BatchesCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, senders SendersCfg, rpcRootsCfg zkStages.RpcRootsCfg, exec ExecuteBlockCfg, hashState HashStateCfg, zkInterHashesCfg zkStages.ZkInterHashesCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*sync_stages.Stage {
+func DefaultZkStages(
+	ctx context.Context,
+	snapshots SnapshotsCfg,
+	l1VerificationsCfg zkStages.L1VerificationsCfg,
+	l1SequencesCfg zkStages.L1SequencesCfg,
+	batchesCfg zkStages.BatchesCfg,
+	cumulativeIndex CumulativeIndexCfg,
+	blockHashCfg BlockHashesCfg,
+	senders SendersCfg,
+	rpcRootsCfg zkStages.RpcRootsCfg,
+	exec ExecuteBlockCfg,
+	hashState HashStateCfg,
+	zkInterHashesCfg zkStages.ZkInterHashesCfg,
+	history HistoryCfg,
+	logIndex LogIndexCfg,
+	callTraces CallTracesCfg,
+	txLookup TxLookupCfg,
+	finish FinishCfg,
+	test bool,
+) []*sync_stages.Stage {
 	return []*sync_stages.Stage{
 		{
 			ID:          sync_stages.L1Verifications,
@@ -307,6 +327,22 @@ func DefaultZkStages(ctx context.Context, snapshots SnapshotsCfg, l1Verification
 			},
 			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
 				return zkStages.PruneL1VerificationsStage(p, tx, l1VerificationsCfg, ctx)
+			},
+		},
+		{
+			ID:          sync_stages.L1Sequences,
+			Description: "Download L1 Sequences",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
+				if badBlockUnwind {
+					return nil
+				}
+				return zkStages.SpawnStageL1Sequences(s, u, ctx, tx, l1SequencesCfg, firstCycle, test)
+			},
+			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
+				return zkStages.UnwindL1SequencesStage(u, tx, l1SequencesCfg, ctx)
+			},
+			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
+				return zkStages.PruneL1SequencesStage(p, tx)
 			},
 		},
 		{

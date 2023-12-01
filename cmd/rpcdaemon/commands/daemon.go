@@ -5,6 +5,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/kvcache"
 	libstate "github.com/ledgerwatch/erigon-lib/state"
+
 	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/cli/httpcfg"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/rpc"
@@ -32,6 +33,7 @@ func APIList(db kv.RoDB, borDb kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 	borImpl := NewBorAPI(base, db, borDb) // bor (consensus) specific
 	otsImpl := NewOtterscanAPI(base, db)
 	gqlImpl := NewGraphQLAPI(base, db)
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, cfg.ReturnDataLimit, l2RpcUrl)
 
 	if cfg.GraphQLEnabled {
 		list = append(list, rpc.API{
@@ -126,6 +128,13 @@ func APIList(db kv.RoDB, borDb kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 				Namespace: "ots",
 				Public:    true,
 				Service:   OtterscanAPI(otsImpl),
+				Version:   "1.0",
+			})
+		case "zkevm":
+			list = append(list, rpc.API{
+				Namespace: "zkevm",
+				Public:    true,
+				Service:   ZkEvmAPI(zkEvmImpl),
 				Version:   "1.0",
 			})
 		}

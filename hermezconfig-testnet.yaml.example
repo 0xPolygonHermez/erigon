@@ -14,4 +14,4 @@ zkevm.l1-first-block: 8577775
 zkevm.rpc-ratelimit: 250
 
 externalcl: true
-http.api : ["eth","debug","net","trace","web3","erigon"]
+http.api : ["eth","debug","net","trace","web3","erigon","zkevm"]

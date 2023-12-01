@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"runtime"
 	"time"
@@ -22,13 +23,14 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
 	"github.com/ledgerwatch/erigon-lib/kv/temporal/historyv2"
 	libstate "github.com/ledgerwatch/erigon-lib/state"
-	"github.com/ledgerwatch/erigon/chain"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/log/v3"
 
-	"math/big"
-
 	"github.com/holiman/uint256"
+
+	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/zk/erigon_db"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+
 	"github.com/ledgerwatch/erigon/common/changeset"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -208,7 +210,7 @@ func executeBlock(
 		execRs, err = core.ExecuteBlockEphemerallyBor(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer)
 	} else {
 		// for zkEVM no receipts
-		vmConfig.NoReceipts = true
+		//vmConfig.NoReceipts = true
 		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx)
 	}
 	if err != nil {
@@ -216,6 +218,16 @@ func executeBlock(
 	}
 	receipts = execRs.Receipts
 	stateSyncReceipt = execRs.StateSyncReceipt
+
+	// [zkevm] - add in the state root to the receipts.  As we only have one tx per block
+	// for now just add the header root to the receipt
+	for _, r := range receipts {
+		r.PostState = header.Root.Bytes()
+	}
+
+	header.GasUsed = uint64(execRs.GasUsed)
+	header.ReceiptHash = types.DeriveSha(receipts)
+	header.Bloom = execRs.Bloom
 
 	if writeReceipts {
 		if err = rawdb.AppendReceipts(tx, blockNum, receipts); err != nil {
@@ -523,6 +535,7 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 
 	total := to - stageProgress
 	initialBlock := stageProgress + 1
+	eridb := erigon_db.NewErigonDb(tx)
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		stageProgress = blockNum
@@ -638,8 +651,44 @@ Loop:
 			}
 		}
 
-		gas = gas + block.GasUsed()
-		currentStateGas = currentStateGas + block.GasUsed()
+		gasUsed := header.GasUsed
+		gas = gas + gasUsed
+		currentStateGas = currentStateGas + gasUsed
+
+		// TODO: how can we store this data right first time?  Or mop up old data as we're currently duping storage
+		/*
+				        ,     \    /      ,
+				       / \    )\__/(     / \
+				      /   \  (_\  /_)   /   \
+				 ____/_____\__\@  @/___/_____\____
+				|             |\../|              |
+				|              \VV/               |
+				|       ZKEVM duping storage      |
+				|_________________________________|
+				 |    /\ /      \\       \ /\    |
+				 |  /   V        ))       V   \  |
+				 |/     `       //        '     \|
+				 `              V                '
+
+			 we need to write the header back to the db at this point as the gas
+			 used wasn't available from the data stream, or receipt hash, or bloom, so we're relying on execution to
+			 provide it.  We also need to update the canonical hash, so we can retrieve this newly updated header
+			 later.
+		*/
+		rawdb.WriteHeader(tx, header)
+		err = rawdb.WriteCanonicalHash(tx, header.Hash(), blockNum)
+		if err != nil {
+			return fmt.Errorf("failed to write header: %v", err)
+		}
+
+		err = eridb.WriteBody(header.Number, header.Hash(), block.Transactions())
+		if err != nil {
+			return fmt.Errorf("failed to write body: %v", err)
+		}
+
+		// write the new block lookup entries
+		rawdb.WriteTxLookupEntries(tx, block)
+
 		select {
 		default:
 		case <-logEvery.C:

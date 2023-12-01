@@ -60,6 +60,7 @@ import (
 	txpool2 "github.com/ledgerwatch/erigon-lib/txpool"
 	"github.com/ledgerwatch/erigon-lib/txpool/txpooluitl"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
+
 	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon/cl/clparams"
@@ -669,9 +670,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		cfg := backend.config.Zk
 
 		etherMan := newEtherMan(cfg)
-		zkSyncer := syncer.NewSyncer(etherMan.EthClient, cfg.L1ContractAddress)
+		zkVerificationsSyncer := syncer.NewVerificationsSyncer(etherMan.EthClient, cfg.L1ContractAddress)
+		zkSequencesSyncer := syncer.NewSequencesSyncer(etherMan.EthClient, cfg.L1ContractAddress)
 
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkSyncer)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkVerificationsSyncer, zkSequencesSyncer)
 		backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 		// TODO: prune order
 	} else {

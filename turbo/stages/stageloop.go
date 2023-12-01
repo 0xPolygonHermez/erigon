@@ -16,8 +16,9 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon-lib/state"
-	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/log/v3"
+
+	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon/consensus"
 
@@ -467,7 +468,8 @@ func NewDefaultZkStages(ctx context.Context,
 	agg *state.AggregatorV3,
 	forkValidator *engineapi.ForkValidator,
 	engine consensus.Engine,
-	syncer *syncer.Syncer,
+	verificationsSyncer *syncer.VerificationsSyncer,
+	sequencesSyncer *syncer.SequencesSyncer,
 ) []*sync_stages.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
@@ -490,8 +492,9 @@ func NewDefaultZkStages(ctx context.Context,
 			cfg.HistoryV3,
 			agg,
 		),
-		zkStages.StageL1VerificationsCfg(db, syncer, cfg.Zk),
-		zkStages.StageBatchesCfg(db, syncer, cfg.Zk),
+		zkStages.StageL1VerificationsCfg(db, verificationsSyncer, cfg.Zk),
+		zkStages.StageL1SequencesCfg(db, sequencesSyncer, cfg.Zk),
+		zkStages.StageBatchesCfg(db, verificationsSyncer, cfg.Zk),
 		stagedsync.StageCumulativeIndexCfg(db),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig),
 		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockRetire, controlServer.Hd),

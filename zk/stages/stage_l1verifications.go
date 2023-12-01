@@ -2,16 +2,17 @@ package stages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"errors"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/log/v3"
+
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/types"
-	"github.com/ledgerwatch/log/v3"
 )
 
 type IVerificationsSyncer interface {

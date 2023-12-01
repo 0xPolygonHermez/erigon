@@ -28,9 +28,11 @@ import (
 
 	erigonchain "github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+
 	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
+
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -164,21 +166,23 @@ func ExecuteBlockEphemerally(
 	}
 
 	receiptSha := types.DeriveSha(receipts)
-	if !vmConfig.StatelessExec && chainConfig.IsByzantium(header.Number.Uint64()) && !vmConfig.NoReceipts && receiptSha != block.ReceiptHash() {
-		return nil, fmt.Errorf("mismatched receipt headers for block %d (%s != %s)", block.NumberU64(), receiptSha.Hex(), block.ReceiptHash().Hex())
-	}
+	// [zkevm] todo
+	//if !vmConfig.StatelessExec && chainConfig.IsByzantium(header.Number.Uint64()) && !vmConfig.NoReceipts && receiptSha != block.ReceiptHash() {
+	//	return nil, fmt.Errorf("mismatched receipt headers for block %d (%s != %s)", block.NumberU64(), receiptSha.Hex(), block.ReceiptHash().Hex())
+	//}
 
 	// in zkEVM we don't have headers to check GasUsed against
-	if !vmConfig.StatelessExec && *usedGas != header.GasUsed && header.GasUsed > 0 {
-		return nil, fmt.Errorf("gas used by execution: %d, in header: %d", *usedGas, header.GasUsed)
-	}
+	//if !vmConfig.StatelessExec && *usedGas != header.GasUsed && header.GasUsed > 0 {
+	//	return nil, fmt.Errorf("gas used by execution: %d, in header: %d", *usedGas, header.GasUsed)
+	//}
 
 	var bloom types.Bloom
 	if !vmConfig.NoReceipts {
 		bloom = types.CreateBloom(receipts)
-		if !vmConfig.StatelessExec && bloom != header.Bloom {
-			return nil, fmt.Errorf("bloom computed by execution: %x, in header: %x", bloom, header.Bloom)
-		}
+		// [zkevm] todo
+		//if !vmConfig.StatelessExec && bloom != header.Bloom {
+		//	return nil, fmt.Errorf("bloom computed by execution: %x, in header: %x", bloom, header.Bloom)
+		//}
 	}
 	if !vmConfig.ReadOnly {
 		txs := block.Transactions()

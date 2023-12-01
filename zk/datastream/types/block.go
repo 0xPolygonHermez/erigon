@@ -78,6 +78,7 @@ type FullL2Block struct {
 	L2Blockhash    common.Hash
 	StateRoot      common.Hash
 	L2Txs          []L2Transaction
+	ParentHash     common.Hash
 }
 
 // ParseFullL2Block parses a FullL2Block from a StartL2Block, EndL2Block and a slice of L2Transactions
