@@ -169,18 +169,15 @@ func Test_ZkTransactionsDeriveSha(t *testing.T) {
 	}
 }
 
-func Test_ZkReceiptsRootHash(t *testing.T) {
-	expected := libcommon.HexToHash("0xddd2d0f0832d901f13b4c5c22e066ecdc35f7baea8b20539a8fdfa497d9d8302")
-
-	bloomBytes := libcommon.FromHex("0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000004000000000000000000000000000000000000000000008000002000000000000000000020000000000000000000000000000000000000000000")
-	bloom := BytesToBloom(bloomBytes)
+func Test_ZkReceiptsRootHash_InludingOmittedBloom(t *testing.T) {
+	expected := libcommon.HexToHash("0xfc07704711a335a4bee26c8a5f813485ddf7a470953d070c4208a6a22668eda3")
 
 	receipt := &Receipt{
 		Type:              0,
 		PostState:         libcommon.FromHex("0xe7e8b651b6c94f823a6b96aa3879f0700220f49fd074cc0fad39fa30f122899b"),
 		Status:            1,
 		CumulativeGasUsed: 107647,
-		Bloom:             bloom,
+		Bloom:             Bloom{},
 		Logs: []*Log{
 			{
 				Address: libcommon.HexToAddress("0xcfa773cc48fbde3ca4d24eecb19d224d697026b2"),
@@ -206,6 +203,6 @@ func Test_ZkReceiptsRootHash(t *testing.T) {
 
 	result := DeriveSha(Receipts{receipt})
 	if result != expected {
-		t.Errorf("unexpected root hash have: %v want: %v\n", result.Hex(), expected)
+		t.Errorf("unexpected root hash have: %v want: %v\n", result.Hex(), expected.Hex())
 	}
 }

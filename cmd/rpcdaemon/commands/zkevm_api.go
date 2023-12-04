@@ -498,11 +498,17 @@ func convertReceipt(r *eritypes.Receipt, from common.Address, to *common.Address
 		cAddr = &r.ContractAddress
 	}
 
+	// ensure logs is always an empty array rather than nil in the response
+	logs := make([]*eritypes.Log, 0)
+	if len(r.Logs) > 0 {
+		logs = r.Logs
+	}
+
 	return &types.Receipt{
 		Root:              common.BytesToHash(r.PostState),
 		CumulativeGasUsed: types.ArgUint64(r.CumulativeGasUsed),
-		LogsBloom:         r.Bloom,
-		Logs:              r.Logs,
+		LogsBloom:         eritypes.CreateBloom(eritypes.Receipts{r}),
+		Logs:              logs,
 		Status:            types.ArgUint64(r.Status),
 		TxHash:            r.TxHash,
 		TxIndex:           types.ArgUint64(r.TransactionIndex),

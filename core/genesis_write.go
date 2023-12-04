@@ -33,9 +33,10 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
-	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
+
+	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/hexutil"
@@ -443,7 +444,7 @@ func ChiadoGenesisBlock() *types.Genesis {
 func HermezMainnetGenesisBlock() *types.Genesis {
 	return &types.Genesis{
 		Config:     params.HermezMainnetChainConfig,
-		Timestamp:  0,
+		Timestamp:  1679653163,
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
 		Alloc:      readPrealloc("allocs/hermez.json"),
@@ -453,7 +454,7 @@ func HermezMainnetGenesisBlock() *types.Genesis {
 func HermezTestnetGenesisBlock() *types.Genesis {
 	return &types.Genesis{
 		Config:     params.HermezTestnetChainConfig,
-		Timestamp:  0,
+		Timestamp:  1677601932,
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
 		Alloc:      readPrealloc("allocs/hermez-testnet.json"),
@@ -463,7 +464,7 @@ func HermezTestnetGenesisBlock() *types.Genesis {
 func HermezDevnetGenesisBlock() *types.Genesis {
 	return &types.Genesis{
 		Config:     params.HermezDevnetChainConfig,
-		Timestamp:  0,
+		Timestamp:  1676996964,
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
 		Alloc:      readPrealloc("allocs/hermez-devnet.json"),
@@ -550,9 +551,12 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 		AuRaStep:      g.AuRaStep,
 		AuRaSeal:      g.AuRaSeal,
 	}
-	if g.GasLimit == 0 {
-		head.GasLimit = params.GenesisGasLimit
-	}
+
+	// [zkevm] - do not override the gas limit for the genesis block
+	//if g.GasLimit == 0 {
+	//	head.GasLimit = params.GenesisGasLimit
+	//}
+
 	if g.Difficulty == nil {
 		head.Difficulty = params.GenesisDifficulty
 	}

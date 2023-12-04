@@ -20,6 +20,7 @@ import (
 	"math/big"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+
 	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon/consensus"
@@ -91,7 +92,11 @@ func applyTransaction(config *chain.Config, engine consensus.EngineReader, gp *G
 		}
 		// Set the receipt logs and create a bloom for filtering
 		receipt.Logs = ibs.GetLogs(tx.Hash())
-		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+
+		// [zkevm] - ignore the bloom at this point due to a bug in zknode where the bloom is not included
+		// in the block during execution
+		//receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+
 		receipt.BlockNumber = header.Number
 		receipt.TransactionIndex = uint(ibs.TxIndex())
 	}
