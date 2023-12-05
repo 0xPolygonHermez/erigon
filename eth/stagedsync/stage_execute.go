@@ -643,6 +643,7 @@ Loop:
 				}
 				// TODO: This creates stacked up deferrals
 				defer tx.Rollback()
+				eridb = erigon_db.NewErigonDb(tx)
 			}
 			batch = olddb.NewHashBatch(tx, quit, cfg.dirs.Tmp)
 			hermezDb, err = hermez_db.NewHermezDb(tx)
