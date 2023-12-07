@@ -74,6 +74,10 @@ type EphemeralExecResult struct {
 	StateSyncReceipt *types.Receipt        `json:"-"`
 }
 
+type EffectivePriceGetter interface {
+	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
+}
+
 // ExecuteBlockEphemerally runs a block from provided stateReader and
 // writes the result to the provided stateWriter
 func ExecuteBlockEphemerally(
@@ -85,6 +89,7 @@ func ExecuteBlockEphemerally(
 	chainReader consensus.ChainHeaderReader,
 	getTracer func(txIndex int, txHash libcommon.Hash) (vm.EVMLogger, error),
 	dbTx kv.RwTx,
+	effectivePriceGetter EffectivePriceGetter,
 ) (*EphemeralExecResult, error) {
 
 	defer BlockExecutionTimer.UpdateDuration(time.Now())
@@ -134,7 +139,12 @@ func ExecuteBlockEphemerally(
 
 		gp.Reset(block.GasLimit())
 
-		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas)
+		ep, err := effectivePriceGetter.GetEffectiveGasPricePercentage(tx.Hash())
+		if err != nil {
+			return nil, err
+		}
+
+		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, ep)
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
 				ftracer.Flush(tx)
@@ -258,7 +268,7 @@ func ExecuteBlockEphemerallyBor(
 		}
 		gp.Reset(block.GasLimit())
 
-		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas)
+		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, 0)
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
 				ftracer.Flush(tx)
@@ -429,7 +439,7 @@ func CallContract(contract libcommon.Address, data []byte, chainConfig chain.Con
 		return nil, fmt.Errorf("SysCallContract: %w ", err)
 	}
 	vmConfig := vm.Config{NoReceipts: true}
-	_, result, err = ApplyTransaction(&chainConfig, GetHashFn(header, nil), engine, &state.SystemAddress, gp, ibs, noop, header, tx, &gasUsed, vmConfig, excessDataGas)
+	_, result, err = ApplyTransaction(&chainConfig, GetHashFn(header, nil), engine, &state.SystemAddress, gp, ibs, noop, header, tx, &gasUsed, vmConfig, excessDataGas, 0)
 	if err != nil {
 		return result, fmt.Errorf("SysCallContract: %w ", err)
 	}

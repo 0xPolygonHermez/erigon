@@ -36,6 +36,7 @@ import (
 )
 
 var emptyCodeHash = crypto.Keccak256Hash(nil)
+var effectiveGasMaxVal = new(uint256.Int).SetUint64(256)
 
 /*
 The State Transitioning Model
@@ -73,6 +74,8 @@ type StateTransition struct {
 	sharedBuyGas        *uint256.Int
 	sharedBuyGasBalance *uint256.Int
 
+	effectiveGasPercentage *uint8
+
 	isBor bool
 }
 
@@ -96,6 +99,7 @@ type Message interface {
 	DataHashes() []libcommon.Hash
 
 	IsFree() bool
+	EffectiveGasPrice() uint8
 }
 
 // ExecutionResult includes all output after executing given evm
@@ -154,11 +158,24 @@ func IntrinsicGas(data []byte, accessList types2.AccessList, isContractCreation 
 // NewStateTransition initialises and returns a new state transition object.
 func NewStateTransition(evm vm.VMInterface, msg Message, gp *GasPool) *StateTransition {
 	isBor := evm.ChainConfig().Bor != nil
+
+	gas := msg.GasPrice()
+
+	// check if we have an effective gas price percentage in the message and apply it
+	ep := msg.EffectiveGasPrice()
+	if ep > 0 && ep < 255 {
+		val := gas.Clone()
+		epi := new(uint256.Int).SetUint64(uint64(ep))
+		epi = epi.Add(epi, u256.Num1)
+		val = val.Mul(val, epi)
+		gas = gas.Div(val, effectiveGasMaxVal)
+	}
+
 	return &StateTransition{
 		gp:        gp,
 		evm:       evm,
 		msg:       msg,
-		gasPrice:  msg.GasPrice(),
+		gasPrice:  gas,
 		gasFeeCap: msg.FeeCap(),
 		tip:       msg.Tip(),
 		value:     msg.Value(),
@@ -390,7 +407,9 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*Executi
 			st.refundGas(params.RefundQuotient)
 		}
 	}
+
 	effectiveTip := st.gasPrice
+
 	if rules.IsLondon {
 		if st.gasFeeCap.Gt(st.evm.Context().BaseFee) {
 			effectiveTip = cmath.Min256(st.tip, new(uint256.Int).Sub(st.gasFeeCap, st.evm.Context().BaseFee))

@@ -5,9 +5,10 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/log/v3"
+
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/types"
-	"github.com/ledgerwatch/log/v3"
 )
 
 const L1VERIFICATIONS = "hermez_l1Verifications"                   // l1blockno, batchno -> l1txhash
@@ -16,6 +17,7 @@ const FORKIDS = "hermez_forkIds"                                   // batchNo ->
 const BLOCKBATCHES = "hermez_blockBatches"                         // l2blockno -> batchno
 const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"                 // l2blockno -> GER
 const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // l2blockno -> GER
+const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"             // txHash -> txPricePercentage
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -54,6 +56,10 @@ func (db *HermezDb) CreateBuckets() error {
 		return err
 	}
 	err = db.tx.CreateBucket(GLOBAL_EXIT_ROOTS_BATCHES)
+	if err != nil {
+		return err
+	}
+	err = db.tx.CreateBucket(TX_PRICE_PERCENTAGE)
 	if err != nil {
 		return err
 	}
@@ -408,4 +414,17 @@ func (db *HermezDb) DeleteForkIds(fromBatchNum, toBatchNum uint64) error {
 	}
 
 	return nil
+}
+
+func (db *HermezDb) WriteEffectiveGasPricePercentage(txHash common.Hash, txPricePercentage uint8) error {
+	return db.tx.Put(TX_PRICE_PERCENTAGE, txHash.Bytes(), Uint8ToBytes(txPricePercentage))
+}
+
+func (db *HermezDb) GetEffectiveGasPricePercentage(txHash common.Hash) (uint8, error) {
+	data, err := db.tx.GetOne(TX_PRICE_PERCENTAGE, txHash.Bytes())
+	if err != nil {
+		return 0, err
+	}
+
+	return BytesToUint8(data), nil
 }
