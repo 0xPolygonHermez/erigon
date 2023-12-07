@@ -913,6 +913,36 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	return ret, nil
 }
 
+func opStaticCallForkId5(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	// Pop gas. The actual gas is in interpreter.evm.callGasTemp.
+	stack := scope.Stack
+	// We use it as a temporary value
+	temp := stack.Pop()
+	gas := interpreter.evm.CallGasTemp()
+	// Pop other call parameters.
+	addr, inOffset, inSize, retOffset, retSize := stack.Pop(), stack.Pop(), stack.Pop(), stack.Pop(), stack.Pop()
+	toAddr := libcommon.Address(addr.Bytes20())
+	// Get arguments from the memory.
+	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
+	ret, returnGas, err := interpreter.evm.StaticCall(scope.Contract, toAddr, args, gas)
+	if err != nil {
+		temp.Clear()
+	} else {
+		temp.SetOne()
+	}
+	stack.Push(&temp)
+	if err == nil || err == ErrExecutionReverted {
+		ret = common.CopyBytes(ret)
+		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
+	}
+
+	scope.Contract.Gas += returnGas
+
+	interpreter.returnData = ret
+
+	return ret, nil
+}
+
 func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	// Pop gas. The actual gas is in interpreter.evm.callGasTemp.
 	stack := scope.Stack
@@ -924,7 +954,6 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 	toAddr := libcommon.Address(addr.Bytes20())
 	// Get arguments from the memory.
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
-
 	ret, returnGas, err := interpreter.evm.StaticCall(scope.Contract, toAddr, args, gas)
 	if err != nil {
 		temp.Clear()
