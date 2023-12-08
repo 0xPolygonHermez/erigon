@@ -324,6 +324,6 @@ func (back *RemoteBackend) PendingBlock(ctx context.Context) (*types.Block, erro
 	return &block, nil
 }
 
-func (back *RemoteBackend) TxnEffectiveGasPrice(ctx context.Context, tx kv.Tx, txnHash libcommon.Hash) (uint8, error) {
-	return back.blockReader.TxnEffectiveGasPrice(ctx, tx, txnHash)
+func (back *RemoteBackend) TxnEffectiveGasPricePercentage(ctx context.Context, tx kv.Tx, txnHash libcommon.Hash) (uint8, error) {
+	return back.blockReader.TxnEffectiveGasPricePercentage(ctx, tx, txnHash)
 }

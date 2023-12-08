@@ -458,21 +458,21 @@ func (t *TransactionsFixedOrder) Pop() {
 
 // Message is a fully derived transaction and implements core.Message
 type Message struct {
-	to                *libcommon.Address
-	from              libcommon.Address
-	nonce             uint64
-	amount            uint256.Int
-	gasLimit          uint64
-	gasPrice          uint256.Int
-	feeCap            uint256.Int
-	tip               uint256.Int
-	maxFeePerDataGas  uint256.Int
-	data              []byte
-	accessList        types2.AccessList
-	checkNonce        bool
-	isFree            bool
-	dataHashes        []libcommon.Hash
-	effectiveGasPrice uint8
+	to                          *libcommon.Address
+	from                        libcommon.Address
+	nonce                       uint64
+	amount                      uint256.Int
+	gasLimit                    uint64
+	gasPrice                    uint256.Int
+	feeCap                      uint256.Int
+	tip                         uint256.Int
+	maxFeePerDataGas            uint256.Int
+	data                        []byte
+	accessList                  types2.AccessList
+	checkNonce                  bool
+	isFree                      bool
+	dataHashes                  []libcommon.Hash
+	effectiveGasPricePercentage uint8
 }
 
 func NewMessage(from libcommon.Address, to *libcommon.Address, nonce uint64, amount *uint256.Int, gasLimit uint64, gasPrice *uint256.Int, feeCap, tip *uint256.Int, data []byte, accessList types2.AccessList, checkNonce bool, isFree bool, maxFeePerDataGas *uint256.Int) Message {
@@ -543,10 +543,10 @@ func (m Message) MaxFeePerDataGas() *uint256.Int {
 }
 
 func (m Message) DataHashes() []libcommon.Hash { return m.dataHashes }
-func (m *Message) SetEffectiveGasPrice(effectiveGasPrice uint8) {
-	m.effectiveGasPrice = effectiveGasPrice
+func (m *Message) SetEffectiveGasPricePercentage(effectiveGasPricePercentage uint8) {
+	m.effectiveGasPricePercentage = effectiveGasPricePercentage
 }
-func (m Message) EffectiveGasPrice() uint8 { return m.effectiveGasPrice }
+func (m Message) EffectiveGasPricePercentage() uint8 { return m.effectiveGasPricePercentage }
 
 func DecodeSSZ(data []byte, dest codec.Deserializable) error {
 	err := dest.Deserialize(codec.NewDecodingReader(bytes.NewReader(data), uint64(len(data))))

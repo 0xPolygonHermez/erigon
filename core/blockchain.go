@@ -30,6 +30,7 @@ import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 
 	"github.com/ledgerwatch/erigon/chain"
+	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 
@@ -74,7 +75,7 @@ type EphemeralExecResult struct {
 	StateSyncReceipt *types.Receipt        `json:"-"`
 }
 
-type EffectivePriceGetter interface {
+type EffectivePricePercentageGetter interface {
 	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
 }
 
@@ -89,7 +90,7 @@ func ExecuteBlockEphemerally(
 	chainReader consensus.ChainHeaderReader,
 	getTracer func(txIndex int, txHash libcommon.Hash) (vm.EVMLogger, error),
 	dbTx kv.RwTx,
-	effectivePriceGetter EffectivePriceGetter,
+	effectivePricePercentageGetter EffectivePricePercentageGetter,
 ) (*EphemeralExecResult, error) {
 
 	defer BlockExecutionTimer.UpdateDuration(time.Now())
@@ -139,12 +140,12 @@ func ExecuteBlockEphemerally(
 
 		gp.Reset(block.GasLimit())
 
-		ep, err := effectivePriceGetter.GetEffectiveGasPricePercentage(tx.Hash())
+		effectiveGasPricePercentage, err := effectivePricePercentageGetter.GetEffectiveGasPricePercentage(tx.Hash())
 		if err != nil {
 			return nil, err
 		}
 
-		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, ep)
+		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, effectiveGasPricePercentage)
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
 				ftracer.Flush(tx)
@@ -268,7 +269,7 @@ func ExecuteBlockEphemerallyBor(
 		}
 		gp.Reset(block.GasLimit())
 
-		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, 0)
+		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED)
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
 				ftracer.Flush(tx)
@@ -439,7 +440,7 @@ func CallContract(contract libcommon.Address, data []byte, chainConfig chain.Con
 		return nil, fmt.Errorf("SysCallContract: %w ", err)
 	}
 	vmConfig := vm.Config{NoReceipts: true}
-	_, result, err = ApplyTransaction(&chainConfig, GetHashFn(header, nil), engine, &state.SystemAddress, gp, ibs, noop, header, tx, &gasUsed, vmConfig, excessDataGas, 0)
+	_, result, err = ApplyTransaction(&chainConfig, GetHashFn(header, nil), engine, &state.SystemAddress, gp, ibs, noop, header, tx, &gasUsed, vmConfig, excessDataGas, zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED)
 	if err != nil {
 		return result, fmt.Errorf("SysCallContract: %w ", err)
 	}

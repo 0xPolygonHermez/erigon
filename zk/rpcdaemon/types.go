@@ -644,9 +644,9 @@ func NewReceipt(tx types.Transaction, r *types.Receipt) (Receipt, error) {
 		Type:              ArgUint64(r.Type),
 	}
 	//[zkevm] - TODO we don't have this field in the receipt
-	// if *r.EffectiveGasPrice != nil {
-	// 	egp := ArgBig(*r.EffectiveGasPrice)
-	// 	receipt.EffectiveGasPrice = &egp
+	// if *r.EffectiveGasPricePercentage != nil {
+	// 	egp := ArgBig(*r.EffectiveGasPricePercentage)
+	// 	receipt.EffectiveGasPricePercentage = &egp
 	// }
 	return receipt, nil
 }

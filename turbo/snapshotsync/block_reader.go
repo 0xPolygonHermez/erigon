@@ -153,7 +153,7 @@ func (back *RemoteBlockReader) BodyRlp(ctx context.Context, tx kv.Getter, hash l
 	return bodyRlp, nil
 }
 
-func (back *RemoteBlockReader) TxnEffectiveGasPrice(ctx context.Context, tx kv.Tx, txnHash libcommon.Hash) (uint8, error) {
+func (back *RemoteBlockReader) TxnEffectiveGasPricePercentage(ctx context.Context, tx kv.Tx, txnHash libcommon.Hash) (uint8, error) {
 	data, err := tx.GetOne(hermez_db.TX_PRICE_PERCENTAGE, txnHash.Bytes())
 	if err != nil {
 		return 0, err
@@ -714,7 +714,7 @@ func (back *BlockReaderWithSnapshots) TxnLookup(ctx context.Context, tx kv.Gette
 	return blockNum, true, nil
 }
 
-func (back *BlockReaderWithSnapshots) TxnEffectiveGasPrice(ctx context.Context, tx kv.Tx, txnHash libcommon.Hash) (uint8, error) {
+func (back *BlockReaderWithSnapshots) TxnEffectiveGasPricePercentage(ctx context.Context, tx kv.Tx, txnHash libcommon.Hash) (uint8, error) {
 	data, err := tx.GetOne(hermez_db.TX_PRICE_PERCENTAGE, txnHash.Bytes())
 	if err != nil {
 		return 0, err

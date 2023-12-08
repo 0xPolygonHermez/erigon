@@ -52,6 +52,7 @@ import (
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	"github.com/ledgerwatch/erigon/turbo/stages"
+	zktypes "github.com/ledgerwatch/erigon/zk/types"
 )
 
 // This nil assignment ensures at compile time that SimulatedBackend implements bind.ContractBackend.
@@ -806,7 +807,9 @@ func (m callMsg) Value() *uint256.Int           { return m.CallMsg.Value }
 func (m callMsg) Data() []byte                  { return m.CallMsg.Data }
 func (m callMsg) AccessList() types2.AccessList { return m.CallMsg.AccessList }
 func (m callMsg) IsFree() bool                  { return false }
-func (m callMsg) EffectiveGasPrice() uint8      { return 0 }
+func (m callMsg) EffectiveGasPricePercentage() uint8 {
+	return zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED
+}
 
 func (m callMsg) DataGas() uint64                { return params.DataGasPerBlob * uint64(len(m.CallMsg.DataHashes)) }
 func (m callMsg) MaxFeePerDataGas() *uint256.Int { return m.CallMsg.MaxFeePerDataGas }

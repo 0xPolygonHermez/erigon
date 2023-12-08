@@ -66,11 +66,11 @@ func (api *BaseAPI) getReceipts(ctx context.Context, tx kv.Tx, chainConfig *chai
 	excessDataGas := header.ParentExcessDataGas(getHeader)
 	for i, txn := range block.Transactions() {
 		ibs.Prepare(txn.Hash(), block.Hash(), i)
-		ep, err := api._blockReader.TxnEffectiveGasPrice(ctx, tx, txn.Hash())
+		effectiveGasPricePercentage, err := api._blockReader.TxnEffectiveGasPricePercentage(ctx, tx, txn.Hash())
 		if err != nil {
 			return nil, err
 		}
-		receipt, _, err := core.ApplyTransaction(chainConfig, core.GetHashFn(header, getHeader), engine, nil, gp, ibs, noopWriter, header, txn, usedGas, vm.Config{}, excessDataGas, ep)
+		receipt, _, err := core.ApplyTransaction(chainConfig, core.GetHashFn(header, getHeader), engine, nil, gp, ibs, noopWriter, header, txn, usedGas, vm.Config{}, excessDataGas, effectiveGasPricePercentage)
 		if err != nil {
 			return nil, err
 		}

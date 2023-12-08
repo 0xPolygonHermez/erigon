@@ -4,8 +4,11 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 )
+
+const EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED = 0
 
 type L1BatchInfo struct {
 	BatchNo   uint64
