@@ -31,10 +31,9 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	state2 "github.com/ledgerwatch/erigon-lib/state"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
-	"github.com/ledgerwatch/log/v3"
-
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/log/v3"
 
 	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon/accounts/abi"
@@ -725,8 +724,7 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx types.Transac
 		b.pendingState, state.NewNoopWriter(),
 		b.pendingHeader, tx,
 		&b.pendingHeader.GasUsed, vm.Config{},
-		b.pendingHeader.ParentExcessDataGas(b.getHeader),
-		0); err != nil {
+		b.pendingHeader.ParentExcessDataGas(b.getHeader), 0); err != nil {
 		return err
 	}
 	//fmt.Printf("==== Start producing block %d\n", (b.prependBlock.NumberU64() + 1))
