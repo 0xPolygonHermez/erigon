@@ -148,6 +148,10 @@ func SpawnStageBatches(
 		select {
 		case l2Block := <-cfg.dsClient.L2BlockChan:
 			zeroHash := common.Hash{}
+			// skip if we already have this block
+			if l2Block.L2BlockNumber < lastBlockHeight+1 {
+				continue
+			}
 			// checks
 			if l2Block.L2BlockNumber != lastBlockHeight+1 {
 				return fmt.Errorf("missing block number. Last blcok number %d, current %d", lastBlockHeight, l2Block.L2BlockNumber)
