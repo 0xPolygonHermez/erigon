@@ -163,6 +163,14 @@ func (api *APIImpl) CallBundle(ctx context.Context, txHashes []common.Hash, stat
 		if err != nil {
 			return nil, err
 		}
+
+		// get the effective gas price percentage and apply it to the message
+		effectiveGasPricePercentage, err := api.getEffectiveGasPricePercentage(tx, txn.Hash())
+		if err != nil {
+			return nil, err
+		}
+		msg.SetEffectiveGasPricePercentage(effectiveGasPricePercentage)
+
 		// Execute the transaction message
 		result, err := core.ApplyMessage(evm, msg, gp, true /* refunds */, false /* gasBailout */)
 		if err != nil {

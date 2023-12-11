@@ -22,7 +22,9 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/kvcfg"
 	libstate "github.com/ledgerwatch/erigon-lib/state"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
+
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -310,6 +312,11 @@ func (api *BaseAPI) pruneMode(tx kv.Tx) (*prune.Mode, error) {
 	api._pruneMode.Store(&mode)
 
 	return p, nil
+}
+
+func (api *BaseAPI) getEffectiveGasPricePercentage(tx kv.Tx, txHash common.Hash) (uint8, error) {
+	hermezReader := hermez_db.NewHermezDbReader(tx)
+	return hermezReader.GetEffectiveGasPricePercentage(txHash)
 }
 
 // APIImpl is implementation of the EthAPI interface based on remote Db access

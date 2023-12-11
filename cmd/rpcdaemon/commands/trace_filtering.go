@@ -14,8 +14,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/iter"
 	"github.com/ledgerwatch/erigon-lib/kv/order"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
-	"github.com/ledgerwatch/erigon/chain"
 
+	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
@@ -123,7 +123,10 @@ func (api *TraceAPIImpl) Transaction(ctx context.Context, txHash common.Hash, ga
 func (api *TraceAPIImpl) Get(ctx context.Context, txHash common.Hash, indicies []hexutil.Uint64, gasBailOut *bool) (*ParityTrace, error) {
 	// Parity fails if it gets more than a single index. It returns nothing in this case. Must we?
 	if len(indicies) > 1 {
-		return nil, nil
+		return nil, errors.New("you can only supply one indices")
+	}
+	if len(indicies) == 0 {
+		return nil, errors.New("you must provide one indices")
 	}
 	traces, err := api.Transaction(ctx, txHash, gasBailOut)
 	if err != nil {
@@ -816,6 +819,12 @@ func (api *TraceAPIImpl) filterV3(ctx context.Context, dbtx kv.TemporalTx, fromB
 			continue
 		}
 
+		effectiveGasPricePercentage, err := api.getEffectiveGasPricePercentage(dbtx, txHash)
+		if err != nil {
+			return err
+		}
+		msg.SetEffectiveGasPricePercentage(effectiveGasPricePercentage)
+
 		stateReader.SetTxNum(txNum)
 		stateCache := shards.NewStateCache(32, 0 /* no limit */) // this cache living only during current RPC call, but required to store state writes
 		cachedReader := state.NewCachedReader(stateReader, stateCache)
@@ -989,6 +998,13 @@ func (api *TraceAPIImpl) callManyTransactions(
 		if err != nil {
 			return nil, fmt.Errorf("convert tx into msg: %w", err)
 		}
+
+		// now read back the effective gas price and set it for execution
+		effectiveGasPricePercentage, err := api.getEffectiveGasPricePercentage(dbtx, hash)
+		if err != nil {
+			return nil, err
+		}
+		msg.SetEffectiveGasPricePercentage(effectiveGasPricePercentage)
 
 		// gnosis might have a fee free account here
 		if msg.FeeCap().IsZero() && engine != nil {

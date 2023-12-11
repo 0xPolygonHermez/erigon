@@ -19,6 +19,7 @@ import (
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -525,6 +526,15 @@ func (e *intraBlockExec) execTx(txNum uint64, txIndex int, txn types.Transaction
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// add the effective gas price percentage
+	hermezReader := hermez_db.NewHermezDbReader(e.tx)
+	effectiveGasPricePercentage, err := hermezReader.GetEffectiveGasPricePercentage(txn.Hash())
+	if err != nil {
+		return nil, nil, err
+	}
+	msg.SetEffectiveGasPricePercentage(effectiveGasPricePercentage)
+
 	e.evm.ResetBetweenBlocks(*e.blockCtx, core.NewEVMTxContext(msg), e.ibs, *e.vmConfig, e.rules)
 	res, err := core.ApplyMessage(e.evm, msg, gp, true /* refunds */, false /* gasBailout */)
 	if err != nil {

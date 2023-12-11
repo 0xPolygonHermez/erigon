@@ -21,10 +21,22 @@ const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"             // txHash -> 
 
 type HermezDb struct {
 	tx kv.RwTx
+	*HermezDbReader
+}
+
+// HermezDbReader represents a reader for the HermezDb database.  It has no write functions and is embedded into the
+// HermezDb type for read operations.
+type HermezDbReader struct {
+	tx kv.Tx
+}
+
+func NewHermezDbReader(tx kv.Tx) *HermezDbReader {
+	return &HermezDbReader{tx}
 }
 
 func NewHermezDb(tx kv.RwTx) (*HermezDb, error) {
 	db := &HermezDb{tx: tx}
+	db.HermezDbReader = NewHermezDbReader(tx)
 
 	err := db.CreateBuckets()
 	if err != nil {
@@ -66,7 +78,7 @@ func (db *HermezDb) CreateBuckets() error {
 	return nil
 }
 
-func (db *HermezDb) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) {
+func (db *HermezDbReader) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) {
 	c, err := db.tx.Cursor(BLOCKBATCHES)
 	if err != nil {
 		return 0, err
@@ -89,7 +101,7 @@ func (db *HermezDb) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) {
 	return BytesToUint64(v), nil
 }
 
-func (db *HermezDb) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error) {
+func (db *HermezDbReader) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error) {
 	// TODO: not the most efficient way of doing this
 	c, err := db.tx.Cursor(BLOCKBATCHES)
 	if err != nil {
@@ -112,7 +124,7 @@ func (db *HermezDb) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error) {
 	return blockNos, err
 }
 
-func (db *HermezDb) GetHighestBlockInBatch(batchNo uint64) (uint64, error) {
+func (db *HermezDbReader) GetHighestBlockInBatch(batchNo uint64) (uint64, error) {
 	blocks, err := db.GetL2BlockNosByBatch(batchNo)
 	if err != nil {
 		return 0, err
@@ -128,7 +140,7 @@ func (db *HermezDb) GetHighestBlockInBatch(batchNo uint64) (uint64, error) {
 	return max, nil
 }
 
-func (db *HermezDb) GetHighestVerifiedBlockNo() (uint64, error) {
+func (db *HermezDbReader) GetHighestVerifiedBlockNo() (uint64, error) {
 	v, err := db.GetLatestVerification()
 	if err != nil {
 		return 0, err
@@ -146,7 +158,7 @@ func (db *HermezDb) GetHighestVerifiedBlockNo() (uint64, error) {
 	return blockNo, nil
 }
 
-func (db *HermezDb) GetVerificationByL2BlockNo(blockNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetVerificationByL2BlockNo(blockNo uint64) (*types.L1BatchInfo, error) {
 	batchNo, err := db.GetBatchNoByL2Block(blockNo)
 	if err != nil {
 		return nil, err
@@ -155,23 +167,23 @@ func (db *HermezDb) GetVerificationByL2BlockNo(blockNo uint64) (*types.L1BatchIn
 	return db.GetVerificationByBatchNo(batchNo)
 }
 
-func (db *HermezDb) GetSequenceByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetSequenceByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
 	return db.getByL1Block(L1SEQUENCES, l1BlockNo)
 }
 
-func (db *HermezDb) GetSequenceByBatchNo(batchNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetSequenceByBatchNo(batchNo uint64) (*types.L1BatchInfo, error) {
 	return db.getByBatchNo(L1SEQUENCES, batchNo)
 }
 
-func (db *HermezDb) GetVerificationByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetVerificationByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
 	return db.getByL1Block(L1VERIFICATIONS, l1BlockNo)
 }
 
-func (db *HermezDb) GetVerificationByBatchNo(batchNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetVerificationByBatchNo(batchNo uint64) (*types.L1BatchInfo, error) {
 	return db.getByBatchNo(L1VERIFICATIONS, batchNo)
 }
 
-func (db *HermezDb) getByL1Block(table string, l1BlockNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) getByL1Block(table string, l1BlockNo uint64) (*types.L1BatchInfo, error) {
 	c, err := db.tx.Cursor(table)
 	if err != nil {
 		return nil, err
@@ -209,7 +221,7 @@ func (db *HermezDb) getByL1Block(table string, l1BlockNo uint64) (*types.L1Batch
 	return nil, nil
 }
 
-func (db *HermezDb) getByBatchNo(table string, batchNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) getByBatchNo(table string, batchNo uint64) (*types.L1BatchInfo, error) {
 	c, err := db.tx.Cursor(table)
 	if err != nil {
 		return nil, err
@@ -247,15 +259,15 @@ func (db *HermezDb) getByBatchNo(table string, batchNo uint64) (*types.L1BatchIn
 	return nil, nil
 }
 
-func (db *HermezDb) GetLatestSequence() (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetLatestSequence() (*types.L1BatchInfo, error) {
 	return db.getLatest(L1SEQUENCES)
 }
 
-func (db *HermezDb) GetLatestVerification() (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetLatestVerification() (*types.L1BatchInfo, error) {
 	return db.getLatest(L1VERIFICATIONS)
 }
 
-func (db *HermezDb) getLatest(table string) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) getLatest(table string) (*types.L1BatchInfo, error) {
 	c, err := db.tx.Cursor(table)
 	if err != nil {
 		return nil, err
@@ -303,7 +315,7 @@ func (db *HermezDb) WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) 
 	return db.tx.Put(GLOBAL_EXIT_ROOTS, Uint64ToBytes(l2BlockNo), ger.Bytes())
 }
 
-func (db *HermezDb) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error) {
+func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error) {
 	data, err := db.tx.GetOne(GLOBAL_EXIT_ROOTS, Uint64ToBytes(l2BlockNo))
 	if err != nil {
 		return common.Hash{}, err
@@ -316,7 +328,7 @@ func (db *HermezDb) WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstyp
 	return db.tx.Put(GLOBAL_EXIT_ROOTS_BATCHES, Uint64ToBytes(batchNumber), ger.EncodeToBytes())
 }
 
-func (db *HermezDb) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error) {
+func (db *HermezDbReader) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error) {
 	c, err := db.tx.Cursor(GLOBAL_EXIT_ROOTS_BATCHES)
 	if err != nil {
 		return nil, err
@@ -376,7 +388,7 @@ func (db *HermezDb) DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error {
 	return nil
 }
 
-func (db *HermezDb) GetForkId(batchNo uint64) (uint64, error) {
+func (db *HermezDbReader) GetForkId(batchNo uint64) (uint64, error) {
 	c, err := db.tx.Cursor(FORKIDS)
 	if err != nil {
 		return 0, err
@@ -420,7 +432,7 @@ func (db *HermezDb) WriteEffectiveGasPricePercentage(txHash common.Hash, txPrice
 	return db.tx.Put(TX_PRICE_PERCENTAGE, txHash.Bytes(), Uint8ToBytes(txPricePercentage))
 }
 
-func (db *HermezDb) GetEffectiveGasPricePercentage(txHash common.Hash) (uint8, error) {
+func (db *HermezDbReader) GetEffectiveGasPricePercentage(txHash common.Hash) (uint8, error) {
 	data, err := db.tx.GetOne(TX_PRICE_PERCENTAGE, txHash.Bytes())
 	if err != nil {
 		return 0, err
