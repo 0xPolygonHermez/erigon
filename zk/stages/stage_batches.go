@@ -13,7 +13,6 @@ import (
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk"
-	"github.com/ledgerwatch/erigon/zk/datastream"
 	dsclient "github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
@@ -21,8 +20,6 @@ import (
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 
 	"github.com/ledgerwatch/log/v3"
-
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
 )
 
 type ISyncer interface {
@@ -46,16 +43,18 @@ type HermezDb interface {
 }
 
 type BatchesCfg struct {
-	db     kv.RwDB
-	syncer ISyncer
-	zkCfg  *ethconfig.Zk
+	db                  kv.RwDB
+	syncer              ISyncer
+	blockRoutineStarted bool
+	dsClient            *dsclient.StreamClient
 }
 
-func StageBatchesCfg(db kv.RwDB, syncer ISyncer, zkCfg *ethconfig.Zk) BatchesCfg {
+func StageBatchesCfg(db kv.RwDB, syncer ISyncer, dsClient *dsclient.StreamClient) BatchesCfg {
 	return BatchesCfg{
-		db:     db,
-		syncer: syncer,
-		zkCfg:  zkCfg,
+		db:                  db,
+		syncer:              syncer,
+		blockRoutineStarted: false,
+		dsClient:            dsClient,
 	}
 }
 
@@ -95,40 +94,32 @@ func SpawnStageBatches(
 	if err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
-	batchesProgress++
-	log.Info(fmt.Sprintf("[%s] Starting stream", logPrefix), "startBlock", batchesProgress)
-
-	l2BlockChan := make(chan types.FullL2Block, 100000)
-	gerUpdatesChan := make(chan types.GerUpdate, 1000)
-	errChan := make(chan error, 2)
 
 	startSyncTime := time.Now()
-	// start routine to download blocks and push them in a channel
-	go func() {
-		log.Info(fmt.Sprintf("[%s] Started downloading L2Blocks routine", logPrefix))
-		defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
-		var err error
+	errChan := make(chan error)
 
-		for {
+	// start routine to download blocks and push them in a channel
+	if firstCycle {
+		log.Info(fmt.Sprintf("[%s] Starting stream", logPrefix), "startBlock", batchesProgress+1)
+		go func() {
+			log.Info(fmt.Sprintf("[%s] Started downloading L2Blocks routine", logPrefix))
+			defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
+			var err error
+
 			// this will download all blocks from datastream and push them in a channel
 			// if no error, break, else continue trying to get them
-			if _, _, err = datastream.DownloadAllL2BlocksToChannel(cfg.zkCfg.L2DataStreamerUrl, l2BlockChan, gerUpdatesChan, batchesProgress); err == nil {
-				break
-			}
+			// Create bookmark
+			bookmark := types.NewL2BlockBookmark(batchesProgress + 1)
+			err = cfg.dsClient.ReadAllEntriesToChannel(bookmark)
 
 			//[zkevm] - this is expected to be returned only when given block number is higher than the highest block number in datastream
 			if err == dsclient.ErrBadBookmark {
 				log.Debug(fmt.Sprintf("[%s] Invalid bookmark. Probably ahead of stream.", logPrefix))
-
-				errChan <- nil
-				return
 			}
 
-			log.Warn(fmt.Sprintf("[%s] Error from the datastream client, retrying... Error: %s", logPrefix, err))
-		}
-
-		errChan <- err
-	}()
+			errChan <- err
+		}()
+	}
 
 	// start a routine to print blocks written progress
 	progressChan, stopProgressPrinter := zk.ProgressPrinter(logPrefix, 0)
@@ -154,11 +145,13 @@ func SpawnStageBatches(
 		// if no blocks available should block
 		// if download routine finished, should continue to read from channel until it's empty
 		// if both download routine stopped and channel empty - stop loop
-		var l2Block types.FullL2Block
 		select {
-		case l2BlockIncomming := <-l2BlockChan:
-			l2Block = l2BlockIncomming // writes header, body, forkId and blockBatch
+		case l2Block := <-cfg.dsClient.L2BlockChan:
 			zeroHash := common.Hash{}
+			// checks
+			if l2Block.L2BlockNumber != lastBlockHeight+1 {
+				return fmt.Errorf("missing block number. Last blcok number %d, current %d", lastBlockHeight, l2Block.L2BlockNumber)
+			}
 
 			// update forkid
 			if l2Block.ForkId > lastForkId {
@@ -213,7 +206,7 @@ func SpawnStageBatches(
 			lastBlockHeight = l2Block.L2BlockNumber
 			blocksWritten++
 			progressChan <- blocksWritten
-		case gerUpdate := <-gerUpdatesChan:
+		case gerUpdate := <-cfg.dsClient.GerUpdatesChan:
 			if err := hermezDb.WriteBatchGBatchGlobalExitRoot(gerUpdate.BatchNumber, gerUpdate); err != nil {
 				return fmt.Errorf("write batch global exit root error: %v", err)
 			}
@@ -223,6 +216,16 @@ func SpawnStageBatches(
 			}
 			writeThreadFinished = true
 		default:
+			// if no blocks available should and time since last block written is > 100ms
+			// consider that we are at the tip and blocks come in the datastream as they are produced
+			// stop the current iteration of the stage
+			lastWrittenTs := cfg.dsClient.LastWrittenTime.Load()
+			timePassedAfterlastBlock := time.Since(time.Unix(0, lastWrittenTs))
+			if cfg.dsClient.Streaming.Load() && timePassedAfterlastBlock.Milliseconds() > 100 {
+				log.Info(fmt.Sprintf("[%s] No new blocks. Continue.", logPrefix), "lastBlockHeight", lastBlockHeight)
+				writeThreadFinished = true
+			}
+
 			if writeThreadFinished {
 				endLoop = true
 			}

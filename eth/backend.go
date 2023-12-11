@@ -108,6 +108,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync/snap"
 	stages2 "github.com/ledgerwatch/erigon/turbo/stages"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
+	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
 )
@@ -669,11 +670,25 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if backend.config.Zk != nil {
 		cfg := backend.config.Zk
 
+		// datastream
+		// Create client
+		log.Info("Starting datastream client...")
+		datastreamClient := client.NewClient(cfg.L2DataStreamerUrl)
+		// retry connection
+		for {
+			// Start client (connect to the server)
+			if err := datastreamClient.Start(); err == nil {
+				break
+			}
+			log.Warn(fmt.Sprintf("Error when starting datastream client, retrying... Error: %s", err))
+		}
+		//datastream end
+
 		etherMan := newEtherMan(cfg)
 		zkVerificationsSyncer := syncer.NewVerificationsSyncer(etherMan.EthClient, cfg.L1ContractAddress)
 		zkSequencesSyncer := syncer.NewSequencesSyncer(etherMan.EthClient, cfg.L1ContractAddress)
 
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkVerificationsSyncer, zkSequencesSyncer)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkVerificationsSyncer, zkSequencesSyncer, &datastreamClient)
 		backend.syncUnwindOrder = stagedsync.ZkUnwindOrder
 		// TODO: prune order
 	} else {

@@ -37,6 +37,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	"github.com/ledgerwatch/erigon/turbo/stages/bodydownload"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
+	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 )
@@ -470,6 +471,7 @@ func NewDefaultZkStages(ctx context.Context,
 	engine consensus.Engine,
 	verificationsSyncer *syncer.VerificationsSyncer,
 	sequencesSyncer *syncer.SequencesSyncer,
+	datastreamClient *client.StreamClient,
 ) []*sync_stages.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
@@ -494,7 +496,7 @@ func NewDefaultZkStages(ctx context.Context,
 		),
 		zkStages.StageL1VerificationsCfg(db, verificationsSyncer, cfg.Zk),
 		zkStages.StageL1SequencesCfg(db, sequencesSyncer, cfg.Zk),
-		zkStages.StageBatchesCfg(db, verificationsSyncer, cfg.Zk),
+		zkStages.StageBatchesCfg(db, verificationsSyncer, datastreamClient),
 		stagedsync.StageCumulativeIndexCfg(db),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig),
 		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockRetire, controlServer.Hd),

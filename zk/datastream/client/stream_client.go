@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"sync/atomic"
+	"time"
 
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 )
@@ -23,11 +25,18 @@ type StreamClient struct {
 	server     string // Server address to connect IP:port
 	streamType StreamType
 	conn       net.Conn
-	id         string // Client id
-
-	Header types.HeaderEntry // Header info received (from Header command)
+	id         string            // Client id
+	Header     types.HeaderEntry // Header info received (from Header command)
 
 	entriesDefinition map[types.EntryType]EntityDefinition
+
+	// atomic
+	LastWrittenTime atomic.Int64
+	Streaming       atomic.Bool
+
+	// Channels
+	L2BlockChan    chan types.FullL2Block
+	GerUpdatesChan chan types.GerUpdate
 }
 
 const (
@@ -72,6 +81,8 @@ func NewClient(server string) StreamClient {
 				Definition: reflect.TypeOf(types.GerUpdate{}),
 			},
 		},
+		L2BlockChan:    make(chan types.FullL2Block, 100000),
+		GerUpdatesChan: make(chan types.GerUpdate, 1000),
 	}
 
 	return c
@@ -93,6 +104,9 @@ func (c *StreamClient) Start() error {
 
 func (c *StreamClient) Stop() {
 	c.conn.Close()
+
+	close(c.L2BlockChan)
+	close(c.GerUpdatesChan)
 }
 
 // Command header: Get status
@@ -154,28 +168,19 @@ func (c *StreamClient) ReadEntries(bookmark *types.Bookmark, l2BlocksAmount int)
 	return fullL2Blocks, gerUpates, bookmarks, entriesRead, nil
 }
 
-// sends start command, reads entries until limit reached and sends end command
-// sends the parsed FullL2Blocks with transactions to a channel
-func (c *StreamClient) ReadAllEntriesToChannel(l2BlockChan chan types.FullL2Block, gerUpdateChan chan types.GerUpdate, bookmark []byte) (uint64, map[uint64][]byte, error) {
-	// Get header from server
-	if err := c.GetHeader(); err != nil {
-		return 0, nil, fmt.Errorf("%s get header error: %v", c.id, err)
-	}
+// reads entries to the end of the stream
+// at end will wait for new entries to arrive
+func (c *StreamClient) ReadAllEntriesToChannel(bookmark *types.Bookmark) error {
 	// send start command
-	if err := c.initiateDownloadBookmark(bookmark); err != nil {
-		return 0, nil, ErrBadBookmark
+	if err := c.initiateDownloadBookmark(bookmark.Encode()); err != nil {
+		return ErrBadBookmark
 	}
 
-	entriesRead, bookmarks, err := c.readAllFullL2BlocksToChannel(l2BlockChan, gerUpdateChan)
-	if err != nil {
-		return 0, nil, fmt.Errorf("%s read full L2 blocks error: %v", c.id, err)
+	if err := c.readAllFullL2BlocksToChannel(); err != nil {
+		return fmt.Errorf("%s read full L2 blocks error: %v", c.id, err)
 	}
 
-	if err := c.sendStopCmd(); err != nil {
-		return 0, nil, fmt.Errorf("%s send stop command error: %v", c.id, err)
-	}
-
-	return entriesRead, bookmarks, nil
+	return nil
 }
 
 // runs the prerequisites for entries download
@@ -228,43 +233,25 @@ func (c *StreamClient) afterStartCommand() error {
 
 // reads all entries from the server and sends them to a channel
 // sends the parsed FullL2Blocks with transactions to a channel
-func (c *StreamClient) readAllFullL2BlocksToChannel(l2BlockChan chan types.FullL2Block, gerUpdateChan chan types.GerUpdate) (uint64, map[uint64][]byte, error) {
-	entriesRead := uint64(0)
-	bookmarks := map[uint64][]byte{}
-	fromEntry := uint64(0)
+func (c *StreamClient) readAllFullL2BlocksToChannel() error {
 	for {
-		if entriesRead+fromEntry >= c.Header.TotalEntries {
-			break
-		}
-
-		fullBlock, gerUpdates, bookmark, fe, er, err := c.readFullBlock()
+		fullBlock, gerUpdates, _, _, _, err := c.readFullBlock()
 		if err != nil {
-			return 0, nil, fmt.Errorf("failed to read full block: %v", err)
+			return fmt.Errorf("failed to read full block: %v", err)
 		}
-
-		// set it only the first time - this is the entry num of the first entry after the bookmark
-		if fromEntry == 0 {
-			fromEntry = fe
-		}
-
-		bookmarks[fullBlock.L2BlockNumber] = bookmark
-
-		// if fullBlock.L2BlockNumber > 200000 {
-		// 	log.Info("readAllFullL2BlocksToChannel - override hit", "fullBlock.L2BlockNumber", fullBlock.L2BlockNumber)
-		// 	return entriesRead, bookmarks, nil
-		// }
 
 		if gerUpdates != nil {
 			for _, gerUpdate := range *gerUpdates {
-				gerUpdateChan <- gerUpdate
+				c.GerUpdatesChan <- gerUpdate
 			}
 		}
-
-		l2BlockChan <- *fullBlock
-		entriesRead += er
+		c.LastWrittenTime.Store(time.Now().UnixNano())
+		c.Streaming.Store(true)
+		c.L2BlockChan <- *fullBlock
 	}
 
-	return entriesRead, bookmarks, nil
+	c.Streaming.Store(false)
+	return nil
 }
 
 // reads a set amount of l2blocks from the server and returns them
