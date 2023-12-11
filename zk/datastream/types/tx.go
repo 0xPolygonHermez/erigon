@@ -3,31 +3,35 @@ package types
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/holiman/uint256"
 )
 
 const (
-	l2TxMinDataLength = 6
+	l2TxMinDataLength = 38
 	// EntryTypeL2Tx represents a L2 transaction
 	EntryTypeL2Tx EntryType = 2
 )
 
 // L2Transaction represents a zkEvm transaction
 type L2Transaction struct {
-	EffectiveGasPricePercentage uint8  // 1 byte
-	IsValid                     uint8  // 1 byte
-	EncodedLength               uint32 // 4 bytes
+	EffectiveGasPricePercentage uint8       // 1 byte
+	IsValid                     uint8       // 1 byte
+	StateRoot                   uint256.Int // 32 bytes
+	EncodedLength               uint32      // 4 bytes
 	Encoded                     []byte
 }
 
-// decodes a L2 transaction from a byte array
+// DecodeL2Transaction decodes a L2 transaction from a byte array
 func DecodeL2Transaction(data []byte) (*L2Transaction, error) {
 	dataLen := len(data)
 	if dataLen < l2TxMinDataLength {
 		return &L2Transaction{}, fmt.Errorf("expected minimum data length: %d, got: %d", l2TxMinDataLength, len(data))
 	}
 
-	encodedLength := binary.LittleEndian.Uint32(data[2:6])
-	encoded := data[6:]
+	stateRoot := uint256.Int{}
+	stateRoot.SetBytes(data[2:34])
+	encodedLength := binary.LittleEndian.Uint32(data[34:38])
+	encoded := data[38:]
 	if encodedLength != uint32(len(encoded)) {
 		return &L2Transaction{}, fmt.Errorf("expected encoded length: %d, got: %d", encodedLength, len(encoded))
 	}
@@ -35,6 +39,7 @@ func DecodeL2Transaction(data []byte) (*L2Transaction, error) {
 	return &L2Transaction{
 		EffectiveGasPricePercentage: data[0],
 		IsValid:                     data[1],
+		StateRoot:                   stateRoot,
 		EncodedLength:               encodedLength,
 		Encoded:                     encoded,
 	}, nil
