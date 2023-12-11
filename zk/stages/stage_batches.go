@@ -154,7 +154,7 @@ func SpawnStageBatches(
 			}
 			// checks
 			if l2Block.L2BlockNumber != lastBlockHeight+1 {
-				return fmt.Errorf("missing block number. Last blcok number %d, current %d", lastBlockHeight, l2Block.L2BlockNumber)
+				return fmt.Errorf("missing block number. Last block number %d, current %d", lastBlockHeight, l2Block.L2BlockNumber)
 			}
 
 			// update forkid
@@ -220,12 +220,12 @@ func SpawnStageBatches(
 			}
 			writeThreadFinished = true
 		default:
-			// if no blocks available should and time since last block written is > 100ms
+			// if no blocks available should and time since last block written is > 500ms
 			// consider that we are at the tip and blocks come in the datastream as they are produced
 			// stop the current iteration of the stage
 			lastWrittenTs := cfg.dsClient.LastWrittenTime.Load()
 			timePassedAfterlastBlock := time.Since(time.Unix(0, lastWrittenTs))
-			if cfg.dsClient.Streaming.Load() && timePassedAfterlastBlock.Milliseconds() > 100 {
+			if cfg.dsClient.Streaming.Load() && timePassedAfterlastBlock.Milliseconds() > 500 {
 				log.Info(fmt.Sprintf("[%s] No new blocks. Continue.", logPrefix), "lastBlockHeight", lastBlockHeight)
 				writeThreadFinished = true
 			}
