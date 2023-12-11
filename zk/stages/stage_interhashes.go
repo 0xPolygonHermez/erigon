@@ -33,6 +33,7 @@ import (
 	"github.com/status-im/keycard-go/hexutils"
 	"io"
 	"net/http"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 )
 
 type ZkInterHashesCfg struct {
@@ -44,12 +45,12 @@ type ZkInterHashesCfg struct {
 	blockReader       services.FullBlockReader
 	hd                *headerdownload.HeaderDownload
 
-	historyV3        bool
-	agg              *state.AggregatorV3
-	rebuildTreeAfter uint64
+	historyV3 bool
+	agg       *state.AggregatorV3
+	zk        *ethconfig.Zk
 }
 
-func StageZkInterHashesCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHalt bool, tmpDir string, blockReader services.FullBlockReader, hd *headerdownload.HeaderDownload, historyV3 bool, agg *state.AggregatorV3, rebuildTreeAfter uint64) ZkInterHashesCfg {
+func StageZkInterHashesCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHalt bool, tmpDir string, blockReader services.FullBlockReader, hd *headerdownload.HeaderDownload, historyV3 bool, agg *state.AggregatorV3, zk *ethconfig.Zk) ZkInterHashesCfg {
 	return ZkInterHashesCfg{
 		db:                db,
 		checkRoot:         checkRoot,
@@ -59,9 +60,9 @@ func StageZkInterHashesCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHal
 		blockReader:       blockReader,
 		hd:                hd,
 
-		historyV3:        historyV3,
-		agg:              agg,
-		rebuildTreeAfter: rebuildTreeAfter,
+		historyV3: historyV3,
+		agg:       agg,
+		zk:        zk,
 	}
 }
 
@@ -112,7 +113,7 @@ func SpawnZkIntermediateHashesStage(s *sync_stages.StageState, u sync_stages.Unw
 
 	var root libcommon.Hash
 
-	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > cfg.rebuildTreeAfter
+	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > cfg.zk.RebuildTreeAfter
 
 	eridb, err := db2.NewEriDb(tx)
 	if err != nil {
@@ -811,7 +812,7 @@ func verifyStateRoot(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *ZkIn
 
 		fmt.Println("[zkevm] interhashes - txno: ", bigTxNo)
 
-		sr, err := stateRootByTxNo(bigTxNo)
+		sr, err := stateRootByTxNo(bigTxNo, cfg.zk.L2RpcUrl)
 		if err != nil {
 			return err
 		}
@@ -827,7 +828,7 @@ func verifyStateRoot(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *ZkIn
 	return nil
 }
 
-func stateRootByTxNo(txNo *big.Int) (*libcommon.Hash, error) {
+func stateRootByTxNo(txNo *big.Int, l2RpcUrl string) (*libcommon.Hash, error) {
 	requestBody := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "eth_getBlockByNumber",
@@ -840,7 +841,7 @@ func stateRootByTxNo(txNo *big.Int) (*libcommon.Hash, error) {
 		return nil, err
 	}
 
-	response, err := http.Post("https://rpc.internal.zkevm-test.net/", "application/json", bytes.NewBuffer(requestBytes))
+	response, err := http.Post(l2RpcUrl, "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
 		return nil, err
 	}
