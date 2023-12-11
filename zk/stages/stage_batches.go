@@ -34,6 +34,7 @@ type HermezDb interface {
 	WriteForkId(batchNumber uint64, forkId uint64) error
 	WriteBlockBatch(l2BlockNumber uint64, batchNumber uint64) error
 	WriteEffectiveGasPricePercentage(txHash common.Hash, effectiveGasPricePercentage uint8) error
+	WriteStateRoot(l2BlockNumber uint64, rpcRoot common.Hash) error
 
 	DeleteForkIds(fromBatchNum, toBatchNum uint64) error
 	DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error
@@ -382,6 +383,10 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 
 		if err := hermezDb.WriteEffectiveGasPricePercentage(ltx.Hash(), transaction.EffectiveGasPricePercentage); err != nil {
 			return fmt.Errorf("write effective gas price percentage error: %v", err)
+		}
+
+		if err := hermezDb.WriteStateRoot(l2Block.L2BlockNumber, l2Block.StateRoot); err != nil {
+			return fmt.Errorf("write rpc root error: %v", err)
 		}
 	}
 	txCollection := ethTypes.Transactions(txs)

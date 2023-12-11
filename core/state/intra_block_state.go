@@ -22,15 +22,10 @@ import (
 	"fmt"
 	"sort"
 
-	"encoding/binary"
 	"encoding/hex"
-	"math/big"
-	"strings"
-
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common"
@@ -41,6 +36,11 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/trie"
 )
 
+type ReadOnlyHermezDb interface {
+	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
+	GetStateRoot(l2BlockNo uint64) (libcommon.Hash, error)
+}
+
 type revision struct {
 	id           int
 	journalIndex int
@@ -48,8 +48,6 @@ type revision struct {
 
 // SystemAddress - sender address for internal state updates.
 var SystemAddress = libcommon.HexToAddress("0xfffffffffffffffffffffffffffffffffffffffe")
-
-const RpcRootsBucketName = "HermezRpcRoot"
 
 // BalanceIncrease represents the increase of balance of an account that did not require
 // reading the account first
@@ -822,7 +820,7 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 	sdb.SetState(saddr, &sl0, *txNum)
 }
 
-func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
+func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) error {
 	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 	sl0 := libcommon.HexToHash("0x0")
 
@@ -835,7 +833,7 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := libcommon.BytesToHash(mapKey)
 
-	rpcHash, err := getDbRoot(dbTx, txNum.Uint64())
+	rpcHash, err := roHermezDb.GetStateRoot(txNum.Uint64())
 	if err != nil {
 		return err
 	}
@@ -847,56 +845,4 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	}
 
 	return nil
-}
-
-func trimHexString(s string) string {
-	if strings.HasPrefix(s, "0x") {
-		s = s[2:]
-	}
-
-	for i := 0; i < len(s); i++ {
-		if s[i] != '0' {
-			return "0x" + s[i:]
-		}
-	}
-
-	return "0x0"
-}
-
-func verifyRoot(dbTx kv.RwTx, hash string, txNum uint64) (*libcommon.Hash, error) {
-	rpcHash, err := getDbRoot(dbTx, txNum)
-	if err != nil {
-		return nil, err
-	}
-	h := libcommon.HexToHash(hash)
-
-	if rpcHash.Big().Cmp(big.NewInt(0)) == 0 {
-		return &h, fmt.Errorf("RPC root hash is zero")
-	}
-
-	trimmedRpcHash := trimHexString(rpcHash.String())
-
-	fmt.Printf("rpcHash: %s\n", trimmedRpcHash)
-	fmt.Printf("hash: %s\n", hash)
-
-	if trimmedRpcHash != hash {
-		return &h, fmt.Errorf("root hash mismatch")
-	}
-
-	return &h, nil
-}
-
-func getDbRoot(dbTx kv.RwTx, txNum uint64) (*libcommon.Hash, error) {
-	rootHash, err := dbTx.GetOne(RpcRootsBucketName, UintBytes(txNum))
-	if err != nil {
-		return nil, err
-	}
-	h := libcommon.BytesToHash(rootHash)
-	return &h, nil
-}
-
-func UintBytes(no uint64) []byte {
-	noBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(noBytes, no)
-	return noBytes
 }

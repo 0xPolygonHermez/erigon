@@ -61,7 +61,6 @@ var (
 	L1Sequences                 SyncStage = "L1Sequences"
 	L1VerificationsBatchNo      SyncStage = "L1VerificationsBatchNo"
 	Batches                     SyncStage = "Batches"
-	RpcRoots                    SyncStage = "RpcRoots"
 	HighestHashableL2BlockNo    SyncStage = "HighestHashableL2BlockNo"
 	VerificationsStateRootCheck SyncStage = "VerificationStateRootCheck"
 	ForkId                      SyncStage = "ForkId"
