@@ -849,15 +849,6 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(dbTx kv.RwTx) error {
 	return nil
 }
 
-// TODO [zkevm] remove debugging struct
-type MyStruct struct {
-	Storage  map[string]string
-	Balance  *big.Int
-	Nonce    *big.Int
-	CodeHash libcommon.Hash
-	Code     string
-}
-
 func trimHexString(s string) string {
 	if strings.HasPrefix(s, "0x") {
 		s = s[2:]

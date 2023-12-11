@@ -351,8 +351,6 @@ func zkIncrementIntermediateHashes(logPrefix string, s *sync_stages.StageState, 
 	for i := s.BlockNumber + 1; i <= to; i++ {
 		dupSortKey := dbutils.EncodeBlockNumber(i)
 
-		// TODO [zkevm]: find out the contractcodelookup
-
 		// i+1 to get state at the beginning of the next batch
 		psr := state2.NewPlainState(db, i+1, systemcontracts.SystemContractCodeLookup["Hermez"])
 
@@ -368,7 +366,6 @@ func zkIncrementIntermediateHashes(logPrefix string, s *sync_stages.StageState, 
 			// store the account
 			accChanges[addr] = currAcc
 
-			// TODO: figure out if we can optimise for performance by making this optional, only on 'creation' or similar
 			cc, err := psr.ReadAccountCode(addr, currAcc.Incarnation, currAcc.CodeHash)
 			if err != nil {
 				return trie.EmptyRoot, err
