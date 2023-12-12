@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )
@@ -30,7 +30,7 @@ func TestL2TransactionDecode(t *testing.T) {
 			expectedResult: L2Transaction{
 				EffectiveGasPricePercentage: 128,
 				IsValid:                     1,
-				StateRoot:                   *uint256.NewInt(0),
+				StateRoot:                   common.Hash{},
 				EncodedLength:               5,
 				Encoded:                     []byte{1, 2, 3, 4, 5},
 			},

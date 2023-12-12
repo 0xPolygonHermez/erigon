@@ -385,7 +385,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 			return fmt.Errorf("write effective gas price percentage error: %v", err)
 		}
 
-		if err := hermezDb.WriteStateRoot(l2Block.L2BlockNumber, l2Block.StateRoot); err != nil {
+		if err := hermezDb.WriteStateRoot(l2Block.L2BlockNumber, transaction.StateRoot); err != nil {
 			return fmt.Errorf("write rpc root error: %v", err)
 		}
 	}

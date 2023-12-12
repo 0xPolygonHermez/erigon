@@ -3,7 +3,8 @@ package types
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/holiman/uint256"
+
+	"github.com/ledgerwatch/erigon-lib/common"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 type L2Transaction struct {
 	EffectiveGasPricePercentage uint8       // 1 byte
 	IsValid                     uint8       // 1 byte
-	StateRoot                   uint256.Int // 32 bytes
+	StateRoot                   common.Hash // 32 bytes
 	EncodedLength               uint32      // 4 bytes
 	Encoded                     []byte
 }
@@ -28,8 +29,7 @@ func DecodeL2Transaction(data []byte) (*L2Transaction, error) {
 		return &L2Transaction{}, fmt.Errorf("expected minimum data length: %d, got: %d", l2TxMinDataLength, len(data))
 	}
 
-	stateRoot := uint256.Int{}
-	stateRoot.SetBytes(data[2:34])
+	stateRoot := common.BytesToHash(data[2:34])
 	encodedLength := binary.LittleEndian.Uint32(data[34:38])
 	encoded := data[38:]
 	if encodedLength != uint32(len(encoded)) {
