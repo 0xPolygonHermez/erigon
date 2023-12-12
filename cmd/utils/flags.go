@@ -401,11 +401,6 @@ var (
 		Usage: "RPC rate limit in requests per second.",
 		Value: 0,
 	}
-	RpcRootsFileFlag = cli.StringFlag{
-		Name:  "zkevm.rpc-roots-file",
-		Usage: "File to store the RPC roots in",
-		Value: "",
-	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",
 		Usage: "Does limit amount of goroutines to process 1 batch request. Means 1 bach request can't overload server. 1 batch still can have unlimited amount of request",

@@ -1,2 +1,1 @@
-zkevm-roots.json filter=lfs diff=lfs merge=lfs -text
-zkevm-roots-testnet.json filter=lfs diff=lfs merge=lfs -text
+

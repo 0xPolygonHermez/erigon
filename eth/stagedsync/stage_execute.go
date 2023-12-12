@@ -159,7 +159,7 @@ func executeBlock(
 	writeCallTraces bool,
 	initialCycle bool,
 	stateStream bool,
-	effectivePricePercentageGetter core.EffectivePricePercentageGetter,
+	roHermezDb state.ReadOnlyHermezDb,
 ) error {
 	blockNum := block.NumberU64()
 
@@ -212,7 +212,7 @@ func executeBlock(
 	} else {
 		// for zkEVM no receipts
 		//vmConfig.NoReceipts = true
-		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx, effectivePricePercentageGetter)
+		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx, roHermezDb)
 	}
 	if err != nil {
 		return err

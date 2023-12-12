@@ -1444,7 +1444,7 @@ func main() {
 		printCurrentBlockNumber(*chaindata)
 
 	case "bucket":
-		printBucket(*chaindata, state.RpcRootsBucketName)
+		printBucket(*chaindata, kv.PlainState)
 
 	case "buckets":
 		printBuckets(*chaindata, *bucket)

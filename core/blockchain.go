@@ -75,10 +75,6 @@ type EphemeralExecResult struct {
 	StateSyncReceipt *types.Receipt        `json:"-"`
 }
 
-type EffectivePricePercentageGetter interface {
-	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
-}
-
 // ExecuteBlockEphemerally runs a block from provided stateReader and
 // writes the result to the provided stateWriter
 func ExecuteBlockEphemerally(
@@ -90,7 +86,7 @@ func ExecuteBlockEphemerally(
 	chainReader consensus.ChainHeaderReader,
 	getTracer func(txIndex int, txHash libcommon.Hash) (vm.EVMLogger, error),
 	dbTx kv.RwTx,
-	effectivePricePercentageGetter EffectivePricePercentageGetter,
+	roHermezDb state.ReadOnlyHermezDb,
 ) (*EphemeralExecResult, error) {
 
 	defer BlockExecutionTimer.UpdateDuration(time.Now())
@@ -140,7 +136,7 @@ func ExecuteBlockEphemerally(
 
 		gp.Reset(block.GasLimit())
 
-		effectiveGasPricePercentage, err := effectivePricePercentageGetter.GetEffectiveGasPricePercentage(tx.Hash())
+		effectiveGasPricePercentage, err := roHermezDb.GetEffectiveGasPricePercentage(tx.Hash())
 		if err != nil {
 			return nil, err
 		}
@@ -166,14 +162,11 @@ func ExecuteBlockEphemerally(
 			}
 		}
 
-		// [zkevm] - set smt root for each tx, unless last tx in block (see ibs block commit)
-		//if i != block.Transactions().Len()-1 {
 		// [zkevm] - set smt root hash in magic account
-		err = ibs.ScalableSetSmtRootHash(dbTx)
+		err = ibs.ScalableSetSmtRootHash(roHermezDb)
 		if err != nil {
 			return nil, err
 		}
-		//}
 	}
 
 	receiptSha := types.DeriveSha(receipts)

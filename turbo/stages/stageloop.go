@@ -25,7 +25,6 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/sentry/sentry"
 	"github.com/ledgerwatch/erigon/consensus/misc"
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	corestate "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -84,20 +83,6 @@ func StageLoop(
 ) {
 	defer close(waitForDone)
 	initialCycle := true
-	trw, err := db.BeginRw(ctx)
-	if err != nil {
-		log.Error("Failed to start transaction to add new zkevm batch tables", "err", err)
-		return
-	}
-	err = trw.CreateBucket(corestate.RpcRootsBucketName)
-	if err != nil {
-		log.Error(fmt.Sprintf("Failed to create %s bucket", corestate.RpcRootsBucketName), "err", err)
-		return
-	}
-	if err := trw.Commit(); err != nil {
-		log.Error("Failed to commit transaction to add new zkevm batch tables", "err", err)
-		return
-	}
 
 	for {
 		start := time.Now()
@@ -500,7 +485,6 @@ func NewDefaultZkStages(ctx context.Context,
 		stagedsync.StageCumulativeIndexCfg(db),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig),
 		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockRetire, controlServer.Hd),
-		zkStages.StageRpcRootsCfg(db, controlServer.ChainConfig, cfg.Zk),
 		stagedsync.StageExecuteBlocksCfg(
 			db,
 			cfg.Prune,

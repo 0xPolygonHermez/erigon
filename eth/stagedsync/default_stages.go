@@ -301,7 +301,6 @@ func DefaultZkStages(
 	cumulativeIndex CumulativeIndexCfg,
 	blockHashCfg BlockHashesCfg,
 	senders SendersCfg,
-	rpcRootsCfg zkStages.RpcRootsCfg,
 	exec ExecuteBlockCfg,
 	hashState HashStateCfg,
 	zkInterHashesCfg zkStages.ZkInterHashesCfg,
@@ -398,22 +397,6 @@ func DefaultZkStages(
 			},
 			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
 				return PruneSendersStage(p, tx, senders, ctx)
-			},
-		},
-		{
-			ID:          sync_stages.RpcRoots,
-			Description: "Download RPC roots",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				if badBlockUnwind {
-					return nil
-				}
-				return zkStages.SpawnStageRpcRoots(s, u, ctx, tx, rpcRootsCfg, test, firstCycle, quiet)
-			},
-			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return zkStages.UnwindRpcRootsStage(u, tx, rpcRootsCfg, ctx)
-			},
-			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return zkStages.PruneRpcRootsStage(p, tx, rpcRootsCfg, ctx)
 			},
 		},
 		{

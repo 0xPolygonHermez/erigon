@@ -18,6 +18,7 @@ const BLOCKBATCHES = "hermez_blockBatches"                         // l2blockno 
 const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"                 // l2blockno -> GER
 const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // l2blockno -> GER
 const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"             // txHash -> txPricePercentage
+const STATE_ROOTS = "hermez_stateRoots"                            // l2blockno -> stateRoot
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -72,6 +73,10 @@ func (db *HermezDb) CreateBuckets() error {
 		return err
 	}
 	err = db.tx.CreateBucket(TX_PRICE_PERCENTAGE)
+	if err != nil {
+		return err
+	}
+	err = db.tx.CreateBucket(STATE_ROOTS)
 	if err != nil {
 		return err
 	}
@@ -439,4 +444,17 @@ func (db *HermezDbReader) GetEffectiveGasPricePercentage(txHash common.Hash) (ui
 	}
 
 	return BytesToUint8(data), nil
+}
+
+func (db *HermezDb) WriteStateRoot(l2BlockNo uint64, rpcRoot common.Hash) error {
+	return db.tx.Put(STATE_ROOTS, Uint64ToBytes(l2BlockNo), rpcRoot.Bytes())
+}
+
+func (db *HermezDbReader) GetStateRoot(l2BlockNo uint64) (common.Hash, error) {
+	data, err := db.tx.GetOne(STATE_ROOTS, Uint64ToBytes(l2BlockNo))
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return common.BytesToHash(data), nil
 }

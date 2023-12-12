@@ -53,6 +53,7 @@ import (
 	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/ledgerwatch/erigon/tests"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
 const (
@@ -302,12 +303,17 @@ func Main(ctx *cli.Context) error {
 	}
 	defer tx.Rollback()
 
+	hermezDb, err := hermez_db.NewHermezDb(tx)
+	if err != nil {
+		return err
+	}
+
 	reader, writer := MakePreState(chainConfig.Rules(0, 0), tx, prestate.Pre)
 	// serenity engine can be used for pre-merge blocks as well, as it
 	// redirects to the ethash engine based on the block number
 	engine := serenity.New(&ethash.FakeEthash{})
 
-	result, err := core.ExecuteBlockEphemerally(chainConfig, &vmConfig, getHash, engine, block, reader, writer, nil, getTracer, tx)
+	result, err := core.ExecuteBlockEphemerally(chainConfig, &vmConfig, getHash, engine, block, reader, writer, nil, getTracer, tx, hermezDb)
 
 	if hashError != nil {
 		return NewError(ErrorMissingBlockhash, fmt.Errorf("blockhash error: %v", err))
