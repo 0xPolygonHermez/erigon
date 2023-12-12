@@ -4,18 +4,6 @@ zkEVM-Erigon is a fork of Erigon, currently in Alpha, optimized for syncing with
 
 ***
 
-## Prerequisites
-
-- [Git LFS](https://git-lfs.com/)
-
-For syncing different networks, you will need the corresponding network-specific files e.g. `zkevm-roots-testnet.json`. To do this run the following commands:
-- `git lfs install` - Initializes the Git LFS
-- `git lfs pull` - Downloads the actual LFS files
-
-These contain some pre-calculated roots from the RPC which are later validated by the local node in the intermediate hashes stage.
-
-***
-
 ## zkevm-specific API Support
 
 In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag (see the example config below).
@@ -41,7 +29,7 @@ In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag
 ## Limitations/Warnings
 
 - The golden poseidon hashing will be much faster on x86, so developers on Mac may experience slowness on Apple silicone
-- Falling behind by > 20 blocks (at some point this will be configurable) will cause a SMT rebuild - which will take some time for longer chains
+- Falling behind by > 500 blocks (at some point this will be configurable) will cause a SMT rebuild - which will take some time for longer chains
 
 ***
 
