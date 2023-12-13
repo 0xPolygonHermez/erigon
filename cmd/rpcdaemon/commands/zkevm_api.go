@@ -16,7 +16,6 @@ import (
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/sync_stages"
-	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
@@ -123,13 +122,8 @@ func (api *ZkEvmAPIImpl) IsBlockVirtualized(ctx context.Context, blockNumber rpc
 		return false, err
 	}
 
-	highestVerifiedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
-	if err != nil {
-		return false, err
-	}
-
-	// higher than the latest verified batch but lower than or equal to the latest sequenced batch
-	return batchNum <= latestSequencedBatch && batchNum > highestVerifiedBatchNo, nil
+	// if the batch is lower than the latest sequenced then it must be virtualized
+	return batchNum <= latestSequencedBatch, nil
 }
 
 // BatchNumberByBlockNumber returns the batch number of the block
@@ -156,16 +150,14 @@ func (api *ZkEvmAPIImpl) BatchNumber(ctx context.Context) (hexutil.Uint64, error
 	}
 	defer tx.Rollback()
 
-	bn, err := rpchelper.GetLatestBlockNumber(tx)
+	currentBatchNumber, err := getLatestBatchNumber(tx)
 	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-	batchNum, err := getBatchNoByL2Block(tx, bn)
-	if err != nil {
-		return hexutil.Uint64(0), err
+		return 0, err
 	}
 
-	return hexutil.Uint64(batchNum), err
+	// here we +1 because we only store a batch when we have a block associated with it.  The upstream has this
+	// batch in their storage so will always report it as being 1 higher than we have a block for
+	return hexutil.Uint64(currentBatchNumber + 1), err
 }
 
 // VirtualBatchNumber returns the latest virtual batch number
@@ -341,6 +333,25 @@ func getAllBlocksInBatchNumber(tx kv.Tx, batchNumber uint64) ([]uint64, error) {
 	}
 
 	return result, nil
+}
+
+func getLatestBatchNumber(tx kv.Tx) (uint64, error) {
+	c, err := tx.Cursor(hermez_db.BLOCKBATCHES)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	// get the last entry from the table
+	k, v, err := c.Last()
+	if err != nil {
+		return 0, err
+	}
+	if k == nil {
+		return 0, nil
+	}
+
+	return hermez_db.BytesToUint64(v), nil
 }
 
 func getBatchNoByL2Block(tx kv.Tx, l2BlockNo uint64) (uint64, error) {
