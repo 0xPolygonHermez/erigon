@@ -12,12 +12,15 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/hexutil"
+	"github.com/ledgerwatch/erigon/common/u256"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
+	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
 )
 
@@ -264,13 +267,19 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 	number := baseBlock.NumberU64()
 	signer := eritypes.MakeSigner(cc, number)
 	var senders []common.Address
+	var effectiveGasPricePercentages []uint8
 	if fullTx {
-		for _, tx := range baseBlock.Transactions() {
-			sender, err := tx.Sender(*signer)
+		for _, txn := range baseBlock.Transactions() {
+			sender, err := txn.Sender(*signer)
 			if err != nil {
 				return types.Block{}, err
 			}
 			senders = append(senders, sender)
+			effectiveGasPricePercentage, err := api.ethApi.getEffectiveGasPricePercentage(tx, txn.Hash())
+			if err != nil {
+				return types.Block{}, err
+			}
+			effectiveGasPricePercentages = append(effectiveGasPricePercentages, effectiveGasPricePercentage)
 		}
 	}
 
@@ -279,7 +288,7 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 		return types.Block{}, err
 	}
 
-	return convertBlockToRpcBlock(baseBlock, receipts, senders, fullTx)
+	return convertBlockToRpcBlock(baseBlock, receipts, senders, effectiveGasPricePercentages, fullTx)
 }
 
 // GetBroadcastURI returns the URI of the broadcaster - the trusted sequencer
@@ -419,6 +428,7 @@ func convertBlockToRpcBlock(
 	orig *eritypes.Block,
 	receipts eritypes.Receipts,
 	senders []common.Address,
+	effectiveGasPricePercentages []uint8,
 	full bool,
 ) (types.Block, error) {
 	header := orig.Header()
@@ -465,9 +475,13 @@ func convertBlockToRpcBlock(
 			if len(senders) > idx {
 				sender = senders[idx]
 			}
+			var effectiveGasPricePercentage uint8 = 0
+			if len(effectiveGasPricePercentages) > idx {
+				effectiveGasPricePercentage = effectiveGasPricePercentages[idx]
+			}
 			var receipt *types.Receipt
 			if len(receipts) > idx {
-				receipt = convertReceipt(receipts[idx], sender, tx.GetTo())
+				receipt = convertReceipt(receipts[idx], sender, tx.GetTo(), tx.GetPrice(), effectiveGasPricePercentage)
 			}
 
 			tran := types.Transaction{
@@ -503,7 +517,13 @@ func convertBlockToRpcBlock(
 	return result, nil
 }
 
-func convertReceipt(r *eritypes.Receipt, from common.Address, to *common.Address) *types.Receipt {
+func convertReceipt(
+	r *eritypes.Receipt,
+	from common.Address,
+	to *common.Address,
+	gasPrice *uint256.Int,
+	effectiveGasPricePercentage uint8,
+) *types.Receipt {
 	var cAddr *common.Address
 	if r.ContractAddress != (common.Address{}) {
 		cAddr = &r.ContractAddress
@@ -513,6 +533,18 @@ func convertReceipt(r *eritypes.Receipt, from common.Address, to *common.Address
 	logs := make([]*eritypes.Log, 0)
 	if len(r.Logs) > 0 {
 		logs = r.Logs
+	}
+
+	var effectiveGasPrice *types.ArgBig
+	gas := gasPrice.Clone()
+	if effectiveGasPricePercentage > zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED && gasPrice != nil {
+		clone := gasPrice.Clone()
+		effectiveGasPricePerc := new(uint256.Int).SetUint64(uint64(effectiveGasPricePercentage))
+		effectiveGasPricePerc.Add(effectiveGasPricePerc, u256.Num1)
+		clone.Mul(clone, effectiveGasPricePerc)
+		gas.Div(clone, zktypes.EFFECTIVE_GAS_PRICE_MAX_VAL)
+		asBig := types.ArgBig(*gas.ToBig())
+		effectiveGasPrice = &asBig
 	}
 
 	return &types.Receipt{
@@ -530,6 +562,6 @@ func convertReceipt(r *eritypes.Receipt, from common.Address, to *common.Address
 		ToAddr:            to,
 		ContractAddress:   cAddr,
 		Type:              types.ArgUint64(r.Type),
-		EffectiveGasPrice: nil,
+		EffectiveGasPrice: effectiveGasPrice,
 	}
 }
