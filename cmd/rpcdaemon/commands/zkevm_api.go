@@ -158,9 +158,7 @@ func (api *ZkEvmAPIImpl) BatchNumber(ctx context.Context) (hexutil.Uint64, error
 		return 0, err
 	}
 
-	// here we +1 because we only store a batch when we have a block associated with it.  The upstream has this
-	// batch in their storage so will always report it as being 1 higher than we have a block for
-	return hexutil.Uint64(currentBatchNumber + 1), err
+	return hexutil.Uint64(currentBatchNumber), err
 }
 
 // VirtualBatchNumber returns the latest virtual batch number
