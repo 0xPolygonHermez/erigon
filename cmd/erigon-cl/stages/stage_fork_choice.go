@@ -17,7 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/execution_client"
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/forkchoice"
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/network"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/sync_stages"
 )
 
 type StageForkChoiceCfg struct {
@@ -46,7 +46,7 @@ func StageForkChoice(db kv.RwDB, downloader *network.ForwardBeaconDownloader, ge
 }
 
 // StageForkChoice enables the fork choice state. it is never supposed to exit this stage once it gets in.
-func SpawnStageForkChoice(cfg StageForkChoiceCfg, s *stagedsync.StageState, tx kv.RwTx, ctx context.Context) error {
+func SpawnStageForkChoice(cfg StageForkChoiceCfg, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context) error {
 	/*useExternalTx := tx != nil
 	var err error
 	if !useExternalTx {
@@ -85,7 +85,7 @@ func SpawnStageForkChoice(cfg StageForkChoiceCfg, s *stagedsync.StageState, tx k
 	return nil
 }
 
-func startDownloadService(s *stagedsync.StageState, cfg StageForkChoiceCfg) {
+func startDownloadService(s *sync_stages.StageState, cfg StageForkChoiceCfg) {
 	cfg.downloader.SetHighestProcessedRoot(libcommon.Hash{})
 	cfg.downloader.SetHighestProcessedSlot(cfg.state.Slot())
 	cfg.downloader.SetProcessFunction(func(highestSlotProcessed uint64, _ libcommon.Hash, newBlocks []*cltypes.SignedBeaconBlock) (uint64, libcommon.Hash, error) {

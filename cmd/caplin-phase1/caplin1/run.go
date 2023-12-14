@@ -13,7 +13,7 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/stages"
 	"github.com/ledgerwatch/log/v3"
 
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/sync_stages"
 )
 
 func RunCaplinPhase1(ctx context.Context, sentinel sentinel.SentinelClient, beaconConfig *clparams.BeaconChainConfig, genesisConfig *clparams.GenesisConfig, engine execution_client.ExecutionEngine, state *state.BeaconState) error {
@@ -27,5 +27,5 @@ func RunCaplinPhase1(ctx context.Context, sentinel sentinel.SentinelClient, beac
 	}
 	gossipManager := network.NewGossipReceiver(ctx, sentinel, forkChoice, beaconConfig, genesisConfig)
 
-	return stages.SpawnStageForkChoice(stages.StageForkChoice(nil, downloader, genesisConfig, beaconConfig, state, nil, gossipManager, forkChoice), &stagedsync.StageState{ID: "Caplin"}, nil, ctx)
+	return stages.SpawnStageForkChoice(stages.StageForkChoice(nil, downloader, genesisConfig, beaconConfig, state, nil, gossipManager, forkChoice), &sync_stages.StageState{ID: "Caplin"}, nil, ctx)
 }

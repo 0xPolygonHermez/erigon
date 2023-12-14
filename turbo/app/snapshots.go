@@ -355,7 +355,6 @@ func doRetireCommand(cliCtx *cli.Context) error {
 		return err
 	}
 	agg.SetWorkers(estimate.CompressSnapshot.Workers())
-	agg.CleanDir()
 
 	if to == 0 {
 		var forwardProgress uint64

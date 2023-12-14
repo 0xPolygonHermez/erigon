@@ -358,7 +358,8 @@ func SysCallContract(contract libcommon.Address, data []byte, chainConfig chain.
 		math.MaxUint64, u256.Num0,
 		nil, nil,
 		data, nil, false,
-		true, // isFree
+		true, // isFree\
+		nil,  // [zkevm] set nil
 	)
 	vmConfig := vm.Config{NoReceipts: true, RestoreState: constCall}
 	// Create a new context to be used in the EVM environment
@@ -402,6 +403,7 @@ func SysCreate(contract libcommon.Address, data []byte, chainConfig chain.Config
 		nil, nil,
 		data, nil, false,
 		true, // isFree
+		nil,  // [zkevm] set nil
 	)
 	vmConfig := vm.Config{NoReceipts: true}
 	// Create a new context to be used in the EVM environment

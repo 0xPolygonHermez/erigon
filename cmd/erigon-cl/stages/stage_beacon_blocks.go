@@ -66,8 +66,9 @@ func SpawnStageBeaconsBlocks(cfg StageBeaconsBlockCfg, s *sync_stages.StageState
 	cfg.downloader.SetHighestProcessedSlot(progress)
 	cfg.downloader.SetHighestProcessedRoot(lastRoot)
 
-	cfg.downloader.SetTargetSlot(targetSlot)
-	cfg.downloader.SetLimitSegmentsLength(1024)
+	// [zkevm] comment to fix
+	//cfg.downloader.SetTargetSlot(targetSlot)
+	//cfg.downloader.SetLimitSegmentsLength(1024)
 	// On new blocks we just check slot sequencing for now :)
 	cfg.downloader.SetProcessFunction(func(
 		highestSlotProcessed uint64,
@@ -136,7 +137,9 @@ func SpawnStageBeaconsBlocks(cfg StageBeaconsBlockCfg, s *sync_stages.StageState
 		// Checks done, update all internals accordingly
 		return lastSlotInSegment, lastRootInSegment, nil
 	})
-	cfg.downloader.SetIsDownloading(true)
+
+	// [zkevm] comment to fix
+	// cfg.downloader.SetIsDownloading(true)
 	logInterval := time.NewTicker(30 * time.Second)
 	defer logInterval.Stop()
 	triggerInterval := time.NewTicker(150 * time.Millisecond)
