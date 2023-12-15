@@ -81,7 +81,7 @@ xdg_data_home_subdirs = $(xdg_data_home)/erigon $(xdg_data_home)/erigon-grafana 
 setup_xdg_data_home:
 	mkdir -p $(xdg_data_home_subdirs)
 	ls -aln $(xdg_data_home) | grep -E "472.*0.*erigon-grafana" || chown -R 472:0 $(xdg_data_home)/erigon-grafana
-	@echo "✔️ xdg_data_home setup"ama ]e e q
+	@echo "✔️ xdg_data_home setup"
 	@ls -al $(xdg_data_home)
 
 ## docker-compose:                    validate build args, setup xdg data home, and run docker-compose up
