@@ -5,17 +5,18 @@ import (
 	"strconv"
 
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/zk/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/test/utils"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
+const dataStreamUrl = "stream.zkevm-rpc.com:6900"
+
 // This code downloads headers and blocks from a datastream server.
 func main() {
 	// Create client
-	c := client.NewClient(datastream.TestDatastreamUrl)
+	c := client.NewClient(dataStreamUrl)
 
 	// Start client (connect to the server)
 	defer c.Stop()
