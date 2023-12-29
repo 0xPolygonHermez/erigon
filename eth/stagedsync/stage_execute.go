@@ -53,7 +53,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/ledgerwatch/erigon/zk/stages"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 const (
@@ -475,7 +475,7 @@ func SpawnExecuteBlocksStage(s *sync_stages.StageState, u sync_stages.Unwinder, 
 		defer tx.Rollback()
 	}
 
-	shouldShortCircuit, noProgressTo, err := stages.ShouldShortCircuitExecution(tx)
+	shouldShortCircuit, noProgressTo, err := utils.ShouldShortCircuitExecution(tx)
 	if err != nil {
 		return err
 	}
