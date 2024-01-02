@@ -28,19 +28,23 @@ func DefaultZkSequencerStages(
 	test bool,
 ) []*sync_stages.Stage {
 	return []*sync_stages.Stage{
-		{
-			ID:          sync_stages.CumulativeIndex,
-			Description: "Write Cumulative Index",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return stagedsync.SpawnStageCumulativeIndex(cumulativeIndex, s, tx, ctx)
+		/*
+			TODO: doesn't work since we don't have headers yet at this stage; should be moved until after execution
+
+			{
+				ID:          sync_stages.CumulativeIndex,
+				Description: "Write Cumulative Index",
+				Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
+					return stagedsync.SpawnStageCumulativeIndex(cumulativeIndex, s, tx, ctx)
+				},
+				Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
+					return stagedsync.UnwindCumulativeIndexStage(u, cumulativeIndex, tx, ctx)
+				},
+				Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
+					return stagedsync.PruneCumulativeIndexStage(p, tx, ctx)
+				},
 			},
-			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return stagedsync.UnwindCumulativeIndexStage(u, cumulativeIndex, tx, ctx)
-			},
-			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return stagedsync.PruneCumulativeIndexStage(p, tx, ctx)
-			},
-		},
+		*/
 		{
 			ID:          sync_stages.BlockHashes,
 			Description: "Write block hashes",
@@ -68,6 +72,29 @@ func DefaultZkSequencerStages(
 			},
 		},
 		{
+			/*
+				TODO:
+				we need to have another "execution" stage, that takes data from the txpool instead of from headers/bodies.
+
+				this "execution" stage should, in fact, write the following:
+				* block headers
+				* block bodies
+				* batches
+
+				currently it could be hard-coded to 1 batch -contains-> 1 block -contains-> 1 tx
+					+------------+
+					|  Batch #1  |
+					+------------+
+					| +--------+ |
+					| |Block #1| |
+					| |        | |
+					| | +Tx #1 | |
+					| +--------+ |
+					+------------+
+				later it should take both the gas limit of the block and the zk counters limit
+
+				it should also generate a retainlist for the future batch witness generation
+			*/
 			ID:          sync_stages.Execution,
 			Description: "Execute blocks w/o hash checks",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -181,7 +208,12 @@ func DefaultZkSequencerStages(
 			},
 		},
 		/*
-			TODO: datastream update
+		  TODO: verify batches stage -- real executor that verifies batches
+		  if it fails, we need to unwind everything up until before the bad batch
+		*/
+		/*
+			TODO: datastream update stage -- send updated data to the datastream
+			- store for future reference
 		*/
 		{
 			ID:          sync_stages.Finish,
@@ -251,6 +283,11 @@ func DefaultZkStages(
 			},
 		},
 		{
+			/*
+			* FIXME: this stage doesn't work since the "headers" we have in the datastream don't have any gasUsed, it's always 0.
+			*
+			* to solve this we probably should move it after execution (execution doesn't depend on it) and update the unwinds.
+			**/
 			ID:          sync_stages.CumulativeIndex,
 			Description: "Write Cumulative Index",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
