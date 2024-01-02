@@ -19,26 +19,35 @@ func ShouldShortCircuitExecution(tx kv.RwTx) (bool, uint64, error) {
 		return false, 0, err
 	}
 
-	// if there is no inters progress - i.e. first sync, don't skip exec, and execute to the highest block in the highest verified batch
+	// if there is no inters progress - i.e. first sync, don't skip exec, and execute to the highest block in the highest verified batch that we did download
 	if intersProgress == 0 {
 		highestVerifiedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
 		if err != nil {
 			return false, 0, err
 		}
 
+		highestDownloadedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.Batches)
+		if err != nil {
+			return false, 0, err
+		}
+
+		batchToCheck := highestVerifiedBatchNo
+		if highestDownloadedBatchNo < highestVerifiedBatchNo {
+			batchToCheck = highestDownloadedBatchNo
+		}
 		// we could find ourselves with a batch with no blocks here, so we want to go back one batch at
 		// a time until we find a batch with blocks
 		max := uint64(0)
 		killSwitch := 0
 		for {
-			max, err = hermezDb.GetHighestBlockInBatch(highestVerifiedBatchNo)
+			max, err = hermezDb.GetHighestBlockInBatch(batchToCheck)
 			if err != nil {
 				return false, 0, err
 			}
 			if max != 0 {
 				break
 			}
-			highestVerifiedBatchNo--
+			batchToCheck--
 			killSwitch++
 			if killSwitch > 100 {
 				return false, 0, fmt.Errorf("could not find a batch with blocks when checking short circuit")
