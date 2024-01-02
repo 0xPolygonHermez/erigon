@@ -28,7 +28,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx) (bool, uint64, error) {
 
 		// checking which is the highest batch we downloaded, in some cases
 		// (e.g. on a bad network), we might have not downloaded the highest verified batch yet...
-		highestDownloadedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.Batches)
+		highestDownloadedBatchNo, err := hermezDb.GetLatestDownloadedBatchNo()
 		if err != nil {
 			return false, 0, err
 		}
