@@ -130,11 +130,11 @@ func (db *HermezDbReader) GetLatestDownloadedBatchNo() (uint64, error) {
 	}
 	defer c.Close()
 
-	k, _, err := c.Last()
+	_, v, err := c.Last()
 	if err != nil {
 		return 0, err
 	}
-	return BytesToUint64(k), nil
+	return BytesToUint64(v), nil
 
 }
 
