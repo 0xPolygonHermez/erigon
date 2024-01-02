@@ -438,14 +438,6 @@ func ChiadoGenesisBlock() *types.Genesis {
 	}
 }
 
-// Pre-calculated version of:
-//
-//	DevnetSignPrivateKey = crypto.HexToECDSA(sha256.Sum256([]byte("erigon devnet key")))
-//	DevnetEtherbase=crypto.PubkeyToAddress(DevnetSignPrivateKey.PublicKey)
-var DevnetSignPrivateKey, _ = crypto.HexToECDSA("26e86e45f6fc45ec6e2ecd128cec80fa1d1505e5507dcd2ae58c3130a7a97b48")
-var DevnetEtherbase = libcommon.HexToAddress("67b1d87101671b127f5f8714789c7192f7ad340e")
-
-// DeveloperGenesisBlock returns the 'geth --dev' genesis block.
 func DeveloperGenesisBlock(period uint64, faucet libcommon.Address) *types.Genesis {
 	// Override the default period to the user requested one
 	config := *params.AllCliqueProtocolChanges
@@ -656,6 +648,8 @@ func GenesisBlockByChainName(chain string) *types.Genesis {
 		return HermezTestnetGenesisBlock()
 	case networkname.HermezBlueberryChainName:
 		return HermezBlueberryGenesisBlock()
+	case networkname.HermezEtrogChainName:
+		return HermezEtrogGenesisBlock()
 	case networkname.HermezCardonaChainName:
 		return HermezCardonaGenesisBlock()
 	case networkname.HermezCardonaInternalChainName:

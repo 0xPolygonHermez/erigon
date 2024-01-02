@@ -1,6 +1,6 @@
 {
-  "ChainName": "hermez-mainnet",
-  "chainId": 1101,
+  "ChainName": "etrog",
+  "chainId": 10010,
   "consensus": "ethash",
   "homesteadBlock": 0,
   "daoForkBlock": 0,
@@ -12,17 +12,17 @@
   "istanbulBlock": 0,
   "muirGlacierBlock": 0,
   "berlinBlock": 0,
-  "londonBlock": 9999999999999999999999999999999999999999999999999,
-  "arrowGlacierBlock": 9999999999999999999999999999999999999999999999999,
-  "grayGlacierBlock": 9999999999999999999999999999999999999999999999999,
+  "londonBlock": 0,
+  "arrowGlacierBlock": 0,
+  "grayGlacierBlock": 0,
   "terminalTotalDifficulty": 58750000000000000000000,
   "terminalTotalDifficultyPassed": false,
   "shanghaiTime": 9999999999999999999999999999999999999999999999999,
   "cancunTime": 9999999999999999999999999999999999999999999999999,
   "pragueTime": 9999999999999999999999999999999999999999999999999,
   "ethash": {},
-  "mordorBlock": 5575557,
+  "mordorBlock": 0,
   "dragonfruitBlock": 0,
-  "etrogBlock": 9999999999999999999999999999999999999999999999999
+  "etrogBlock": 0
 }
 

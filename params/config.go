@@ -63,6 +63,8 @@ var (
 	HermezLocalDevnetGenesisHash     = libcommon.HexToHash("0x65531c46ddeb39ba78d50f4eb6b87a279fa28bb6f683b327779392a4cd4770f3")
 	HermezTestnetGenesisHash         = libcommon.HexToHash("0x13a14c4a8288e782863d7ce916d224546c69dc428fbfa7115a0cc33a27a05b26")
 	HermezBlueberryGenesisHash       = libcommon.HexToHash("0x45cff376044a08f8f33f0244d589f2178ea4f4c5234d912daa2ff3c496b17862")
+	HermezDevnetGenesisHash          = libcommon.HexToHash("0x45cff376044a08f8f33f0244d589f2178ea4f4c5234d912daa2ff3c496b17862")
+	HermezEtrogGenesisHash           = libcommon.HexToHash("0x0d87f6e71cd13713696856dd9c02f497b8fc35ccb73cdb1cf110b20455f91873")
 	HermezCardonaGenesisHash         = libcommon.HexToHash("0xf1a89745a08cfd1af739b93f960ad89546e3cec2a7babe8607703eb1e4e94b4d")
 	HermezCardonaInternalGenesisHash = libcommon.HexToHash("0x676657dd8a7dce782f4fe8a97ba794de3ff732b40233fce01da77d1ba1a24ee1")
 	X1TestnetGenesisHash             = libcommon.HexToHash("0xb2fbff62137228e52809081a425bfcd30c0fdc8c1213085278c739676a7669b8")
@@ -108,6 +110,8 @@ var (
 		ShanghaiTime:                  big.NewInt(0),
 		Ethash:                        new(erigonchain.EthashConfig),
 		MordorBlock:                   big.NewInt(0),
+		DragonfruitBlock:              big.NewInt(0),
+		EtrogBlock:                    big.NewInt(0),
 	}
 
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
@@ -127,6 +131,8 @@ var (
 		LondonBlock:           big.NewInt(0),
 		Clique:                &erigonchain.CliqueConfig{Period: 0, Epoch: 30000},
 		MordorBlock:           big.NewInt(0),
+		DragonfruitBlock:      big.NewInt(0),
+		EtrogBlock:            big.NewInt(0),
 	}
 
 	MumbaiChainConfig = readChainSpec("chainspecs/mumbai.json")
@@ -146,6 +152,8 @@ var (
 	HermezTestnetChainConfig = readChainSpec("chainspecs/hermez-testnet.json")
 
 	HermezBlueberryChainConfig = readChainSpec("chainspecs/hermez-blueberry.json")
+
+	HermezEtrogChainConfig = readChainSpec("chainspecs/hermez-etrog.json")
 
 	HermezCardonaChainConfig = readChainSpec("chainspecs/hermez-cardona.json")
 
@@ -241,6 +249,10 @@ func ChainConfigByChainName(chain string) *chain.Config {
 		return HermezTestnetChainConfig
 	case networkname.HermezBlueberryChainName:
 		return HermezBlueberryChainConfig
+	case networkname.HermezDevnetChainName:
+		return HermezDevnetChainConfig
+	case networkname.HermezEtrogChainName:
+		return HermezEtrogChainConfig
 	case networkname.HermezCardonaChainName:
 		return HermezCardonaChainConfig
 	case networkname.HermezCardonaInternalChainName:
@@ -280,6 +292,8 @@ func GenesisHashByChainName(chain string) *libcommon.Hash {
 		return &HermezTestnetGenesisHash
 	case networkname.HermezBlueberryChainName:
 		return &HermezBlueberryGenesisHash
+	case networkname.HermezEtrogChainName:
+		return &HermezEtrogGenesisHash
 	case networkname.HermezCardonaChainName:
 		return &HermezCardonaGenesisHash
 	case networkname.HermezCardonaInternalChainName:

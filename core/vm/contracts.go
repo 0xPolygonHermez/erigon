@@ -110,11 +110,28 @@ var PrecompiledContractsBLS = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{18}): &bls12381MapG2{},
 }
 
+var PrecompiledContractsEtrog = map[libcommon.Address]PrecompiledContract{
+	libcommon.BytesToAddress([]byte{1}): &ecrecover{},
+	libcommon.BytesToAddress([]byte{2}): &sha256hash{},
+	libcommon.BytesToAddress([]byte{3}): &dataCopy{},
+	libcommon.BytesToAddress([]byte{4}): &bigModExp{eip2565: true},
+	libcommon.BytesToAddress([]byte{5}): &bn256AddIstanbul{},
+	libcommon.BytesToAddress([]byte{6}): &bn256ScalarMulIstanbul{},
+	libcommon.BytesToAddress([]byte{7}): &bn256PairingIstanbul{},
+}
+
+var PrecompiledContractsDragonfruit = map[libcommon.Address]PrecompiledContract{
+	libcommon.BytesToAddress([]byte{1}): &ecrecover{},
+	libcommon.BytesToAddress([]byte{2}): &dataCopy{},
+}
+
 var (
-	PrecompiledAddressesBerlin    []libcommon.Address
-	PrecompiledAddressesIstanbul  []libcommon.Address
-	PrecompiledAddressesByzantium []libcommon.Address
-	PrecompiledAddressesHomestead []libcommon.Address
+	PrecompiledAddressesBerlin      []libcommon.Address
+	PrecompiledAddressesIstanbul    []libcommon.Address
+	PrecompiledAddressesByzantium   []libcommon.Address
+	PrecompiledAddressesHomestead   []libcommon.Address
+	PrecompiledAddressesEtrog       []libcommon.Address
+	PrecompiledAddressesDragonfruit []libcommon.Address
 )
 
 func init() {
@@ -130,11 +147,21 @@ func init() {
 	for k := range PrecompiledContractsBerlin {
 		PrecompiledAddressesBerlin = append(PrecompiledAddressesBerlin, k)
 	}
+	for k := range PrecompiledContractsEtrog {
+		PrecompiledAddressesEtrog = append(PrecompiledAddressesEtrog, k)
+	}
+	for k := range PrecompiledContractsDragonfruit {
+		PrecompiledAddressesDragonfruit = append(PrecompiledAddressesDragonfruit, k)
+	}
 }
 
 // ActivePrecompiles returns the precompiles enabled with the current configuration.
 func ActivePrecompiles(rules *chain.Rules) []libcommon.Address {
 	switch {
+	case rules.IsEtrog:
+		return PrecompiledAddressesEtrog
+	case rules.IsDragonfruit:
+		return PrecompiledAddressesDragonfruit
 	case rules.IsBerlin:
 		return PrecompiledAddressesBerlin
 	case rules.IsIstanbul:

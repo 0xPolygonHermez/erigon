@@ -77,13 +77,15 @@ type Config struct {
 	Bor    *chain.BorConfig    `json:"bor,omitempty"`
 
 	//zkEVM updates
-	MordorBlock *big.Int `json:"mordorBlock,omitempty"`
+	MordorBlock      *big.Int `json:"mordorBlock,omitempty"`
+	DragonfruitBlock *big.Int `json:"dragonfruitBlock,omitempty"`
+	EtrogBlock       *big.Int `json:"etrogBlock,omitempty"`
 }
 
 func (c *Config) String() string {
 	engine := c.getEngine()
 
-	return fmt.Sprintf("{ChainID: %v, Homestead: %v, DAO: %v, Tangerine Whistle: %v, Spurious Dragon: %v, Byzantium: %v, Constantinople: %v, Petersburg: %v, Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, Gray Glacier: %v, Terminal Total Difficulty: %v, Merge Netsplit: %v, Shanghai: %v, Cancun: %v, Prague: %v, Engine: %v, Mordor: %v}",
+	return fmt.Sprintf("{ChainID: %v, Homestead: %v, DAO: %v, Tangerine Whistle: %v, Spurious Dragon: %v, Byzantium: %v, Constantinople: %v, Petersburg: %v, Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, Gray Glacier: %v, Terminal Total Difficulty: %v, Merge Netsplit: %v, Shanghai: %v, Cancun: %v, Prague: %v, Engine: %v, Mordor: %v, Dragonfruit: %v, Etrog: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -105,6 +107,8 @@ func (c *Config) String() string {
 		c.PragueTime,
 		engine,
 		c.MordorBlock,
+		c.DragonfruitBlock,
+		c.EtrogBlock,
 	)
 }
 
@@ -213,6 +217,14 @@ func (c *Config) IsMordor(num uint64) bool {
 	return isForked(c.MordorBlock, num)
 }
 
+func (c *Config) IsEtrog(num uint64) bool {
+	return isForked(c.EtrogBlock, num)
+}
+
+func (c *Config) IsDragonfruit(num uint64) bool {
+	return isForked(c.DragonfruitBlock, num)
+}
+
 // CheckCompatible checks whether scheduled fork transitions have been imported
 // with a mismatching chain configuration.
 func (c *Config) CheckCompatible(newcfg *Config, height uint64) *chain.ConfigCompatError {
@@ -254,6 +266,8 @@ func (c *Config) forkBlockNumbers() []forkBlockNumber {
 		{name: "grayGlacierBlock", blockNumber: c.GrayGlacierBlock, optional: true},
 		{name: "mergeNetsplitBlock", blockNumber: c.MergeNetsplitBlock, optional: true},
 		{name: "mordorBlock", blockNumber: c.MordorBlock, optional: true},
+		{name: "etrogBlock", blockNumber: c.EtrogBlock, optional: true},
+		{name: "dragonfruitBlock", blockNumber: c.DragonfruitBlock, optional: true},
 	}
 }
 
@@ -352,6 +366,12 @@ func (c *Config) checkCompatible(newcfg *Config, head uint64) *chain.ConfigCompa
 	if incompatible(c.MordorBlock, newcfg.MordorBlock, head) {
 		return newCompatError("Merge netsplit block", c.MordorBlock, newcfg.MordorBlock)
 	}
+	if incompatible(c.DragonfruitBlock, newcfg.DragonfruitBlock, head) {
+		return newCompatError("Merge netsplit block", c.DragonfruitBlock, newcfg.DragonfruitBlock)
+	}
+	if incompatible(c.EtrogBlock, newcfg.EtrogBlock, head) {
+		return newCompatError("Merge netsplit block", c.EtrogBlock, newcfg.EtrogBlock)
+	}
 	return nil
 }
 
@@ -394,6 +414,7 @@ type Rules struct {
 	IsBerlin, IsLondon, IsShanghai, IsCancun, IsPrague      bool
 	IsEip1559FeeCollector, IsAura, IsMordor                 bool
 	IsZkEVMForkID4                                          bool
+	IsEtrog, IsDragonfruit                                  bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -420,6 +441,8 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsEip1559FeeCollector: c.IsEip1559FeeCollector(num),
 		IsAura:                c.Aura != nil,
 		IsMordor:              c.IsMordor(num),
+		IsEtrog:               c.IsEtrog(num),
+		IsDragonfruit:         c.IsDragonfruit(num),
 	}
 }
 
