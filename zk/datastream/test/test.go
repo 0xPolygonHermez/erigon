@@ -28,7 +28,7 @@ func main() {
 	bookmark := types.NewL2BlockBookmark(0)
 
 	// Read all entries from server
-	blocksRead, _, _, entriesReadAmount, err := c.ReadEntries(bookmark, 3000)
+	blocksRead, _, _, entriesReadAmount, err := c.ReadEntries(bookmark, 1000000)
 	if err != nil {
 		panic(err)
 	}
@@ -36,22 +36,27 @@ func main() {
 	fmt.Println("Blocks read amount: ", len(*blocksRead))
 
 	lastGer := common.Hash{}
+	expectedDsBlock := uint64(1)
+
+	var missingBlocks []uint64
+
 	for i, dsBlock := range *blocksRead {
 		if i == 0 {
 			continue
 		}
-		rpcBlock, err := utils.GetBlockByHash(dsBlock.L2Blockhash.String())
-		if err != nil {
-			panic(err)
-		}
 
+		if dsBlock.L2BlockNumber != expectedDsBlock {
+				missingBlocks = append(missingBlocks, dsBlock.L2BlockNumber)
+				log.Error("Missing blocks: %v", missingBlocks)
+			}
+			expectedDsBlock++
+
+		rpcBlock, _ := utils.GetBlockByHash(dsBlock.L2Blockhash.String())
 		match := matchBlocks(dsBlock, rpcBlock, lastGer)
 		if !match {
 			log.Error("Blocks don't match")
-			return
 		}
 		if lastGer.Hex() != dsBlock.GlobalExitRoot.Hex() {
-			fmt.Println("New ger!")
 			lastGer = dsBlock.GlobalExitRoot
 		}
 	}
@@ -99,6 +104,7 @@ func matchBlocks(dsBlock types.FullL2Block, rpcBlock utils.Result, lastGer commo
 			return false
 		}
 	}
+
 	// for i, tx := range dsBlock.L2Txs {
 	// 	if tx..String() != rpcBlock.Transactions[i] {
 	// 		log.Error("Block txs don't match", "blockNumber", dsBlock.L2BlockNumber, "dsBlockTx", tx.String(), "rpcBlockTx", rpcBlock.Transactions[i])
