@@ -419,6 +419,10 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
+		/*
+		* SEQ: We execute the block and we need to add the witness generation (or at least the retain list generation for the block)
+		* Also these retain lists should be able to be composed together
+		 */
 		if err = executeBlock(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
 			/*
 			* SEQ: okay, if fails -- we need to append a reverted tx to the block (need a testcase)

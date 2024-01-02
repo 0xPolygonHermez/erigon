@@ -58,6 +58,8 @@ func DefaultZkSequencerStages(
 				return stagedsync.PruneBlockHashStage(p, tx, blockHashCfg, ctx)
 			},
 		},
+		/* TODO: here should be some stage of getting GERs from the L1 and writing to the DB for future batches
+		 */
 		{
 			ID:          sync_stages.Senders,
 			Description: "Recover senders from tx signatures",
