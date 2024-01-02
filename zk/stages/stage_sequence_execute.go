@@ -1,3 +1,5 @@
+// +build zkevm-sequencer
+
 package stages
 
 import (
@@ -277,14 +279,6 @@ func SpawnSequenceExecuteBlock(s *sync_stages.StageState, u sync_stages.Unwinder
 		defer tx.Rollback()
 	}
 
-	shouldShortCircuit, noProgressTo, err := utils.ShouldShortCircuitExecution(tx)
-	if err != nil {
-		return err
-	}
-	if shouldShortCircuit {
-		return nil
-	}
-
 	prevStageProgress, errStart := sync_stages.GetStageProgress(tx, sync_stages.Senders)
 	if errStart != nil {
 		return errStart
@@ -299,9 +293,6 @@ func SpawnSequenceExecuteBlock(s *sync_stages.StageState, u sync_stages.Unwinder
 	var to = prevStageProgress
 	if toBlock > 0 {
 		to = cmp.Min(prevStageProgress, toBlock)
-	}
-	if to <= s.BlockNumber {
-		return nil
 	}
 
 	stateStream := !initialCycle && cfg.stateStream && to-s.BlockNumber < stateStreamLimit
@@ -333,44 +324,27 @@ func SpawnSequenceExecuteBlock(s *sync_stages.StageState, u sync_stages.Unwinder
 		batch.Rollback()
 	}()
 
-	if s.BlockNumber == 0 {
-		to = noProgressTo
-	}
-
-	// limit execution to 100 blocks at a time for faster sync near tip
-	// [TODO] remove it after Interhashes  incremental is optimized
-	total := to - stageProgress
-	if total > cfg.zk.RebuildTreeAfter && total < 100000 {
-		to = stageProgress + cfg.zk.RebuildTreeAfter
-		total = cfg.zk.RebuildTreeAfter
-	}
-	if !quiet && to > s.BlockNumber+16 {
-		log.Info(fmt.Sprintf("[%s] Blocks execution", logPrefix), "from", s.BlockNumber, "to", to)
-	}
-
-	initialBlock := stageProgress + 1
 	eridb := erigon_db.NewErigonDb(tx)
+
+	/*
+	* SEQ: Here we are pre-creating a candidate batch
+	 */
 Loop:
+	/*
+	* SEQ: here is a `while` there are txs in the txpool
+	 */
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		stageProgress = blockNum
+		/*
+		* SEQ: pre-creating a candidate block
+		* Adding a single transaction to it
+		* No GER stuff and no state root
+		* We execute the tx afterwards and then add the info (state root, etc), to the block.
+		 */
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}
-
-		//[zkevm] - get the last batch number so we can check for empty batches in between it and the new one
-		lastBatchInserted, err := hermezDb.GetBatchNoByL2Block(stageProgress - 1)
-		if err != nil {
-			return fmt.Errorf("failed to get last batch inserted: %v", err)
-		}
-
-		// write batches between last block and this if they exist
-		currentBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
-		if err != nil {
-			return err
-		}
-
-		gers := []*dstypes.GerUpdate{}
 
 		blockHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 		if err != nil {
@@ -394,6 +368,25 @@ Loop:
 			continue
 		}
 
+		//[zkevm] - get the last batch number so we can check for empty batches in between it and the new one
+		lastBatchInserted, err := hermezDb.GetBatchNoByL2Block(stageProgress - 1)
+		if err != nil {
+			return fmt.Errorf("failed to get last batch inserted: %v", err)
+		}
+
+		/*
+		* SEQ: here we have our candidate batch
+		 */
+		// write batches between last block and this if they exist
+		currentBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
+		if err != nil {
+			return err
+		}
+
+		/*
+		* SEQ: here in theory we should get GERs from the L1 and write them down before
+		* execution into a separate table.
+		 */
 		//[zkevm] get batches between last block and this one
 		// plus this blocks ger
 		gersInBetween, err := hermezDb.GetBatchGlobalExitRoots(lastBatchInserted, currentBatch)
@@ -401,10 +394,13 @@ Loop:
 			return err
 		}
 
+		gers := []*dstypes.GerUpdate{}
+
 		if gersInBetween != nil {
 			gers = append(gers, gersInBetween...)
 		}
 
+		/* SEQ: here probably something about GER from L1 if needed (Local ER can be done via EVM) */
 		blockGer, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
 		if err != nil {
 			return err
@@ -424,6 +420,10 @@ Loop:
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
 		if err = executeBlock(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
+			/*
+			* SEQ: okay, if fails -- we need to append a reverted tx to the block (need a testcase)
+			* The code under is definitely not needed -- we can't report bad header if we are the only one sequencing.
+			 */
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {
@@ -469,6 +469,7 @@ Loop:
 		gasUsed := header.GasUsed
 		gas = gas + gasUsed
 		currentStateGas = currentStateGas + gasUsed
+		/* SEQ: here we can actually write header with the actual gas! */
 
 		// TODO: how can we store this data right first time?  Or mop up old data as we're currently duping storage
 		/*
@@ -503,6 +504,10 @@ Loop:
 
 		// write the new block lookup entries
 		rawdb.WriteTxLookupEntries(tx, block)
+
+		/*
+		* SEQ: we report progress as soon as we create a block or a batch
+		 */
 
 		select {
 		default:
