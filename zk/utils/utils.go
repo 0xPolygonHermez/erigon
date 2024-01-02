@@ -26,12 +26,16 @@ func ShouldShortCircuitExecution(tx kv.RwTx) (bool, uint64, error) {
 			return false, 0, err
 		}
 
+		// checking which is the highest batch we downloaded, in some cases
+		// (e.g. on a bad network), we might have not downloaded the highest verified batch yet...
 		highestDownloadedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.Batches)
 		if err != nil {
 			return false, 0, err
 		}
 
 		batchToCheck := highestVerifiedBatchNo
+		// in that case, we want to check up to the last batch we downloaded
+		// (otherwie we have no blocks to return)
 		if highestDownloadedBatchNo < highestVerifiedBatchNo {
 			batchToCheck = highestDownloadedBatchNo
 		}
