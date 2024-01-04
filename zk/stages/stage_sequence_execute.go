@@ -1,5 +1,3 @@
-// +build zkevm-sequencer
-
 package stages
 
 import (
@@ -267,7 +265,7 @@ func newStateReaderWriter(
 	return stateReader, stateWriter, nil
 }
 
-func SpawnSequenceExecuteBlock(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool, quiet bool) (err error) {
+func SpawnSequenceExecuteionStage(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool, quiet bool) (err error) {
 
 	quit := ctx.Done()
 	useExternalTx := tx != nil
@@ -516,7 +514,7 @@ Loop:
 		select {
 		default:
 		case <-logEvery.C:
-			logBlock, logTx, logTime = logProgress(logPrefix, total, initialBlock, logBlock, logTime, blockNum, logTx, lastLogTx, gas, float64(currentStateGas)/float64(gasState), batch)
+			logBlock, logTx, logTime = logProgress(logPrefix /*total*/, 1000 /*initialBlock*/, 0, logBlock, logTime, blockNum, logTx, lastLogTx, gas, float64(currentStateGas)/float64(gasState), batch)
 			gas = 0
 			tx.CollectMetrics()
 			sync_stages.Metrics[sync_stages.Execution].Set(blockNum)
@@ -576,7 +574,7 @@ func logProgress(logPrefix string, total, initialBlock, prevBlock uint64, prevTi
 	return currentBlock, currentTx, currentTime
 }
 
-func UnwindExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) (err error) {
+func UnwindSequenceExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) (err error) {
 	if u.UnwindPoint >= s.BlockNumber {
 		return nil
 	}
@@ -750,7 +748,7 @@ func recoverCodeHashPlain(acc *accounts.Account, db kv.Tx, key []byte) {
 	}
 }
 
-func PruneExecutionStage(s *sync_stages.PruneState, tx kv.RwTx, cfg ExecuteBlockCfg, ctx context.Context, initialCycle bool) (err error) {
+func PruneSequenceExecutionStage(s *sync_stages.PruneState, tx kv.RwTx, cfg ExecuteBlockCfg, ctx context.Context, initialCycle bool) (err error) {
 	logPrefix := s.LogPrefix()
 	useExternalTx := tx != nil
 	if !useExternalTx {

@@ -17,7 +17,7 @@ func DefaultZkSequencerStages(
 	cumulativeIndex stagedsync.CumulativeIndexCfg,
 	blockHashCfg stagedsync.BlockHashesCfg,
 	senders stagedsync.SendersCfg,
-	exec stagedsync.ExecuteBlockCfg,
+	exec ExecuteBlockCfg,
 	hashState stagedsync.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
 	history stagedsync.HistoryCfg,
@@ -100,13 +100,13 @@ func DefaultZkSequencerStages(
 			ID:          sync_stages.Execution,
 			Description: "Execute blocks w/o hash checks",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return stagedsync.SpawnExecuteBlocksStage(s, u, tx, 0, ctx, exec, firstCycle, quiet)
+				return SpawnSequenceExecuteionStage(s, u, tx, 0, ctx, exec, firstCycle, quiet)
 			},
 			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return stagedsync.UnwindExecutionStage(u, s, tx, ctx, exec, firstCycle)
+				return UnwindSequenceExecutionStage(u, s, tx, ctx, exec, firstCycle)
 			},
 			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return stagedsync.PruneExecutionStage(p, tx, exec, ctx, firstCycle)
+				return PruneSequenceExecutionStage(p, tx, exec, ctx, firstCycle)
 			},
 		},
 		{
@@ -215,7 +215,6 @@ func DefaultZkSequencerStages(
 		*/
 		/*
 			TODO: datastream update stage -- send updated data to the datastream
-			- store for future reference
 		*/
 		{
 			ID:          sync_stages.Finish,
