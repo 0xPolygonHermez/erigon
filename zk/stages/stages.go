@@ -440,6 +440,7 @@ func DefaultZkStages(
 				return stagedsync.PruneTxLookup(p, tx, txLookup, ctx, firstCycle)
 			},
 		},
+		/* TODO insert here the stage that updates the datastream */
 		{
 			ID:          sync_stages.Finish,
 			Description: "Final: update current block for the RPC API",
