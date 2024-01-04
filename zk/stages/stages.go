@@ -9,11 +9,8 @@ import (
 	"github.com/ledgerwatch/erigon/sync_stages"
 )
 
-func DefaultZkSequencerStages(
+func SequencerZkStages(
 	ctx context.Context,
-	snapshots stagedsync.SnapshotsCfg,
-	l1SyncerCfg L1SyncerCfg,
-	batchesCfg BatchesCfg,
 	cumulativeIndex stagedsync.CumulativeIndexCfg,
 	blockHashCfg stagedsync.BlockHashesCfg,
 	senders stagedsync.SendersCfg,
@@ -234,7 +231,6 @@ func DefaultZkSequencerStages(
 
 func DefaultZkStages(
 	ctx context.Context,
-	snapshots stagedsync.SnapshotsCfg,
 	l1SyncerCfg L1SyncerCfg,
 	batchesCfg BatchesCfg,
 	cumulativeIndex stagedsync.CumulativeIndexCfg,

@@ -93,7 +93,7 @@ type ExecuteBlockCfg struct {
 	zk        *ethconfig.Zk
 }
 
-func StageExecuteBlocksCfg(
+func StageSequenceBlocksCfg(
 	db kv.RwDB,
 	pm prune.Mode,
 	batchSize datasize.ByteSize,
