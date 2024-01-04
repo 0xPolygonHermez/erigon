@@ -716,12 +716,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		zkL1Syncer := syncer.NewL1Syncer(etherMan.EthClient, cfg.L1ContractAddress, cfg.L1BlockRange, cfg.L1QueryDelay)
 
 		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkL1Syncer, &datastreamClient)
+		// TODO: SEQ: move this check into stages2 or something like that, bad place to have it..
 		if sequencer.IsSequencer() {
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
 		} else {
 			backend.syncUnwindOrder = zkStages.ZkUnwindOrder
 		}
-		// TODO: prune order
+		// TODO: SEQ: prune order
 	} else {
 		backend.syncStages = stages2.NewDefaultStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine)
 		backend.syncUnwindOrder = stagedsync.DefaultUnwindOrder
