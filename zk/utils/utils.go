@@ -39,8 +39,6 @@ func ShouldShortCircuitExecution(tx kv.RwTx) (bool, uint64, error) {
 		if highestDownloadedBatchNo < highestVerifiedBatchNo {
 			batchToCheck = highestDownloadedBatchNo
 		}
-		// print all results
-		fmt.Printf("highestVerifiedBatchNo: %d, highestDownloadedBatchNo: %d, batchToCheck: %d\n", highestVerifiedBatchNo, highestDownloadedBatchNo, batchToCheck)
 
 		// we could find ourselves with a batch with no blocks here, so we want to go back one batch at
 		// a time until we find a batch with blocks
