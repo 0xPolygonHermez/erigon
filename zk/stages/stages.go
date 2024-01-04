@@ -95,9 +95,9 @@ func SequencerZkStages(
 				it should also generate a retainlist for the future batch witness generation
 			*/
 			ID:          sync_stages.Execution,
-			Description: "Execute blocks w/o hash checks",
+			Description: "Sequence transactions",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnSequenceExecuteionStage(s, u, tx, 0, ctx, exec, firstCycle, quiet)
+				return SpawnSequencingStage(s, u, tx, 0, ctx, exec, firstCycle, quiet)
 			},
 			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
 				return UnwindSequenceExecutionStage(u, s, tx, ctx, exec, firstCycle)
@@ -453,6 +453,20 @@ func DefaultZkStages(
 	}
 }
 
+var ZkSequencerUnwindOrder = sync_stages.UnwindOrder{
+	sync_stages.BlockHashes,
+	sync_stages.IntermediateHashes, // need to unwind SMT before we remove history
+	sync_stages.Execution,
+	sync_stages.HashState,
+	sync_stages.Senders,
+	sync_stages.CallTraces,
+	sync_stages.AccountHistoryIndex,
+	sync_stages.StorageHistoryIndex,
+	sync_stages.LogIndex,
+	sync_stages.TxLookup,
+	sync_stages.Finish,
+}
+
 var ZkUnwindOrder = sync_stages.UnwindOrder{
 	sync_stages.L1Syncer,
 	sync_stages.Batches,
@@ -462,7 +476,6 @@ var ZkUnwindOrder = sync_stages.UnwindOrder{
 	sync_stages.Execution,
 	sync_stages.HashState,
 	sync_stages.Senders,
-	sync_stages.Translation,
 	sync_stages.CallTraces,
 	sync_stages.AccountHistoryIndex,
 	sync_stages.StorageHistoryIndex,

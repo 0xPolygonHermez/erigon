@@ -265,7 +265,15 @@ func newStateReaderWriter(
 	return stateReader, stateWriter, nil
 }
 
-func SpawnSequenceExecuteionStage(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool, quiet bool) (err error) {
+func SpawnSequencingStage(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool, quiet bool) (err error) {
+	logPrefix := s.LogPrefix()
+	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
+	defer log.Info(fmt.Sprintf("[%s] Finished sequencing stage", logPrefix))
+
+	log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool", logPrefix))
+	time.Sleep(1 * time.Second) // give some time to start other stages
+
+	return
 
 	quit := ctx.Done()
 	useExternalTx := tx != nil
@@ -287,7 +295,6 @@ func SpawnSequenceExecuteionStage(s *sync_stages.StageState, u sync_stages.Unwin
 	}
 	nextStagesExpectData := nextStageProgress > 0 // Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
 
-	logPrefix := s.LogPrefix()
 	var to = prevStageProgress
 	if toBlock > 0 {
 		to = cmp.Min(prevStageProgress, toBlock)

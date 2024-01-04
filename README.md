@@ -15,8 +15,8 @@ Using the Makefile command: `make build-libs` will install these for the relevan
 
 ## sequencer (WIP)
 
-Enable Sequencer: `CDK-ERIGON-SEQUENCER=1 ./build/bin/cdk-erigon <flags>`
-
+Enable Sequencer: `CDK_ERIGON_SEQUENCER=1 ./build/bin/cdk-erigon <flags>`
+q
 ## zkevm-specific API Support
 
 In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag (see the example config below).

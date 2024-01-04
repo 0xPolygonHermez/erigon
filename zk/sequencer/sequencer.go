@@ -4,7 +4,7 @@ import "os"
 
 const (
 	// Env variable to enable sequencer
-	SEQUENCER_ENV_KEY = "CDK-ERIGON-SEQUENCER"
+	SEQUENCER_ENV_KEY = "CDK_ERIGON_SEQUENCER"
 )
 
 func IsSequencer() bool {
