@@ -429,7 +429,6 @@ var ZkSequencerUnwindOrder = sync_stages.UnwindOrder{
 	sync_stages.IntermediateHashes, // need to unwind SMT before we remove history
 	sync_stages.Execution,
 	sync_stages.HashState,
-	sync_stages.Senders,
 	sync_stages.CallTraces,
 	sync_stages.AccountHistoryIndex,
 	sync_stages.StorageHistoryIndex,
@@ -442,7 +441,6 @@ var ZkUnwindOrder = sync_stages.UnwindOrder{
 	sync_stages.L1Syncer,
 	sync_stages.Batches,
 	sync_stages.BlockHashes,
-
 	sync_stages.IntermediateHashes, // need to unwind SMT before we remove history
 	sync_stages.Execution,
 	sync_stages.HashState,
