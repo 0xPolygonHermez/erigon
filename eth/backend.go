@@ -694,28 +694,31 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	var datastreamClient *client.StreamClient = nil
 
 	if backend.config.Zk != nil {
 		cfg := backend.config.Zk
 
-		// datastream
-		// Create client
-		log.Info("Starting datastream client...")
-		datastreamClient := client.NewClient(cfg.L2DataStreamerUrl)
-		// retry connection
-		for {
-			// Start client (connect to the server)
-			if err := datastreamClient.Start(); err == nil {
-				break
+		if !sequencer.IsSequencer() {
+			// datastream
+			// Create client
+			log.Info("Starting datastream client...")
+			// retry connection
+			datastreamClient = client.NewClient(cfg.L2DataStreamerUrl)
+			for {
+				// Start client (connect to the server)
+				if err := datastreamClient.Start(); err == nil {
+					break
+				}
+				log.Warn(fmt.Sprintf("Error when starting datastream client, retrying... Error: %s", err))
 			}
-			log.Warn(fmt.Sprintf("Error when starting datastream client, retrying... Error: %s", err))
+			//datastream end
 		}
-		//datastream end
 
 		etherMan := newEtherMan(cfg)
 		zkL1Syncer := syncer.NewL1Syncer(etherMan.EthClient, cfg.L1ContractAddress, cfg.L1BlockRange, cfg.L1QueryDelay)
 
-		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkL1Syncer, &datastreamClient)
+		backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkL1Syncer, datastreamClient)
 		// TODO: SEQ: move this check into stages2 or something like that, bad place to have it..
 		if sequencer.IsSequencer() {
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
