@@ -71,7 +71,7 @@ type headerDownloader interface {
 	ReportBadHeaderPoS(badHeader, lastValidAncestor common.Hash)
 }
 
-type ExecuteBlockCfg struct {
+type SequenceBlockCfg struct {
 	db            kv.RwDB
 	batchSize     datasize.ByteSize
 	prune         prune.Mode
@@ -113,8 +113,8 @@ func StageSequenceBlocksCfg(
 	syncCfg ethconfig.Sync,
 	agg *libstate.AggregatorV3,
 	zk *ethconfig.Zk,
-) ExecuteBlockCfg {
-	return ExecuteBlockCfg{
+) SequenceBlockCfg {
+	return SequenceBlockCfg{
 		db:            db,
 		prune:         pm,
 		batchSize:     batchSize,
@@ -142,7 +142,7 @@ func executeBlock(
 	tx kv.RwTx,
 	batch ethdb.Database,
 	gers []*dstypes.GerUpdate,
-	cfg ExecuteBlockCfg,
+	cfg SequenceBlockCfg,
 	vmConfig vm.Config, // emit copy, because will modify it
 	writeChangesets bool,
 	writeReceipts bool,
@@ -265,7 +265,7 @@ func newStateReaderWriter(
 	return stateReader, stateWriter, nil
 }
 
-func SpawnSequencingStage(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool, quiet bool) (err error) {
+func SpawnSequencingStage(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool, quiet bool) (err error) {
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished sequencing stage", logPrefix))
@@ -581,7 +581,7 @@ func logProgress(logPrefix string, total, initialBlock, prevBlock uint64, prevTi
 	return currentBlock, currentTx, currentTime
 }
 
-func UnwindSequenceExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) (err error) {
+func UnwindSequenceExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) (err error) {
 	if u.UnwindPoint >= s.BlockNumber {
 		return nil
 	}
@@ -611,7 +611,7 @@ func UnwindSequenceExecutionStage(u *sync_stages.UnwindState, s *sync_stages.Sta
 	return nil
 }
 
-func unwindExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) error {
+func unwindExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) error {
 	logPrefix := s.LogPrefix()
 	stateBucket := kv.PlainState
 	storageKeyLength := length.Addr + length.Incarnation + length.Hash
@@ -755,7 +755,7 @@ func recoverCodeHashPlain(acc *accounts.Account, db kv.Tx, key []byte) {
 	}
 }
 
-func PruneSequenceExecutionStage(s *sync_stages.PruneState, tx kv.RwTx, cfg ExecuteBlockCfg, ctx context.Context, initialCycle bool) (err error) {
+func PruneSequenceExecutionStage(s *sync_stages.PruneState, tx kv.RwTx, cfg SequenceBlockCfg, ctx context.Context, initialCycle bool) (err error) {
 	logPrefix := s.LogPrefix()
 	useExternalTx := tx != nil
 	if !useExternalTx {

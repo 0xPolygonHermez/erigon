@@ -14,7 +14,7 @@ func SequencerZkStages(
 	cumulativeIndex stagedsync.CumulativeIndexCfg,
 	blockHashCfg stagedsync.BlockHashesCfg,
 	senders stagedsync.SendersCfg,
-	exec ExecuteBlockCfg,
+	exec SequenceBlockCfg,
 	hashState stagedsync.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
 	history stagedsync.HistoryCfg,
@@ -42,19 +42,6 @@ func SequencerZkStages(
 				},
 			},
 		*/
-		{
-			ID:          sync_stages.BlockHashes,
-			Description: "Write block hashes",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return stagedsync.SpawnBlockHashStage(s, tx, blockHashCfg, ctx)
-			},
-			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return stagedsync.UnwindBlockHashStage(u, tx, blockHashCfg, ctx)
-			},
-			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return stagedsync.PruneBlockHashStage(p, tx, blockHashCfg, ctx)
-			},
-		},
 		/* TODO: here should be some stage of getting GERs from the L1 and writing to the DB for future batches
 		 */
 		{
@@ -454,7 +441,6 @@ func DefaultZkStages(
 }
 
 var ZkSequencerUnwindOrder = sync_stages.UnwindOrder{
-	sync_stages.BlockHashes,
 	sync_stages.IntermediateHashes, // need to unwind SMT before we remove history
 	sync_stages.Execution,
 	sync_stages.HashState,
