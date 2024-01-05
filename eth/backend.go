@@ -700,9 +700,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		etherMan := newEtherMan(cfg)
 
 		if sequencer.IsSequencer() {
-			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
 
-			backend.syncStages = stages2.NewSequencerZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine)
+			backend.syncStages = stages2.NewSequencerZkStages(
+				backend.sentryCtx,
+				backend.chainDB, stack.Config().P2P, config, backend.sentriesClient,
+				backend.notifications, backend.downloaderClient, allSnapshots,
+				backend.agg, backend.forkValidator, backend.engine,
+			)
+
+			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
 		} else {
 			// datastream
 			// Create client
@@ -719,7 +725,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			//datastream end
 			zkL1Syncer := syncer.NewL1Syncer(etherMan.EthClient, cfg.L1ContractAddress, cfg.L1BlockRange, cfg.L1QueryDelay)
 
-			backend.syncStages = stages2.NewDefaultZkStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine, zkL1Syncer, datastreamClient)
+			backend.syncStages = stages2.NewDefaultZkStages(
+				backend.sentryCtx, backend.chainDB, stack.Config().P2P, config,
+				backend.sentriesClient, backend.notifications,
+				backend.downloaderClient, allSnapshots, backend.agg,
+				backend.forkValidator, backend.engine, zkL1Syncer,
+				datastreamClient,
+			)
 			backend.syncUnwindOrder = zkStages.ZkUnwindOrder
 		}
 		// TODO: SEQ: prune order
