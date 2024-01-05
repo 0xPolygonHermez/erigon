@@ -11,7 +11,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/p2p"
 	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/turbo/engineapi"
 	"github.com/ledgerwatch/erigon/turbo/shards"
@@ -24,7 +23,6 @@ import (
 // NewDefaultZkStages creates stages for zk syncer (RPC mode)
 func NewDefaultZkStages(ctx context.Context,
 	db kv.RwDB,
-	p2pCfg p2p.Config,
 	cfg *ethconfig.Config,
 	controlServer *sentry.MultiClient,
 	notifications *shards.Notifications,
@@ -83,7 +81,6 @@ func NewDefaultZkStages(ctx context.Context,
 // NewSequencerZkStages creates stages for a zk sequencer
 func NewSequencerZkStages(ctx context.Context,
 	db kv.RwDB,
-	p2pCfg p2p.Config,
 	cfg *ethconfig.Config,
 	controlServer *sentry.MultiClient,
 	notifications *shards.Notifications,
@@ -95,7 +92,6 @@ func NewSequencerZkStages(ctx context.Context,
 ) []*sync_stages.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
-	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, snapshots, db, snapDownloader, notifications.Events)
 
 	// During Import we don't want other services like header requests, body requests etc. to be running.
 	// Hence we run it in the test mode.
@@ -103,8 +99,6 @@ func NewSequencerZkStages(ctx context.Context,
 
 	return zkStages.SequencerZkStages(ctx,
 		stagedsync.StageCumulativeIndexCfg(db),
-		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig),
-		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockRetire, controlServer.Hd),
 		zkStages.StageSequenceBlocksCfg(
 			db,
 			cfg.Prune,
