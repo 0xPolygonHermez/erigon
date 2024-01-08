@@ -533,13 +533,7 @@ func convertReceipt(
 	}
 
 	var effectiveGasPrice *types.ArgBig
-	// gas := gasPrice.Clone()
 	if gasPrice != nil {
-		// clone := gasPrice.Clone()
-		// effectiveGasPricePerc := new(uint256.Int).SetUint64(uint64(effectiveGasPricePercentage))
-		// effectiveGasPricePerc.Add(effectiveGasPricePerc, u256.Num1)
-		// clone.Mul(clone, effectiveGasPricePerc)
-		// gas.Div(clone, zktypes.EFFECTIVE_GAS_PRICE_MAX_VAL)
 		gas := core.CalculateEffectiveGas(gasPrice, effectiveGasPricePercentage)
 		asBig := types.ArgBig(*gas.ToBig())
 		effectiveGasPrice = &asBig
