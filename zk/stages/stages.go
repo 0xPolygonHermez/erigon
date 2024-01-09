@@ -44,19 +44,6 @@ func SequencerZkStages(
 		/* TODO: here should be some stage of getting GERs from the L1 and writing to the DB for future batches
 		 */
 		{
-			ID:          sync_stages.DataStream,
-			Description: "Update the data stream with missing details",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnStageDataStreamCatchup(s, ctx, tx, dataStreamCatchupCfg)
-			},
-			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return nil
-			},
-			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return nil
-			},
-		},
-		{
 			/*
 				TODO:
 				we need to have another "execution" stage, that takes data from the txpool instead of from headers/bodies.
@@ -196,9 +183,19 @@ func SequencerZkStages(
 		  TODO: verify batches stage -- real executor that verifies batches
 		  if it fails, we need to unwind everything up until before the bad batch
 		*/
-		/*
-			TODO: datastream update stage -- send updated data to the datastream
-		*/
+		{
+			ID:          sync_stages.DataStream,
+			Description: "Update the data stream with missing details",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
+				return SpawnStageDataStreamCatchup(s, ctx, tx, dataStreamCatchupCfg)
+			},
+			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
+				return nil
+			},
+			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
+				return nil
+			},
+		},
 		{
 			ID:          sync_stages.Finish,
 			Description: "Final: update current block for the RPC API",
@@ -308,19 +305,6 @@ func DefaultZkStages(
 			},
 			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
 				return stagedsync.PruneSendersStage(p, tx, senders, ctx)
-			},
-		},
-		{
-			ID:          sync_stages.DataStream,
-			Description: "Update the data stream with missing details",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnStageDataStreamCatchup(s, ctx, tx, dataStreamCatchupCfg)
-			},
-			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
-				return nil
-			},
-			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
-				return nil
 			},
 		},
 		{
@@ -436,7 +420,19 @@ func DefaultZkStages(
 				return stagedsync.PruneTxLookup(p, tx, txLookup, ctx, firstCycle)
 			},
 		},
-		/* TODO insert here the stage that updates the datastream */
+		{
+			ID:          sync_stages.DataStream,
+			Description: "Update the data stream with missing details",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
+				return SpawnStageDataStreamCatchup(s, ctx, tx, dataStreamCatchupCfg)
+			},
+			Unwind: func(firstCycle bool, u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx) error {
+				return nil
+			},
+			Prune: func(firstCycle bool, p *sync_stages.PruneState, tx kv.RwTx) error {
+				return nil
+			},
+		},
 		{
 			ID:          sync_stages.Finish,
 			Description: "Final: update current block for the RPC API",

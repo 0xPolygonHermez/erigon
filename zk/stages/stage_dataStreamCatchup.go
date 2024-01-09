@@ -164,11 +164,11 @@ func SpawnStageDataStreamCatchup(
 		}
 		block := hermez_db.BytesToUint64(k)
 		batch := hermez_db.BytesToUint64(v)
-		val, ok := batchToBlocks[batch]
+		_, ok := batchToBlocks[batch]
 		if !ok {
 			batchToBlocks[batch] = []uint64{block}
 		} else {
-			val = append(val, block)
+			batchToBlocks[batch] = append(batchToBlocks[batch], block)
 		}
 	}
 
@@ -179,10 +179,9 @@ func SpawnStageDataStreamCatchup(
 	var currentGER = common.Hash{}
 	logTicker := time.NewTicker(10 * time.Second)
 
-	const batchSize = 1000
 	var currentBlock uint64 = 0
-	count := 0
 	var total uint64 = 0
+	count := 0
 	skipped := false
 
 LOOP:
@@ -200,8 +199,7 @@ LOOP:
 		}
 
 		if count == 0 && !skipped {
-			err = stream.StartAtomicOp()
-			if err != nil {
+			if err = stream.StartAtomicOp(); err != nil {
 				return err
 			}
 		}
@@ -217,16 +215,15 @@ LOOP:
 				return err
 			}
 
-			if ger != nil && ger.GlobalExitRoot != currentGER {
+			if ger != nil && ger.GlobalExitRoot != currentGER && ger.GlobalExitRoot != (common.Hash{}) {
 				entry, err = srv.AddGerUpdateFromDb(ger)
 				if err != nil {
 					return err
 				}
 			}
 
-			currentBatchNumber++
-			total++
 			skipped = true
+			currentBatchNumber++
 			log.Debug(fmt.Sprintf("[%s]: found batch with no blocks - skipping", logPrefix), "number", currentBatchNumber)
 			continue
 		}
@@ -280,24 +277,22 @@ LOOP:
 			if err != nil {
 				return err
 			}
+		}
 
-			// only commit when we've processed our batch size
-			if count >= batchSize {
-				err = commitBatch(stream, count)
-				count = 0
-			} else {
-				count++
+		currentBatchNumber++
+		total++
+		count++
+
+		if count >= 1000 {
+			if err := commitBatch(stream); err != nil {
+				return err
 			}
-
-			if currentBatchNumber >= highestSeenBatchNumber {
-				err = commitBatch(stream, count)
-				// stop the loop as we're at the latest block we know about
-				break LOOP
+			count = 0
+		} else if currentBatchNumber > highestSeenBatchNumber {
+			if err := commitBatch(stream); err != nil {
+				return err
 			}
-
-			total++
-			currentBatchNumber++
-
+			break LOOP
 		}
 	}
 
@@ -316,7 +311,7 @@ LOOP:
 	return err
 }
 
-func commitBatch(stream *datastreamer.StreamServer, count int) error {
+func commitBatch(stream *datastreamer.StreamServer) error {
 	err := stream.CommitAtomicOp()
 	if err != nil {
 		return err

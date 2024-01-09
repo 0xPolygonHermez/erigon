@@ -42,46 +42,59 @@ func main() {
 		From: 0,
 	}
 
-	blocks1, gers1, bookmarks1, entries1, err := client1.ReadEntries(initialBookmark, 100)
+	data1, err := readFromClient(client1, initialBookmark, 5000)
 	if err != nil {
-		fmt.Printf("error: %s\n", err)
-		return
+		fmt.Printf("error: %v", err)
 	}
 
-	blocks2, gers2, bookmarks2, entries2, err := client2.ReadEntries(initialBookmark, 100)
+	data2, err := readFromClient(client2, initialBookmark, 5000)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
+		fmt.Printf("error: %v", err)
 	}
 
-	b1s := *blocks1
-	b2s := *blocks2
-
-	if entries1 != entries2 {
-		fmt.Printf("entries count mismatch: have: %v, want: %v\n", entries2, entries1)
-	}
-
-	if len(b1s) != len(b2s) {
-		fmt.Printf("block count mismatch: have %v, want: %v\n", len(*blocks2), len(*blocks1))
-	}
-
-	if len(*gers1) != len(*gers2) {
-		fmt.Printf("gers count mismatch: have %s, want: %v\n", len(*gers2), len(*gers1))
-	}
-
-	if len(bookmarks1) != len(bookmarks2) {
-		fmt.Printf("bookmarks count mismatch: have: %v, want: %v\n", len(bookmarks2), len(bookmarks1))
-	}
-
-	for i := 0; i < len(b1s); i++ {
-		b1 := b1s[i]
-		b2 := b2s[i]
-		eq := reflect.DeepEqual(b1, b2)
-		if !eq {
-			fmt.Printf("blocks %v not equal\n", b1.L2BlockNumber)
-			b1j, _ := json.Marshal(b1)
-			b2j, _ := json.Marshal(b2)
-			_, report := jsondiff.Compare(b1j, b2j, &consoleOptions)
+	for i := 0; i < len(data1); i++ {
+		d1 := data1[i]
+		d2 := data2[i]
+		if !reflect.DeepEqual(d1, d2) {
+			d1j, _ := json.Marshal(d1)
+			d2j, _ := json.Marshal(d2)
+			_, report := jsondiff.Compare(d1j, d2j, &consoleOptions)
+			fmt.Printf("error comparing stream at index %v", i)
 			fmt.Println(report)
 		}
 	}
+
+	fmt.Println("test complete...")
+}
+
+func readFromClient(client *client.StreamClient, bookmark *types.Bookmark, total int) ([]interface{}, error) {
+	go func() {
+		err := client.ReadAllEntriesToChannel(bookmark)
+		if err != nil {
+			fmt.Printf("error: %v", err)
+			return
+		}
+	}()
+
+	data := make([]interface{}, 0)
+	count := 0
+
+LOOP:
+	for {
+		select {
+		case d := <-client.L2BlockChan:
+			data = append(data, d)
+			count++
+		case d := <-client.GerUpdatesChan:
+			data = append(data, d)
+			count++
+		}
+
+		if count == total {
+			break LOOP
+		}
+
+	}
+
+	return data, nil
 }
