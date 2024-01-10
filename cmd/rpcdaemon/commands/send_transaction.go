@@ -19,6 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
 )
@@ -36,8 +37,9 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 	}
 	chainId := cc.ChainID
 
-	// [zkevm] - proxy the request if the chainID is ZK
-	if zkchainconfig.IsZk(chainId.Uint64()) {
+	// [zkevm] - proxy the request if the chainID is ZK and not a sequencer
+	sequencer := sequencer.IsSequencer()
+	if !sequencer && zkchainconfig.IsZk(chainId.Uint64()) {
 		return api.sendTxZk(api.L2RpcUrl, encodedTx, chainId.Uint64())
 	}
 

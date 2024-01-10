@@ -26,6 +26,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 
+	mapset "github.com/deckarep/golang-set/v2"
+	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/common/changeset"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -47,6 +49,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -55,6 +58,9 @@ const (
 
 	// stateStreamLimit - don't accumulate state changes if jump is bigger than this amount of blocks
 	stateStreamLimit uint64 = 1_000
+
+	transactionGasLimit = 3_000_000
+	blobGasLimit        = 3_000_000 // not sure if this applies to zk but separating it out anyway
 )
 
 type HasChangeSetWriter interface {
@@ -91,6 +97,9 @@ type SequenceBlockCfg struct {
 	genesis   *types.Genesis
 	agg       *libstate.AggregatorV3
 	zk        *ethconfig.Zk
+
+	txPool   *txpool.TxPool
+	txPoolDb kv.RwDB
 }
 
 func StageSequenceBlocksCfg(
@@ -113,6 +122,9 @@ func StageSequenceBlocksCfg(
 	syncCfg ethconfig.Sync,
 	agg *libstate.AggregatorV3,
 	zk *ethconfig.Zk,
+
+	txPool *txpool.TxPool,
+	txPoolDb kv.RwDB,
 ) SequenceBlockCfg {
 	return SequenceBlockCfg{
 		db:            db,
@@ -133,6 +145,8 @@ func StageSequenceBlocksCfg(
 		syncCfg:       syncCfg,
 		agg:           agg,
 		zk:            zk,
+		txPool:        txPool,
+		txPoolDb:      txPoolDb,
 	}
 }
 
@@ -258,6 +272,7 @@ func newStateReaderWriter(
 	}
 	if writeChangesets {
 		stateWriter = state.NewPlainStateWriter(batch, tx, block.NumberU64()).SetAccumulator(accumulator)
+
 	} else {
 		stateWriter = state.NewPlainStateWriterNoHistory(batch).SetAccumulator(accumulator)
 	}
@@ -270,8 +285,65 @@ func SpawnSequencingStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv
 	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished sequencing stage", logPrefix))
 
-	log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool", logPrefix))
-	time.Sleep(1 * time.Second) // give some time to start other stages
+	freshTx := tx == nil
+	if freshTx {
+		tx, err = cfg.db.BeginRw(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
+
+	executionAt, err := s.ExecutionAt(tx)
+	if err != nil {
+		return err
+	}
+
+	transactions := make(chan types2.TxsRlp)
+
+	// start waiting for a new transaction to arrive
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+		for {
+			var count = 0
+			var err error
+
+			select {
+			case <-ticker.C:
+				log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+			default:
+				/*
+					todo: seq: for now we only care about one tx and we'll move on to executing the block, but in the future
+					when we're timeboxing the block or using counters the yielded set will be useful to ensure we don't double
+					up any tx
+				*/
+				yielded := mapset.NewSet[[32]byte]()
+
+				// todo: seq: only looking for one transaction right now
+				if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
+					txSlots := types2.TxsRlp{}
+					if _, count, err = cfg.txPool.YieldBest(1, &txSlots, poolTx, executionAt, transactionGasLimit, blobGasLimit, yielded); err != nil {
+						return err
+					}
+					if count == 0 {
+						time.Sleep(100 * time.Millisecond)
+					} else {
+						transactions <- txSlots
+					}
+					return nil
+				}); err != nil {
+					log.Error(fmt.Sprintf("error loading txpool view: %v", err))
+				}
+			}
+		}
+	}()
+
+	txs := <-transactions
+
+	txn := txs.Txs[0]
+	foo := txn
+	_ = foo
 
 	return
 

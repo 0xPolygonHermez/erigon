@@ -733,6 +733,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.forkValidator,
 				backend.engine,
 				backend.dataStream,
+				backend.txPool2,
+				backend.txPool2DB,
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
