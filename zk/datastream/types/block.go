@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	startL2BlockDataLength = 78
+	startL2BlockDataLength = 142
 	endL2BlockDataLength   = 72
 
 	// EntryTypeL2Block represents a L2 block
@@ -22,7 +22,9 @@ type StartL2Block struct {
 	BatchNumber    uint64         // 8 bytes
 	L2BlockNumber  uint64         // 8 bytes
 	Timestamp      int64          // 8 bytes
+	L1BlockHash    common.Hash    // 32 bytes
 	GlobalExitRoot common.Hash    // 32 bytes
+	L1InfoRoot     common.Hash    // 32 bytes
 	Coinbase       common.Address // 20 bytes
 	ForkId         uint16         // 2 bytes
 }
@@ -43,9 +45,11 @@ func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 		BatchNumber:    binary.LittleEndian.Uint64(data[:8]),
 		L2BlockNumber:  binary.LittleEndian.Uint64(data[8:16]),
 		Timestamp:      ts,
-		GlobalExitRoot: common.BytesToHash(data[24:56]),
-		Coinbase:       common.BytesToAddress(data[56:76]),
-		ForkId:         binary.LittleEndian.Uint16(data[76:78]),
+		L1BlockHash:    common.BytesToHash(data[24:56]),
+		GlobalExitRoot: common.BytesToHash(data[56:88]),
+		L1InfoRoot:     common.BytesToHash(data[88:120]),
+		Coinbase:       common.BytesToAddress(data[120:136]),
+		ForkId:         binary.LittleEndian.Uint16(data[136:138]),
 	}, nil
 }
 
