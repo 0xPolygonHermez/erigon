@@ -60,14 +60,14 @@ func (s *StageState) UpdatePrune(db kv.Putter, blockNum uint64) error {
 
 // ExecutionAt gets the current state of the "Execution" stage, which block is currently executed.
 func (s *StageState) ExecutionAt(db kv.Getter) (uint64, error) {
-	execution, err := stages.GetStageProgress(db, Execution)
+	execution, err := stages.GetStageProgress(db, stages.Execution)
 	return execution, err
 }
 
 // IntermediateHashesAt gets the current state of the "IntermediateHashes" stage.
 // A block is fully validated after the IntermediateHashes stage is passed successfully.
 func (s *StageState) IntermediateHashesAt(db kv.Getter) (uint64, error) {
-	progress, err := stages.GetStageProgress(db, IntermediateHashes)
+	progress, err := stages.GetStageProgress(db, stages.IntermediateHashes)
 	return progress, err
 }
 

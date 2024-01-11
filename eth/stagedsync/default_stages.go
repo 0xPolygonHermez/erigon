@@ -10,7 +10,7 @@ import (
 )
 
 func DefaultStages(ctx context.Context, snapshots SnapshotsCfg, headers HeadersCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, bodies BodiesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*Stage {
-	return []*stages.Stage{
+	return []*Stage{
 		{
 			ID:          stages.Headers,
 			Description: "Download headers",
@@ -216,7 +216,7 @@ func DefaultStages(ctx context.Context, snapshots SnapshotsCfg, headers HeadersC
 
 // StateStages are all stages necessary for basic unwind and stage computation, it is primarily used to process side forks and memory execution.
 func StateStages(ctx context.Context, headers HeadersCfg, bodies BodiesCfg, blockHashCfg BlockHashesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg) []*Stage {
-	return []*stages.Stage{
+	return []*Stage{
 		{
 			ID:          stages.Headers,
 			Description: "Download headers",
