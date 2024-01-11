@@ -17,7 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/params"
-	"github.com/ledgerwatch/erigon/sync_stages"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/stretchr/testify/require"
 )
 

@@ -11,7 +11,7 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon/common/dbutils"
-	"github.com/ledgerwatch/erigon/sync_stages"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 func extractHeaders(k []byte, v []byte, next etl.ExtractNextFunc) error {
