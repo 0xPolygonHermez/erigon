@@ -1,4 +1,4 @@
-package sync_stages
+package stagedsync
 
 import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
