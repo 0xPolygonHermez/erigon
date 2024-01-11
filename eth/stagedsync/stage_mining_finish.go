@@ -9,7 +9,6 @@ import (
 
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 type MiningFinishCfg struct {

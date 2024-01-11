@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 // PostExec stage is run after execution stage to peform extra verifications that are only possible when state is available.
