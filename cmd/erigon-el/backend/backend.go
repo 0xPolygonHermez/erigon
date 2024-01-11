@@ -134,7 +134,7 @@ type Ethereum struct {
 	sentriesClient *sentry.MultiClient
 	sentryServers  []*sentry.GrpcServer
 
-	stagedSync *stages.Sync
+	stagedSync *stagedsync.Sync
 
 	downloaderClient proto_downloader.DownloaderClient
 
@@ -211,7 +211,7 @@ func NewBackend(stack *node.Node, config *ethconfig.Config, logger log.Logger) (
 	log.Info("Initialised chain configuration", "config", chainConfig, "genesis", genesis.Hash())
 
 	if err := chainKv.Update(context.Background(), func(tx kv.RwTx) error {
-		if err = stages.UpdateMetrics(tx); err != nil {
+		if err = stagedsync.UpdateMetrics(tx); err != nil {
 			return err
 		}
 
@@ -492,7 +492,7 @@ func NewBackend(stack *node.Node, config *ethconfig.Config, logger log.Logger) (
 	assembleBlockPOS := func(param *core.BlockBuilderParameters, interrupt *int32) (*types.BlockWithReceipts, error) {
 		miningStatePos := stagedsync.NewProposingState(&config.Miner)
 		miningStatePos.MiningConfig.Etherbase = param.SuggestedFeeRecipient
-		proposingSync := stages.New(
+		proposingSync := stagedsync.New(
 			stagedsync.MiningStages(backend.sentryCtx,
 				stagedsync.StageMiningCreateBlockCfg(backend.chainDB, miningStatePos, *backend.chainConfig, backend.engine, backend.txPool2, backend.txPool2DB, param, tmpdir),
 				stagedsync.StageMiningExecCfg(backend.chainDB, miningStatePos, backend.notifications.Events, *backend.chainConfig, backend.engine, &vm.Config{}, tmpdir, interrupt, param.PayloadId, backend.txPool2, backend.txPool2DB, allSnapshots, config.TransactionsV3),
@@ -710,7 +710,7 @@ func (s *Ethereum) Etherbase() (eb libcommon.Address, err error) {
 // StartMining starts the miner with the given number of CPU threads. If mining
 // is already running, this method adjust the number of threads allowed to use
 // and updates the minimum price required by the transaction pool.
-func (s *Ethereum) StartMining(ctx context.Context, db kv.RwDB, mining *stages.Sync, cfg params.MiningConfig, gasPrice *uint256.Int, quitCh chan struct{}, tmpDir string) error {
+func (s *Ethereum) StartMining(ctx context.Context, db kv.RwDB, mining *stagedsync.Sync, cfg params.MiningConfig, gasPrice *uint256.Int, quitCh chan struct{}, tmpDir string) error {
 	if !cfg.Enabled {
 		return nil
 	}
@@ -1012,7 +1012,7 @@ func (s *Ethereum) ChainConfig() *chain.Config {
 	return s.chainConfig
 }
 
-func (s *Ethereum) StagedSync() *stages.Sync {
+func (s *Ethereum) StagedSync() *stagedsync.Sync {
 	return s.stagedSync
 }
 

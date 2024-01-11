@@ -18,8 +18,9 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/ethdb/privateapi"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/ethdb/privateapi"
 	"github.com/ledgerwatch/erigon/turbo/services"
 )
 
@@ -27,12 +28,12 @@ type Eth1Execution struct {
 	execution.UnimplementedExecutionServer
 
 	db                kv.RwDB
-	executionPipeline *stages.Sync
+	executionPipeline *stagedsync.Sync
 	blockReader       services.FullBlockReader
 	mu                sync.Mutex
 }
 
-func NewEth1Execution(db kv.RwDB, blockReader services.FullBlockReader, executionPipeline *stages.Sync) *Eth1Execution {
+func NewEth1Execution(db kv.RwDB, blockReader services.FullBlockReader, executionPipeline *stagedsync.Sync) *Eth1Execution {
 	return &Eth1Execution{
 		db:                db,
 		executionPipeline: executionPipeline,
