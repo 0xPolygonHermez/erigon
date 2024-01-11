@@ -48,8 +48,8 @@ func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 		L1BlockHash:    common.BytesToHash(data[24:56]),
 		GlobalExitRoot: common.BytesToHash(data[56:88]),
 		L1InfoRoot:     common.BytesToHash(data[88:120]),
-		Coinbase:       common.BytesToAddress(data[120:136]),
-		ForkId:         binary.LittleEndian.Uint16(data[136:138]),
+		Coinbase:       common.BytesToAddress(data[120:140]),
+		ForkId:         binary.LittleEndian.Uint16(data[140:142]),
 	}, nil
 }
 

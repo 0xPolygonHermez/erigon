@@ -22,6 +22,7 @@ import (
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -180,7 +181,7 @@ func SpawnStageBatches(
 			}
 
 			// update GER
-			if l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 {
+			if l2Block.ForkId < constants.ForkEtrogId7 && l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 {
 				if lastGer == zeroHash {
 					prevGer, err := hermezDb.GetBlockGlobalExitRoot(l2Block.L2BlockNumber - 1)
 					if err != nil {
