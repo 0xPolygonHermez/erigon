@@ -4,17 +4,18 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
+	"time"
+
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	stages "github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/log/v3"
-	"math"
-	"time"
 )
 
 type DataStreamCatchupCfg struct {

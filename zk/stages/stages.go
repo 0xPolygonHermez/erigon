@@ -6,7 +6,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	stages "github.com/ledgerwatch/erigon/eth/stagedsync"
+	stages2 "github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 func SequencerZkStages(
@@ -67,7 +68,7 @@ func SequencerZkStages(
 
 				it should also generate a retainlist for the future batch witness generation
 			*/
-			ID:          stages.Execution,
+			ID:          stages2.Execution,
 			Description: "Sequence transactions",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnSequencingStage(s, u, tx, 0, ctx, exec, firstCycle, quiet)
@@ -80,7 +81,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:          stages.HashState,
+			ID:          stages2.HashState,
 			Description: "Hash the key in the state",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -94,7 +95,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:          stages.IntermediateHashes,
+			ID:          stages2.IntermediateHashes,
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -110,7 +111,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:                  stages.CallTraces,
+			ID:                  stages2.CallTraces,
 			Description:         "Generate call traces index",
 			DisabledDescription: "Work In Progress",
 			Disabled:            false,
@@ -125,7 +126,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:          stages.AccountHistoryIndex,
+			ID:          stages2.AccountHistoryIndex,
 			Description: "Generate account history index",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -139,7 +140,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:          stages.StorageHistoryIndex,
+			ID:          stages2.StorageHistoryIndex,
 			Description: "Generate storage history index",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -153,7 +154,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:          stages.LogIndex,
+			ID:          stages2.LogIndex,
 			Description: "Generate receipt logs index",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -167,7 +168,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:          stages.TxLookup,
+			ID:          stages2.TxLookup,
 			Description: "Generate tx lookup index",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.SpawnTxLookup(s, tx, 0 /* toBlock */, txLookup, ctx)
@@ -184,7 +185,7 @@ func SequencerZkStages(
 		  if it fails, we need to unwind everything up until before the bad batch
 		*/
 		{
-			ID:          stages.DataStream,
+			ID:          stages2.DataStream,
 			Description: "Update the data stream with missing details",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageDataStreamCatchup(s, ctx, tx, dataStreamCatchupCfg)
@@ -197,7 +198,7 @@ func SequencerZkStages(
 			},
 		},
 		{
-			ID:          stages.Finish,
+			ID:          stages2.Finish,
 			Description: "Final: update current block for the RPC API",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, _ stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.FinishForward(s, tx, finish, firstCycle)
@@ -232,7 +233,7 @@ func DefaultZkStages(
 ) []*stages.Stage {
 	return []*stages.Stage{
 		{
-			ID:          stages.L1Syncer,
+			ID:          stages2.L1Syncer,
 			Description: "Download L1 Verifications",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				if badBlockUnwind {
@@ -248,7 +249,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.Batches,
+			ID:          stages2.Batches,
 			Description: "Download batches",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				if badBlockUnwind {
@@ -269,7 +270,7 @@ func DefaultZkStages(
 			*
 			* to solve this we probably should move it after execution (execution doesn't depend on it) and update the unwinds.
 			**/
-			ID:          stages.CumulativeIndex,
+			ID:          stages2.CumulativeIndex,
 			Description: "Write Cumulative Index",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.SpawnStageCumulativeIndex(cumulativeIndex, s, tx, ctx)
@@ -282,7 +283,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.BlockHashes,
+			ID:          stages2.BlockHashes,
 			Description: "Write block hashes",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.SpawnBlockHashStage(s, tx, blockHashCfg, ctx)
@@ -295,7 +296,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.Senders,
+			ID:          stages2.Senders,
 			Description: "Recover senders from tx signatures",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.SpawnRecoverSendersStage(senders, s, u, tx, 0, ctx, quiet)
@@ -308,7 +309,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.Execution,
+			ID:          stages2.Execution,
 			Description: "Execute blocks w/o hash checks",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.SpawnExecuteBlocksStage(s, u, tx, 0, ctx, exec, firstCycle, quiet)
@@ -321,7 +322,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.HashState,
+			ID:          stages2.HashState,
 			Description: "Hash the key in the state",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -335,7 +336,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.IntermediateHashes,
+			ID:          stages2.IntermediateHashes,
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -351,7 +352,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:                  stages.CallTraces,
+			ID:                  stages2.CallTraces,
 			Description:         "Generate call traces index",
 			DisabledDescription: "Work In Progress",
 			Disabled:            false,
@@ -366,9 +367,10 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.AccountHistoryIndex,
+			ID:          stages2.AccountHistoryIndex,
 			Description: "Generate account history index",
 			Disabled:    false,
+
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.SpawnAccountHistoryIndex(s, tx, history, ctx)
 			},
@@ -380,7 +382,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.StorageHistoryIndex,
+			ID:          stages2.StorageHistoryIndex,
 			Description: "Generate storage history index",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -394,7 +396,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.LogIndex,
+			ID:          stages2.LogIndex,
 			Description: "Generate receipt logs index",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -408,7 +410,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.TxLookup,
+			ID:          stages2.TxLookup,
 			Description: "Generate tx lookup index",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.SpawnTxLookup(s, tx, 0 /* toBlock */, txLookup, ctx)
@@ -421,7 +423,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.DataStream,
+			ID:          stages2.DataStream,
 			Description: "Update the data stream with missing details",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageDataStreamCatchup(s, ctx, tx, dataStreamCatchupCfg)
@@ -434,7 +436,7 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages.Finish,
+			ID:          stages2.Finish,
 			Description: "Final: update current block for the RPC API",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, _ stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return stagedsync.FinishForward(s, tx, finish, firstCycle)
@@ -450,29 +452,29 @@ func DefaultZkStages(
 }
 
 var ZkSequencerUnwindOrder = stages.UnwindOrder{
-	stages.IntermediateHashes, // need to unwind SMT before we remove history
-	stages.Execution,
-	stages.HashState,
-	stages.CallTraces,
-	stages.AccountHistoryIndex,
-	stages.StorageHistoryIndex,
-	stages.LogIndex,
-	stages.TxLookup,
-	stages.Finish,
+	stages2.IntermediateHashes, // need to unwind SMT before we remove history
+	stages2.Execution,
+	stages2.HashState,
+	stages2.CallTraces,
+	stages2.AccountHistoryIndex,
+	stages2.StorageHistoryIndex,
+	stages2.LogIndex,
+	stages2.TxLookup,
+	stages2.Finish,
 }
 
 var ZkUnwindOrder = stages.UnwindOrder{
-	stages.L1Syncer,
-	stages.Batches,
-	stages.BlockHashes,
-	stages.IntermediateHashes, // need to unwind SMT before we remove history
-	stages.Execution,
-	stages.HashState,
-	stages.Senders,
-	stages.CallTraces,
-	stages.AccountHistoryIndex,
-	stages.StorageHistoryIndex,
-	stages.LogIndex,
-	stages.TxLookup,
-	stages.Finish,
+	stages2.L1Syncer,
+	stages2.Batches,
+	stages2.BlockHashes,
+	stages2.IntermediateHashes, // need to unwind SMT before we remove history
+	stages2.Execution,
+	stages2.HashState,
+	stages2.Senders,
+	stages2.CallTraces,
+	stages2.AccountHistoryIndex,
+	stages2.StorageHistoryIndex,
+	stages2.LogIndex,
+	stages2.TxLookup,
+	stages2.Finish,
 }

@@ -10,7 +10,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	stages "github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/types"
