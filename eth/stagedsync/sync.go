@@ -9,6 +9,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/dbg"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
+
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 type Sync struct {
@@ -27,7 +29,7 @@ type Sync struct {
 type Timing struct {
 	isUnwind bool
 	isPrune  bool
-	stage    SyncStage
+	stage    stages.SyncStage
 	took     time.Duration
 }
 

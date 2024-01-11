@@ -105,7 +105,7 @@ func (p *Progress) Log(rs *state.StateV3, in *exec22.QueueWithRetry, rws *exec22
 }
 
 func ExecV3(ctx context.Context,
-	execStage *stages.StageState, u stages.Unwinder, workerCount int, cfg ExecuteBlockCfg, applyTx kv.RwTx,
+	execStage *StageState, u Unwinder, workerCount int, cfg ExecuteBlockCfg, applyTx kv.RwTx,
 	parallel bool, logPrefix string,
 	maxBlockNum uint64,
 ) error {
@@ -768,7 +768,7 @@ func reconstituteStep(last bool,
 	workerCount int, ctx context.Context, db kv.RwDB, txNum uint64, dirs datadir.Dirs,
 	as *libstate.AggregatorStep, chainDb kv.RwDB, blockReader services.FullBlockReader,
 	chainConfig *chain.Config, logger log.Logger, genesis *types.Genesis, engine consensus.Engine,
-	batchSize datasize.ByteSize, s *stages.StageState, blockNum uint64, total uint64,
+	batchSize datasize.ByteSize, s *StageState, blockNum uint64, total uint64,
 ) error {
 	var startOk, endOk bool
 	startTxNum, endTxNum := as.TxNumRange()
@@ -1287,7 +1287,7 @@ func safeCloseTxTaskCh(ch chan *exec22.TxTask) {
 	}
 }
 
-func ReconstituteState(ctx context.Context, s *stages.StageState, dirs datadir.Dirs, workerCount int, batchSize datasize.ByteSize, chainDb kv.RwDB,
+func ReconstituteState(ctx context.Context, s *StageState, dirs datadir.Dirs, workerCount int, batchSize datasize.ByteSize, chainDb kv.RwDB,
 	blockReader services.FullBlockReader,
 	logger log.Logger, agg *state2.AggregatorV3, engine consensus.Engine,
 	chainConfig *chain.Config, genesis *types.Genesis) (err error) {

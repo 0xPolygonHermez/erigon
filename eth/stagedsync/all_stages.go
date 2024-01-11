@@ -5,9 +5,11 @@ import (
 	"github.com/VictoriaMetrics/metrics"
 	"github.com/huandu/xstrings"
 	"github.com/ledgerwatch/erigon-lib/kv"
+
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
-var Metrics = map[SyncStage]*metrics.Counter{}
+var Metrics = map[stages.SyncStage]*metrics.Counter{}
 
 // TODO: this needs improving to support passing in different sets of stages
 func init() {

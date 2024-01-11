@@ -9,7 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
-func DefaultStages(ctx context.Context, snapshots SnapshotsCfg, headers HeadersCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, bodies BodiesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*stages.Stage {
+func DefaultStages(ctx context.Context, snapshots SnapshotsCfg, headers HeadersCfg, cumulativeIndex CumulativeIndexCfg, blockHashCfg BlockHashesCfg, bodies BodiesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg, history HistoryCfg, logIndex LogIndexCfg, callTraces CallTracesCfg, txLookup TxLookupCfg, finish FinishCfg, test bool) []*Stage {
 	return []*stages.Stage{
 		{
 			ID:          stages.Headers,
@@ -215,7 +215,7 @@ func DefaultStages(ctx context.Context, snapshots SnapshotsCfg, headers HeadersC
 }
 
 // StateStages are all stages necessary for basic unwind and stage computation, it is primarily used to process side forks and memory execution.
-func StateStages(ctx context.Context, headers HeadersCfg, bodies BodiesCfg, blockHashCfg BlockHashesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg) []*stages.Stage {
+func StateStages(ctx context.Context, headers HeadersCfg, bodies BodiesCfg, blockHashCfg BlockHashesCfg, senders SendersCfg, exec ExecuteBlockCfg, hashState HashStateCfg, trieCfg TrieCfg) []*Stage {
 	return []*stages.Stage{
 		{
 			ID:          stages.Headers,
@@ -295,10 +295,10 @@ func StateStages(ctx context.Context, headers HeadersCfg, bodies BodiesCfg, bloc
 // The unwind order is important and not always just stages going backwards.
 // Let's say, there is tx pool can be unwound only after execution.
 // It's ok to remove some stage from here to disable only unwind of stage
-type UnwindOrder []SyncStage
-type PruneOrder []SyncStage
+type UnwindOrder []stages.SyncStage
+type PruneOrder []stages.SyncStage
 
-var DefaultForwardOrder = stages.UnwindOrder{
+var DefaultForwardOrder = UnwindOrder{
 	stages.Snapshots,
 	stages.Headers,
 	stages.BlockHashes,
@@ -318,11 +318,11 @@ var DefaultForwardOrder = stages.UnwindOrder{
 	stages.Finish,
 }
 
-var DefaultUnwindOrder = stages.UnwindOrder{}
+var DefaultUnwindOrder = UnwindOrder{}
 
-var StateUnwindOrder = stages.UnwindOrder{}
+var StateUnwindOrder = UnwindOrder{}
 
-var DefaultPruneOrder = stages.PruneOrder{}
+var DefaultPruneOrder = PruneOrder{}
 
-var MiningUnwindOrder = stages.UnwindOrder{} // nothing to unwind in mining - because mining does not commit db changes
-var MiningPruneOrder = stages.PruneOrder{}   // nothing to unwind in mining - because mining does not commit db changes
+var MiningUnwindOrder = UnwindOrder{} // nothing to unwind in mining - because mining does not commit db changes
+var MiningPruneOrder = PruneOrder{}   // nothing to unwind in mining - because mining does not commit db changes
