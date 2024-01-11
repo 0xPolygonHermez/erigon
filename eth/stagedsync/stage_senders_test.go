@@ -108,10 +108,10 @@ func TestSenders(t *testing.T) {
 	}))
 	require.NoError(rawdb.WriteCanonicalHash(tx, libcommon.HexToHash("03"), 3))
 
-	require.NoError(sync_stages.SaveStageProgress(tx, sync_stages.Bodies, 3))
+	require.NoError(stages.SaveStageProgress(tx, stages.Bodies, 3))
 
 	cfg := StageSendersCfg(db, params.TestChainConfig, false, "", prune.Mode{}, snapshotsync.NewBlockRetire(1, "", nil, db, nil, nil), nil)
-	err := SpawnRecoverSendersStage(cfg, &sync_stages.StageState{ID: sync_stages.Senders}, nil, tx, 3, ctx, false /* quiet */)
+	err := SpawnRecoverSendersStage(cfg, &stages.StageState{ID: stages.Senders}, nil, tx, 3, ctx, false /* quiet */)
 	assert.NoError(t, err)
 
 	{

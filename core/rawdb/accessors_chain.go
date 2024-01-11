@@ -282,7 +282,7 @@ func ReadCurrentBlock(db kv.Tx) *types.Block {
 }
 
 func ReadLastBlockSynced(db kv.Tx) (*types.Block, error) {
-	headNumber, err := sync_stages.GetStageProgress(db, sync_stages.Execution)
+	headNumber, err := stages.GetStageProgress(db, stages.Execution)
 	if err != nil {
 		return nil, err
 	}

@@ -799,15 +799,15 @@ func advanceExec(chaindata string) error {
 	}
 	defer tx.Rollback()
 
-	stageExec, err := sync_stages.GetStageProgress(tx, sync_stages.Execution)
+	stageExec, err := stages.GetStageProgress(tx, stages.Execution)
 	if err != nil {
 		return err
 	}
 	log.Info("ID exec", "progress", stageExec)
-	if err = sync_stages.SaveStageProgress(tx, sync_stages.Execution, stageExec+1); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.Execution, stageExec+1); err != nil {
 		return err
 	}
-	stageExec, err = sync_stages.GetStageProgress(tx, sync_stages.Execution)
+	stageExec, err = stages.GetStageProgress(tx, stages.Execution)
 	if err != nil {
 		return err
 	}
@@ -827,15 +827,15 @@ func backExec(chaindata string) error {
 	}
 	defer tx.Rollback()
 
-	stageExec, err := sync_stages.GetStageProgress(tx, sync_stages.Execution)
+	stageExec, err := stages.GetStageProgress(tx, stages.Execution)
 	if err != nil {
 		return err
 	}
 	log.Info("ID exec", "progress", stageExec)
-	if err = sync_stages.SaveStageProgress(tx, sync_stages.Execution, stageExec-1); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.Execution, stageExec-1); err != nil {
 		return err
 	}
-	stageExec, err = sync_stages.GetStageProgress(tx, sync_stages.Execution)
+	stageExec, err = stages.GetStageProgress(tx, stages.Execution)
 	if err != nil {
 		return err
 	}

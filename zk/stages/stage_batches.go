@@ -60,8 +60,8 @@ func StageBatchesCfg(db kv.RwDB, dsClient *dsclient.StreamClient) BatchesCfg {
 var emptyHash = common.Hash{0}
 
 func SpawnStageBatches(
-	s *sync_stages.StageState,
-	u sync_stages.Unwinder,
+	s *stages.StageState,
+	u stages.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg BatchesCfg,
@@ -92,12 +92,12 @@ func SpawnStageBatches(
 		return fmt.Errorf("failed to create hermezDb: %v", err)
 	}
 
-	batchesProgress, err := sync_stages.GetStageProgress(tx, sync_stages.Batches)
+	batchesProgress, err := stages.GetStageProgress(tx, stages.Batches)
 	if err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	highestVerifiedBatch, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
+	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
 		return fmt.Errorf("could not retrieve l1 verifications batch no progress")
 	}
@@ -141,7 +141,7 @@ func SpawnStageBatches(
 
 	writeThreadFinished := false
 	lastGer := common.Hash{}
-	lastForkId64, err := sync_stages.GetStageProgress(tx, sync_stages.ForkId)
+	lastForkId64, err := stages.GetStageProgress(tx, stages.ForkId)
 	lastForkId := uint16(lastForkId64)
 	if err != nil {
 		return fmt.Errorf("failed to get last fork id, %w", err)
@@ -272,16 +272,16 @@ func SpawnStageBatches(
 	}
 
 	// store the highest hashable block number
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	if err = sync_stages.SaveStageProgress(tx, sync_stages.HighestSeenBatchNumber, highestSeenBatchNo); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, highestSeenBatchNo); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
 	// store the highest seen forkid
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.ForkId, uint64(lastForkId)); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.ForkId, uint64(lastForkId)); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
@@ -290,7 +290,7 @@ func SpawnStageBatches(
 	log.Info(fmt.Sprintf("[%s] Finished writing blocks", logPrefix), "blocksWritten", blocksWritten, "elapsed", elapsed)
 
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "lastBlockHeight", lastBlockHeight)
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, lastBlockHeight); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.Batches, lastBlockHeight); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
@@ -304,7 +304,7 @@ func SpawnStageBatches(
 	return nil
 }
 
-func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
+func UnwindBatchesStage(u *stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
 	logPrefix := u.LogPrefix()
 
 	useExternalTx := tx != nil
@@ -336,7 +336,7 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", fromBlock)
 
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, fromBlock); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.Batches, fromBlock); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
@@ -351,7 +351,7 @@ func UnwindBatchesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, 
 	return nil
 }
 
-func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
+func PruneBatchesStage(s *stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
 	logPrefix := s.LogPrefix()
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -371,7 +371,7 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 		return fmt.Errorf("failed to create hermezDb: %v", err)
 	}
 
-	toBlock, err := sync_stages.GetStageProgress(tx, sync_stages.Batches)
+	toBlock, err := stages.GetStageProgress(tx, stages.Batches)
 	if err != nil {
 		return fmt.Errorf("get stage datastream progress error: %v", err)
 	}
@@ -385,7 +385,7 @@ func PruneBatchesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ct
 
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "stageProgress", 0)
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.Batches, 0); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.Batches, 0); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 

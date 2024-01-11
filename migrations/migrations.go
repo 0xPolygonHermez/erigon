@@ -260,7 +260,7 @@ func MarshalMigrationPayload(db kv.Getter) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	encoder := codec.NewEncoder(buf, &codec.CborHandle{})
 
-	for _, stage := range sync_stages.AllStages {
+	for _, stage := range stages.AllStages {
 		v, err := db.GetOne(kv.SyncStageProgress, []byte(stage))
 		if err != nil {
 			return nil, err

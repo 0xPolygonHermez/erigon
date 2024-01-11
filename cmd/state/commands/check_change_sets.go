@@ -105,11 +105,11 @@ func CheckChangeSets(genesis *types.Genesis, logger log.Logger, blockNum uint64,
 	}
 	defer rwtx.Rollback()
 
-	execAt, err1 := sync_stages.GetStageProgress(rwtx, sync_stages.Execution)
+	execAt, err1 := stages.GetStageProgress(rwtx, stages.Execution)
 	if err1 != nil {
 		return err1
 	}
-	historyAt, err1 := sync_stages.GetStageProgress(rwtx, sync_stages.StorageHistoryIndex)
+	historyAt, err1 := stages.GetStageProgress(rwtx, stages.StorageHistoryIndex)
 	if err1 != nil {
 		return err1
 	}

@@ -35,7 +35,7 @@ func NewDefaultZkStages(ctx context.Context,
 	l1Syncer *syncer.L1Syncer,
 	datastreamClient *client.StreamClient,
 	datastreamServer *datastreamer.StreamServer,
-) []*sync_stages.Stage {
+) []*stages.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
 	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, snapshots, db, snapDownloader, notifications.Events)
@@ -93,7 +93,7 @@ func NewSequencerZkStages(ctx context.Context,
 	forkValidator *engineapi.ForkValidator,
 	engine consensus.Engine,
 	datastreamServer *datastreamer.StreamServer,
-) []*sync_stages.Stage {
+) []*stages.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
 

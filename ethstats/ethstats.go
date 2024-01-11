@@ -669,11 +669,11 @@ func (s *Service) reportStats(conn *connWrapper) error {
 		return err
 	}
 	defer roTx.Rollback()
-	sync, err := sync_stages.GetStageProgress(roTx, sync_stages.Execution)
+	sync, err := stages.GetStageProgress(roTx, stages.Execution)
 	if err != nil {
 		return err
 	}
-	finishSync, err := sync_stages.GetStageProgress(roTx, sync_stages.Finish)
+	finishSync, err := stages.GetStageProgress(roTx, stages.Finish)
 	if err != nil {
 		return err
 	}

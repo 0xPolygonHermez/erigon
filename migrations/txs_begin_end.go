@@ -33,7 +33,7 @@ var txsBeginEnd = Migration{
 
 		var latestBlock uint64
 		if err := db.View(context.Background(), func(tx kv.Tx) error {
-			bodiesProgress, err := sync_stages.GetStageProgress(tx, sync_stages.Bodies)
+			bodiesProgress, err := stages.GetStageProgress(tx, stages.Bodies)
 			if err != nil {
 				return err
 			}

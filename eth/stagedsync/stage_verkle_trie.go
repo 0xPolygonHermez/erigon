@@ -12,7 +12,7 @@ import (
 	"github.com/ledgerwatch/erigon/sync_stages"
 )
 
-func SpawnVerkleTrie(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (libcommon.Hash, error) {
+func SpawnVerkleTrie(s *stages.StageState, u stages.Unwinder, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (libcommon.Hash, error) {
 	var err error
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -47,7 +47,7 @@ func SpawnVerkleTrie(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.Rw
 	if err := s.Update(tx, to); err != nil {
 		return libcommon.Hash{}, err
 	}
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.VerkleTrie, to); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.VerkleTrie, to); err != nil {
 		return libcommon.Hash{}, err
 	}
 	if !useExternalTx {
@@ -56,7 +56,7 @@ func SpawnVerkleTrie(s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.Rw
 	return newRoot, nil
 }
 
-func UnwindVerkleTrie(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
+func UnwindVerkleTrie(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -80,7 +80,7 @@ func UnwindVerkleTrie(u *sync_stages.UnwindState, s *sync_stages.StageState, tx 
 	if err := s.Update(tx, from); err != nil {
 		return err
 	}
-	if err := sync_stages.SaveStageProgress(tx, sync_stages.VerkleTrie, from); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.VerkleTrie, from); err != nil {
 		return err
 	}
 	if !useExternalTx {
@@ -89,7 +89,7 @@ func UnwindVerkleTrie(u *sync_stages.UnwindState, s *sync_stages.StageState, tx 
 	return nil
 }
 
-func PruneVerkleTries(s *sync_stages.PruneState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
+func PruneVerkleTries(s *stages.PruneState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

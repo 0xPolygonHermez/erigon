@@ -360,8 +360,8 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 		batch := memdb.NewMemoryBatch(tx, api.dirs.Tmp)
 		defer batch.Rollback()
 
-		unwindState := &sync_stages.UnwindState{UnwindPoint: blockNr}
-		stageState := &sync_stages.StageState{BlockNumber: latestBlock}
+		unwindState := &stages.UnwindState{UnwindPoint: blockNr}
+		stageState := &stages.StageState{BlockNumber: latestBlock}
 
 		hashStageCfg := stagedsync.StageHashStateCfg(nil, api.dirs, api.historyV3(batch), api._agg)
 		if err := stagedsync.UnwindHashStateStage(unwindState, stageState, batch, hashStageCfg, ctx); err != nil {

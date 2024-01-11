@@ -44,8 +44,8 @@ func StageBodiesCfg(db kv.RwDB, bd *bodydownload.BodyDownload, bodyReqSend func(
 
 // BodiesForward progresses Bodies stage in the forward direction
 func BodiesForward(
-	s *sync_stages.StageState,
-	u sync_stages.Unwinder,
+	s *stages.StageState,
+	u stages.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg BodiesCfg,
@@ -84,7 +84,7 @@ func BodiesForward(
 	}
 	defer cfg.bd.ClearBodyCache()
 	var headerProgress, bodyProgress uint64
-	headerProgress, err = sync_stages.GetStageProgress(tx, sync_stages.Headers)
+	headerProgress, err = stages.GetStageProgress(tx, stages.Headers)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func logWritingBodies(logPrefix string, committed, headerProgress uint64) {
 	)
 }
 
-func UnwindBodiesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BodiesCfg, ctx context.Context) (err error) {
+func UnwindBodiesStage(u *stages.UnwindState, tx kv.RwTx, cfg BodiesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -390,7 +390,7 @@ func UnwindBodiesStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BodiesCfg, ct
 	return nil
 }
 
-func PruneBodiesStage(s *sync_stages.PruneState, tx kv.RwTx, cfg BodiesCfg, ctx context.Context) (err error) {
+func PruneBodiesStage(s *stages.PruneState, tx kv.RwTx, cfg BodiesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

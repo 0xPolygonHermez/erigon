@@ -44,7 +44,7 @@ func SpawnStageBeaconState(cfg StageBeaconStateCfg, tx kv.RwTx, ctx context.Cont
 		defer tx.Rollback()
 	}
 
-	endSlot, err := sync_stages.GetStageProgress(tx, sync_stages.BeaconBlocks)
+	endSlot, err := stages.GetStageProgress(tx, stages.BeaconBlocks)
 	if err != nil {
 		return err
 	}

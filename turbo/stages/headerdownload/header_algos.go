@@ -325,7 +325,7 @@ func (hd *HeaderDownload) RecoverFromDb(db kv.RoDB) error {
 		if err != nil {
 			return err
 		}
-		hd.highestInDb, err = sync_stages.GetStageProgress(tx, sync_stages.Headers)
+		hd.highestInDb, err = stages.GetStageProgress(tx, stages.Headers)
 		if err != nil {
 			return err
 		}
@@ -369,7 +369,7 @@ func (hd *HeaderDownload) RecoverFromDb(db kv.RoDB) error {
 func (hd *HeaderDownload) ReadProgressFromDb(tx kv.RwTx) (err error) {
 	hd.lock.Lock()
 	defer hd.lock.Unlock()
-	hd.highestInDb, err = sync_stages.GetStageProgress(tx, sync_stages.Headers)
+	hd.highestInDb, err = stages.GetStageProgress(tx, stages.Headers)
 	if err != nil {
 		return err
 	}

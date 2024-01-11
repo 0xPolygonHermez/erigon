@@ -49,7 +49,7 @@ func StageLogIndexCfg(db kv.RwDB, prune prune.Mode, tmpDir string) LogIndexCfg {
 	}
 }
 
-func SpawnLogIndex(s *sync_stages.StageState, tx kv.RwTx, cfg LogIndexCfg, ctx context.Context, prematureEndBlock uint64) error {
+func SpawnLogIndex(s *stages.StageState, tx kv.RwTx, cfg LogIndexCfg, ctx context.Context, prematureEndBlock uint64) error {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -245,7 +245,7 @@ func promoteLogIndex(logPrefix string, tx kv.RwTx, start uint64, endBlock uint64
 	return nil
 }
 
-func UnwindLogIndex(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, cfg LogIndexCfg, ctx context.Context) (err error) {
+func UnwindLogIndex(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg LogIndexCfg, ctx context.Context) (err error) {
 	quitCh := ctx.Done()
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -387,7 +387,7 @@ func pruneOldLogChunks(tx kv.RwTx, bucket string, inMem *etl.Collector, pruneTo 
 	return nil
 }
 
-func PruneLogIndex(s *sync_stages.PruneState, tx kv.RwTx, cfg LogIndexCfg, ctx context.Context) (err error) {
+func PruneLogIndex(s *stages.PruneState, tx kv.RwTx, cfg LogIndexCfg, ctx context.Context) (err error) {
 	if !cfg.prune.Receipts.Enabled() {
 		return nil
 	}

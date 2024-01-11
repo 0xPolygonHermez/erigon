@@ -1119,7 +1119,7 @@ func (br *BlockRetire) PruneAncientBlocks(tx kv.RwTx, limit int) error {
 	if br.snapshots.cfg.KeepBlocks {
 		return nil
 	}
-	currentProgress, err := sync_stages.GetStageProgress(tx, sync_stages.Senders)
+	currentProgress, err := stages.GetStageProgress(tx, stages.Senders)
 	if err != nil {
 		return err
 	}

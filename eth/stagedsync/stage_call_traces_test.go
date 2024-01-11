@@ -48,7 +48,7 @@ func TestCallTrace(t *testing.T) {
 		return b
 	}
 
-	err := sync_stages.SaveStageProgress(tx, sync_stages.Execution, 30)
+	err := stages.SaveStageProgress(tx, stages.Execution, 30)
 	assert.NoError(err)
 
 	// forward 0->20

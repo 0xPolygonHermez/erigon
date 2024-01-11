@@ -107,7 +107,7 @@ var resetBlocks4 = Migration{
 			return tx.Commit()
 		}
 
-		headersProgress, _ := sync_stages.GetStageProgress(tx, sync_stages.Headers)
+		headersProgress, _ := stages.GetStageProgress(tx, stages.Headers)
 		if headersProgress > 0 {
 			log.Warn("NOTE: this migration will remove recent blocks (and senders) to fix several recent bugs. Your node will re-download last ~400K blocks, should not take very long")
 		}

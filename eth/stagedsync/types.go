@@ -6,6 +6,6 @@ import (
 )
 
 type DownloaderGlue interface {
-	SpawnHeaderDownloadStage([]func() error, *sync_stages.StageState, sync_stages.Unwinder) error
-	SpawnBodyDownloadStage(string, string, *sync_stages.StageState, sync_stages.Unwinder, *bodydownload.PrefetchedBlocks) (bool, error)
+	SpawnHeaderDownloadStage([]func() error, *stages.StageState, stages.Unwinder) error
+	SpawnBodyDownloadStage(string, string, *stages.StageState, stages.Unwinder, *bodydownload.PrefetchedBlocks) (bool, error)
 }

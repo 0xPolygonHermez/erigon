@@ -69,7 +69,7 @@ func (api *ZkEvmAPIImpl) ConsolidatedBlockNumber(ctx context.Context) (hexutil.U
 	}
 	defer tx.Rollback()
 
-	highestVerifiedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
+	highestVerifiedBatchNo, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
 		return hexutil.Uint64(0), err
 	}
@@ -95,7 +95,7 @@ func (api *ZkEvmAPIImpl) IsBlockConsolidated(ctx context.Context, blockNumber rp
 		return false, err
 	}
 
-	highestVerifiedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
+	highestVerifiedBatchNo, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
 		return false, err
 	}
@@ -189,7 +189,7 @@ func (api *ZkEvmAPIImpl) VerifiedBatchNumber(ctx context.Context) (hexutil.Uint6
 	}
 	defer tx.Rollback()
 
-	highestVerifiedBatchNo, err := sync_stages.GetStageProgress(tx, sync_stages.L1VerificationsBatchNo)
+	highestVerifiedBatchNo, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
 		return hexutil.Uint64(0), err
 	}

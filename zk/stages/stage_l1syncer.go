@@ -49,8 +49,8 @@ func StageL1SyncerCfg(db kv.RwDB, syncer IL1Syncer, zkCfg *ethconfig.Zk) L1Synce
 }
 
 func SpawnStageL1Syncer(
-	s *sync_stages.StageState,
-	u sync_stages.Unwinder,
+	s *stages.StageState,
+	u stages.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg L1SyncerCfg,
@@ -83,7 +83,7 @@ func SpawnStageL1Syncer(
 	}
 
 	// get l1 block progress from this stage's progress
-	l1BlockProgress, err := sync_stages.GetStageProgress(tx, sync_stages.L1Syncer)
+	l1BlockProgress, err := stages.GetStageProgress(tx, stages.L1Syncer)
 	if err != nil {
 		return fmt.Errorf("failed to get l1 progress block, %w", err)
 	}
@@ -135,12 +135,12 @@ Loop:
 	if latestCheckedBlock > l1BlockProgress {
 		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", newVerificationsCount, "newSequencesCount", newSequencesCount)
 
-		if err := sync_stages.SaveStageProgress(tx, sync_stages.L1Syncer, latestCheckedBlock); err != nil {
+		if err := stages.SaveStageProgress(tx, stages.L1Syncer, latestCheckedBlock); err != nil {
 			return fmt.Errorf("failed to save stage progress, %w", err)
 		}
 		if highestVerification.BatchNo > 0 {
 			log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", highestVerification.BatchNo)
-			if err := sync_stages.SaveStageProgress(tx, sync_stages.L1VerificationsBatchNo, highestVerification.BatchNo); err != nil {
+			if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, highestVerification.BatchNo); err != nil {
 				return fmt.Errorf("failed to save stage progress, %w", err)
 			}
 		}
@@ -167,7 +167,7 @@ Loop:
 	return nil
 }
 
-func UnwindL1SyncerStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
+func UnwindL1SyncerStage(u *stages.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -190,7 +190,7 @@ func UnwindL1SyncerStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg L1SyncerCfg
 	return nil
 }
 
-func PruneL1SyncerStage(s *sync_stages.PruneState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
+func PruneL1SyncerStage(s *stages.PruneState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -212,7 +212,7 @@ func PruneL1SyncerStage(s *sync_stages.PruneState, tx kv.RwTx, cfg L1SyncerCfg, 
 
 func verifyAgainstLocalBlocks(tx kv.RwTx, hermezDb *hermez_db.HermezDb, logPrefix string) (err error) {
 	// get the highest hashed block
-	hashedBlockNo, err := sync_stages.GetStageProgress(tx, sync_stages.IntermediateHashes)
+	hashedBlockNo, err := stages.GetStageProgress(tx, stages.IntermediateHashes)
 	if err != nil {
 		return fmt.Errorf("failed to get highest hashed block, %w", err)
 	}
@@ -240,7 +240,7 @@ func verifyAgainstLocalBlocks(tx kv.RwTx, hermezDb *hermez_db.HermezDb, logPrefi
 	blockToCheck := min(verifiedBlockNo, hashedBlockNo)
 
 	// already checked
-	highestChecked, err := sync_stages.GetStageProgress(tx, sync_stages.VerificationsStateRootCheck)
+	highestChecked, err := stages.GetStageProgress(tx, stages.VerificationsStateRootCheck)
 	if err != nil {
 		return fmt.Errorf("failed to get highest checked block, %w", err)
 	}
@@ -252,7 +252,7 @@ func verifyAgainstLocalBlocks(tx kv.RwTx, hermezDb *hermez_db.HermezDb, logPrefi
 
 	if err == nil {
 		log.Info(fmt.Sprintf("[%s] State root verified in block %d", logPrefix, blockToCheck))
-		if err := sync_stages.SaveStageProgress(tx, sync_stages.VerificationsStateRootCheck, verifiedBlockNo); err != nil {
+		if err := stages.SaveStageProgress(tx, stages.VerificationsStateRootCheck, verifiedBlockNo); err != nil {
 			return fmt.Errorf("failed to save stage progress, %w", err)
 		}
 	}

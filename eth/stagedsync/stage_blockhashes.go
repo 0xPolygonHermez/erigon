@@ -36,7 +36,7 @@ func StageBlockHashesCfg(db kv.RwDB, tmpDir string, cc *chain.Config) BlockHashe
 	}
 }
 
-func SpawnBlockHashStage(s *sync_stages.StageState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
+func SpawnBlockHashStage(s *stages.StageState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -46,7 +46,7 @@ func SpawnBlockHashStage(s *sync_stages.StageState, tx kv.RwTx, cfg BlockHashesC
 		defer tx.Rollback()
 	}
 	quit := ctx.Done()
-	headNumber, err := sync_stages.GetStageProgress(tx, sync_stages.Headers)
+	headNumber, err := stages.GetStageProgress(tx, stages.Headers)
 	if err != nil {
 		return fmt.Errorf("getting headers progress: %w", err)
 	}
@@ -87,7 +87,7 @@ func SpawnBlockHashStage(s *sync_stages.StageState, tx kv.RwTx, cfg BlockHashesC
 	return nil
 }
 
-func UnwindBlockHashStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
+func UnwindBlockHashStage(u *stages.UnwindState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -108,7 +108,7 @@ func UnwindBlockHashStage(u *sync_stages.UnwindState, tx kv.RwTx, cfg BlockHashe
 	return nil
 }
 
-func PruneBlockHashStage(p *sync_stages.PruneState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
+func PruneBlockHashStage(p *stages.PruneState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

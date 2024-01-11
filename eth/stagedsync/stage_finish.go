@@ -39,7 +39,7 @@ func StageFinishCfg(db kv.RwDB, tmpDir string, forkValidator *engineapi.ForkVali
 	}
 }
 
-func FinishForward(s *sync_stages.StageState, tx kv.RwTx, cfg FinishCfg, initialCycle bool) error {
+func FinishForward(s *stages.StageState, tx kv.RwTx, cfg FinishCfg, initialCycle bool) error {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -82,7 +82,7 @@ func FinishForward(s *sync_stages.StageState, tx kv.RwTx, cfg FinishCfg, initial
 	return nil
 }
 
-func UnwindFinish(u *sync_stages.UnwindState, tx kv.RwTx, cfg FinishCfg, ctx context.Context) (err error) {
+func UnwindFinish(u *stages.UnwindState, tx kv.RwTx, cfg FinishCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -103,7 +103,7 @@ func UnwindFinish(u *sync_stages.UnwindState, tx kv.RwTx, cfg FinishCfg, ctx con
 	return nil
 }
 
-func PruneFinish(u *sync_stages.PruneState, tx kv.RwTx, cfg FinishCfg, ctx context.Context) (err error) {
+func PruneFinish(u *stages.PruneState, tx kv.RwTx, cfg FinishCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

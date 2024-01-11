@@ -20,10 +20,10 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 )
 
-func nullStage(firstCycle bool, badBlockUnwind bool, s *sync_stages.StageState, u sync_stages.Unwinder, tx kv.RwTx, quiet bool) error {
+func nullStage(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 	return nil
 }
-func ExecutionStages(ctx context.Context, sm prune.Mode, snapshots stagedsync.SnapshotsCfg, headers stagedsync.HeadersCfg, cumulativeIndex stagedsync.CumulativeIndexCfg, blockHashCfg stagedsync.BlockHashesCfg, bodies stagedsync.BodiesCfg, senders stagedsync.SendersCfg, exec stagedsync.ExecuteBlockCfg, hashState stagedsync.HashStateCfg, trieCfg stagedsync.TrieCfg, history stagedsync.HistoryCfg, logIndex stagedsync.LogIndexCfg, callTraces stagedsync.CallTracesCfg, txLookup stagedsync.TxLookupCfg, finish stagedsync.FinishCfg, test bool) []*sync_stages.Stage {
+func ExecutionStages(ctx context.Context, sm prune.Mode, snapshots stagedsync.SnapshotsCfg, headers stagedsync.HeadersCfg, cumulativeIndex stagedsync.CumulativeIndexCfg, blockHashCfg stagedsync.BlockHashesCfg, bodies stagedsync.BodiesCfg, senders stagedsync.SendersCfg, exec stagedsync.ExecuteBlockCfg, hashState stagedsync.HashStateCfg, trieCfg stagedsync.TrieCfg, history stagedsync.HistoryCfg, logIndex stagedsync.LogIndexCfg, callTraces stagedsync.CallTracesCfg, txLookup stagedsync.TxLookupCfg, finish stagedsync.FinishCfg, test bool) []*stages.Stage {
 	defaultStages := stagedsync.DefaultStages(ctx, snapshots, headers, cumulativeIndex, blockHashCfg, bodies, senders, exec, hashState, trieCfg, history, logIndex, callTraces, txLookup, finish, test)
 	// Remove body/headers stages
 	defaultStages[1].Forward = nullStage
@@ -43,7 +43,7 @@ func NewStagedSync(ctx context.Context,
 	forkValidator *engineapi.ForkValidator,
 	engine consensus.Engine,
 	transactionsV3 bool,
-) (*sync_stages.Sync, error) {
+) (*stages.Sync, error) {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, transactionsV3)
 	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, snapshots, db, snapDownloader, notifications.Events)
@@ -52,7 +52,7 @@ func NewStagedSync(ctx context.Context,
 	// Hence we run it in the test mode.
 	runInTestMode := cfg.ImportMode
 
-	return sync_stages.New(
+	return stages.New(
 		ExecutionStages(ctx, cfg.Prune,
 			stagedsync.StageSnapshotsCfg(
 				db,

@@ -30,7 +30,7 @@ func StageDataStreamCatchupCfg(stream *datastreamer.StreamServer, db kv.RwDB) Da
 }
 
 func SpawnStageDataStreamCatchup(
-	s *sync_stages.StageState,
+	s *stages.StageState,
 	ctx context.Context,
 	tx kv.Tx,
 	cfg DataStreamCatchupCfg,
@@ -123,7 +123,7 @@ func SpawnStageDataStreamCatchup(
 
 	// get the latest block so when to terminate the loop.  This is because not all batches contain blocks
 	// so we cannot use this reliably to break the loop.  Block number is more reliable
-	highestSeenBatchNumber, err := sync_stages.GetStageProgress(tx, sync_stages.HighestSeenBatchNumber)
+	highestSeenBatchNumber, err := stages.GetStageProgress(tx, stages.HighestSeenBatchNumber)
 	if err != nil {
 		return err
 	}
