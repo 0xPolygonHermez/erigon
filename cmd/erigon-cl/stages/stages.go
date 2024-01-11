@@ -22,7 +22,7 @@ func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReco
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageHistoryReconstruction(historyReconstruction, s, tx, ctx)
 			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
+			Unwind: func(firstCycle bool, u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
 				return nil
 			},
 		},
@@ -32,7 +32,7 @@ func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReco
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageBeaconsBlocks(beaconsBlocks, s, tx, ctx)
 			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
+			Unwind: func(firstCycle bool, u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
 				return nil
 			},
 		},
@@ -42,7 +42,7 @@ func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReco
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageBeaconState(beaconState, tx, ctx)
 			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
+			Unwind: func(firstCycle bool, u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
 				return nil
 			},
 		},
@@ -69,7 +69,7 @@ func NewConsensusStagedSync(ctx context.Context,
 	tmpdir string,
 	executionClient *execution_client.ExecutionClient,
 	beaconDBCfg *rawdb.BeaconDataConfig,
-) (*stages.Sync, error) {
+) (*stagedsync.Sync, error) {
 	return stagedsync.New(
 		ConsensusStages(
 			ctx,
