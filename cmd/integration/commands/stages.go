@@ -1314,7 +1314,7 @@ func newDomains(ctx context.Context, db kv.RwDB, stepSize uint64, mode libstate.
 	return engine, cfg, allSn, agg
 }
 
-func newSync(ctx context.Context, db kv.RwDB, miningConfig *params.MiningConfig) (consensus.Engine, *vm.Config, *stages.Sync, *stages.Sync, stagedsync.MiningState) {
+func newSync(ctx context.Context, db kv.RwDB, miningConfig *params.MiningConfig) (consensus.Engine, *vm.Config, *stagedsync.Sync, *stagedsync.Sync, stagedsync.MiningState) {
 	dirs, historyV3, pm := datadir.New(datadirCli), kvcfg.HistoryV3.FromDB(db), fromdb.PruneMode(db)
 
 	vmConfig := &vm.Config{}
@@ -1366,7 +1366,7 @@ func newSync(ctx context.Context, db kv.RwDB, miningConfig *params.MiningConfig)
 	}
 
 	stages := stages2.NewDefaultStages(context.Background(), db, p2p.Config{}, &cfg, sentryControlServer, &shards.Notifications{}, nil, allSn, agg, nil, engine)
-	sync := stages.New(stages, stagedsync.DefaultUnwindOrder, stagedsync.DefaultPruneOrder)
+	sync := stagedsync.New(stages, stagedsync.DefaultUnwindOrder, stagedsync.DefaultPruneOrder)
 
 	miner := stagedsync.NewMiningState(&cfg.Miner)
 	miningCancel := make(chan struct{})
@@ -1374,7 +1374,7 @@ func newSync(ctx context.Context, db kv.RwDB, miningConfig *params.MiningConfig)
 		<-ctx.Done()
 		close(miningCancel)
 	}()
-	miningSync := stages.New(
+	miningSync := stagedsync.New(
 		stagedsync.MiningStages(ctx,
 			stagedsync.StageMiningCreateBlockCfg(db, miner, *chainConfig, engine, nil, nil, nil, dirs.Tmp),
 			stagedsync.StageMiningExecCfg(db, miner, events, *chainConfig, engine, &vm.Config{}, dirs.Tmp, nil, 0, nil, nil, allSn, cfg.TransactionsV3),
@@ -1397,7 +1397,7 @@ func progress(tx kv.Getter, stage stages.SyncStage) uint64 {
 	return res
 }
 
-func stage(st *stages.Sync, tx kv.Tx, db kv.RoDB, stage stages.SyncStage) *stages.StageState {
+func stage(st *stagedsync.Sync, tx kv.Tx, db kv.RoDB, stage stages.SyncStage) *stagedsync.StageState {
 	res, err := st.StageState(stage, tx, db)
 	if err != nil {
 		panic(err)
