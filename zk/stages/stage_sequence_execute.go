@@ -323,7 +323,7 @@ func SpawnSequencingStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv
 				// todo: seq: only looking for one transaction right now
 				if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
 					txSlots := types2.TxsRlp{}
-					if _, count, err = cfg.txPool.YieldBest(1, &txSlots, poolTx, executionAt, transactionGasLimit, blobGasLimit, yielded); err != nil {
+					if _, count, err = cfg.txPool.YieldBest(1, &txSlots, poolTx, executionAt, transactionGasLimit, yielded); err != nil {
 						return err
 					}
 					if count == 0 {
