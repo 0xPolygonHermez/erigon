@@ -29,7 +29,7 @@ func StageCumulativeIndexCfg(db kv.RwDB) CumulativeIndexCfg {
 	}
 }
 
-func SpawnStageCumulativeIndex(cfg CumulativeIndexCfg, s *stages.StageState, tx kv.RwTx, ctx context.Context) error {
+func SpawnStageCumulativeIndex(cfg CumulativeIndexCfg, s *StageState, tx kv.RwTx, ctx context.Context) error {
 	useExternalTx := tx != nil
 
 	if !useExternalTx {

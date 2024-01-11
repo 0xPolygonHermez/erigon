@@ -36,7 +36,7 @@ func StageBlockHashesCfg(db kv.RwDB, tmpDir string, cc *chain.Config) BlockHashe
 	}
 }
 
-func SpawnBlockHashStage(s *stages.StageState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
+func SpawnBlockHashStage(s *StageState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -87,7 +87,7 @@ func SpawnBlockHashStage(s *stages.StageState, tx kv.RwTx, cfg BlockHashesCfg, c
 	return nil
 }
 
-func UnwindBlockHashStage(u *stages.UnwindState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
+func UnwindBlockHashStage(u *UnwindState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -108,7 +108,7 @@ func UnwindBlockHashStage(u *stages.UnwindState, tx kv.RwTx, cfg BlockHashesCfg,
 	return nil
 }
 
-func PruneBlockHashStage(p *stages.PruneState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
+func PruneBlockHashStage(p *PruneState, tx kv.RwTx, cfg BlockHashesCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
