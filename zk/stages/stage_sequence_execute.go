@@ -305,13 +305,17 @@ func SpawnSequencingStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+		reachedDesiredLimit := false
 		for {
+			if reachedDesiredLimit {
+				break
+			}
 			var count = 0
 			var err error
 
 			select {
 			case <-ticker.C:
-				log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+				log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
 			default:
 				/*
 					todo: seq: for now we only care about one tx and we'll move on to executing the block, but in the future
@@ -330,6 +334,7 @@ func SpawnSequencingStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv
 						time.Sleep(100 * time.Millisecond)
 					} else {
 						transactions <- txSlots
+						reachedDesiredLimit = true
 					}
 					return nil
 				}); err != nil {
@@ -340,6 +345,7 @@ func SpawnSequencingStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv
 	}()
 
 	txs := <-transactions
+	log.Info("found transaction!!!")
 
 	txn := txs.Txs[0]
 	foo := txn
