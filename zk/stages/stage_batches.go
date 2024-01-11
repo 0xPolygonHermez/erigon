@@ -12,6 +12,7 @@ import (
 
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/zk"
 	dsclient "github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
@@ -60,8 +61,8 @@ func StageBatchesCfg(db kv.RwDB, dsClient *dsclient.StreamClient) BatchesCfg {
 var emptyHash = common.Hash{0}
 
 func SpawnStageBatches(
-	s *stages.StageState,
-	u stages.Unwinder,
+	s *stagedsync.StageState,
+	u stagedsync.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg BatchesCfg,
@@ -304,7 +305,7 @@ func SpawnStageBatches(
 	return nil
 }
 
-func UnwindBatchesStage(u *stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
+func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
 	logPrefix := u.LogPrefix()
 
 	useExternalTx := tx != nil
@@ -351,7 +352,7 @@ func UnwindBatchesStage(u *stages.UnwindState, tx kv.RwTx, cfg BatchesCfg, ctx c
 	return nil
 }
 
-func PruneBatchesStage(s *stages.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
+func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx context.Context) (err error) {
 	logPrefix := s.LogPrefix()
 	useExternalTx := tx != nil
 	if !useExternalTx {

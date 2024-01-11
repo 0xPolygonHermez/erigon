@@ -10,7 +10,8 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	stages "github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/types"
@@ -49,8 +50,8 @@ func StageL1SyncerCfg(db kv.RwDB, syncer IL1Syncer, zkCfg *ethconfig.Zk) L1Synce
 }
 
 func SpawnStageL1Syncer(
-	s *stages.StageState,
-	u stages.Unwinder,
+	s *stagedsync.StageState,
+	u stagedsync.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg L1SyncerCfg,
@@ -167,7 +168,7 @@ Loop:
 	return nil
 }
 
-func UnwindL1SyncerStage(u *stages.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
+func UnwindL1SyncerStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -190,7 +191,7 @@ func UnwindL1SyncerStage(u *stages.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx
 	return nil
 }
 
-func PruneL1SyncerStage(s *stages.PruneState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
+func PruneL1SyncerStage(s *stagedsync.PruneState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

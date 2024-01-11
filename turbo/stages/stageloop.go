@@ -29,8 +29,8 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/p2p"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/p2p"
 	"github.com/ledgerwatch/erigon/turbo/engineapi"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
@@ -71,7 +71,7 @@ func StageLoop(
 	ctx context.Context,
 	chainConfig *chain.Config,
 	db kv.RwDB,
-	sync *stages.Sync,
+	sync *stagedsync.Sync,
 	hd *headerdownload.HeaderDownload,
 	notifications *shards.Notifications,
 	updateHead func(ctx context.Context, headHeight, headTime uint64, hash libcommon.Hash, td *uint256.Int),
@@ -125,7 +125,7 @@ func StageLoop(
 	}
 }
 
-func StageLoopStep(ctx context.Context, chainConfig *chain.Config, db kv.RwDB, sync *stages.Sync, notifications *shards.Notifications, initialCycle bool,
+func StageLoopStep(ctx context.Context, chainConfig *chain.Config, db kv.RwDB, sync *stagedsync.Sync, notifications *shards.Notifications, initialCycle bool,
 	updateHead func(ctx context.Context, headHeight uint64, headTime uint64, hash libcommon.Hash, td *uint256.Int),
 ) (headBlockHash libcommon.Hash, err error) {
 	/*
@@ -174,7 +174,7 @@ func StageLoopStep(ctx context.Context, chainConfig *chain.Config, db kv.RwDB, s
 	var tableSizes []interface{}
 	var commitTime time.Duration
 	if canRunCycleInOneTransaction {
-		tableSizes = stages.PrintTables(db, tx) // Need to do this before commit to access tx
+		tableSizes = stagedsync.PrintTables(db, tx) // Need to do this before commit to access tx
 		commitStart := time.Now()
 		errTx := tx.Commit()
 		if errTx != nil {
@@ -258,7 +258,7 @@ func StageLoopStep(ctx context.Context, chainConfig *chain.Config, db kv.RwDB, s
 	return headBlockHash, nil
 }
 
-func MiningStep(ctx context.Context, kv kv.RwDB, mining *stages.Sync, tmpDir string) (err error) {
+func MiningStep(ctx context.Context, kv kv.RwDB, mining *stagedsync.Sync, tmpDir string) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = fmt.Errorf("%+v, trace: %s", rec, dbg.Stack())
@@ -281,7 +281,7 @@ func MiningStep(ctx context.Context, kv kv.RwDB, mining *stages.Sync, tmpDir str
 	return nil
 }
 
-func StateStep(ctx context.Context, batch kv.RwTx, stateSync *stages.Sync, Bd *bodydownload.BodyDownload, header *types.Header, body *types.RawBody, unwindPoint uint64, headersChain []*types.Header, bodiesChain []*types.RawBody, quiet bool) (err error) {
+func StateStep(ctx context.Context, batch kv.RwTx, stateSync *stagedsync.Sync, Bd *bodydownload.BodyDownload, header *types.Header, body *types.RawBody, unwindPoint uint64, headersChain []*types.Header, bodiesChain []*types.RawBody, quiet bool) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = fmt.Errorf("%+v, trace: %s", rec, dbg.Stack())
@@ -358,7 +358,7 @@ func NewDefaultStages(ctx context.Context,
 	agg *state.AggregatorV3,
 	forkValidator *engineapi.ForkValidator,
 	engine consensus.Engine,
-) []*stages.Stage {
+) []*stagedsync.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
 	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, snapshots, db, snapDownloader, notifications.Events)
@@ -441,10 +441,10 @@ func NewDefaultStages(ctx context.Context,
 		runInTestMode)
 }
 
-func NewInMemoryExecution(ctx context.Context, db kv.RwDB, cfg *ethconfig.Config, controlServer *sentry.MultiClient, dirs datadir.Dirs, notifications *shards.Notifications, snapshots *snapshotsync.RoSnapshots, agg *state.AggregatorV3) (*stages.Sync, error) {
+func NewInMemoryExecution(ctx context.Context, db kv.RwDB, cfg *ethconfig.Config, controlServer *sentry.MultiClient, dirs datadir.Dirs, notifications *shards.Notifications, snapshots *snapshotsync.RoSnapshots, agg *state.AggregatorV3) (*stagedsync.Sync, error) {
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
 
-	return stages.New(
+	return stagedsync.New(
 		stagedsync.StateStages(ctx,
 			stagedsync.StageHeadersCfg(
 				db,

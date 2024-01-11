@@ -11,7 +11,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	stages "github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
@@ -31,7 +32,7 @@ func StageDataStreamCatchupCfg(stream *datastreamer.StreamServer, db kv.RwDB) Da
 }
 
 func SpawnStageDataStreamCatchup(
-	s *stages.StageState,
+	s *stagedsync.StageState,
 	ctx context.Context,
 	tx kv.Tx,
 	cfg DataStreamCatchupCfg,

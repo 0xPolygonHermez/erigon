@@ -53,10 +53,10 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconsensusconfig"
 	"github.com/ledgerwatch/erigon/eth/protocols/eth"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/turbo/engineapi"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
@@ -75,8 +75,8 @@ type MockSentry struct {
 	Engine         consensus.Engine
 	gspec          *types.Genesis
 	ChainConfig    *chain.Config
-	Sync           *stages.Sync
-	MiningSync     *stages.Sync
+	Sync           *stagedsync.Sync
+	MiningSync     *stagedsync.Sync
 	PendingBlocks  chan *types.Block
 	MinedBlocks    chan *types.Block
 	sentriesClient *sentry.MultiClient
@@ -397,7 +397,7 @@ func MockWithEverything(t *testing.T, gspec *types.Genesis, key *ecdsa.PrivateKe
 	var snapshotsDownloader proto_downloader.DownloaderClient
 
 	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, mock.BlockSnapshots, mock.DB, snapshotsDownloader, mock.Notifications.Events)
-	mock.Sync = stages.New(
+	mock.Sync = stagedsync.New(
 		stagedsync.DefaultStages(mock.Ctx,
 			stagedsync.StageSnapshotsCfg(
 				mock.DB,
@@ -491,7 +491,7 @@ func MockWithEverything(t *testing.T, gspec *types.Genesis, key *ecdsa.PrivateKe
 	miner := stagedsync.NewMiningState(&miningConfig)
 	mock.PendingBlocks = miner.PendingResultCh
 	mock.MinedBlocks = miner.MiningResultCh
-	mock.MiningSync = stages.New(
+	mock.MiningSync = stagedsync.New(
 		stagedsync.MiningStages(mock.Ctx,
 			stagedsync.StageMiningCreateBlockCfg(mock.DB, miner, *mock.ChainConfig, mock.Engine, mock.TxPool, nil, nil, dirs.Tmp),
 			stagedsync.StageMiningExecCfg(mock.DB, miner, nil, *mock.ChainConfig, mock.Engine, &vm.Config{}, dirs.Tmp, nil, 0, mock.TxPool, nil, mock.BlockSnapshots, cfg.TransactionsV3),
