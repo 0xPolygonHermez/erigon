@@ -89,8 +89,8 @@ func StageHeadersCfg(
 }
 
 func SpawnStageHeaders(
-	s *stages.StageState,
-	u stages.Unwinder,
+	s *StageState,
+	u Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -149,8 +149,8 @@ func SpawnStageHeaders(
 // HeadersPOS processes Proof-of-Stake requests (newPayload, forkchoiceUpdated).
 // It also saves PoS headers downloaded by (*HeaderDownload)StartPoSDownloader into the DB.
 func HeadersPOS(
-	s *stages.StageState,
-	u stages.Unwinder,
+	s *StageState,
+	u Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -236,7 +236,7 @@ func HeadersPOS(
 
 func writeForkChoiceHashes(
 	forkChoice *engineapi.ForkChoiceMessage,
-	s *stages.StageState,
+	s *StageState,
 	tx kv.RwTx,
 	cfg HeadersCfg,
 ) (bool, error) {
@@ -277,8 +277,8 @@ func startHandlingForkChoice(
 	forkChoice *engineapi.ForkChoiceMessage,
 	requestStatus engineapi.RequestStatus,
 	requestId int,
-	s *stages.StageState,
-	u stages.Unwinder,
+	s *StageState,
+	u Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -429,7 +429,7 @@ func startHandlingForkChoice(
 func finishHandlingForkChoice(
 	forkChoice *engineapi.ForkChoiceMessage,
 	headHeight uint64,
-	s *stages.StageState,
+	s *StageState,
 	tx kv.RwTx,
 	cfg HeadersCfg,
 	useExternalTx bool,
@@ -479,7 +479,7 @@ func handleNewPayload(
 	block *types.Block,
 	requestStatus engineapi.RequestStatus,
 	requestId int,
-	s *stages.StageState,
+	s *StageState,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -546,7 +546,7 @@ func handleNewPayload(
 
 func verifyAndSaveNewPoSHeader(
 	requestStatus engineapi.RequestStatus,
-	s *stages.StageState,
+	s *StageState,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -599,7 +599,7 @@ func schedulePoSDownload(
 	hashToDownload libcommon.Hash,
 	heightToDownload uint64,
 	downloaderTip libcommon.Hash,
-	s *stages.StageState,
+	s *StageState,
 	cfg HeadersCfg,
 ) bool {
 	cfg.hd.BeaconRequestList.SetStatus(requestId, engineapi.DataWasMissing)
@@ -740,8 +740,8 @@ func handleInterrupt(interrupt engineapi.Interrupt, cfg HeadersCfg, tx kv.RwTx, 
 
 // HeadersPOW progresses Headers stage for Proof-of-Work headers
 func HeadersPOW(
-	s *stages.StageState,
-	u stages.Unwinder,
+	s *StageState,
+	u Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg HeadersCfg,
@@ -980,7 +980,7 @@ func fixCanonicalChain(logPrefix string, logEvery *time.Ticker, height uint64, h
 	return nil
 }
 
-func HeadersUnwind(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg HeadersCfg, test bool) (err error) {
+func HeadersUnwind(u *UnwindState, s *StageState, tx kv.RwTx, cfg HeadersCfg, test bool) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(context.Background())
@@ -1150,7 +1150,7 @@ func (cr ChainReaderImpl) GetTd(hash libcommon.Hash, number uint64) *big.Int {
 	return td
 }
 
-func HeadersPrune(p *stages.PruneState, tx kv.RwTx, cfg HeadersCfg, ctx context.Context) (err error) {
+func HeadersPrune(p *PruneState, tx kv.RwTx, cfg HeadersCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

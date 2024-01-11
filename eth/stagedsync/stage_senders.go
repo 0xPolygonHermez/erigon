@@ -64,7 +64,7 @@ func StageSendersCfg(db kv.RwDB, chainCfg *chain.Config, badBlockHalt bool, tmpd
 	}
 }
 
-func SpawnRecoverSendersStage(cfg SendersCfg, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, quiet bool) error {
+func SpawnRecoverSendersStage(cfg SendersCfg, s *StageState, u Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, quiet bool) error {
 	if cfg.blockRetire != nil && cfg.blockRetire.Snapshots() != nil && cfg.blockRetire.Snapshots().Cfg().Enabled && s.BlockNumber < cfg.blockRetire.Snapshots().BlocksAvailable() {
 		s.BlockNumber = cfg.blockRetire.Snapshots().BlocksAvailable()
 	}
@@ -363,7 +363,7 @@ func recoverSenders(ctx context.Context, logPrefix string, cryptoContext *secp25
 	}
 }
 
-func UnwindSendersStage(s *stages.UnwindState, tx kv.RwTx, cfg SendersCfg, ctx context.Context) (err error) {
+func UnwindSendersStage(s *UnwindState, tx kv.RwTx, cfg SendersCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -384,7 +384,7 @@ func UnwindSendersStage(s *stages.UnwindState, tx kv.RwTx, cfg SendersCfg, ctx c
 	return nil
 }
 
-func PruneSendersStage(s *stages.PruneState, tx kv.RwTx, cfg SendersCfg, ctx context.Context) (err error) {
+func PruneSendersStage(s *PruneState, tx kv.RwTx, cfg SendersCfg, ctx context.Context) (err error) {
 	logEvery := time.NewTicker(logInterval)
 	defer logEvery.Stop()
 	useExternalTx := tx != nil

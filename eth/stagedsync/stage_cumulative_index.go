@@ -122,7 +122,7 @@ func SpawnStageCumulativeIndex(cfg CumulativeIndexCfg, s *StageState, tx kv.RwTx
 	return nil
 }
 
-func UnwindCumulativeIndexStage(u *stages.UnwindState, cfg CumulativeIndexCfg, tx kv.RwTx, ctx context.Context) (err error) {
+func UnwindCumulativeIndexStage(u *UnwindState, cfg CumulativeIndexCfg, tx kv.RwTx, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -145,7 +145,7 @@ func UnwindCumulativeIndexStage(u *stages.UnwindState, cfg CumulativeIndexCfg, t
 	return nil
 }
 
-func PruneCumulativeIndexStage(p *stages.PruneState, tx kv.RwTx, ctx context.Context) (err error) {
+func PruneCumulativeIndexStage(p *PruneState, tx kv.RwTx, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 
 	if !useExternalTx {

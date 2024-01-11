@@ -48,7 +48,7 @@ func StageHistoryCfg(db kv.RwDB, prune prune.Mode, tmpDir string) HistoryCfg {
 	}
 }
 
-func SpawnAccountHistoryIndex(s *stages.StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) error {
+func SpawnAccountHistoryIndex(s *StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) error {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -96,7 +96,7 @@ func SpawnAccountHistoryIndex(s *stages.StageState, tx kv.RwTx, cfg HistoryCfg, 
 	return nil
 }
 
-func SpawnStorageHistoryIndex(s *stages.StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) error {
+func SpawnStorageHistoryIndex(s *StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) error {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -231,7 +231,7 @@ func promoteHistory(logPrefix string, tx kv.RwTx, changesetBucket string, start,
 	return nil
 }
 
-func UnwindAccountHistoryIndex(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
+func UnwindAccountHistoryIndex(u *UnwindState, s *StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -259,7 +259,7 @@ func UnwindAccountHistoryIndex(u *stages.UnwindState, s *stages.StageState, tx k
 	return nil
 }
 
-func UnwindStorageHistoryIndex(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
+func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -357,7 +357,7 @@ func truncateBitmaps64(tx kv.RwTx, bucket string, inMem map[string]struct{}, to 
 	return nil
 }
 
-func PruneAccountHistoryIndex(s *stages.PruneState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
+func PruneAccountHistoryIndex(s *PruneState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
 	if !cfg.prune.History.Enabled() {
 		return nil
 	}
@@ -388,7 +388,7 @@ func PruneAccountHistoryIndex(s *stages.PruneState, tx kv.RwTx, cfg HistoryCfg, 
 	return nil
 }
 
-func PruneStorageHistoryIndex(s *stages.PruneState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
+func PruneStorageHistoryIndex(s *PruneState, tx kv.RwTx, cfg HistoryCfg, ctx context.Context) (err error) {
 	if !cfg.prune.History.Enabled() {
 		return nil
 	}

@@ -45,7 +45,7 @@ func StageTxLookupCfg(
 	}
 }
 
-func SpawnTxLookup(s *stages.StageState, tx kv.RwTx, toBlock uint64, cfg TxLookupCfg, ctx context.Context) (err error) {
+func SpawnTxLookup(s *StageState, tx kv.RwTx, toBlock uint64, cfg TxLookupCfg, ctx context.Context) (err error) {
 
 	// TODO: abstract
 	return nil
@@ -168,7 +168,7 @@ func borTxnLookupTransform(logPrefix string, tx kv.RwTx, blockFrom, blockTo uint
 	})
 }
 
-func UnwindTxLookup(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg TxLookupCfg, ctx context.Context) (err error) {
+func UnwindTxLookup(u *UnwindState, s *StageState, tx kv.RwTx, cfg TxLookupCfg, ctx context.Context) (err error) {
 	if s.BlockNumber <= u.UnwindPoint {
 		return nil
 	}
@@ -208,7 +208,7 @@ func UnwindTxLookup(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg
 	return nil
 }
 
-func PruneTxLookup(s *stages.PruneState, tx kv.RwTx, cfg TxLookupCfg, ctx context.Context, initialCycle bool) (err error) {
+func PruneTxLookup(s *PruneState, tx kv.RwTx, cfg TxLookupCfg, ctx context.Context, initialCycle bool) (err error) {
 	logPrefix := s.LogPrefix()
 	useExternalTx := tx != nil
 	if !useExternalTx {

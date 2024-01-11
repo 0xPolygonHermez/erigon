@@ -80,7 +80,7 @@ func StageSnapshotsCfg(
 }
 
 func SpawnStageSnapshots(
-	s *stages.StageState,
+	s *StageState,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg SnapshotsCfg,
@@ -121,7 +121,7 @@ func SpawnStageSnapshots(
 	return nil
 }
 
-func DownloadAndIndexSnapshotsIfNeed(s *stages.StageState, ctx context.Context, tx kv.RwTx, cfg SnapshotsCfg, initialCycle bool) error {
+func DownloadAndIndexSnapshotsIfNeed(s *StageState, ctx context.Context, tx kv.RwTx, cfg SnapshotsCfg, initialCycle bool) error {
 	if !initialCycle || cfg.snapshots == nil || !cfg.snapshots.Cfg().Enabled {
 		return nil
 	}
@@ -321,7 +321,7 @@ func FillDBFromSnapshots(logPrefix string, ctx context.Context, tx kv.RwTx, dirs
 
 // WaitForDownloader - wait for Downloader service to download all expected snapshots
 // for MVP we sync with Downloader only once, in future will send new snapshots also
-func WaitForDownloader(s *stages.StageState, ctx context.Context, cfg SnapshotsCfg, tx kv.RwTx) error {
+func WaitForDownloader(s *StageState, ctx context.Context, cfg SnapshotsCfg, tx kv.RwTx) error {
 	if cfg.snapshots.Cfg().NoDownloader {
 		if err := cfg.snapshots.ReopenFolder(); err != nil {
 			return err
@@ -495,7 +495,7 @@ func calculateTime(amountLeft, rate uint64) string {
 /* ====== PRUNING ====== */
 // snapshots pruning sections works more as a retiring of blocks
 // retiring blocks means moving block data from db into snapshots
-func SnapshotsPrune(s *stages.PruneState, cfg SnapshotsCfg, ctx context.Context, tx kv.RwTx) (err error) {
+func SnapshotsPrune(s *PruneState, cfg SnapshotsCfg, ctx context.Context, tx kv.RwTx) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

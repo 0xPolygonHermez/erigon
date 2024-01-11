@@ -12,7 +12,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
-func SpawnVerkleTrie(s *stages.StageState, u stages.Unwinder, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (libcommon.Hash, error) {
+func SpawnVerkleTrie(s *StageState, u Unwinder, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (libcommon.Hash, error) {
 	var err error
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -56,7 +56,7 @@ func SpawnVerkleTrie(s *stages.StageState, u stages.Unwinder, tx kv.RwTx, cfg Tr
 	return newRoot, nil
 }
 
-func UnwindVerkleTrie(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
+func UnwindVerkleTrie(u *UnwindState, s *StageState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -89,7 +89,7 @@ func UnwindVerkleTrie(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, c
 	return nil
 }
 
-func PruneVerkleTries(s *stages.PruneState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
+func PruneVerkleTries(s *PruneState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

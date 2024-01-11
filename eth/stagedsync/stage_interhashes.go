@@ -60,7 +60,7 @@ func StageTrieCfg(db kv.RwDB, checkRoot, saveNewHashesToDB, badBlockHalt bool, t
 	}
 }
 
-func SpawnIntermediateHashesStage(s *stages.StageState, u stages.Unwinder, tx kv.RwTx, cfg TrieCfg, ctx context.Context, quiet bool) (libcommon.Hash, error) {
+func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg TrieCfg, ctx context.Context, quiet bool) (libcommon.Hash, error) {
 	quit := ctx.Done()
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -455,7 +455,7 @@ func (p *HashPromoter) UnwindOnHistoryV3(logPrefix string, agg *state.Aggregator
 	return nil
 }
 
-func (p *HashPromoter) Unwind(logPrefix string, s *stages.StageState, u *stages.UnwindState, storage bool, load etl.LoadFunc) error {
+func (p *HashPromoter) Unwind(logPrefix string, s *StageState, u *UnwindState, storage bool, load etl.LoadFunc) error {
 	to := u.UnwindPoint
 	var changeSetBucket string
 
@@ -545,7 +545,7 @@ func (p *HashPromoter) Unwind(logPrefix string, s *stages.StageState, u *stages.
 	return nil
 }
 
-func incrementIntermediateHashes(logPrefix string, s *stages.StageState, db kv.RwTx, to uint64, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
+func incrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to uint64, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
 	p := NewHashPromoter(db, cfg.tmpDir, quit, logPrefix)
 	rl := trie.NewRetainList(0)
 	if cfg.historyV3 {
@@ -621,7 +621,7 @@ func incrementIntermediateHashes(logPrefix string, s *stages.StageState, db kv.R
 	return hash, nil
 }
 
-func UnwindIntermediateHashesStage(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
+func UnwindIntermediateHashesStage(u *UnwindState, s *StageState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
 	quit := ctx.Done()
 	useExternalTx := tx != nil
 	if !useExternalTx {
@@ -656,7 +656,7 @@ func UnwindIntermediateHashesStage(u *stages.UnwindState, s *stages.StageState, 
 	return nil
 }
 
-func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList, u *stages.UnwindState, s *stages.StageState, db kv.RwTx, cfg TrieCfg, accTrieCollectorFunc trie.HashCollector2, stTrieCollectorFunc trie.StorageHashCollector2, quit <-chan struct{}) (*trie.FlatDBTrieLoader, error) {
+func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, accTrieCollectorFunc trie.HashCollector2, stTrieCollectorFunc trie.StorageHashCollector2, quit <-chan struct{}) (*trie.FlatDBTrieLoader, error) {
 	p := NewHashPromoter(db, cfg.tmpDir, quit, logPrefix)
 	if cfg.historyV3 {
 		cfg.agg.SetTx(db)
@@ -685,7 +685,7 @@ func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList
 	return trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false), nil
 }
 
-func unwindIntermediateHashesStageImpl(logPrefix string, u *stages.UnwindState, s *stages.StageState, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}) error {
+func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}) error {
 	accTrieCollector := etl.NewCollector(logPrefix, cfg.tmpDir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 	defer accTrieCollector.Close()
 	accTrieCollectorFunc := accountTrieCollector(accTrieCollector)
@@ -764,7 +764,7 @@ func storageTrieCollector(collector *etl.Collector) trie.StorageHashCollector2 {
 	}
 }
 
-func PruneIntermediateHashesStage(s *stages.PruneState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
+func PruneIntermediateHashesStage(s *PruneState, tx kv.RwTx, cfg TrieCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

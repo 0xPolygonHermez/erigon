@@ -34,8 +34,8 @@ func TestExec(t *testing.T) {
 		err := stages.SaveStageProgress(tx2, stages.Execution, 50)
 		require.NoError(err)
 
-		u := &stages.UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &stages.StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -50,8 +50,8 @@ func TestExec(t *testing.T) {
 		err := stages.SaveStageProgress(tx2, stages.Execution, 50)
 		require.NoError(err)
 
-		u := &stages.UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &stages.StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -68,8 +68,8 @@ func TestExec(t *testing.T) {
 		if err != nil {
 			t.Errorf("error while saving progress: %v", err)
 		}
-		u := &stages.UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &stages.StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -87,7 +87,7 @@ func TestExec(t *testing.T) {
 		require.NoError(err)
 		require.Equal(uint64(1), available)
 
-		s := &stages.PruneState{ID: stages.Execution, ForwardProgress: 20}
+		s := &PruneState{ID: stages.Execution, ForwardProgress: 20}
 		// check pruning distance > than current stage progress
 		err = PruneExecutionStage(s, tx, ExecuteBlockCfg{prune: prune.Mode{History: prune.Distance(100), Receipts: prune.Distance(101), CallTraces: prune.Distance(200)}}, ctx, false)
 		require.NoError(err)
@@ -193,8 +193,8 @@ func TestExec22(t *testing.T) {
 			require.NoError(err)
 		}
 
-		u := &stages.UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &stages.StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 
@@ -217,8 +217,8 @@ func TestExec22(t *testing.T) {
 			require.NoError(err)
 		}
 
-		u := &stages.UnwindState{ID: stages.Execution, UnwindPoint: 25}
-		s := &stages.StageState{ID: stages.Execution, BlockNumber: 50}
+		u := &UnwindState{ID: stages.Execution, UnwindPoint: 25}
+		s := &StageState{ID: stages.Execution, BlockNumber: 50}
 		err = UnwindExecutionStage(u, s, tx2, ctx, cfg, false)
 		require.NoError(err)
 

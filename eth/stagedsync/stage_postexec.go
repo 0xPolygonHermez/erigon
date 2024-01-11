@@ -23,7 +23,7 @@ func StagePostExecCfg(db kv.RwDB, borDb kv.RwDB) PostExecCfg {
 	}
 }
 
-func SpawnPostExecStage(s *stages.StageState, tx kv.RwTx, cfg PostExecCfg, ctx context.Context) error {
+func SpawnPostExecStage(s *StageState, tx kv.RwTx, cfg PostExecCfg, ctx context.Context) error {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -61,7 +61,7 @@ func SpawnPostExecStage(s *stages.StageState, tx kv.RwTx, cfg PostExecCfg, ctx c
 	return nil
 }
 
-func UnwindPostExecStage(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg PostExecCfg, ctx context.Context) (err error) {
+func UnwindPostExecStage(u *UnwindState, s *StageState, tx kv.RwTx, cfg PostExecCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)

@@ -50,7 +50,7 @@ func StageHashStateCfg(db kv.RwDB, dirs datadir.Dirs, historyV3 bool, agg *state
 	}
 }
 
-func SpawnHashStateStage(s *stages.StageState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context, quiet bool) error {
+func SpawnHashStateStage(s *StageState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context, quiet bool) error {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -101,7 +101,7 @@ func SpawnHashStateStage(s *stages.StageState, tx kv.RwTx, cfg HashStateCfg, ctx
 	return nil
 }
 
-func UnwindHashStateStage(u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context) (err error) {
+func UnwindHashStateStage(u *UnwindState, s *StageState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -126,7 +126,7 @@ func UnwindHashStateStage(u *stages.UnwindState, s *stages.StageState, tx kv.RwT
 	return nil
 }
 
-func unwindHashStateStageImpl(logPrefix string, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context) error {
+func unwindHashStateStageImpl(logPrefix string, u *UnwindState, s *StageState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context) error {
 	// Currently it does not require unwinding because it does not create any Intermediate Hash records
 	// and recomputes the state root from scratch
 	prom := NewPromoter(tx, cfg.dirs, ctx)
@@ -838,7 +838,7 @@ func (p *Promoter) UnwindOnHistoryV3(logPrefix string, agg *state.AggregatorV3, 
 	return collector.Load(p.tx, kv.HashedAccounts, etl.IdentityLoadFunc, etl.TransformArgs{Quit: p.ctx.Done()})
 }
 
-func (p *Promoter) Unwind(logPrefix string, s *stages.StageState, u *stages.UnwindState, storage bool, codes bool) error {
+func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, storage bool, codes bool) error {
 	var changeSetBucket string
 	if storage {
 		changeSetBucket = kv.StorageChangeSet
@@ -916,7 +916,7 @@ func promoteHashedStateIncrementally(logPrefix string, from, to uint64, tx kv.Rw
 	return nil
 }
 
-func PruneHashStateStage(s *stages.PruneState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context) (err error) {
+func PruneHashStateStage(s *PruneState, tx kv.RwTx, cfg HashStateCfg, ctx context.Context) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
