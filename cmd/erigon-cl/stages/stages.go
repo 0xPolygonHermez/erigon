@@ -18,7 +18,7 @@ func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReco
 		{
 			ID:          stages.BeaconHistoryReconstruction,
 			Description: "Download beacon blocks backwards.",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageHistoryReconstruction(historyReconstruction, s, tx, ctx)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
@@ -28,7 +28,7 @@ func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReco
 		{
 			ID:          stages.BeaconBlocks,
 			Description: "Download beacon blocks forward.",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageBeaconsBlocks(beaconsBlocks, s, tx, ctx)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
@@ -38,7 +38,7 @@ func ConsensusStages(ctx context.Context, historyReconstruction StageHistoryReco
 		{
 			ID:          stages.BeaconState,
 			Description: "Execute Consensus Layer transition",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnStageBeaconState(beaconState, tx, ctx)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stagedsync.StageState, tx kv.RwTx) error {
