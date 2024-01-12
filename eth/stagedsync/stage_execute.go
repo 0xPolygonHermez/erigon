@@ -959,14 +959,17 @@ func PruneExecutionStage(s *PruneState, tx kv.RwTx, cfg ExecuteBlockCfg, ctx con
 }
 
 func tryUpdateForkVersion(cfg *ExecuteBlockCfg, hermezDb *hermez_db.HermezDb) error {
-	if cfg.chainConfig.Fork7Block == nil || cfg.chainConfig.Fork7Block == big.NewInt(0) {
-		blockNum, err := hermezDb.GetForkIdBlock(chain.FORKID_7)
-		log.Debug("Fork7Block not set, getting from db")
-		if err != nil {
-			return err
-		}
-		cfg.chainConfig.Fork7Block = big.NewInt(0).SetUint64(blockNum)
+	if cfg.chainConfig.Fork7Block != nil && cfg.chainConfig.Fork7Block != big.NewInt(0) {
+		return nil
 	}
+
+	log.Debug("Fork7Block not set, getting from db")
+	// TODO is this the best way to get the fork block? or in memory?
+	blockNum, err := hermezDb.GetForkIdBlock(chain.FORKID_7)
+	if err != nil {
+		return err
+	}
+	cfg.chainConfig.Fork7Block = big.NewInt(0).SetUint64(blockNum)
 
 	return nil
 }
