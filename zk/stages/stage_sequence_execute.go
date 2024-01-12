@@ -35,20 +35,21 @@ import (
 	"github.com/ledgerwatch/erigon/eth/calltracer"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/eth/tracers/logger"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
-	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
-	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/secp256k1"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -81,14 +82,6 @@ type HasChangeSetWriter interface {
 
 type ChangeSetHook func(blockNum uint64, wr *state.ChangeSetWriter)
 
-type WithSnapshots interface {
-	Snapshots() *snapshotsync.RoSnapshots
-}
-
-type headerDownloader interface {
-	ReportBadHeaderPoS(badHeader, lastValidAncestor common.Hash)
-}
-
 type SequenceBlockCfg struct {
 	db            kv.RwDB
 	batchSize     datasize.ByteSize
@@ -101,7 +94,6 @@ type SequenceBlockCfg struct {
 	stateStream   bool
 	accumulator   *shards.Accumulator
 	blockReader   services.FullBlockReader
-	hd            headerDownloader
 
 	dirs      datadir.Dirs
 	historyV3 bool
@@ -129,7 +121,6 @@ func StageSequenceBlocksCfg(
 	historyV3 bool,
 	dirs datadir.Dirs,
 	blockReader services.FullBlockReader,
-	hd headerDownloader,
 	genesis *types.Genesis,
 	syncCfg ethconfig.Sync,
 	agg *libstate.AggregatorV3,
@@ -151,7 +142,6 @@ func StageSequenceBlocksCfg(
 		stateStream:   stateStream,
 		badBlockHalt:  badBlockHalt,
 		blockReader:   blockReader,
-		hd:            hd,
 		genesis:       genesis,
 		historyV3:     historyV3,
 		syncCfg:       syncCfg,
@@ -293,8 +283,8 @@ func newStateReaderWriter(
 }
 
 func SpawnSequencingStage(
-	s *sync_stages.StageState,
-	u sync_stages.Unwinder,
+	s *stagedsync.StageState,
+	u stagedsync.Unwinder,
 	tx kv.RwTx,
 	toBlock uint64,
 	ctx context.Context,
@@ -442,23 +432,16 @@ func SpawnSequencingStage(
 	}
 
 	parentHeader := getHeader(current.Header.ParentHash, current.Header.Number.Uint64()-1)
+
+	stateWriter := state.NewPlainStateWriter(tx, tx, current.Header.Number.Uint64())
+	//stateWriter := state.NewPlainStateWriter(batch, tx, block.NumberU64())
+	chainReader := utils.NewZkChainReader(cfg.chainConfig, tx, cfg.blockReader)
+	hermezDb, err := hermez_db.NewHermezDb(tx)
+
 	var excessDataGas *big.Int
 	if parentHeader != nil {
 		excessDataGas = parentHeader.ExcessDataGas
 	}
-
-	stateWriter := state.NewPlainStateWriter(tx, tx, blockNum)
-	chainReader := utils.NewZkChainReader(cfg.chainConfig, tx, cfg.blockReader)
-
-	callTracer := calltracer.NewCallTracer()
-	vmConfig := *cfg.vmConfig
-	vmConfig.Debug = true
-	vmConfig.Tracer = callTracer
-
-	//getHeader := func(hash common.Hash, number uint64) *types.Header {
-	//	h, _ := cfg.blockReader.Header(context.Background(), tx, hash, number)
-	//	return h
-	//}
 
 	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecution(
 		cfg.engine,
@@ -479,14 +462,7 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	// [zkevm] - add in the state root to the receipts.  As we only have one tx per block
-	// for now just add the header root to the receipt
-	for _, r := range finalReceipts {
-		r.PostState = finalBlock.Header().Root.Bytes()
-	}
-
 	newHeader := finalBlock.Header()
-	newHeader.ReceiptHash = types.DeriveSha(finalReceipts)
 	newHeader.Coinbase = fixedMiner
 	newHeader.GasLimit = transactionGasLimit
 	newNum := finalBlock.Number()
@@ -507,11 +483,36 @@ func SpawnSequencingStage(
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(tx, finalBlock)
 
-	if err = rawdb.AppendReceipts(tx, newNum.Uint64(), finalReceipts); err != nil {
+	if err = rawdb.WriteReceipts(tx, newNum.Uint64(), finalReceipts); err != nil {
 		return err
 	}
 
-	if err = sync_stages.SaveStageProgress(tx, sync_stages.Execution, newNum.Uint64()); err != nil {
+	// now add in the zk batch to block references
+	if err := hermezDb.WriteBlockBatch(newNum.Uint64(), newNum.Uint64()); err != nil {
+		return fmt.Errorf("write block batch error: %v", err)
+	}
+
+	if err = stages.SaveStageProgress(tx, stages.Execution, newNum.Uint64()); err != nil {
+		return err
+	}
+
+	// now process the senders to avoid a stage by itself
+	signer := types.MakeSigner(cfg.chainConfig, newNum.Uint64())
+	cryptoContext := secp256k1.ContextForThread(1)
+	var senders []common.Address
+	for _, transaction := range finalTransactions {
+		from, err := signer.SenderWithContext(cryptoContext, transaction)
+		if err != nil {
+			return err
+		}
+		senders = append(senders, from)
+	}
+	if err = rawdb.WriteSenders(tx, newHash, newNum.Uint64(), senders); err != nil {
+		return err
+	}
+
+	// todo: hack! for now one block to one batch but this will change shortly
+	if err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, newNum.Uint64()); err != nil {
 		return err
 	}
 
@@ -664,7 +665,7 @@ LOOP:
 
 }
 
-func UnwindSequenceExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) (err error) {
+func UnwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) (err error) {
 	if u.UnwindPoint >= s.BlockNumber {
 		return nil
 	}

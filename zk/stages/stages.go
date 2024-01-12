@@ -14,6 +14,8 @@ func SequencerZkStages(
 	ctx context.Context,
 	cumulativeIndex stagedsync.CumulativeIndexCfg,
 	dataStreamCatchupCfg DataStreamCatchupCfg,
+	sequencerInterhashesCfg SequencerInterhashesCfg,
+	senders stagedsync.SendersCfg,
 	exec SequenceBlockCfg,
 	hashState stagedsync.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
@@ -81,6 +83,19 @@ func SequencerZkStages(
 			},
 		},
 		{
+			ID:          stages2.IntermediateHashes,
+			Description: "Seuncer Intermediate Hashes",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
+				return SpawnSequencerInterhashesStage(s, u, tx, ctx, sequencerInterhashesCfg, firstCycle, quiet)
+			},
+			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
+				return UnwindSequencerInterhashsStage(u, s, tx, ctx, sequencerInterhashesCfg, firstCycle)
+			},
+			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
+				return PruneSequencerInterhashesStage(p, tx, sequencerInterhashesCfg, ctx, firstCycle)
+			},
+		},
+		{
 			ID:          stages2.HashState,
 			Description: "Hash the key in the state",
 			Disabled:    false,
@@ -92,22 +107,6 @@ func SequencerZkStages(
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
 				return stagedsync.PruneHashStateStage(p, tx, hashState, ctx)
-			},
-		},
-		{
-			ID:          stages2.IntermediateHashes,
-			Description: "Generate intermediate hashes and computing state root",
-			Disabled:    false,
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				_, err := SpawnZkIntermediateHashesStage(s, u, tx, zkInterHashesCfg, ctx, quiet)
-				return err
-			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
-				return UnwindZkIntermediateHashesStage(u, s, tx, zkInterHashesCfg, ctx)
-			},
-			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
-				// TODO: implement this in zk interhashes
-				return nil
 			},
 		},
 		{
