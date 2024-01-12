@@ -15,7 +15,6 @@ func SequencerZkStages(
 	cumulativeIndex stagedsync.CumulativeIndexCfg,
 	dataStreamCatchupCfg DataStreamCatchupCfg,
 	sequencerInterhashesCfg SequencerInterhashesCfg,
-	senders stagedsync.SendersCfg,
 	exec SequenceBlockCfg,
 	hashState stagedsync.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
@@ -84,7 +83,7 @@ func SequencerZkStages(
 		},
 		{
 			ID:          stages2.IntermediateHashes,
-			Description: "Seuncer Intermediate Hashes",
+			Description: "Sequencer Intermediate Hashes",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
 				return SpawnSequencerInterhashesStage(s, u, tx, ctx, sequencerInterhashesCfg, firstCycle, quiet)
 			},

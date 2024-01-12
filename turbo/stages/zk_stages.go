@@ -98,7 +98,6 @@ func NewSequencerZkStages(ctx context.Context,
 ) []*stagedsync.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
-	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, snapshots, db, snapDownloader, notifications.Events)
 
 	// During Import we don't want other services like header requests, body requests etc. to be running.
 	// Hence we run it in the test mode.
@@ -108,7 +107,6 @@ func NewSequencerZkStages(ctx context.Context,
 		stagedsync.StageCumulativeIndexCfg(db),
 		zkStages.StageDataStreamCatchupCfg(datastreamServer, db),
 		zkStages.StageSequencerInterhashesCfg(db),
-		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockRetire, controlServer.Hd),
 		zkStages.StageSequenceBlocksCfg(
 			db,
 			cfg.Prune,
