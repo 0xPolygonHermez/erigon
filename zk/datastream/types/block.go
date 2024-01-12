@@ -6,11 +6,13 @@ import (
 	"fmt"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/log/v3"
 )
 
 const (
-	startL2BlockDataLength = 142
-	endL2BlockDataLength   = 72
+	startL2BlockDataLength                = 142
+	startL2BlockDataLengthPreEtrogForkId7 = 78
+	endL2BlockDataLength                  = 72
 
 	// EntryTypeL2Block represents a L2 block
 	EntryTypeStartL2Block EntryType = 1
@@ -32,6 +34,10 @@ type StartL2Block struct {
 // decodes a StartL2Block from a byte array
 func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 	if len(data) != startL2BlockDataLength {
+		if len(data) == startL2BlockDataLengthPreEtrogForkId7 {
+			log.Info("stream sent start l2 block length 78: pre etrog fork id 7", "blockNo", binary.LittleEndian.Uint64(data[8:16]))
+			return decodeStartL2BlockPreEtrogForkId7(data)
+		}
 		return &StartL2Block{}, fmt.Errorf("expected data length: %d, got: %d", startL2BlockDataLength, len(data))
 	}
 
@@ -50,6 +56,23 @@ func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 		L1InfoRoot:     common.BytesToHash(data[88:120]),
 		Coinbase:       common.BytesToAddress(data[120:140]),
 		ForkId:         binary.LittleEndian.Uint16(data[140:142]),
+	}, nil
+}
+
+func decodeStartL2BlockPreEtrogForkId7(data []byte) (*StartL2Block, error) {
+	var ts int64
+	buf := bytes.NewBuffer(data[16:24])
+	if err := binary.Read(buf, binary.LittleEndian, &ts); err != nil {
+		return &StartL2Block{}, err
+	}
+
+	return &StartL2Block{
+		BatchNumber:    binary.LittleEndian.Uint64(data[:8]),
+		L2BlockNumber:  binary.LittleEndian.Uint64(data[8:16]),
+		Timestamp:      ts,
+		GlobalExitRoot: common.BytesToHash(data[24:56]),
+		Coinbase:       common.BytesToAddress(data[56:76]),
+		ForkId:         binary.LittleEndian.Uint16(data[76:78]),
 	}, nil
 }
 
