@@ -11,9 +11,12 @@ import (
 	"sync"
 	"time"
 
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+
 	"github.com/TwiN/gocache/v2"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -627,7 +630,9 @@ func (s *SMT) CheckOrphanedNodes(ctx context.Context) int {
 	return len(orphanedNodes)
 }
 
-func (s *SMT) traverseAndMark(ctx context.Context, node *big.Int, visited VisitedNodesMap) error {
+type TraverseAction func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) bool
+
+func (s *SMT) traverse(ctx context.Context, node *big.Int, action TraverseAction) error {
 	if node == nil || node.Cmp(big.NewInt(0)) == 0 {
 		return nil
 	}
@@ -638,22 +643,17 @@ func (s *SMT) traverseAndMark(ctx context.Context, node *big.Int, visited Visite
 	default:
 	}
 
-	nodeKey := utils.ConvertBigIntToHex(node)
-
-	if _, ok := visited[nodeKey]; ok {
-		return nil
-	}
-
-	visited[nodeKey] = true
-
 	ky := utils.ScalarToRoot(node)
 
 	nodeValue, err := s.Db.Get(ky)
+
 	if err != nil {
 		return err
 	}
 
-	if nodeValue.IsFinalNode() {
+	shouldContinue := action(nil, ky, nodeValue)
+
+	if nodeValue.IsFinalNode() || !shouldContinue {
 		return nil
 	}
 
@@ -662,11 +662,68 @@ func (s *SMT) traverseAndMark(ctx context.Context, node *big.Int, visited Visite
 			return errors.New("nodeValue has insufficient length")
 		}
 		child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
-		err := s.traverseAndMark(ctx, child.ToBigInt(), visited)
+		err := s.traverse(ctx, child.ToBigInt(), action)
 		if err != nil {
 			fmt.Println(err)
 		}
 	}
 
 	return nil
+}
+
+func (s *SMT) traverseAndMark(ctx context.Context, node *big.Int, visited VisitedNodesMap) error {
+	return s.traverse(ctx, node, func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) bool {
+		if visited[utils.ConvertBigIntToHex(k.ToBigInt())] {
+			return false
+		}
+
+		visited[utils.ConvertBigIntToHex(k.ToBigInt())] = true
+		return true
+	})
+}
+
+func (s *SMT) BuildWitness(ctx context.Context, rd trie.RetainDecider) (*trie.Witness, error) {
+	operands := make([]trie.WitnessOperator, 0)
+
+	root, err := s.Db.GetLastRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	action := func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) bool {
+		if rd != nil && !rd.Retain(prefix) {
+			if !v.IsFinalNode() {
+				h := libcommon.BigToHash(k.ToBigInt())
+				hNode := trie.OperatorHash{Hash: h}
+				operands = append(operands, &hNode)
+			}
+			return false
+		}
+
+		if v.IsFinalNode() {
+			operands = append(operands, &trie.OperatorSMTLeafValue{
+				Value: v.ToBigInt().Bytes(),
+			})
+			return true
+		}
+
+		var mask uint32
+		if !v.Get0to4().IsZero() {
+			mask |= 1
+		}
+
+		if !v.Get4to8().IsZero() {
+			mask |= 2
+		}
+
+		operands = append(operands, &trie.OperatorBranch{
+			Mask: mask,
+		})
+
+		return true
+	}
+
+	err = s.traverse(ctx, root, action)
+
+	return trie.NewWitness(operands), err
 }
