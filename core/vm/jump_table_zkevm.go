@@ -1,0 +1,49 @@
+package vm
+
+var (
+	rohanInstructionSet  = newZkEVM_forkID4InstructionSet()
+	mordorInstructionSet = newZkEVM_forkID5InstructionSet()
+)
+
+// newZkEVM_forkID4InstructionSet returns the instruction set for the forkID4
+func newZkEVM_forkID4InstructionSet() JumpTable {
+	instructionSet := newBerlinInstructionSet()
+
+	instructionSet[CALLDATALOAD].execute = opCallDataLoad_zkevmIncompatible
+	instructionSet[CALLDATACOPY].execute = opCallDataCopy_zkevmIncompatible
+
+	instructionSet[STATICCALL].execute = opStaticCall_zkevm
+
+	instructionSet[NUMBER].execute = opNumber_zkevm
+
+	instructionSet[DIFFICULTY].execute = opDifficulty_zkevm
+
+	instructionSet[BLOCKHASH].execute = opBlockhash_zkevm
+
+	instructionSet[EXTCODEHASH].execute = opExtCodeHash_zkevm
+	instructionSet[SELFDESTRUCT].execute = opSendAll_zkevm
+
+	instructionSet[SENDALL] = &operation{
+		execute:    opSendAll_zkevm,
+		dynamicGas: gasSelfdestruct,
+		numPop:     1,
+		numPush:    0,
+	}
+
+	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}
+
+// newZkEVM_forkID5InstructionSet returns the instruction set for the forkID5
+func newZkEVM_forkID5InstructionSet() JumpTable {
+	instructionSet := newZkEVM_forkID4InstructionSet()
+
+	instructionSet[CALLDATACOPY].execute = opCallDataCopy
+	instructionSet[CALLDATALOAD].execute = opCallDataLoad
+	instructionSet[STATICCALL].execute = opStaticCall
+
+	enable3855(&instructionSet) // EIP-3855: Enable PUSH0 opcode
+
+	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}

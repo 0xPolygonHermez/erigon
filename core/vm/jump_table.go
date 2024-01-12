@@ -59,8 +59,6 @@ var (
 	constantinopleInstructionSet   = newConstantinopleInstructionSet()
 	istanbulInstructionSet         = newIstanbulInstructionSet()
 	berlinInstructionSet           = newBerlinInstructionSet()
-	rohanInstructionSet            = newRohanInstructionSet()
-	mordorInstructionSet           = newMordorInstructionSet()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -82,41 +80,6 @@ func validateAndFillMaxStack(jt *JumpTable) {
 		}
 		op.maxStack = maxStack(op.numPop, op.numPush)
 	}
-}
-func newMordorInstructionSet() JumpTable {
-	instructionSet := newRohanInstructionSet()
-
-	instructionSet[CALLDATACOPY].execute = opCallDataCopy
-	instructionSet[CALLDATALOAD].execute = opCallDataLoad
-	instructionSet[STATICCALL].execute = opStaticCall
-
-	enable3855(&instructionSet) // EIP-3855: Enable PUSH0 opcode
-
-	validateAndFillMaxStack(&instructionSet)
-	return instructionSet
-}
-
-func newRohanInstructionSet() JumpTable {
-	instructionSet := newBerlinInstructionSet()
-
-	instructionSet[NUMBER].execute = opNumber_zkevm
-
-	instructionSet[DIFFICULTY].execute = opDifficulty_zkevm
-
-	instructionSet[BLOCKHASH].execute = opBlockhash_zkevm
-
-	instructionSet[EXTCODEHASH].execute = opExtCodeHash_zkevm
-	instructionSet[SELFDESTRUCT].execute = opSendAll_zkevm
-
-	instructionSet[SENDALL] = &operation{
-		execute:    opSendAll_zkevm,
-		dynamicGas: gasSelfdestruct,
-		numPop:     1,
-		numPush:    0,
-	}
-
-	validateAndFillMaxStack(&instructionSet)
-	return instructionSet
 }
 
 // newBerlinInstructionSet returns the frontier, homestead, byzantium,
@@ -186,7 +149,7 @@ func newConstantinopleInstructionSet() JumpTable {
 func newByzantiumInstructionSet() JumpTable {
 	instructionSet := newSpuriousDragonInstructionSet()
 	instructionSet[STATICCALL] = &operation{
-		execute:     opStaticCall_zkevm,
+		execute:     opStaticCall,
 		constantGas: params.CallGasEIP150,
 		dynamicGas:  gasStaticCall,
 		numPop:      6,
@@ -438,7 +401,7 @@ func newFrontierInstructionSet() JumpTable {
 			numPush:     1,
 		},
 		CALLDATALOAD: {
-			execute:     opCallDataLoad_zkevmIncompatible,
+			execute:     opCallDataLoad,
 			constantGas: GasFastestStep,
 			numPop:      1,
 			numPush:     1,
@@ -450,7 +413,7 @@ func newFrontierInstructionSet() JumpTable {
 			numPush:     1,
 		},
 		CALLDATACOPY: {
-			execute:     opCallDataCopy_zkevmIncompatible,
+			execute:     opCallDataCopy,
 			constantGas: GasFastestStep,
 			dynamicGas:  gasCallDataCopy,
 			numPop:      3,
