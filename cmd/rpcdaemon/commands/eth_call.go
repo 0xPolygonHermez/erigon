@@ -500,13 +500,12 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		if err != nil {
 			return nil, err
 		}
-		// tx = batch
 	}
 
 	eridb := db2.NewEriDb(batch)
 	smtTrie := smt.NewSMT(eridb)
 
-	witness, err := smtTrie.BuildWitness(ctx, nil)
+	witness, err := smt.BuildWitness(smtTrie, nil, ctx)
 
 	if err != nil {
 		return nil, err
