@@ -5,14 +5,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/cmp"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
-	"github.com/ledgerwatch/erigon-lib/common/dbg"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/common/length"
 	"github.com/ledgerwatch/erigon-lib/etl"
@@ -21,13 +18,10 @@ import (
 	libstate "github.com/ledgerwatch/erigon-lib/state"
 	"github.com/ledgerwatch/log/v3"
 
-	"github.com/ledgerwatch/erigon/chain"
-	"github.com/ledgerwatch/erigon/eth/tracers/logger"
-	"github.com/ledgerwatch/erigon/zk/erigon_db"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-
+	"bytes"
 	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
+	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/changeset"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -41,16 +35,23 @@ import (
 	"github.com/ledgerwatch/erigon/eth/calltracer"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/eth/tracers/logger"
 	"github.com/ledgerwatch/erigon/ethdb"
-	"github.com/ledgerwatch/erigon/ethdb/olddb"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
+	"github.com/ledgerwatch/erigon/params"
+	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/sync_stages"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/txpool"
+	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"io"
+	"math/big"
+	"sync/atomic"
 )
 
 const (
@@ -59,8 +60,19 @@ const (
 	// stateStreamLimit - don't accumulate state changes if jump is bigger than this amount of blocks
 	stateStreamLimit uint64 = 1_000
 
-	transactionGasLimit = 3_000_000
-	blobGasLimit        = 3_000_000 // not sure if this applies to zk but separating it out anyway
+	transactionGasLimit = 30000000
+	blobGasLimit        = 30000000 // not sure if this applies to zk but separating it out anyway
+)
+
+var (
+	fixedUncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
+
+	// todo: seq: this should be read in from somewhere rather than hard coded!
+	fixedMiner = common.HexToAddress("0x650c68bef674dc40b54962e1ae9b6c0e35b9d781")
+
+	emptyUncles      = make([]*types.Header, 0)
+	emptyReceipts    = make([]*types.Receipt, 0)
+	emptyWithdrawals = make([]*types.Withdrawal, 0)
 )
 
 type HasChangeSetWriter interface {
@@ -280,7 +292,16 @@ func newStateReaderWriter(
 	return stateReader, stateWriter, nil
 }
 
-func SpawnSequencingStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool, quiet bool) (err error) {
+func SpawnSequencingStage(
+	s *sync_stages.StageState,
+	u sync_stages.Unwinder,
+	tx kv.RwTx,
+	toBlock uint64,
+	ctx context.Context,
+	cfg SequenceBlockCfg,
+	initialCycle bool,
+	quiet bool,
+) (err error) {
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished sequencing stage", logPrefix))
@@ -298,368 +319,352 @@ func SpawnSequencingStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv
 	if err != nil {
 		return err
 	}
+	blockNum := executionAt + 1
 
-	transactions := make(chan types2.TxsRlp)
+	slots := make([]types2.TxsRlp, 0)
 
 	// start waiting for a new transaction to arrive
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
-		reachedDesiredLimit := false
-		for {
-			if reachedDesiredLimit {
-				break
-			}
-			var count = 0
-			var err error
-
-			select {
-			case <-ticker.C:
-				log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
-			default:
-				/*
-					todo: seq: for now we only care about one tx and we'll move on to executing the block, but in the future
-					when we're timeboxing the block or using counters the yielded set will be useful to ensure we don't double
-					up any tx
-				*/
-				yielded := mapset.NewSet[[32]byte]()
-
-				// todo: seq: only looking for one transaction right now
-				if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
-					txSlots := types2.TxsRlp{}
-					if _, count, err = cfg.txPool.YieldBest(1, &txSlots, poolTx, executionAt, transactionGasLimit, yielded); err != nil {
-						return err
-					}
-					if count == 0 {
-						time.Sleep(100 * time.Millisecond)
-					} else {
-						transactions <- txSlots
-						reachedDesiredLimit = true
-					}
-					return nil
-				}); err != nil {
-					log.Error(fmt.Sprintf("error loading txpool view: %v", err))
-				}
-			}
-		}
-	}()
-
-	txs := <-transactions
-	log.Info("found transaction!!!")
-
-	txn := txs.Txs[0]
-	foo := txn
-	_ = foo
-
-	return
-
-	quit := ctx.Done()
-	useExternalTx := tx != nil
-	if !useExternalTx {
-		tx, err = cfg.db.BeginRw(context.Background())
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-	}
-
-	prevStageProgress, errStart := stages.GetStageProgress(tx, stages.Senders)
-	if errStart != nil {
-		return errStart
-	}
-	nextStageProgress, err := stages.GetStageProgress(tx, stages.HashState)
-	if err != nil {
-		return err
-	}
-	nextStagesExpectData := nextStageProgress > 0 // Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
-
-	var to = prevStageProgress
-	if toBlock > 0 {
-		to = cmp.Min(prevStageProgress, toBlock)
-	}
-
-	stateStream := !initialCycle && cfg.stateStream && to-s.BlockNumber < stateStreamLimit
-
-	// changes are stored through memory buffer
-	logEvery := time.NewTicker(logInterval)
-	defer logEvery.Stop()
-	stageProgress := s.BlockNumber
-	logBlock := stageProgress
-	logTx, lastLogTx := uint64(0), uint64(0)
-	logTime := time.Now()
-	var gas uint64             // used for logs
-	var currentStateGas uint64 // used for batch commits of state
-	// Transform batch_size limit into Ggas
-	gasState := uint64(cfg.batchSize) * uint64(datasize.KB) * 2
-
-	var stoppedErr error
-
-	hermezDb, err := hermez_db.NewHermezDb(tx)
-	if err != nil {
-		return fmt.Errorf("failed to create hermezDb: %v", err)
-	}
-
-	var batch ethdb.DbWithPendingMutations
-	// state is stored through ethdb batches
-	batch = olddb.NewHashBatch(tx, quit, cfg.dirs.Tmp)
-	// avoids stacking defers within the loop
-	defer func() {
-		batch.Rollback()
-	}()
-
-	eridb := erigon_db.NewErigonDb(tx)
-
-	/*
-	* SEQ: Here we are pre-creating a candidate batch
-	 */
-Loop:
-	/*
-	* SEQ: here is a `while` there are txs in the txpool
-	 */
-	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
-		stageProgress = blockNum
-		/*
-		* SEQ: pre-creating a candidate block
-		* Adding a single transaction to it
-		* No GER stuff and no state root
-		* We execute the tx afterwards and then add the info (state root, etc), to the block.
-		 */
-
-		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
+	ticker := time.NewTicker(10 * time.Second)
+	log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+	reachedDesiredLimit := false
+	for {
+		if reachedDesiredLimit {
 			break
 		}
-
-		blockHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
-		if err != nil {
-			return err
-		}
-		block, _, err := cfg.blockReader.BlockWithSenders(ctx, tx, blockHash, blockNum)
-		if err != nil {
-			return err
-		}
-		if block == nil {
-			log.Error(fmt.Sprintf("[%s] Empty block", logPrefix), "blocknum", blockNum)
-			continue
-		}
-
-		header, err := cfg.blockReader.Header(ctx, tx, blockHash, blockNum)
-		if err != nil {
-			return err
-		}
-		if header == nil {
-			log.Error(fmt.Sprintf("[%s] Empty header", logPrefix), "blocknum", blockNum)
-			continue
-		}
-
-		//[zkevm] - get the last batch number so we can check for empty batches in between it and the new one
-		lastBatchInserted, err := hermezDb.GetBatchNoByL2Block(stageProgress - 1)
-		if err != nil {
-			return fmt.Errorf("failed to get last batch inserted: %v", err)
-		}
-
-		/*
-		* SEQ: here we have our candidate batch
-		 */
-		// write batches between last block and this if they exist
-		currentBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
-		if err != nil {
-			return err
-		}
-
-		/*
-		* SEQ: here in theory we should get GERs from the L1 and write them down before
-		* execution into a separate table.
-		 */
-		//[zkevm] get batches between last block and this one
-		// plus this blocks ger
-		gersInBetween, err := hermezDb.GetBatchGlobalExitRoots(lastBatchInserted, currentBatch)
-		if err != nil {
-			return err
-		}
-
-		gers := []*dstypes.GerUpdate{}
-
-		if gersInBetween != nil {
-			gers = append(gers, gersInBetween...)
-		}
-
-		/* SEQ: here probably something about GER from L1 if needed (Local ER can be done via EVM) */
-		blockGer, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
-		if err != nil {
-			return err
-		}
-
-		blockGerUpdate := dstypes.GerUpdate{
-			GlobalExitRoot: blockGer,
-			Timestamp:      header.Time,
-		}
-		gers = append(gers, &blockGerUpdate)
-		//[zkevm] finished getting gers
-
-		lastLogTx += uint64(block.Transactions().Len())
-
-		// Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
-		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
-		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
-		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		/*
-		* SEQ: We execute the block and we need to add the witness generation (or at least the retain list generation for the block)
-		* Also these retain lists should be able to be composed together
-		 */
-		if err = executeBlock(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
-			/*
-			* SEQ: okay, if fails -- we need to append a reverted tx to the block (need a testcase)
-			* The code under is definitely not needed -- we can't report bad header if we are the only one sequencing.
-			 */
-			if !errors.Is(err, context.Canceled) {
-				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
-				if cfg.hd != nil {
-					cfg.hd.ReportBadHeaderPoS(blockHash, block.ParentHash())
-				}
-				if cfg.badBlockHalt {
-					return err
-				}
-			}
-			u.UnwindTo(blockNum-1, block.Hash())
-			break Loop
-		}
-
-		shouldUpdateProgress := batch.BatchSize() >= int(cfg.batchSize)
-		if shouldUpdateProgress {
-			log.Info("Committed State", "gas reached", currentStateGas, "gasTarget", gasState)
-			currentStateGas = 0
-			if err = batch.Commit(); err != nil {
-				return err
-			}
-			if err = s.Update(tx, stageProgress); err != nil {
-				return err
-			}
-			if !useExternalTx {
-				if err = tx.Commit(); err != nil {
-					return err
-				}
-				tx, err = cfg.db.BeginRw(context.Background())
-				if err != nil {
-					return err
-				}
-				// TODO: This creates stacked up deferrals
-				defer tx.Rollback()
-				eridb = erigon_db.NewErigonDb(tx)
-			}
-			batch = olddb.NewHashBatch(tx, quit, cfg.dirs.Tmp)
-			hermezDb, err = hermez_db.NewHermezDb(tx)
-			if err != nil {
-				return fmt.Errorf("failed to create hermezDb: %v", err)
-			}
-		}
-
-		gasUsed := header.GasUsed
-		gas = gas + gasUsed
-		currentStateGas = currentStateGas + gasUsed
-		/* SEQ: here we can actually write header with the actual gas! */
-
-		// TODO: how can we store this data right first time?  Or mop up old data as we're currently duping storage
-		/*
-				        ,     \    /      ,
-				       / \    )\__/(     / \
-				      /   \  (_\  /_)   /   \
-				 ____/_____\__\@  @/___/_____\____
-				|             |\../|              |
-				|              \VV/               |
-				|       ZKEVM duping storage      |
-				|_________________________________|
-				 |    /\ /      \\       \ /\    |
-				 |  /   V        ))       V   \  |
-				 |/     `       //        '     \|
-				 `              V                '
-
-			 we need to write the header back to the db at this point as the gas
-			 used wasn't available from the data stream, or receipt hash, or bloom, so we're relying on execution to
-			 provide it.  We also need to update the canonical hash, so we can retrieve this newly updated header
-			 later.
-		*/
-		rawdb.WriteHeader(tx, header)
-		err = rawdb.WriteCanonicalHash(tx, header.Hash(), blockNum)
-		if err != nil {
-			return fmt.Errorf("failed to write header: %v", err)
-		}
-
-		err = eridb.WriteBody(header.Number, header.Hash(), block.Transactions())
-		if err != nil {
-			return fmt.Errorf("failed to write body: %v", err)
-		}
-
-		// write the new block lookup entries
-		rawdb.WriteTxLookupEntries(tx, block)
-
-		/*
-		* SEQ: we report progress as soon as we create a block or a batch
-		 */
+		var count = 0
+		var err error
 
 		select {
+		case <-ticker.C:
+			log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
 		default:
-		case <-logEvery.C:
-			logBlock, logTx, logTime = logProgress(logPrefix /*total*/, 1000 /*initialBlock*/, 0, logBlock, logTime, blockNum, logTx, lastLogTx, gas, float64(currentStateGas)/float64(gasState), batch)
-			gas = 0
-			tx.CollectMetrics()
-			stagedsync.Metrics[stages.Execution].Set(blockNum)
+			/*
+				todo: seq: for now we only care about one tx and we'll move on to executing the block, but in the future
+				when we're timeboxing the block or using counters the yielded set will be useful to ensure we don't double
+				up any tx
+			*/
+			yielded := mapset.NewSet[[32]byte]()
+
+			if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
+				txSlots := types2.TxsRlp{}
+				if _, count, err = cfg.txPool.YieldBest(1, &txSlots, poolTx, executionAt, transactionGasLimit, yielded); err != nil {
+					return err
+				}
+				if count == 0 {
+					time.Sleep(100 * time.Millisecond)
+				} else {
+					slots = append(slots, txSlots)
+
+					reachedDesiredLimit = true
+				}
+				return nil
+			}); err != nil {
+				log.Error(fmt.Sprintf("error loading txpool view: %v", err))
+			}
 		}
 	}
 
-	if err = s.Update(batch, stageProgress); err != nil {
+	var transactions []types.Transaction
+	reader := bytes.NewReader([]byte{})
+	stream := new(rlp.Stream)
+	for _, slot := range slots {
+		for idx, txBytes := range slot.Txs {
+			reader.Reset(txBytes)
+			stream.Reset(reader, uint64(len(txBytes)))
+			transaction, err := types.DecodeTransaction(stream)
+			if err == io.EOF {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			var sender common.Address
+			copy(sender[:], slot.Senders.At(idx))
+			transaction.SetSender(sender)
+			transactions = append(transactions, transaction)
+		}
+	}
+
+	txStream := types.NewTransactionsFixedOrder(transactions)
+
+	getHeader := func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(tx, hash, number) }
+
+	previousHeader, err := rawdb.ReadBlockByNumber(tx, executionAt)
+	if err != nil {
 		return err
 	}
-	if err = batch.Commit(); err != nil {
-		return fmt.Errorf("batch commit: %w", err)
+	nextNumber := new(big.Int).SetUint64(blockNum)
+	difficulty := new(big.Int).SetUint64(0)
+	current := &stagedsync.MiningBlock{
+		Header: &types.Header{
+			ParentHash: previousHeader.Hash(),
+			Coinbase:   common.Address{},
+			Difficulty: difficulty,
+			Number:     nextNumber,
+			GasLimit:   math.MaxUint64,
+			GasUsed:    0,
+			Time:       0,
+			Extra:      nil,
+		},
 	}
 
-	_, err = rawdb.IncrementStateVersion(tx)
+	quitChan := make(chan struct{})
+	var interrupt *int32
+	stateReader := state.NewPlainStateReader(tx)
+	ibs := state.New(stateReader)
+
+	_, _, err = addTransactionsToMiningBlock(
+		s.LogPrefix(),
+		current,
+		*cfg.chainConfig,
+		cfg.vmConfig,
+		getHeader,
+		cfg.engine,
+		txStream,
+		common.Address{}, // todo: zk: where do I get the miner address?
+		ibs,
+		quitChan,
+		interrupt,
+		0,
+	)
 	if err != nil {
-		return fmt.Errorf("writing plain state version: %w", err)
+		return err
 	}
 
-	if !useExternalTx {
-		log.Info(fmt.Sprintf("[%s] Commiting DB transaction...", logPrefix), "block", stageProgress)
+	if current.Uncles == nil {
+		current.Uncles = []*types.Header{}
+	}
+	if current.Txs == nil {
+		current.Txs = []types.Transaction{}
+	}
+	if current.Receipts == nil {
+		current.Receipts = types.Receipts{}
+	}
 
+	parentHeader := getHeader(current.Header.ParentHash, current.Header.Number.Uint64()-1)
+	var excessDataGas *big.Int
+	if parentHeader != nil {
+		excessDataGas = parentHeader.ExcessDataGas
+	}
+
+	stateWriter := state.NewPlainStateWriter(tx, tx, blockNum)
+	chainReader := utils.NewZkChainReader(cfg.chainConfig, tx, cfg.blockReader)
+
+	callTracer := calltracer.NewCallTracer()
+	vmConfig := *cfg.vmConfig
+	vmConfig.Debug = true
+	vmConfig.Tracer = callTracer
+
+	//getHeader := func(hash common.Hash, number uint64) *types.Header {
+	//	h, _ := cfg.blockReader.Header(context.Background(), tx, hash, number)
+	//	return h
+	//}
+
+	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecution(
+		cfg.engine,
+		stateReader,
+		current.Header,
+		current.Txs,
+		current.Uncles,
+		stateWriter,
+		cfg.chainConfig,
+		ibs,
+		current.Receipts,
+		current.Withdrawals,
+		chainReader,
+		true,
+		excessDataGas,
+	)
+	if err != nil {
+		return err
+	}
+
+	// [zkevm] - add in the state root to the receipts.  As we only have one tx per block
+	// for now just add the header root to the receipt
+	for _, r := range finalReceipts {
+		r.PostState = finalBlock.Header().Root.Bytes()
+	}
+
+	newHeader := finalBlock.Header()
+	newHeader.ReceiptHash = types.DeriveSha(finalReceipts)
+	newHeader.Coinbase = fixedMiner
+	newHeader.GasLimit = transactionGasLimit
+	newNum := finalBlock.Number()
+	newHash := newHeader.Hash()
+
+	rawdb.WriteHeader(tx, newHeader)
+	err = rawdb.WriteCanonicalHash(tx, newHash, newNum.Uint64())
+	if err != nil {
+		return fmt.Errorf("failed to write header: %v", err)
+	}
+
+	eridb := erigon_db.NewErigonDb(tx)
+	err = eridb.WriteBody(newNum, newHash, finalTransactions)
+	if err != nil {
+		return fmt.Errorf("failed to write body: %v", err)
+	}
+
+	// write the new block lookup entries
+	rawdb.WriteTxLookupEntries(tx, finalBlock)
+
+	if err = rawdb.AppendReceipts(tx, newNum.Uint64(), finalReceipts); err != nil {
+		return err
+	}
+
+	if err = sync_stages.SaveStageProgress(tx, sync_stages.Execution, newNum.Uint64()); err != nil {
+		return err
+	}
+
+	if freshTx {
 		if err = tx.Commit(); err != nil {
 			return err
 		}
 	}
 
-	if !quiet {
-		log.Info(fmt.Sprintf("[%s] Completed on", logPrefix), "block", stageProgress)
-	}
-	return stoppedErr
+	return nil
 }
 
-func logProgress(logPrefix string, total, initialBlock, prevBlock uint64, prevTime time.Time, currentBlock uint64, prevTx, currentTx uint64, gas uint64, gasState float64, batch ethdb.DbWithPendingMutations) (uint64, uint64, time.Time) {
-	currentTime := time.Now()
-	interval := currentTime.Sub(prevTime)
-	speed := float64(currentBlock-prevBlock) / (float64(interval) / float64(time.Second))
-	speedTx := float64(currentTx-prevTx) / (float64(interval) / float64(time.Second))
-	speedMgas := float64(gas) / 1_000_000 / (float64(interval) / float64(time.Second))
-	percent := float64(currentBlock-initialBlock) / float64(total) * 100
+func addTransactionsToMiningBlock(
+	logPrefix string,
+	current *stagedsync.MiningBlock,
+	chainConfig chain.Config,
+	vmConfig *vm.Config,
+	getHeader func(hash common.Hash, number uint64) *types.Header,
+	engine consensus.Engine,
+	txs types.TransactionsStream,
+	coinbase common.Address,
+	ibs *state.IntraBlockState,
+	quit <-chan struct{},
+	interrupt *int32,
+	payloadId uint64,
+) (types.Logs, bool, error) {
+	header := current.Header
+	tcount := 0
+	gasPool := new(core.GasPool).AddGas(header.GasLimit - header.GasUsed)
+	signer := types.MakeSigner(&chainConfig, header.Number.Uint64())
 
-	var m runtime.MemStats
-	dbg.ReadMemStats(&m)
-	var logpairs = []interface{}{
-		"number", currentBlock,
-		"%", percent,
-		"blk/s", fmt.Sprintf("%.1f", speed),
-		"tx/s", fmt.Sprintf("%.1f", speedTx),
-		"Mgas/s", fmt.Sprintf("%.1f", speedMgas),
-		"gasState", fmt.Sprintf("%.2f", gasState),
-	}
-	if batch != nil {
-		logpairs = append(logpairs, "batch", common.ByteCount(uint64(batch.BatchSize())))
-	}
-	logpairs = append(logpairs, "alloc", common.ByteCount(m.Alloc), "sys", common.ByteCount(m.Sys))
-	log.Info(fmt.Sprintf("[%s] Executed blocks", logPrefix), logpairs...)
+	var coalescedLogs types.Logs
+	noop := state.NewNoopWriter()
 
-	return currentBlock, currentTx, currentTime
+	parentHeader := getHeader(header.ParentHash, header.Number.Uint64()-1)
+
+	var miningCommitTx = func(txn types.Transaction, coinbase common.Address, vmConfig *vm.Config, chainConfig chain.Config, ibs *state.IntraBlockState, current *stagedsync.MiningBlock) ([]*types.Log, error) {
+		ibs.Prepare(txn.Hash(), common.Hash{}, tcount)
+		gasSnap := gasPool.Gas()
+		snap := ibs.Snapshot()
+		log.Debug("addTransactionsToMiningBlock", "txn hash", txn.Hash())
+		receipt, _, err := core.ApplyTransaction(&chainConfig, core.GetHashFn(header, getHeader), engine, &coinbase, gasPool, ibs, noop, header, txn, &header.GasUsed, *vmConfig, parentHeader.ExcessDataGas, zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED)
+		if err != nil {
+			ibs.RevertToSnapshot(snap)
+			gasPool = new(core.GasPool).AddGas(gasSnap) // restore gasPool as well as ibs
+			return nil, err
+		}
+
+		current.Txs = append(current.Txs, txn)
+		current.Receipts = append(current.Receipts, receipt)
+		return receipt.Logs, nil
+	}
+
+	var stopped *time.Ticker
+	defer func() {
+		if stopped != nil {
+			stopped.Stop()
+		}
+	}()
+
+	done := false
+
+LOOP:
+	for {
+		// see if we need to stop now
+		if stopped != nil {
+			select {
+			case <-stopped.C:
+				done = true
+				break LOOP
+			default:
+			}
+		}
+
+		if err := common.Stopped(quit); err != nil {
+			return nil, true, err
+		}
+
+		if interrupt != nil && atomic.LoadInt32(interrupt) != 0 && stopped == nil {
+			log.Debug("Transaction adding was requested to stop", "payload", payloadId)
+			// ensure we run for at least 500ms after the request to stop comes in from GetPayload
+			stopped = time.NewTicker(500 * time.Millisecond)
+		}
+		// If we don't have enough gas for any further transactions then we're done
+		if gasPool.Gas() < params.TxGas {
+			log.Debug(fmt.Sprintf("[%s] Not enough gas for further transactions", logPrefix), "have", gasPool, "want", params.TxGas)
+			done = true
+			break
+		}
+		// Retrieve the next transaction and abort if all done
+		txn := txs.Peek()
+		if txn == nil {
+			break
+		}
+
+		// We use the eip155 signer regardless of the env hf.
+		from, err := txn.Sender(*signer)
+		if err != nil {
+			log.Warn(fmt.Sprintf("[%s] Could not recover transaction sender", logPrefix), "hash", txn.Hash(), "err", err)
+			txs.Pop()
+			continue
+		}
+
+		// Check whether the txn is replay protected. If we're not in the EIP155 (Spurious Dragon) hf
+		// phase, start ignoring the sender until we do.
+		if txn.Protected() && !chainConfig.IsSpuriousDragon(header.Number.Uint64()) {
+			log.Debug(fmt.Sprintf("[%s] Ignoring replay protected transaction", logPrefix), "hash", txn.Hash(), "eip155", chainConfig.SpuriousDragonBlock)
+
+			txs.Pop()
+			continue
+		}
+
+		// Start executing the transaction
+		logs, err := miningCommitTx(txn, coinbase, vmConfig, chainConfig, ibs, current)
+
+		if errors.Is(err, core.ErrGasLimitReached) {
+			// Pop the env out-of-gas transaction without shifting in the next from the account
+			log.Debug(fmt.Sprintf("[%s] Gas limit exceeded for env block", logPrefix), "hash", txn.Hash(), "sender", from)
+			txs.Pop()
+		} else if errors.Is(err, core.ErrNonceTooLow) {
+			// New head notification data race between the transaction pool and miner, shift
+			log.Debug(fmt.Sprintf("[%s] Skipping transaction with low nonce", logPrefix), "hash", txn.Hash(), "sender", from, "nonce", txn.GetNonce())
+			txs.Shift()
+		} else if errors.Is(err, core.ErrNonceTooHigh) {
+			// Reorg notification data race between the transaction pool and miner, skip account =
+			log.Debug(fmt.Sprintf("[%s] Skipping transaction with high nonce", logPrefix), "hash", txn.Hash(), "sender", from, "nonce", txn.GetNonce())
+			txs.Pop()
+		} else if err == nil {
+			// Everything ok, collect the logs and shift in the next transaction from the same account
+			log.Debug(fmt.Sprintf("[%s] addTransactionsToMiningBlock Successful", logPrefix), "sender", from, "nonce", txn.GetNonce(), "payload", payloadId)
+			coalescedLogs = append(coalescedLogs, logs...)
+			tcount++
+			txs.Shift()
+		} else {
+			// Strange error, discard the transaction and get the next in line (note, the
+			// nonce-too-high clause will prevent us from executing in vain).
+			log.Debug(fmt.Sprintf("[%s] Skipping transaction", logPrefix), "hash", txn.Hash(), "sender", from, "err", err)
+			txs.Shift()
+		}
+	}
+
+	/*
+		// Notify resubmit loop to decrease resubmitting interval if env interval is larger
+		// than the user-specified one.
+		if interrupt != nil {
+			w.resubmitAdjustCh <- &intervalAdjust{inc: false}
+		}
+	*/
+	return coalescedLogs, done, nil
+
 }
 
-func UnwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) (err error) {
+func UnwindSequenceExecutionStage(u *sync_stages.UnwindState, s *sync_stages.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) (err error) {
 	if u.UnwindPoint >= s.BlockNumber {
 		return nil
 	}
