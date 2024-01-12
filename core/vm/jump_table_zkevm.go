@@ -27,7 +27,7 @@ func newZkEVM_forkID4InstructionSet() JumpTable {
 
 	instructionSet[SENDALL] = &operation{
 		execute:    opSendAll_zkevm,
-		dynamicGas: gasSelfdestruct,
+		dynamicGas: gasSelfdestruct_zkevm,
 		numPop:     1,
 		numPush:    0,
 	}
