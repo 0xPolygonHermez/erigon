@@ -2,9 +2,9 @@ package hermez_db
 
 import (
 	"fmt"
-
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/types"
@@ -13,6 +13,7 @@ import (
 const L1VERIFICATIONS = "hermez_l1Verifications"                   // l1blockno, batchno -> l1txhash
 const L1SEQUENCES = "hermez_l1Sequences"                           // l1blockno, batchno -> l1txhash
 const FORKIDS = "hermez_forkIds"                                   // batchNo -> forkId
+const FORKID_BLOCK = "hermez_forkIdBlock"                          // forkId -> startBlock
 const BLOCKBATCHES = "hermez_blockBatches"                         // l2blockno -> batchno
 const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"                 // l2blockno -> GER
 const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // l2blockno -> GER
@@ -51,6 +52,10 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		return err
 	}
 	err = tx.CreateBucket(FORKIDS)
+	if err != nil {
+		return err
+	}
+	err = tx.CreateBucket(FORKID_BLOCK)
 	if err != nil {
 		return err
 	}
@@ -445,6 +450,44 @@ func (db *HermezDbReader) GetForkId(batchNo uint64) (uint64, error) {
 
 func (db *HermezDb) WriteForkId(batchNo, forkId uint64) error {
 	return db.tx.Put(FORKIDS, Uint64ToBytes(batchNo), Uint64ToBytes(forkId))
+}
+
+func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, error) {
+	c, err := db.tx.Cursor(FORKID_BLOCK)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	var blockNum uint64 = 0
+	var k, v []byte
+
+	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			break
+		}
+		currentForkId := BytesToUint64(k)
+		if currentForkId == forkId {
+			blockNum = BytesToUint64(v)
+		} else {
+			break
+		}
+	}
+
+	return blockNum, err
+}
+
+func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
+	tempBlockNum, err := db.GetForkIdBlock(forkId)
+	if err != nil {
+		log.Errorf("Error getting forkIdBlock: %v", err)
+		return err
+	}
+	if tempBlockNum != 0 {
+		log.Debugf("ForkIdBlock already exists: %d", forkId)
+		return nil
+	}
+	return db.tx.Put(FORKID_BLOCK, Uint64ToBytes(forkId), Uint64ToBytes(blockNum))
 }
 
 func (db *HermezDb) DeleteForkIds(fromBatchNum, toBatchNum uint64) error {

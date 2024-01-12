@@ -127,6 +127,8 @@ func NewEVMInterpreter(evm VMInterpreter, cfg Config) *EVMInterpreter {
 	// to add our own IsRohan chain rule, we would need to fork or code or chain.Config
 	// that is why we hard code it here for POC
 	// our fork extends berlin anyways and starts from block 1
+	case evm.ChainRules().IsFork7:
+		jt = &fork7InstructionSet
 	case evm.ChainRules().IsMordor:
 		jt = &mordorInstructionSet
 	case evm.ChainRules().IsBerlin:

@@ -61,6 +61,7 @@ var (
 	berlinInstructionSet           = newBerlinInstructionSet()
 	rohanInstructionSet            = newRohanInstructionSet()
 	mordorInstructionSet           = newMordorInstructionSet()
+	fork7InstructionSet            = newFork7InstructionSet()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -83,6 +84,14 @@ func validateAndFillMaxStack(jt *JumpTable) {
 		op.maxStack = maxStack(op.numPop, op.numPush)
 	}
 }
+
+func newFork7InstructionSet() JumpTable {
+	instructionSet := newMordorInstructionSet()
+	// TODO the fork7 handler
+
+	return instructionSet
+}
+
 func newMordorInstructionSet() JumpTable {
 	instructionSet := newRohanInstructionSet()
 

@@ -25,6 +25,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 )
 
+const FORKID_7 = 7
+
 // Config is the core config which determines the blockchain settings.
 //
 // Config is stored in the database on a per block basis. This means
@@ -78,6 +80,7 @@ type Config struct {
 
 	//zkEVM updates
 	MordorBlock *big.Int `json:"mordorBlock,omitempty"`
+	Fork7Block  *big.Int `json:"fork7Block,omitempty"`
 }
 
 func (c *Config) String() string {
@@ -211,6 +214,10 @@ func (c *Config) IsEip1559FeeCollector(num uint64) bool {
 
 func (c *Config) IsMordor(num uint64) bool {
 	return isForked(c.MordorBlock, num)
+}
+
+func (c *Config) IsFork7(num uint64) bool {
+	return isForked(c.Fork7Block, num)
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
@@ -392,7 +399,7 @@ type Rules struct {
 	IsHomestead, IsTangerineWhistle, IsSpuriousDragon       bool
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon, IsShanghai, IsCancun, IsPrague      bool
-	IsEip1559FeeCollector, IsAura, IsMordor                 bool
+	IsEip1559FeeCollector, IsAura, IsMordor, IsFork7        bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -419,6 +426,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsEip1559FeeCollector: c.IsEip1559FeeCollector(num),
 		IsAura:                c.Aura != nil,
 		IsMordor:              c.IsMordor(num),
+		IsFork7:               c.IsFork7(num),
 	}
 }
 

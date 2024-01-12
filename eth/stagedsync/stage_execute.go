@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"runtime"
 	"time"
@@ -41,10 +42,10 @@ import (
 	"github.com/ledgerwatch/erigon/eth/calltracer"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/ethconfig/estimate"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/olddb"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
@@ -567,6 +568,9 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
+		if err = tryUpdateForkVersion(&cfg, hermezDb); err != nil {
+			return err
+		}
 		if err = executeBlock(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
@@ -951,5 +955,18 @@ func PruneExecutionStage(s *PruneState, tx kv.RwTx, cfg ExecuteBlockCfg, ctx con
 			return err
 		}
 	}
+	return nil
+}
+
+func tryUpdateForkVersion(cfg *ExecuteBlockCfg, hermezDb *hermez_db.HermezDb) error {
+	if cfg.chainConfig.Fork7Block == nil || cfg.chainConfig.Fork7Block == big.NewInt(0) {
+		blockNum, err := hermezDb.GetForkIdBlock(chain.FORKID_7)
+		log.Debug("Fork7Block not set, getting from db")
+		if err != nil {
+			return err
+		}
+		cfg.chainConfig.Fork7Block = big.NewInt(0).SetUint64(blockNum)
+	}
+
 	return nil
 }

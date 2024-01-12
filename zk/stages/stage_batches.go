@@ -11,8 +11,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
 	dsclient "github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
@@ -32,6 +32,7 @@ type ErigonDb interface {
 
 type HermezDb interface {
 	WriteForkId(batchNumber uint64, forkId uint64) error
+	WriteForkIdBlockOnce(forkId, blockNum uint64) error
 	WriteBlockBatch(l2BlockNumber uint64, batchNumber uint64) error
 	WriteEffectiveGasPricePercentage(txHash common.Hash, effectiveGasPricePercentage uint8) error
 	WriteStateRoot(l2BlockNumber uint64, rpcRoot common.Hash) error
@@ -176,6 +177,10 @@ func SpawnStageBatches(
 				err = hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId))
 				if err != nil {
 					return fmt.Errorf("write fork id error: %v", err)
+				}
+				// TODO Optimize Multiple
+				if err := hermezDb.WriteForkIdBlockOnce(uint64(l2Block.ForkId), l2Block.L2BlockNumber); err != nil {
+					return fmt.Errorf("write fork id block once error: %v", err)
 				}
 			}
 
@@ -431,6 +436,11 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 
 	if err := eriDb.WriteBody(bn, h.Hash(), txs); err != nil {
 		return fmt.Errorf("write body error: %v", err)
+	}
+
+	// TODO Optimize Multiple writes
+	if err := hermezDb.WriteForkIdBlockOnce(uint64(l2Block.ForkId), l2Block.L2BlockNumber); err != nil {
+		return fmt.Errorf("write fork id block once error: %v", err)
 	}
 
 	if err := hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId)); err != nil {
