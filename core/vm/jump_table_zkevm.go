@@ -1,8 +1,8 @@
 package vm
 
 var (
-	rohanInstructionSet  = newZkEVM_forkID4InstructionSet()
-	mordorInstructionSet = newZkEVM_forkID5InstructionSet()
+	zkevmForkID4InstructionSet = newZkEVM_forkID4InstructionSet()
+	zkevmForkID5InstructionSet = newZkEVM_forkID5InstructionSet()
 )
 
 // newZkEVM_forkID4InstructionSet returns the instruction set for the forkID4

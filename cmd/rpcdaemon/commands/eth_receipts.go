@@ -535,7 +535,7 @@ func (e *intraBlockExec) execTx(txNum uint64, txIndex int, txn types.Transaction
 	}
 	msg.SetEffectiveGasPricePercentage(effectiveGasPricePercentage)
 
-	e.evm.ResetBetweenBlocks(*e.blockCtx, core.NewEVMTxContext(msg), e.ibs, *e.vmConfig, e.rules)
+	e.evm.ResetBetweenBlocks_zkevm(*e.blockCtx, core.NewEVMTxContext(msg), e.ibs, *e.vmConfig, e.rules)
 	res, err := core.ApplyMessage(e.evm, msg, gp, true /* refunds */, false /* gasBailout */)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: blockNum=%d, txNum=%d, %s", err, e.blockNum, txNum, e.ibs.Error())
