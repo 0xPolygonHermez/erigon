@@ -30,6 +30,19 @@ import (
 	//lint:ignore SA1019 Needed for precompile
 )
 
+// PrecompiledContractsZKEVMDragonfruit contains the default set of pre-compiled zkEVM Dragonfruit
+var PrecompiledContractsZKEVMDragonfruit = map[libcommon.Address]PrecompiledContract{
+	libcommon.BytesToAddress([]byte{1}): &ecrecover_zkevm{},
+	libcommon.BytesToAddress([]byte{2}): &sha256hash_zkevm{},
+	libcommon.BytesToAddress([]byte{3}): &ripemd160hash_zkevm{},
+	libcommon.BytesToAddress([]byte{4}): &dataCopy_zkevm{},
+	libcommon.BytesToAddress([]byte{5}): &bigModExp_zkevm{eip2565: true},
+	libcommon.BytesToAddress([]byte{6}): &bn256AddIstanbul_zkevm{},
+	libcommon.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul_zkevm{},
+	libcommon.BytesToAddress([]byte{8}): &bn256PairingIstanbul_zkevm{},
+	libcommon.BytesToAddress([]byte{9}): &blake2F_zkevm{},
+}
+
 // ECRECOVER implemented as a native contract.
 type ecrecover_zkevm struct{}
 
@@ -128,12 +141,12 @@ func (c *dataCopy_zkevm) Run(in []byte) ([]byte, error) {
 }
 
 // bigModExp implements a native big integer exponential modular operation.
-type bigModExp_zekvm struct {
+type bigModExp_zkevm struct {
 	eip2565 bool
 }
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
-func (c *bigModExp_zekvm) RequiredGas(input []byte) uint64 {
+func (c *bigModExp_zkevm) RequiredGas(input []byte) uint64 {
 	//[zkevm]
 	return 0
 	// var (
@@ -205,7 +218,7 @@ func (c *bigModExp_zekvm) RequiredGas(input []byte) uint64 {
 	// return gas.Uint64()
 }
 
-func (c *bigModExp_zekvm) Run(input []byte) ([]byte, error) {
+func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 	//[zkevm]
 	return []byte{}, ErrExecutionReverted
 

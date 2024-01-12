@@ -34,7 +34,7 @@ import (
 // deployed contract addresses (relevant after the account abstraction).
 var emptyCodeHash = crypto.Keccak256Hash(nil)
 
-func (evm *EVM) precompile(addr libcommon.Address) (PrecompiledContract, bool) {
+func (evm *EVM) precompile_disabled(addr libcommon.Address) (PrecompiledContract, bool) {
 	var precompiles map[libcommon.Address]PrecompiledContract
 	switch {
 	case evm.chainRules.IsBerlin:
@@ -102,7 +102,8 @@ func NewEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state evmt
 		chainRules:      chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time),
 	}
 
-	evm.interpreter = NewEVMInterpreter(evm, vmConfig)
+	// [zkevm] change
+	evm.interpreter = NewZKEVMInterpreter(evm, vmConfig)
 
 	return evm
 }
@@ -124,7 +125,8 @@ func (evm *EVM) ResetBetweenBlocks(blockCtx evmtypes.BlockContext, txCtx evmtype
 	evm.config = vmConfig
 	evm.chainRules = chainRules
 
-	evm.interpreter = NewEVMInterpreter(evm, vmConfig)
+	// [zkevm] change
+	evm.interpreter = NewZKEVMInterpreter(evm, vmConfig)
 
 	// ensure the evm is reset to be used again
 	atomic.StoreInt32(&evm.abort, 0)
@@ -323,8 +325,14 @@ func (c *codeAndHash) Hash() libcommon.Hash {
 	return c.hash
 }
 
-// create creates a new contract using code as deployment code.
 func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool) ([]byte, libcommon.Address, uint64, error) {
+	// hack to support zkeVM
+	return evm.createZkEvm(caller, codeAndHash, gas, value, address, typ, incrementNonce)
+}
+
+// create creates a new contract using code as deployment code.
+func (evm *EVM) create_disabled(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool) ([]byte, libcommon.Address, uint64, error) {
+
 	var ret []byte
 	var err error
 	var gasConsumption uint64
