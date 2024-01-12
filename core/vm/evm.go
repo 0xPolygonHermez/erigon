@@ -370,23 +370,17 @@ func (evm *EVM) create_disabled(caller ContractRef, codeAndHash *codeAndHash, ga
 		}
 		evm.intraBlockState.SetNonce(caller.Address(), nonce+1)
 	}
-	//[zkevm] - moved after err check, because zkevm reverts the address add
 	// We add this to the access list _before_ taking a snapshot. Even if the creation fails,
 	// the access-list change should not be rolled back
-	// if evm.chainRules.IsBerlin {
-	// 	evm.intraBlockState.AddAddressToAccessList(address)
-	// }
+	if evm.chainRules.IsBerlin {
+		evm.intraBlockState.AddAddressToAccessList(address)
+	}
 	// Ensure there's no existing contract already at the designated address
 	contractHash := evm.intraBlockState.GetCodeHash(address)
 	if evm.intraBlockState.GetNonce(address) != 0 || (contractHash != (libcommon.Hash{}) && contractHash != emptyCodeHash) {
 		err = ErrContractAddressCollision
 		return nil, libcommon.Address{}, 0, err
 	}
-
-	if evm.chainRules.IsBerlin {
-		evm.intraBlockState.AddAddressToAccessList(address)
-	}
-
 	// Create a new account on the state
 	snapshot := evm.intraBlockState.Snapshot()
 	evm.intraBlockState.CreateAccount(address, true)
@@ -416,7 +410,7 @@ func (evm *EVM) create_disabled(caller ContractRef, codeAndHash *codeAndHash, ga
 	}
 
 	// Reject code starting with 0xEF if EIP-3541 is enabled.
-	if err == nil && len(ret) >= 1 && ret[0] == 0xEF {
+	if err == nil && evm.chainRules.IsLondon && len(ret) >= 1 && ret[0] == 0xEF {
 		err = ErrInvalidCode
 	}
 	// if the contract creation ran successfully and no errors were returned
