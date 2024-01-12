@@ -9,6 +9,8 @@ var (
 func newZkEVM_forkID4InstructionSet() JumpTable {
 	instructionSet := newBerlinInstructionSet()
 
+	enable2929_zkevm(&instructionSet) // Access lists for trie accesses https://eips.ethereum.org/EIPS/eip-2929
+
 	instructionSet[CALLDATALOAD].execute = opCallDataLoad_zkevmIncompatible
 	instructionSet[CALLDATACOPY].execute = opCallDataCopy_zkevmIncompatible
 

@@ -134,27 +134,27 @@ func enable2929(jt *JumpTable) {
 	jt[BALANCE].dynamicGas = gasEip2929AccountCheck
 
 	jt[CALL].constantGas = params.WarmStorageReadCostEIP2929
-	jt[CALL].dynamicGas = gasCallEIP2929_zkevm
+	jt[CALL].dynamicGas = gasCallEIP2929
 
 	jt[CALLCODE].constantGas = params.WarmStorageReadCostEIP2929
-	jt[CALLCODE].dynamicGas = gasCallCodeEIP2929_zkevm
+	jt[CALLCODE].dynamicGas = gasCallCodeEIP2929
 
 	jt[STATICCALL].constantGas = params.WarmStorageReadCostEIP2929
-	jt[STATICCALL].dynamicGas = gasStaticCallEIP2929_zkevm
+	jt[STATICCALL].dynamicGas = gasStaticCallEIP2929
 
 	jt[DELEGATECALL].constantGas = params.WarmStorageReadCostEIP2929
-	jt[DELEGATECALL].dynamicGas = gasDelegateCallEIP2929_zkevm
+	jt[DELEGATECALL].dynamicGas = gasDelegateCallEIP2929
 
 	// This was previously part of the dynamic cost, but we're using it as a constantGas
 	// factor here
 	jt[SELFDESTRUCT].constantGas = params.SelfdestructGasEIP150
-	jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP2929_zkevm
-	jt[SENDALL].dynamicGas = gasSelfdestructEIP2929_zkevm
+	jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP2929
+	jt[SENDALL].dynamicGas = gasSelfdestructEIP2929
 }
 
 func enable3529(jt *JumpTable) {
 	jt[SSTORE].dynamicGas = gasSStoreEIP3529
-	jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP3529_zkevm
+	jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP3529
 }
 
 // enable3198 applies EIP-3198 (BASEFEE Opcode)
