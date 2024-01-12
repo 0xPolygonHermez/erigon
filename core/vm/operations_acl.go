@@ -165,13 +165,6 @@ func gasEip2929AccountCheck(evm VMInterpreter, contract *Contract, stack *stack.
 }
 
 var (
-	gasCallEIP2929         = makeCallVariantGasCallEIP2929_zkevm(gasCall)
-	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929_zkevm(gasDelegateCall)
-	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929_zkevm(gasStaticCall)
-	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929_zkevm(gasCallCode)
-	gasSelfdestructEIP2929 = makeSelfdestructGasFn_zkevm(true)
-	// gasSelfdestructEIP3529 implements the changes in EIP-2539 (no refunds)
-	gasSelfdestructEIP3529 = makeSelfdestructGasFn_zkevm(false)
 
 	// gasSStoreEIP2929 implements gas cost for SSTORE according to EIP-2929
 	//

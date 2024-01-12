@@ -6,6 +6,16 @@ import (
 	"github.com/ledgerwatch/erigon/params"
 )
 
+var (
+	gasCallEIP2929_zkevm         = makeCallVariantGasCallEIP2929_zkevm(gasCall)
+	gasDelegateCallEIP2929_zkevm = makeCallVariantGasCallEIP2929_zkevm(gasDelegateCall)
+	gasStaticCallEIP2929_zkevm   = makeCallVariantGasCallEIP2929_zkevm(gasStaticCall)
+	gasCallCodeEIP2929_zkevm     = makeCallVariantGasCallEIP2929_zkevm(gasCallCode)
+	gasSelfdestructEIP2929_zkevm = makeSelfdestructGasFn_zkevm(true)
+	// gasSelfdestructEIP3529_zkevm implements the changes in EIP-2539 (no refunds)
+	gasSelfdestructEIP3529_zkevm = makeSelfdestructGasFn_zkevm(false)
+)
+
 // makeCallGasFn_zkevm can create the call dynamic gas function for EIP-2929 and EIP-2539 for Polygon zkEVM
 func makeCallVariantGasCallEIP2929_zkevm(oldCalculator gasFunc) gasFunc {
 	return func(evm VMInterpreter, contract *Contract, stack *stack.Stack, mem *Memory, memorySize uint64) (uint64, error) {
