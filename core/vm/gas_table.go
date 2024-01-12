@@ -476,3 +476,26 @@ func gasStaticCall(evm VMInterpreter, contract *Contract, stack *stack.Stack, me
 	}
 	return gas, nil
 }
+
+func gasSelfdestruct(evm VMInterpreter, contract *Contract, stack *stack.Stack, mem *Memory, memorySize uint64) (uint64, error) {
+	var gas uint64
+	// TangerineWhistle (EIP150) gas reprice fork:
+	if evm.ChainRules().IsTangerineWhistle {
+		gas = params.SelfdestructGasEIP150
+		var address = libcommon.Address(stack.Back(0).Bytes20())
+
+		if evm.ChainRules().IsSpuriousDragon {
+			// if empty and transfers value
+			if evm.IntraBlockState().Empty(address) && !evm.IntraBlockState().GetBalance(contract.Address()).IsZero() {
+				gas += params.CreateBySelfdestructGas
+			}
+		} else if !evm.IntraBlockState().Exist(address) {
+			gas += params.CreateBySelfdestructGas
+		}
+	}
+
+	if !evm.IntraBlockState().HasSelfdestructed(contract.Address()) {
+		evm.IntraBlockState().AddRefund(params.SelfdestructRefundGas)
+	}
+	return gas, nil
+}
