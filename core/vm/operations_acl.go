@@ -164,8 +164,48 @@ func gasEip2929AccountCheck(evm VMInterpreter, contract *Contract, stack *stack.
 	return 0, nil
 }
 
-var (
+func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
+	return func(evm VMInterpreter, contract *Contract, stack *stack.Stack, mem *Memory, memorySize uint64) (uint64, error) {
+		addr := libcommon.Address(stack.Back(1).Bytes20())
+		// Check slot presence in the access list
+		warmAccess := evm.IntraBlockState().AddressInAccessList(addr)
+		// The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant cost, so
+		// the cost to charge for cold access, if any, is Cold - Warm
+		coldCost := params.ColdAccountAccessCostEIP2929 - params.WarmStorageReadCostEIP2929
+		if !warmAccess {
+			evm.IntraBlockState().AddAddressToAccessList(addr)
+			// Charge the remaining difference here already, to correctly calculate available
+			// gas for call
+			if !contract.UseGas(coldCost) {
+				return 0, ErrOutOfGas
+			}
+		}
+		// Now call the old calculator, which takes into account
+		// - create new account
+		// - transfer value
+		// - memory expansion
+		// - 63/64ths rule
+		gas, err := oldCalculator(evm, contract, stack, mem, memorySize)
+		if warmAccess || err != nil {
+			return gas, err
+		}
+		// In case of a cold access, we temporarily add the cold charge back, and also
+		// add it to the returned gas. By adding it to the return, it will be charged
+		// outside of this function, as part of the dynamic gas, and that will make it
+		// also become correctly reported to tracers.
+		contract.Gas += coldCost
+		return gas + coldCost, nil
+	}
+}
 
+var (
+	gasCallEIP2929         = makeCallVariantGasCallEIP2929(gasCall)
+	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929(gasDelegateCall)
+	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929(gasStaticCall)
+	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929(gasCallCode)
+	gasSelfdestructEIP2929 = makeSelfdestructGasFn(true)
+	// gasSelfdestructEIP3529 implements the changes in EIP-2539 (no refunds)
+	gasSelfdestructEIP3529 = makeSelfdestructGasFn(false)
 	// gasSStoreEIP2929 implements gas cost for SSTORE according to EIP-2929
 	//
 	// When calling SSTORE, check if the (address, storage_key) pair is in accessed_storage_keys.
@@ -184,3 +224,27 @@ var (
 	// Replace `SSTORE_CLEARS_SCHEDULE` with `SSTORE_RESET_GAS + ACCESS_LIST_STORAGE_KEY_COST` (4,800)
 	gasSStoreEIP3529 = makeGasSStoreFunc(params.SstoreClearsScheduleRefundEIP3529)
 )
+
+// makeSelfdestructGasFn can create the selfdestruct dynamic gas function for EIP-2929 and EIP-2539
+func makeSelfdestructGasFn(refundsEnabled bool) gasFunc {
+	gasFunc := func(evm VMInterpreter, contract *Contract, stack *stack.Stack, mem *Memory, memorySize uint64) (uint64, error) {
+		var (
+			gas     uint64
+			address = libcommon.Address(stack.Peek().Bytes20())
+		)
+		if !evm.IntraBlockState().AddressInAccessList(address) {
+			// If the caller cannot afford the cost, this change will be rolled back
+			evm.IntraBlockState().AddAddressToAccessList(address)
+			gas = params.ColdAccountAccessCostEIP2929
+		}
+		// if empty and transfers value
+		if evm.IntraBlockState().Empty(address) && !evm.IntraBlockState().GetBalance(contract.Address()).IsZero() {
+			gas += params.CreateBySelfdestructGas
+		}
+		if refundsEnabled && !evm.IntraBlockState().HasSelfdestructed(contract.Address()) {
+			evm.IntraBlockState().AddRefund(params.SelfdestructRefundGas)
+		}
+		return gas, nil
+	}
+	return gasFunc
+}
