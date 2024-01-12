@@ -206,6 +206,7 @@ var (
 	gasSelfdestructEIP2929 = makeSelfdestructGasFn(true)
 	// gasSelfdestructEIP3529 implements the changes in EIP-2539 (no refunds)
 	gasSelfdestructEIP3529 = makeSelfdestructGasFn(false)
+
 	// gasSStoreEIP2929 implements gas cost for SSTORE according to EIP-2929
 	//
 	// When calling SSTORE, check if the (address, storage_key) pair is in accessed_storage_keys.
