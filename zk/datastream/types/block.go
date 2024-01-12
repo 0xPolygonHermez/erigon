@@ -54,14 +54,16 @@ func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 }
 
 func EncodeStartL2Block(block *StartL2Block) []byte {
-	bytes := make([]byte, 0)
-	bytes = binary.LittleEndian.AppendUint64(bytes, block.BatchNumber)
-	bytes = binary.LittleEndian.AppendUint64(bytes, block.L2BlockNumber)
-	bytes = binary.LittleEndian.AppendUint64(bytes, uint64(block.Timestamp))
-	bytes = append(bytes, block.GlobalExitRoot.Bytes()...)
-	bytes = append(bytes, block.Coinbase.Bytes()...)
-	bytes = binary.LittleEndian.AppendUint16(bytes, block.ForkId)
-	return bytes
+	b := make([]byte, 0)
+	b = binary.LittleEndian.AppendUint64(b, block.BatchNumber)
+	b = binary.LittleEndian.AppendUint64(b, block.L2BlockNumber)
+	b = binary.LittleEndian.AppendUint64(b, uint64(block.Timestamp))
+	b = append(b, block.L1BlockHash.Bytes()...)
+	b = append(b, block.GlobalExitRoot.Bytes()...)
+	b = append(b, block.L1InfoRoot.Bytes()...)
+	b = append(b, block.Coinbase.Bytes()...)
+	b = binary.LittleEndian.AppendUint16(b, block.ForkId)
+	return b
 }
 
 type EndL2Block struct {
@@ -98,6 +100,8 @@ type FullL2Block struct {
 	GlobalExitRoot common.Hash
 	Coinbase       common.Address
 	ForkId         uint16
+	L1BlockHash    common.Hash
+	L1InfoRoot     common.Hash
 	L2Blockhash    common.Hash
 	StateRoot      common.Hash
 	L2Txs          []L2Transaction
@@ -113,6 +117,8 @@ func ParseFullL2Block(startL2Block *StartL2Block, endL2Block *EndL2Block, l2Txs 
 		GlobalExitRoot: startL2Block.GlobalExitRoot,
 		Coinbase:       startL2Block.Coinbase,
 		ForkId:         startL2Block.ForkId,
+		L1BlockHash:    startL2Block.L1BlockHash,
+		L1InfoRoot:     startL2Block.L1InfoRoot,
 		L2Blockhash:    endL2Block.L2Blockhash,
 		StateRoot:      endL2Block.StateRoot,
 		L2Txs:          *l2Txs,

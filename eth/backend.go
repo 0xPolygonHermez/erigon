@@ -757,9 +757,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			etherMan := newEtherMan(cfg)
 			zkL1Syncer := syncer.NewL1Syncer(
 				etherMan.EthClient,
-				cfg.L1ContractAddress,
-				cfg.L1BlockRange,
-				cfg.L1QueryDelay,
+				cfg,
 			)
 
 			backend.syncStages = stages2.NewDefaultZkStages(
@@ -795,7 +793,7 @@ func newEtherMan(cfg *ethconfig.Zk) *etherman.Client {
 	ethmanConf := etherman.Config{
 		URL:                       cfg.L1RpcUrl,
 		L1ChainID:                 cfg.L1ChainId,
-		PoEAddr:                   cfg.L1ContractAddress,
+		PoEAddr:                   cfg.L1PolygonRollupManager,
 		MaticAddr:                 cfg.L1MaticContractAddress,
 		GlobalExitRootManagerAddr: cfg.L1GERManagerContractAddress,
 	}

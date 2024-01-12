@@ -12,13 +12,11 @@ import (
 	"github.com/ledgerwatch/log/v3"
 
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/zk/types"
 )
 
 var (
-	sequencedBatchTopic = common.HexToHash("0x303446e6a8cb73c83dff421c0b1d5e5ce0719dab1bff13660fc254e58cc17fce")
-	verificationTopic   = common.HexToHash("0xcb339b570a7f0b25afa7333371ff11192092a0aeace12b671f4c212f2815c6fe")
-
 	batchWorkers = 2
 )
 
@@ -39,10 +37,8 @@ type jobResult struct {
 }
 
 type L1Syncer struct {
-	em                IEtherman
-	l1ContractAddress common.Address
-	blockRange        uint64
-	queryDelay        uint64
+	em    IEtherman
+	zkCfg *ethconfig.Zk
 
 	latestL1Block uint64
 
@@ -57,12 +53,10 @@ type L1Syncer struct {
 	progressMessageChan chan string
 }
 
-func NewL1Syncer(em IEtherman, l1ContractAddress common.Address, blockRange, queryDelay uint64) *L1Syncer {
+func NewL1Syncer(em IEtherman, zkCfg *ethconfig.Zk) *L1Syncer {
 	return &L1Syncer{
 		em:                  em,
-		l1ContractAddress:   l1ContractAddress,
-		blockRange:          blockRange,
-		queryDelay:          queryDelay,
+		zkCfg:               zkCfg,
 		verificationsChan:   make(chan types.L1BatchInfo, 1000),
 		sequencesChan:       make(chan types.L1BatchInfo, 1000),
 		progressMessageChan: make(chan string),
@@ -129,7 +123,7 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 			}
 
 			s.isDownloading.Store(false)
-			time.Sleep(time.Duration(s.queryDelay) * time.Millisecond)
+			time.Sleep(time.Duration(s.zkCfg.L1QueryDelay) * time.Millisecond)
 		}
 	}()
 }
@@ -155,7 +149,7 @@ func (s *L1Syncer) queryBlocks() error {
 	fetches := make([]fetchJob, 0)
 	low := startBlock
 	for {
-		high := low + s.blockRange
+		high := low + s.zkCfg.L1BlockRange
 		if high > s.latestL1Block {
 			// at the end of our search
 			high = s.latestL1Block
@@ -169,7 +163,7 @@ func (s *L1Syncer) queryBlocks() error {
 		if high == s.latestL1Block {
 			break
 		}
-		low += s.blockRange + 1
+		low += s.zkCfg.L1BlockRange + 1
 	}
 
 	stop := make(chan bool)
@@ -202,9 +196,9 @@ loop:
 			if len(res.Logs) > 0 {
 				for _, l := range res.Logs {
 					info := convertResultToBatchInfo(&l)
-					if l.Topics[0] == sequencedBatchTopic {
+					if l.Topics[0] == s.zkCfg.L1TopicSequence {
 						s.sequencesChan <- info
-					} else if l.Topics[0] == verificationTopic {
+					} else if l.Topics[0] == s.zkCfg.L1TopicVerification {
 
 						stateRootData := l.Data[:32]
 						stateRoot := common.BytesToHash(stateRootData)
@@ -255,8 +249,8 @@ func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult
 			query := ethereum.FilterQuery{
 				FromBlock: big.NewInt(int64(j.From)),
 				ToBlock:   big.NewInt(int64(j.To)),
-				Addresses: []common.Address{s.l1ContractAddress},
-				Topics:    [][]common.Hash{{sequencedBatchTopic, verificationTopic}},
+				Addresses: []common.Address{s.zkCfg.L1PolygonRollupManager, s.zkCfg.L1Rollup},
+				Topics:    [][]common.Hash{{s.zkCfg.L1TopicSequence, s.zkCfg.L1TopicVerification}},
 			}
 
 			var logs []ethTypes.Log

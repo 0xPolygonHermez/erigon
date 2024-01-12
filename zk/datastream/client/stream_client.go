@@ -36,7 +36,7 @@ type StreamClient struct {
 
 	// Channels
 	L2BlockChan    chan types.FullL2Block
-	GerUpdatesChan chan types.GerUpdate
+	GerUpdatesChan chan types.GerUpdate // NB: unused from etrog onwards (forkid 7)
 }
 
 const (
@@ -238,6 +238,12 @@ func (c *StreamClient) readAllFullL2BlocksToChannel() error {
 		fullBlock, gerUpdates, _, _, _, err := c.readFullBlock()
 		if err != nil {
 			return fmt.Errorf("failed to read full block: %v", err)
+		}
+
+		// TODO: remove test code- prevents us hitting broken part of etrog stream
+		if fullBlock.L2BlockNumber > 10000 {
+			c.Streaming.Store(false)
+			return nil
 		}
 
 		if gerUpdates != nil {

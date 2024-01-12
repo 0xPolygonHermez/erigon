@@ -11,8 +11,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
 	dsclient "github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
@@ -22,7 +22,6 @@ import (
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -181,7 +180,7 @@ func SpawnStageBatches(
 			}
 
 			// update GER
-			if l2Block.ForkId < constants.ForkEtrogId7 && l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 {
+			if l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 { // TODO: possibly check l2Block.ForkId < constants.ForkEtrogId7 &&
 				if lastGer == zeroHash {
 					prevGer, err := hermezDb.GetBlockGlobalExitRoot(l2Block.L2BlockNumber - 1)
 					if err != nil {
@@ -230,6 +229,7 @@ func SpawnStageBatches(
 			blocksWritten++
 			progressChan <- blocksWritten
 		case gerUpdate := <-cfg.dsClient.GerUpdatesChan:
+			// NB: we won't get these post Etrog (fork id 7)
 			if err := hermezDb.WriteBatchGBatchGlobalExitRoot(gerUpdate.BatchNumber, gerUpdate); err != nil {
 				return fmt.Errorf("write batch global exit root error: %v", err)
 			}
@@ -426,9 +426,12 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 		return fmt.Errorf("write header error: %v", err)
 	}
 
+	// pre-etrog forkid 7 - store blockno->ger
 	if err := hermezDb.WriteBlockGlobalExitRoot(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
 		return fmt.Errorf("write block global exit root error: %v", err)
 	}
+
+	// post-etrog forkid 7 - store l1blockhash->ger
 
 	if err := eriDb.WriteBody(bn, h.Hash(), txs); err != nil {
 		return fmt.Errorf("write body error: %v", err)
