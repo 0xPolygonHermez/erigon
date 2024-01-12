@@ -22,6 +22,7 @@ import (
 	"github.com/ledgerwatch/erigon/params"
 )
 
+// [zkevm] contains the list of zkevm precompiles
 func (evm *EVM) precompile(addr libcommon.Address) (PrecompiledContract, bool) {
 	var precompiles map[libcommon.Address]PrecompiledContract
 	switch {
