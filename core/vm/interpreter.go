@@ -252,10 +252,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		// Get the operation from the jump table and validate the stack to ensure there are
 		// enough stack items available to perform the operation.
 		op = contract.GetOp(_pc)
-		//[zkevm] - SELFDESTRUCT removed and replaced by SENDALL
-		if op == SELFDESTRUCT {
-			op = SENDALL
-		}
 		operation := in.jt[op]
 		cost = operation.constantGas // For tracing
 		// Validate stack

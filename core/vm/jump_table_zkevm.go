@@ -23,7 +23,6 @@ func newZkEVM_forkID4InstructionSet() JumpTable {
 	instructionSet[BLOCKHASH].execute = opBlockhash_zkevm
 
 	instructionSet[EXTCODEHASH].execute = opExtCodeHash_zkevm
-	instructionSet[SELFDESTRUCT].execute = opSendAll_zkevm
 
 	instructionSet[SENDALL] = &operation{
 		execute:    opSendAll_zkevm,
@@ -31,6 +30,9 @@ func newZkEVM_forkID4InstructionSet() JumpTable {
 		numPop:     1,
 		numPush:    0,
 	}
+
+	// SELFDESTRUCT is replaces by SENDALL
+	instructionSet[SELFDESTRUCT] = instructionSet[SENDALL]
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
