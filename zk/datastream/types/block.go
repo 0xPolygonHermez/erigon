@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	startL2BlockDataLength                = 142
+	startL2BlockDataLength                = 110
 	startL2BlockDataLengthPreEtrogForkId7 = 78
 	endL2BlockDataLength                  = 72
 
@@ -26,7 +26,6 @@ type StartL2Block struct {
 	Timestamp      int64          // 8 bytes
 	L1BlockHash    common.Hash    // 32 bytes
 	GlobalExitRoot common.Hash    // 32 bytes
-	L1InfoRoot     common.Hash    // 32 bytes
 	Coinbase       common.Address // 20 bytes
 	ForkId         uint16         // 2 bytes
 }
@@ -53,9 +52,8 @@ func DecodeStartL2Block(data []byte) (*StartL2Block, error) {
 		Timestamp:      ts,
 		L1BlockHash:    common.BytesToHash(data[24:56]),
 		GlobalExitRoot: common.BytesToHash(data[56:88]),
-		L1InfoRoot:     common.BytesToHash(data[88:120]),
-		Coinbase:       common.BytesToAddress(data[120:140]),
-		ForkId:         binary.LittleEndian.Uint16(data[140:142]),
+		Coinbase:       common.BytesToAddress(data[88:108]),
+		ForkId:         binary.LittleEndian.Uint16(data[108:110]),
 	}, nil
 }
 
@@ -83,7 +81,6 @@ func EncodeStartL2Block(block *StartL2Block) []byte {
 	b = binary.LittleEndian.AppendUint64(b, uint64(block.Timestamp))
 	b = append(b, block.L1BlockHash.Bytes()...)
 	b = append(b, block.GlobalExitRoot.Bytes()...)
-	b = append(b, block.L1InfoRoot.Bytes()...)
 	b = append(b, block.Coinbase.Bytes()...)
 	b = binary.LittleEndian.AppendUint16(b, block.ForkId)
 	return b
@@ -124,7 +121,6 @@ type FullL2Block struct {
 	Coinbase       common.Address
 	ForkId         uint16
 	L1BlockHash    common.Hash
-	L1InfoRoot     common.Hash
 	L2Blockhash    common.Hash
 	StateRoot      common.Hash
 	L2Txs          []L2Transaction
@@ -141,7 +137,6 @@ func ParseFullL2Block(startL2Block *StartL2Block, endL2Block *EndL2Block, l2Txs 
 		Coinbase:       startL2Block.Coinbase,
 		ForkId:         startL2Block.ForkId,
 		L1BlockHash:    startL2Block.L1BlockHash,
-		L1InfoRoot:     startL2Block.L1InfoRoot,
 		L2Blockhash:    endL2Block.L2Blockhash,
 		StateRoot:      endL2Block.StateRoot,
 		L2Txs:          *l2Txs,
