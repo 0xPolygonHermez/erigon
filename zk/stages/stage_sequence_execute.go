@@ -435,7 +435,10 @@ func SpawnSequencingStage(
 
 	stateWriter := state.NewPlainStateWriter(tx, tx, current.Header.Number.Uint64())
 	//stateWriter := state.NewPlainStateWriter(batch, tx, block.NumberU64())
-	chainReader := utils.NewZkChainReader(cfg.chainConfig, tx, cfg.blockReader)
+	chainReader := stagedsync.ChainReader{
+		Cfg: *cfg.chainConfig,
+		Db:  tx,
+	}
 	hermezDb, err := hermez_db.NewHermezDb(tx)
 
 	var excessDataGas *big.Int
