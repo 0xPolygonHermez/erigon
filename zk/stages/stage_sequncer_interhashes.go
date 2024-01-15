@@ -83,19 +83,30 @@ func SpawnSequencerInterhashesStage(
 		r.PostState = newRoot.Bytes()
 	}
 	header.ReceiptHash = types.DeriveSha(receipts)
+	newHash := header.Hash()
 
-	err = rawdb.WriteCanonicalHash(tx, header.Hash(), header.Number.Uint64())
+	rawdb.WriteHeader(tx, header)
+
+	err = rawdb.WriteCanonicalHash(tx, newHash, header.Number.Uint64())
 	if err != nil {
 		return fmt.Errorf("failed to write header: %v", err)
 	}
 
-	err = erigonDb.WriteBody(header.Number, header.Hash(), latest.Transactions())
+	err = rawdb.WriteReceipts(tx, header.Number.Uint64(), receipts)
+
+	err = erigonDb.WriteBody(header.Number, newHash, latest.Transactions())
 	if err != nil {
 		return fmt.Errorf("failed to write body: %v", err)
 	}
 
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(tx, latest)
+
+	if freshTx {
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

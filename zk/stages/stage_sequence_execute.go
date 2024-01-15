@@ -466,16 +466,15 @@ func SpawnSequencingStage(
 	newHeader.Coinbase = fixedMiner
 	newHeader.GasLimit = transactionGasLimit
 	newNum := finalBlock.Number()
-	newHash := newHeader.Hash()
 
 	rawdb.WriteHeader(tx, newHeader)
-	err = rawdb.WriteCanonicalHash(tx, newHash, newNum.Uint64())
+	err = rawdb.WriteCanonicalHash(tx, newHeader.Hash(), newNum.Uint64())
 	if err != nil {
 		return fmt.Errorf("failed to write header: %v", err)
 	}
 
-	eridb := erigon_db.NewErigonDb(tx)
-	err = eridb.WriteBody(newNum, newHash, finalTransactions)
+	erigonDB := erigon_db.NewErigonDb(tx)
+	err = erigonDB.WriteBody(newNum, newHeader.Hash(), finalTransactions)
 	if err != nil {
 		return fmt.Errorf("failed to write body: %v", err)
 	}
@@ -507,7 +506,7 @@ func SpawnSequencingStage(
 		}
 		senders = append(senders, from)
 	}
-	if err = rawdb.WriteSenders(tx, newHash, newNum.Uint64(), senders); err != nil {
+	if err = rawdb.WriteSenders(tx, newHeader.Hash(), newNum.Uint64(), senders); err != nil {
 		return err
 	}
 
