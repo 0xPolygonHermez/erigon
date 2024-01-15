@@ -59,7 +59,6 @@ var (
 	constantinopleInstructionSet   = newConstantinopleInstructionSet()
 	istanbulInstructionSet         = newIstanbulInstructionSet()
 	berlinInstructionSet           = newBerlinInstructionSet()
-	fork7InstructionSet            = newFork7InstructionSet()
 	londonInstructionSet           = newLondonInstructionSet()
 	shanghaiInstructionSet         = newShanghaiInstructionSet()
 	cancunInstructionSet           = newCancunInstructionSet()
@@ -85,13 +84,6 @@ func validateAndFillMaxStack(jt *JumpTable) {
 		}
 		op.maxStack = maxStack(op.numPop, op.numPush)
 	}
-}
-
-func newFork7InstructionSet() JumpTable {
-	instructionSet := newPragueInstructionSet()
-	// TODO the fork7 handler
-
-	return instructionSet
 }
 
 // newPragueInstructionSet returns the frontier, homestead, byzantium,

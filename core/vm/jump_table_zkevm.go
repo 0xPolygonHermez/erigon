@@ -1,12 +1,13 @@
 package vm
 
 var (
-	zkevmForkID4InstructionSet = newZkEVM_forkID4InstructionSet()
-	zkevmForkID5InstructionSet = newZkEVM_forkID5InstructionSet()
+	zkEVMForkID4InstructionSet = newZkEVMForkID4InstructionSet()
+	zkEVMForkID5InstructionSet = newZkEVMForkID5InstructionSet()
+	zkEVMForkID7InstructionSet = newZkEVMForkID7InstructionSet()
 )
 
-// newZkEVM_forkID4InstructionSet returns the instruction set for the forkID4
-func newZkEVM_forkID4InstructionSet() JumpTable {
+// newZkEVMForkID4InstructionSet returns the instruction set for the forkID4
+func newZkEVMForkID4InstructionSet() JumpTable {
 	instructionSet := newBerlinInstructionSet()
 
 	enable2929_zkevm(&instructionSet) // Access lists for trie accesses https://eips.ethereum.org/EIPS/eip-2929
@@ -38,9 +39,9 @@ func newZkEVM_forkID4InstructionSet() JumpTable {
 	return instructionSet
 }
 
-// newZkEVM_forkID5InstructionSet returns the instruction set for the forkID5
-func newZkEVM_forkID5InstructionSet() JumpTable {
-	instructionSet := newZkEVM_forkID4InstructionSet()
+// newZkEVMForkID5InstructionSet returns the instruction set for the forkID5
+func newZkEVMForkID5InstructionSet() JumpTable {
+	instructionSet := newZkEVMForkID4InstructionSet()
 
 	instructionSet[CALLDATACOPY].execute = opCallDataCopy
 	instructionSet[CALLDATALOAD].execute = opCallDataLoad
@@ -49,5 +50,13 @@ func newZkEVM_forkID5InstructionSet() JumpTable {
 	enable3855(&instructionSet) // EIP-3855: Enable PUSH0 opcode
 
 	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}
+
+// newZkEVMForkID7InstructionSet returns the instruction set for the forkID7
+func newZkEVMForkID7InstructionSet() JumpTable {
+	instructionSet := newZkEVMForkID5InstructionSet()
+	// TODO add the new instructions for fork7
+
 	return instructionSet
 }

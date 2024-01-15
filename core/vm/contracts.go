@@ -109,26 +109,11 @@ var PrecompiledContractsBLS = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{18}): &bls12381MapG2{},
 }
 
-// PrecompiledContractFork7 contains the default set of pre-compiled Ethereum
-// contracts used in the Fork7 release.
-var PrecompiledContractFork7 = map[libcommon.Address]PrecompiledContract{
-	libcommon.BytesToAddress([]byte{1}): &ecrecover{},
-	libcommon.BytesToAddress([]byte{2}): &sha256hash{used: true}, // TODO [zkevm] - add the supported pre in forkId7, and which one is used?
-	libcommon.BytesToAddress([]byte{3}): &ripemd160hash{},
-	libcommon.BytesToAddress([]byte{4}): &dataCopy{},
-	libcommon.BytesToAddress([]byte{5}): &bigModExp{eip2565: true},
-	libcommon.BytesToAddress([]byte{6}): &bn256AddIstanbul{},
-	libcommon.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul{},
-	libcommon.BytesToAddress([]byte{8}): &bn256PairingIstanbul{},
-	libcommon.BytesToAddress([]byte{9}): &blake2F{},
-}
-
 var (
 	PrecompiledAddressesBerlin    []libcommon.Address
 	PrecompiledAddressesIstanbul  []libcommon.Address
 	PrecompiledAddressesByzantium []libcommon.Address
 	PrecompiledAddressesHomestead []libcommon.Address
-	PrecompiledAddressesFork7     []libcommon.Address
 )
 
 func init() {
@@ -144,11 +129,6 @@ func init() {
 	for k := range PrecompiledContractsBerlin {
 		PrecompiledAddressesBerlin = append(PrecompiledAddressesBerlin, k)
 	}
-
-	for k := range PrecompiledContractFork7 {
-		PrecompiledAddressesFork7 = append(PrecompiledAddressesFork7, k)
-	}
-
 }
 
 // ActivePrecompiles returns the precompiles enabled with the current configuration.
@@ -219,50 +199,31 @@ func (c *ecrecover) Run(input []byte) ([]byte, error) {
 }
 
 // SHA256 implemented as a native contract.
-type sha256hash struct {
-	used bool
-}
+type sha256hash struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 //
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
 func (c *sha256hash) RequiredGas(input []byte) uint64 {
-	if !c.used {
-		return 0
-	}
 	return uint64(len(input)+31)/32*params.Sha256PerWordGas + params.Sha256BaseGas
 }
 func (c *sha256hash) Run(input []byte) ([]byte, error) {
-	if !c.used {
-		return []byte{}, ErrExecutionReverted
-	}
-
 	h := sha256.Sum256(input)
 	return h[:], nil
 }
 
 // RIPEMD160 implemented as a native contract.
-type ripemd160hash struct {
-	used bool
-}
+type ripemd160hash struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 //
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
 func (c *ripemd160hash) RequiredGas(input []byte) uint64 {
-	if !c.used {
-		return 0
-	}
-
 	return uint64(len(input)+31)/32*params.Ripemd160PerWordGas + params.Ripemd160BaseGas
 }
 func (c *ripemd160hash) Run(input []byte) ([]byte, error) {
-	if !c.used {
-		return []byte{}, ErrExecutionReverted
-	}
-
 	ripemd := ripemd160.New()
 	ripemd.Write(input)
 	return common.LeftPadBytes(ripemd.Sum(nil), 32), nil
@@ -285,7 +246,6 @@ func (c *dataCopy) Run(in []byte) ([]byte, error) {
 // bigModExp implements a native big integer exponential modular operation.
 type bigModExp struct {
 	eip2565 bool
-	used    bool
 }
 
 var (
@@ -336,9 +296,6 @@ func modexpMultComplexity(x *big.Int) *big.Int {
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bigModExp) RequiredGas(input []byte) uint64 {
-	if !c.used {
-		return 0
-	}
 	var (
 		baseLen = new(big.Int).SetBytes(getData(input, 0, 32))
 		expLen  = new(big.Int).SetBytes(getData(input, 32, 32))
@@ -409,10 +366,6 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 }
 
 func (c *bigModExp) Run(input []byte) ([]byte, error) {
-	if !c.used {
-		return []byte{}, ErrExecutionReverted
-	}
-
 	var (
 		baseLen = new(big.Int).SetBytes(getData(input, 0, 32)).Uint64()
 		expLen  = new(big.Int).SetBytes(getData(input, 32, 32)).Uint64()
@@ -489,23 +442,14 @@ func runBn256Add(input []byte) ([]byte, error) {
 
 // bn256Add implements a native elliptic curve point addition conforming to
 // Istanbul consensus rules.
-type bn256AddIstanbul struct {
-	used bool
-}
+type bn256AddIstanbul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256AddIstanbul) RequiredGas(input []byte) uint64 {
-	if !c.used {
-		return 0
-	}
 	return params.Bn256AddGasIstanbul
 }
 
 func (c *bn256AddIstanbul) Run(input []byte) ([]byte, error) {
-	if !c.used {
-		return []byte{}, ErrExecutionReverted
-	}
-
 	return runBn256Add(input)
 }
 
@@ -536,23 +480,14 @@ func runBn256ScalarMul(input []byte) ([]byte, error) {
 
 // bn256ScalarMulIstanbul implements a native elliptic curve scalar
 // multiplication conforming to Istanbul consensus rules.
-type bn256ScalarMulIstanbul struct {
-	used bool
-}
+type bn256ScalarMulIstanbul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256ScalarMulIstanbul) RequiredGas(input []byte) uint64 {
-	if !c.used {
-		return 0
-	}
 	return params.Bn256ScalarMulGasIstanbul
 }
 
 func (c *bn256ScalarMulIstanbul) Run(input []byte) ([]byte, error) {
-	if !c.used {
-		return []byte{}, ErrExecutionReverted
-	}
-
 	return runBn256ScalarMul(input)
 }
 
@@ -613,22 +548,14 @@ func runBn256Pairing(input []byte) ([]byte, error) {
 
 // bn256PairingIstanbul implements a pairing pre-compile for the bn256 curve
 // conforming to Istanbul consensus rules.
-type bn256PairingIstanbul struct {
-	used bool
-}
+type bn256PairingIstanbul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256PairingIstanbul) RequiredGas(input []byte) uint64 {
-	if !c.used {
-		return 0
-	}
 	return params.Bn256PairingBaseGasIstanbul + uint64(len(input)/192)*params.Bn256PairingPerPointGasIstanbul
 }
 
 func (c *bn256PairingIstanbul) Run(input []byte) ([]byte, error) {
-	if !c.used {
-		return []byte{}, ErrExecutionReverted
-	}
 	return runBn256Pairing(input)
 }
 
@@ -645,14 +572,9 @@ func (c *bn256PairingByzantium) Run(input []byte) ([]byte, error) {
 	return runBn256Pairing(input)
 }
 
-type blake2F struct {
-	used bool
-}
+type blake2F struct{}
 
 func (c *blake2F) RequiredGas(input []byte) uint64 {
-	if !c.used {
-		return 0
-	}
 	// If the input is malformed, we can't calculate the gas, return 0 and let the
 	// actual call choke and fault.
 	if len(input) != blake2FInputLength {
@@ -673,10 +595,6 @@ var (
 )
 
 func (c *blake2F) Run(input []byte) ([]byte, error) {
-	if !c.used {
-		return []byte{}, ErrExecutionReverted
-	}
-
 	// // Make sure the input is valid (correct length and final flag)
 	if len(input) != blake2FInputLength {
 		return nil, errBlake2FInvalidInputLength

@@ -37,8 +37,6 @@ var emptyCodeHash = crypto.Keccak256Hash(nil)
 func (evm *EVM) precompile_disabled(addr libcommon.Address) (PrecompiledContract, bool) {
 	var precompiles map[libcommon.Address]PrecompiledContract
 	switch {
-	case evm.chainRules.IsFork7:
-		precompiles = PrecompiledContractFork7
 	case evm.chainRules.IsBerlin:
 		precompiles = PrecompiledContractsBerlin
 	case evm.chainRules.IsIstanbul:

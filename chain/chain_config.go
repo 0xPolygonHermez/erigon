@@ -216,7 +216,7 @@ func (c *Config) IsMordor(num uint64) bool {
 	return isForked(c.MordorBlock, num)
 }
 
-func (c *Config) IsFork7(num uint64) bool {
+func (c *Config) IsZkevmForkID7(num uint64) bool {
 	return isForked(c.Fork7Block, num)
 }
 
@@ -400,7 +400,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon, IsShanghai, IsCancun, IsPrague      bool
 	IsEip1559FeeCollector, IsAura, IsMordor                 bool
-	IsZkEVMForkID4, IsFork7                                 bool
+	IsZkEVMForkID4, IsZKEVMForkID7                          bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -427,7 +427,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsEip1559FeeCollector: c.IsEip1559FeeCollector(num),
 		IsAura:                c.Aura != nil,
 		IsMordor:              c.IsMordor(num),
-		IsFork7:               c.IsFork7(num),
+		IsZKEVMForkID7:        c.IsZkevmForkID7(num),
 	}
 }
 
