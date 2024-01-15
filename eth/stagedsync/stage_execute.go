@@ -965,7 +965,7 @@ func tryUpdateForkVersion(cfg *ExecuteBlockCfg, hermezDb *hermez_db.HermezDb) er
 
 	log.Debug("Fork7Block not set, getting from db")
 	// TODO is this the best way to get the fork block? or in memory?
-	blockNum, err := hermezDb.GetForkIdBlock(chain.FORKID_7)
+	blockNum, err := hermezDb.GetForkIdBlock(chain.ZkEVMForkId7)
 	if err != nil {
 		return err
 	}

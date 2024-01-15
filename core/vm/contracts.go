@@ -33,6 +33,7 @@ import (
 	"github.com/ledgerwatch/erigon/crypto/bls12381"
 	"github.com/ledgerwatch/erigon/crypto/bn256"
 	"github.com/ledgerwatch/erigon/params"
+
 	//lint:ignore SA1019 Needed for precompile
 	"golang.org/x/crypto/ripemd160"
 )
@@ -595,7 +596,7 @@ var (
 )
 
 func (c *blake2F) Run(input []byte) ([]byte, error) {
-	// // Make sure the input is valid (correct length and final flag)
+	// Make sure the input is valid (correct length and final flag)
 	if len(input) != blake2FInputLength {
 		return nil, errBlake2FInvalidInputLength
 	}

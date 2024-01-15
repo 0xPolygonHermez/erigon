@@ -25,7 +25,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 )
 
-const FORKID_7 = 7
+const ZkEVMForkId7 = 7
 
 // Config is the core config which determines the blockchain settings.
 //
