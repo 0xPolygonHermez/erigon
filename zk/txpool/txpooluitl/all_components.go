@@ -23,7 +23,7 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon/zk/txpool/txpoolcfg"
+	"github.com/ledgerwatch/erigon-lib/txpool/txpoolcfg"
 	"github.com/ledgerwatch/log/v3"
 	mdbx2 "github.com/torquem-ch/mdbx-go/mdbx"
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ledgerwatch/erigon/zk/txpool/txpoolcfg"
+	"github.com/ledgerwatch/erigon-lib/txpool/txpoolcfg"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 
