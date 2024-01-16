@@ -15,7 +15,6 @@ const (
 	EntryTypeGerUpdate EntryType = 4
 )
 
-// StartL2Block represents a zkEvm block
 type GerUpdate struct {
 	BatchNumber    uint64         // 8 bytes
 	Timestamp      uint64         // 8 bytes
@@ -23,6 +22,7 @@ type GerUpdate struct {
 	Coinbase       common.Address // 20 bytes
 	ForkId         uint16         // 2 bytes
 	StateRoot      common.Hash    // 32 bytes
+	L1BlockHash    common.Hash    // not included in stream
 }
 
 func (g *GerUpdate) EncodeToBytes() []byte {

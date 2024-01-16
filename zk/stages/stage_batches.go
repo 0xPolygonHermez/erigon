@@ -39,7 +39,7 @@ type HermezDb interface {
 	DeleteForkIds(fromBatchNum, toBatchNum uint64) error
 	DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error
 
-	WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) error
+	WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash, l1BlockHash common.Hash) error
 
 	WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger types.GerUpdate) error
 }
@@ -182,7 +182,7 @@ func SpawnStageBatches(
 			// update GER
 			if l2Block.GlobalExitRoot == zeroHash && l2Block.L2BlockNumber > 0 { // TODO: possibly check l2Block.ForkId < constants.ForkEtrogId7 &&
 				if lastGer == zeroHash {
-					prevGer, err := hermezDb.GetBlockGlobalExitRoot(l2Block.L2BlockNumber - 1)
+					prevGer, _, err := hermezDb.GetBlockGlobalExitRoot(l2Block.L2BlockNumber - 1)
 					if err != nil {
 						return fmt.Errorf("failed to get previous GER, %w", err)
 					}
@@ -427,11 +427,9 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 	}
 
 	// pre-etrog forkid 7 - store blockno->ger
-	if err := hermezDb.WriteBlockGlobalExitRoot(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
+	if err := hermezDb.WriteBlockGlobalExitRoot(l2Block.L2BlockNumber, l2Block.GlobalExitRoot, l2Block.L1BlockHash); err != nil {
 		return fmt.Errorf("write block global exit root error: %v", err)
 	}
-
-	// post-etrog forkid 7 - store l1blockhash->ger
 
 	if err := eriDb.WriteBody(bn, h.Hash(), txs); err != nil {
 		return fmt.Errorf("write body error: %v", err)

@@ -77,7 +77,7 @@ func SpawnStageDataStreamCatchup(
 			return err
 		}
 
-		ger, err := reader.GetBlockGlobalExitRoot(genesis.NumberU64())
+		ger, _, err := reader.GetBlockGlobalExitRoot(genesis.NumberU64())
 		if err != nil {
 			return err
 		}
@@ -239,7 +239,7 @@ LOOP:
 				return err
 			}
 
-			ger, err := reader.GetBlockGlobalExitRoot(blockNumber)
+			ger, _, err := reader.GetBlockGlobalExitRoot(blockNumber)
 			if err != nil {
 				return err
 			}

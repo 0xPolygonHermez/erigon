@@ -325,17 +325,28 @@ func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
 	return db.tx.Put(BLOCKBATCHES, Uint64ToBytes(l2BlockNo), Uint64ToBytes(batchNo))
 }
 
-func (db *HermezDb) WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash) error {
-	return db.tx.Put(GLOBAL_EXIT_ROOTS, Uint64ToBytes(l2BlockNo), ger.Bytes())
+func (db *HermezDb) WriteBlockGlobalExitRoot(l2BlockNo uint64, ger, l1BlockHash common.Hash) error {
+	key := ConcatGerKey(l2BlockNo, l1BlockHash)
+	return db.tx.Put(GLOBAL_EXIT_ROOTS, key, ger.Bytes())
 }
 
-func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error) {
-	data, err := db.tx.GetOne(GLOBAL_EXIT_ROOTS, Uint64ToBytes(l2BlockNo))
+func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, common.Hash, error) {
+	var h common.Hash
+	var l1BlockHash common.Hash
+
+	blockNoBytes := Uint64ToBytes(l2BlockNo)
+	err := db.tx.ForPrefix(GLOBAL_EXIT_ROOTS, blockNoBytes, func(k, v []byte) error {
+		h = common.BytesToHash(v)
+		if len(k) == 40 {
+			l1BlockHash = common.BytesToHash(k[8:])
+		}
+		return nil
+	})
 	if err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, common.Hash{}, err
 	}
 
-	return common.BytesToHash(data), nil
+	return h, l1BlockHash, nil
 }
 
 func (db *HermezDb) WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error {
