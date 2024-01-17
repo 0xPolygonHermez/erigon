@@ -25,7 +25,9 @@ import (
 	"github.com/ledgerwatch/erigon/zk/zkchainconfig"
 )
 
-const ZkEVMForkId7 = 7
+const ForkID5Dragonfruit = 5
+const ForkID6IncaBerry = 6
+const ForkID7Etrog = 7
 
 // Config is the core config which determines the blockchain settings.
 //
@@ -79,14 +81,16 @@ type Config struct {
 	Bor    *chain.BorConfig    `json:"bor,omitempty"`
 
 	//zkEVM updates
-	MordorBlock *big.Int `json:"mordorBlock,omitempty"`
-	Fork7Block  *big.Int `json:"fork7Block,omitempty"`
+	MordorBlock             *big.Int `json:"mordorBlock,omitempty"`
+	ForkID5DragonfruitBlock *big.Int `json:"forkID5DragonfruitBlock,omitempty"`
+	ForkID6IncaBerryBlock   *big.Int `json:"forkID6IncaBerryBlock,omitempty"`
+	ForkID7EtrogBlock       *big.Int `json:"forkID7EtrogBlock,omitempty"`
 }
 
 func (c *Config) String() string {
 	engine := c.getEngine()
 
-	return fmt.Sprintf("{ChainID: %v, Homestead: %v, DAO: %v, Tangerine Whistle: %v, Spurious Dragon: %v, Byzantium: %v, Constantinople: %v, Petersburg: %v, Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, Gray Glacier: %v, Terminal Total Difficulty: %v, Merge Netsplit: %v, Shanghai: %v, Cancun: %v, Prague: %v, Engine: %v, Mordor: %v}",
+	return fmt.Sprintf("{ChainID: %v, Homestead: %v, DAO: %v, Tangerine Whistle: %v, Spurious Dragon: %v, Byzantium: %v, Constantinople: %v, Petersburg: %v, Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, Gray Glacier: %v, Terminal Total Difficulty: %v, Merge Netsplit: %v, Shanghai: %v, Cancun: %v, Prague: %v, Engine: %v, Mordor: %v, ForkID5Dragonfruit: %v, ForkID6IncaBerry: %v, ForkID7Etrog: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -108,6 +112,9 @@ func (c *Config) String() string {
 		c.PragueTime,
 		engine,
 		c.MordorBlock,
+		c.ForkID5DragonfruitBlock,
+		c.ForkID6IncaBerryBlock,
+		c.ForkID7EtrogBlock,
 	)
 }
 
@@ -216,8 +223,8 @@ func (c *Config) IsMordor(num uint64) bool {
 	return isForked(c.MordorBlock, num)
 }
 
-func (c *Config) IsZkevmForkID7(num uint64) bool {
-	return isForked(c.Fork7Block, num)
+func (c *Config) IsForkID7Etrog(num uint64) bool {
+	return isForked(c.ForkID7EtrogBlock, num)
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
@@ -400,7 +407,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon, IsShanghai, IsCancun, IsPrague      bool
 	IsEip1559FeeCollector, IsAura, IsMordor                 bool
-	IsZkEVMForkID4, IsZKEVMForkID7                          bool
+	IsForkID7Etrog                                          bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -427,7 +434,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsEip1559FeeCollector: c.IsEip1559FeeCollector(num),
 		IsAura:                c.Aura != nil,
 		IsMordor:              c.IsMordor(num),
-		IsZKEVMForkID7:        c.IsZkevmForkID7(num),
+		IsForkID7Etrog:        c.IsForkID7Etrog(num),
 	}
 }
 

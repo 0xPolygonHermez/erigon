@@ -178,7 +178,7 @@ func SpawnStageBatches(
 				if err != nil {
 					return fmt.Errorf("write fork id error: %v", err)
 				}
-				// TODO Optimize Multiple
+				log.Info(fmt.Sprintf("[%s] Updated fork id, last fork id %d, new fork id:%d", logPrefix, lastForkId, l2Block.ForkId))
 				if err := hermezDb.WriteForkIdBlockOnce(uint64(l2Block.ForkId), l2Block.L2BlockNumber); err != nil {
 					return fmt.Errorf("write fork id block once error: %v", err)
 				}
@@ -437,12 +437,6 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 	if err := eriDb.WriteBody(bn, h.Hash(), txs); err != nil {
 		return fmt.Errorf("write body error: %v", err)
 	}
-
-	// TODO Optimize Multiple writes
-	if err := hermezDb.WriteForkIdBlockOnce(uint64(l2Block.ForkId), l2Block.L2BlockNumber); err != nil {
-		return fmt.Errorf("write fork id block once error: %v", err)
-	}
-
 	if err := hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId)); err != nil {
 		return fmt.Errorf("write block batch error: %v", err)
 	}

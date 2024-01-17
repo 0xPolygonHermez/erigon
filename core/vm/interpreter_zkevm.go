@@ -9,12 +9,12 @@ func NewZKEVMInterpreter(evm VMInterpreter, cfg Config) *EVMInterpreter {
 	// to add our own IsRohan chain rule, we would need to fork or code or chain.Config
 	// that is why we hard code it here for POC
 	// our fork extends berlin anyways and starts from block 1
-	case evm.ChainRules().IsZKEVMForkID7:
-		jt = &zkEVMForkID7InstructionSet
+	case evm.ChainRules().IsForkID7Etrog:
+		jt = &forkID7EtrogInstructionSet
 	case evm.ChainRules().IsMordor:
-		jt = &zkEVMForkID5InstructionSet
+		jt = &forkID5DragonfruitInstructionSet
 	case evm.ChainRules().IsBerlin:
-		jt = &zkEVMForkID4InstructionSet
+		jt = &forkID4InstructionSet
 	}
 	if len(cfg.ExtraEips) > 0 {
 		jt = copyJumpTable(jt)

@@ -35,8 +35,8 @@ import (
 	//lint:ignore SA1019 Needed for precompile
 )
 
-// PrecompiledContractsZKEVMDragonfruit contains the default set of pre-compiled zkEVM Dragonfruit
-var PrecompiledContractsZKEVMDragonfruit = map[libcommon.Address]PrecompiledContract{
+// PrecompiledContractsForkID5Dragonfruit contains the default set of pre-compiled ForkID5 Dragonfruit
+var PrecompiledContractsForkID5Dragonfruit = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{1}): &ecrecover_zkevm{enabled: true},
 	libcommon.BytesToAddress([]byte{2}): &sha256hash_zkevm{},
 	libcommon.BytesToAddress([]byte{3}): &ripemd160hash_zkevm{},
@@ -48,10 +48,9 @@ var PrecompiledContractsZKEVMDragonfruit = map[libcommon.Address]PrecompiledCont
 	libcommon.BytesToAddress([]byte{9}): &blake2F_zkevm{},
 }
 
-// PrecompiledContractZKEVMFork7 contains the default set of pre-compiled Ethereum
-// contracts used in the Fork7 release.
+// PrecompiledContractForkID7Etrog contains the default set of pre-compiled ForkID7 Etrog.
 // TODO Add: sha256, Modexp, ecAdd ,ecMul, ecPairing
-var PrecompiledContractZKEVMFork7 = map[libcommon.Address]PrecompiledContract{
+var PrecompiledContractForkID7Etrog = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{1}): &ecrecover_zkevm{enabled: true},
 	libcommon.BytesToAddress([]byte{2}): &sha256hash_zkevm{enabled: true},
 	libcommon.BytesToAddress([]byte{3}): &ripemd160hash_zkevm{},
@@ -421,22 +420,14 @@ func (c *bn256PairingIstanbul_zkevm) Run(input []byte) ([]byte, error) {
 
 // bn256PairingByzantium implements a pairing pre-compile for the bn256 curve
 // conforming to Byzantium consensus rules.
-type bn256PairingByzantium_zkevm struct {
-	enabled bool
-}
+type bn256PairingByzantium_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256PairingByzantium_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	return params.Bn256PairingBaseGasByzantium + uint64(len(input)/192)*params.Bn256PairingPerPointGasByzantium
 }
 
 func (c *bn256PairingByzantium_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	return runBn256Pairing(input)
 }
 
@@ -500,22 +491,14 @@ func (c *blake2F_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381G1Add implements EIP-2537 G1Add precompile.
-type bls12381G1Add_zkevm struct {
-	enabled bool
-}
+type bls12381G1Add_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381G1Add_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	return params.Bls12381G1AddGas
 }
 
 func (c *bls12381G1Add_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 G1Add precompile.
 	// > G1 addition call expects `256` bytes as an input that is interpreted as byte concatenation of two G1 points (`128` bytes each).
 	// > Output is an encoding of addition operation result - single G1 point (`128` bytes).
@@ -546,22 +529,14 @@ func (c *bls12381G1Add_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381G1Mul implements EIP-2537 G1Mul precompile.
-type bls12381G1Mul_zkevm struct {
-	enabled bool
-}
+type bls12381G1Mul_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381G1Mul_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	return params.Bls12381G1MulGas
 }
 
 func (c *bls12381G1Mul_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 G1Mul precompile.
 	// > G1 multiplication call expects `160` bytes as an input that is interpreted as byte concatenation of encoding of G1 point (`128` bytes) and encoding of a scalar value (`32` bytes).
 	// > Output is an encoding of multiplication operation result - single G1 point (`128` bytes).
@@ -590,15 +565,10 @@ func (c *bls12381G1Mul_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381G1MultiExp implements EIP-2537 G1MultiExp precompile.
-type bls12381G1MultiExp_zkevm struct {
-	enabled bool
-}
+type bls12381G1MultiExp_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381G1MultiExp_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	// Calculate G1 point, scalar value pair length
 	k := len(input) / 160
 	if k == 0 {
@@ -617,9 +587,6 @@ func (c *bls12381G1MultiExp_zkevm) RequiredGas(input []byte) uint64 {
 }
 
 func (c *bls12381G1MultiExp_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 G1MultiExp precompile.
 	// G1 multiplication call expects `160*k` bytes as an input that is interpreted as byte concatenation of `k` slices each of them being a byte concatenation of encoding of G1 point (`128` bytes) and encoding of a scalar value (`32` bytes).
 	// Output is an encoding of multiexponentiation operation result - single G1 point (`128` bytes).
@@ -657,23 +624,14 @@ func (c *bls12381G1MultiExp_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381G2Add implements EIP-2537 G2Add precompile.
-type bls12381G2Add_zkevm struct {
-	enabled bool
-}
+type bls12381G2Add_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381G2Add_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	return params.Bls12381G2AddGas
 }
 
 func (c *bls12381G2Add_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
-
 	// Implements EIP-2537 G2Add precompile.
 	// > G2 addition call expects `512` bytes as an input that is interpreted as byte concatenation of two G2 points (`256` bytes each).
 	// > Output is an encoding of addition operation result - single G2 point (`256` bytes).
@@ -704,23 +662,14 @@ func (c *bls12381G2Add_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381G2Mul implements EIP-2537 G2Mul precompile.
-type bls12381G2Mul_zkevm struct {
-	enabled bool
-}
+type bls12381G2Mul_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381G2Mul_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
-
 	return params.Bls12381G2MulGas
 }
 
 func (c *bls12381G2Mul_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 G2MUL precompile logic.
 	// > G2 multiplication call expects `288` bytes as an input that is interpreted as byte concatenation of encoding of G2 point (`256` bytes) and encoding of a scalar value (`32` bytes).
 	// > Output is an encoding of multiplication operation result - single G2 point (`256` bytes).
@@ -749,15 +698,10 @@ func (c *bls12381G2Mul_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381G2MultiExp implements EIP-2537 G2MultiExp precompile.
-type bls12381G2MultiExp_zkevm struct {
-	enabled bool
-}
+type bls12381G2MultiExp_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381G2MultiExp_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	// Calculate G2 point, scalar value pair length
 	k := len(input) / 288
 	if k == 0 {
@@ -776,9 +720,6 @@ func (c *bls12381G2MultiExp_zkevm) RequiredGas(input []byte) uint64 {
 }
 
 func (c *bls12381G2MultiExp_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 G2MultiExp precompile logic
 	// > G2 multiplication call expects `288*k` bytes as an input that is interpreted as byte concatenation of `k` slices each of them being a byte concatenation of encoding of G2 point (`256` bytes) and encoding of a scalar value (`32` bytes).
 	// > Output is an encoding of multiexponentiation operation result - single G2 point (`256` bytes).
@@ -816,22 +757,14 @@ func (c *bls12381G2MultiExp_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381Pairing implements EIP-2537 Pairing precompile.
-type bls12381Pairing_zkevm struct {
-	enabled bool
-}
+type bls12381Pairing_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381Pairing_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	return params.Bls12381PairingBaseGas + uint64(len(input)/384)*params.Bls12381PairingPerPairGas
 }
 
 func (c *bls12381Pairing_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 Pairing precompile logic.
 	// > Pairing call expects `384*k` bytes as an inputs that is interpreted as byte concatenation of `k` slices. Each slice has the following structure:
 	// > - `128` bytes of G1 point encoding
@@ -886,22 +819,14 @@ func (c *bls12381Pairing_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381MapG1 implements EIP-2537 MapG1 precompile.
-type bls12381MapG1_zkevm struct {
-	enabled bool
-}
+type bls12381MapG1_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381MapG1_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	return params.Bls12381MapG1Gas
 }
 
 func (c *bls12381MapG1_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 Map_To_G1 precompile.
 	// > Field-to-curve call expects `64` bytes an an input that is interpreted as a an element of the base field.
 	// > Output of this call is `128` bytes and is G1 point following respective encoding rules.
@@ -929,22 +854,14 @@ func (c *bls12381MapG1_zkevm) Run(input []byte) ([]byte, error) {
 }
 
 // bls12381MapG2 implements EIP-2537 MapG2 precompile.
-type bls12381MapG2_zkevm struct {
-	enabled bool
-}
+type bls12381MapG2_zkevm struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bls12381MapG2_zkevm) RequiredGas(input []byte) uint64 {
-	if !c.enabled {
-		return 0
-	}
 	return params.Bls12381MapG2Gas
 }
 
 func (c *bls12381MapG2_zkevm) Run(input []byte) ([]byte, error) {
-	if !c.enabled {
-		return []byte{}, ErrExecutionReverted
-	}
 	// Implements EIP-2537 Map_FP2_TO_G2 precompile logic.
 	// > Field-to-curve call expects `128` bytes an an input that is interpreted as a an element of the quadratic extension field.
 	// > Output of this call is `256` bytes and is G2 point following respective encoding rules.
