@@ -11,7 +11,7 @@ func NewZKEVMInterpreter(evm VMInterpreter, cfg Config) *EVMInterpreter {
 	// our fork extends berlin anyways and starts from block 1
 	case evm.ChainRules().IsForkID7Etrog:
 		jt = &forkID7EtrogInstructionSet
-	case evm.ChainRules().IsMordor:
+	case evm.ChainRules().IsMordor, evm.ChainRules().IsForkID5Dragonfruit, evm.ChainRules().IsForkID6IncaBerry:
 		jt = &forkID5DragonfruitInstructionSet
 	case evm.ChainRules().IsBerlin:
 		jt = &forkID4InstructionSet
