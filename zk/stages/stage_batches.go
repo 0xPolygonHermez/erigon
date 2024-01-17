@@ -173,12 +173,12 @@ func SpawnStageBatches(
 
 			// update forkid
 			if l2Block.ForkId > lastForkId {
+				log.Info(fmt.Sprintf("[%s] Updated fork id, last fork id %d, new fork id:%d, block num:%d", logPrefix, lastForkId, l2Block.ForkId, l2Block.L2BlockNumber))
 				lastForkId = l2Block.ForkId
 				err = hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId))
 				if err != nil {
 					return fmt.Errorf("write fork id error: %v", err)
 				}
-				log.Info(fmt.Sprintf("[%s] Updated fork id, last fork id %d, new fork id:%d", logPrefix, lastForkId, l2Block.ForkId))
 				if err := hermezDb.WriteForkIdBlockOnce(uint64(l2Block.ForkId), l2Block.L2BlockNumber); err != nil {
 					return fmt.Errorf("write fork id block once error: %v", err)
 				}

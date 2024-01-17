@@ -223,6 +223,14 @@ func (c *Config) IsMordor(num uint64) bool {
 	return isForked(c.MordorBlock, num)
 }
 
+func (c *Config) IsForkID5Dragonfruit(num uint64) bool {
+	return isForked(c.ForkID5DragonfruitBlock, num)
+}
+
+func (c *Config) IsForkID6IncaBerry(num uint64) bool {
+	return isForked(c.ForkID6IncaBerryBlock, num)
+}
+
 func (c *Config) IsForkID7Etrog(num uint64) bool {
 	return isForked(c.ForkID7EtrogBlock, num)
 }
@@ -402,12 +410,12 @@ func newCompatError(what string, storedblock, newblock *big.Int) *chain.ConfigCo
 // Rules is a one time interface meaning that it shouldn't be used in between transition
 // phases.
 type Rules struct {
-	ChainID                                                 *big.Int
-	IsHomestead, IsTangerineWhistle, IsSpuriousDragon       bool
-	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
-	IsBerlin, IsLondon, IsShanghai, IsCancun, IsPrague      bool
-	IsEip1559FeeCollector, IsAura, IsMordor                 bool
-	IsForkID7Etrog                                          bool
+	ChainID                                                  *big.Int
+	IsHomestead, IsTangerineWhistle, IsSpuriousDragon        bool
+	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul  bool
+	IsBerlin, IsLondon, IsShanghai, IsCancun, IsPrague       bool
+	IsEip1559FeeCollector, IsAura, IsMordor                  bool
+	IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -434,6 +442,8 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsEip1559FeeCollector: c.IsEip1559FeeCollector(num),
 		IsAura:                c.Aura != nil,
 		IsMordor:              c.IsMordor(num),
+		IsForkID5Dragonfruit:  c.IsForkID5Dragonfruit(num),
+		IsForkID6IncaBerry:    c.IsForkID6IncaBerry(num),
 		IsForkID7Etrog:        c.IsForkID7Etrog(num),
 	}
 }
