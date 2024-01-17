@@ -81,7 +81,6 @@ type Config struct {
 	Bor    *chain.BorConfig    `json:"bor,omitempty"`
 
 	//zkEVM updates
-	MordorBlock             *big.Int `json:"mordorBlock,omitempty"`
 	ForkID5DragonfruitBlock *big.Int `json:"forkID5DragonfruitBlock,omitempty"`
 	ForkID6IncaBerryBlock   *big.Int `json:"forkID6IncaBerryBlock,omitempty"`
 	ForkID7EtrogBlock       *big.Int `json:"forkID7EtrogBlock,omitempty"`
@@ -90,7 +89,7 @@ type Config struct {
 func (c *Config) String() string {
 	engine := c.getEngine()
 
-	return fmt.Sprintf("{ChainID: %v, Homestead: %v, DAO: %v, Tangerine Whistle: %v, Spurious Dragon: %v, Byzantium: %v, Constantinople: %v, Petersburg: %v, Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, Gray Glacier: %v, Terminal Total Difficulty: %v, Merge Netsplit: %v, Shanghai: %v, Cancun: %v, Prague: %v, Engine: %v, Mordor: %v, ForkID5Dragonfruit: %v, ForkID6IncaBerry: %v, ForkID7Etrog: %v}",
+	return fmt.Sprintf("{ChainID: %v, Homestead: %v, DAO: %v, Tangerine Whistle: %v, Spurious Dragon: %v, Byzantium: %v, Constantinople: %v, Petersburg: %v, Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, Gray Glacier: %v, Terminal Total Difficulty: %v, Merge Netsplit: %v, Shanghai: %v, Cancun: %v, Prague: %v, Engine: %v, ForkID5Dragonfruit: %v, ForkID6IncaBerry: %v, ForkID7Etrog: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -111,7 +110,6 @@ func (c *Config) String() string {
 		c.CancunTime,
 		c.PragueTime,
 		engine,
-		c.MordorBlock,
 		c.ForkID5DragonfruitBlock,
 		c.ForkID6IncaBerryBlock,
 		c.ForkID7EtrogBlock,
@@ -219,10 +217,6 @@ func (c *Config) IsEip1559FeeCollector(num uint64) bool {
 	return c.Eip1559FeeCollector != nil && isForked(c.Eip1559FeeCollectorTransition, num)
 }
 
-func (c *Config) IsMordor(num uint64) bool {
-	return isForked(c.MordorBlock, num)
-}
-
 func (c *Config) IsForkID5Dragonfruit(num uint64) bool {
 	return isForked(c.ForkID5DragonfruitBlock, num)
 }
@@ -275,7 +269,6 @@ func (c *Config) forkBlockNumbers() []forkBlockNumber {
 		{name: "arrowGlacierBlock", blockNumber: c.ArrowGlacierBlock, optional: true},
 		{name: "grayGlacierBlock", blockNumber: c.GrayGlacierBlock, optional: true},
 		{name: "mergeNetsplitBlock", blockNumber: c.MergeNetsplitBlock, optional: true},
-		{name: "mordorBlock", blockNumber: c.MordorBlock, optional: true},
 	}
 }
 
@@ -369,11 +362,6 @@ func (c *Config) checkCompatible(newcfg *Config, head uint64) *chain.ConfigCompa
 	if incompatible(c.MergeNetsplitBlock, newcfg.MergeNetsplitBlock, head) {
 		return newCompatError("Merge netsplit block", c.MergeNetsplitBlock, newcfg.MergeNetsplitBlock)
 	}
-
-	//zkEVM forks
-	if incompatible(c.MordorBlock, newcfg.MordorBlock, head) {
-		return newCompatError("Merge netsplit block", c.MordorBlock, newcfg.MordorBlock)
-	}
 	return nil
 }
 
@@ -414,7 +402,7 @@ type Rules struct {
 	IsHomestead, IsTangerineWhistle, IsSpuriousDragon        bool
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul  bool
 	IsBerlin, IsLondon, IsShanghai, IsCancun, IsPrague       bool
-	IsEip1559FeeCollector, IsAura, IsMordor                  bool
+	IsEip1559FeeCollector, IsAura                            bool
 	IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog bool
 }
 
@@ -441,7 +429,6 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsPrague:              c.IsPrague(time),
 		IsEip1559FeeCollector: c.IsEip1559FeeCollector(num),
 		IsAura:                c.Aura != nil,
-		IsMordor:              c.IsMordor(num),
 		IsForkID5Dragonfruit:  c.IsForkID5Dragonfruit(num),
 		IsForkID6IncaBerry:    c.IsForkID6IncaBerry(num),
 		IsForkID7Etrog:        c.IsForkID7Etrog(num),
