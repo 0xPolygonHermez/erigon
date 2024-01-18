@@ -156,6 +156,7 @@ type Instruction = LEAF{key:(Byte...) value:(Byte...)}
                  | ACCOUNT_LEAF{key:(Byte...)
                  | BRANCH{mask:Int}
                  | NEW_TRIE{}
+                 | SMT_LEAF{nodeType:Byte address:(Byte...) /storageKey:(Byte...)/ value:(Byte...)}
 
 type Witness = (INSTRUCTION...)
 
@@ -236,6 +237,10 @@ Here is how the instuctions are encoded:
     * bit 2 defines if **nonce** is not 0; if set to 0, *nonce* field is not encoded;
     * bit 3 defines if **balance** is not 0; if set to 0, *balance* field is not encoded;
 
+* **`SMT_LEAF`** -> `( 0x07 nodeType CBOR(address) /CBOR(storageKey).../ CBOR(value)...)`
+    * if `nodeType` == `0x03`, then an extra field `storageKey` is read; otherwise it is skipped
+
+
 * **`NEW_TRIE`** -> `( 0xBB )`
 
 
@@ -258,6 +263,7 @@ type Node = HashNode{raw_hash:Hash}
           | ExtensionNode{key:(Byte...) child:Node}
           | BranchNode{child0:nil|Node child1:nil|Node child3:nil|Node ... child15:nil|Node}
           | CodeNode{code:(Byte... )}
+          | SmtLeafNode{nodeType:Byte address:(Byte...), storageKey:(Byte...), value:(Byte...)}
 ```
 
 ## Execution process
@@ -503,6 +509,10 @@ CODE{raw_code} |=> CodeNode{raw_code}
 ---
 
 LEAF{key, raw_value} |=> LeafNode{key, ValueNode{raw_value}}
+
+---
+
+SMT_LEAF{nodeType, address, storageKey, value} |=> SmtLeafNode{nodeType, address, storageKey, value}
 
 ---
 
