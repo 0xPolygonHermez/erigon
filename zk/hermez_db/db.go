@@ -5,10 +5,9 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/zkevm/log"
-
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/types"
+	"github.com/ledgerwatch/log/v3"
 )
 
 const L1VERIFICATIONS = "hermez_l1Verifications"                   // l1blockno, batchno -> l1txhash
@@ -470,7 +469,7 @@ func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, error) {
 		currentForkId := BytesToUint64(k)
 		if currentForkId == forkId {
 			blockNum = BytesToUint64(v)
-			log.Infof("Got block num %d for forkId %d", blockNum, forkId)
+			log.Info(fmt.Sprintf("[HermezDbReader] Got block num %d for forkId %d", blockNum, forkId))
 			break
 		} else {
 			continue
@@ -483,11 +482,11 @@ func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, error) {
 func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
 	tempBlockNum, err := db.GetForkIdBlock(forkId)
 	if err != nil {
-		log.Errorf("Error getting forkIdBlock: %v", err)
+		log.Error(fmt.Sprintf("[HermezDb] Error getting forkIdBlock: %v", err))
 		return err
 	}
 	if tempBlockNum != 0 {
-		log.Errorf("Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum)
+		log.Error(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum))
 		return nil
 	}
 	return db.tx.Put(FORKID_BLOCK, Uint64ToBytes(forkId), Uint64ToBytes(blockNum))

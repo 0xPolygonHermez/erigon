@@ -1,11 +1,12 @@
 package stagedsync
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 func updateZkEVMBlockCfg(cfg *ExecuteBlockCfg, hermezDb *hermez_db.HermezDb, logPrefix string) error {
@@ -15,12 +16,12 @@ func updateZkEVMBlockCfg(cfg *ExecuteBlockCfg, hermezDb *hermez_db.HermezDb, log
 		}
 		blockNum, err := hermezDb.GetForkIdBlock(forkId)
 		if err != nil {
-			log.Errorf("[%s] Error getting fork id %v from db: %v", logPrefix, forkId, err)
+			log.Error(fmt.Sprintf("[%s] Error getting fork id %v from db: %v", logPrefix, forkId, err))
 			return err
 		}
 		if blockNum != 0 {
 			*forkBlock = big.NewInt(0).SetUint64(blockNum)
-			log.Infof("[%s] Set execute block cfg, fork id %v, block:%v, ", logPrefix, forkId, blockNum)
+			log.Info(fmt.Sprintf("[%s] Set execute block cfg, fork id %v, block:%v, ", logPrefix, forkId, blockNum))
 		}
 
 		return nil
