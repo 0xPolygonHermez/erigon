@@ -4,13 +4,17 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dgravesa/go-parallel/parallel"
 	"github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
 func (s *SMT) SetAccountState(ethAddr string, balance, nonce *big.Int) (*big.Int, error) {
+	startTime := time.Now()
 	keyBalance, err := utils.KeyEthAddrBalance(ethAddr)
 	if err != nil {
 		return nil, err
@@ -31,6 +35,8 @@ func (s *SMT) SetAccountState(ethAddr string, balance, nonce *big.Int) (*big.Int
 		return nil, err
 	}
 
+	TimeAccount += int64(time.Since(startTime))
+
 	auxRes, err := s.InsertKA(keyNonce, nonce)
 
 	if err != nil {
@@ -46,7 +52,19 @@ func (s *SMT) SetAccountState(ethAddr string, balance, nonce *big.Int) (*big.Int
 	return auxRes.NewRootScalar.ToBigInt(), err
 }
 
+func (s *SMT) SetAccountStorage(addr libcommon.Address, acc *accounts.Account) error {
+	if acc != nil {
+		n := new(big.Int).SetUint64(acc.Nonce)
+		_, err := s.SetAccountState(addr.String(), acc.Balance.ToBig(), n)
+		return err
+	}
+
+	_, err := s.SetAccountState(addr.String(), big.NewInt(0), big.NewInt(0))
+	return err
+}
+
 func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
+	startTime := time.Now()
 	keyContractCode, err := utils.KeyContractCode(ethAddr)
 	if err != nil {
 		return err
@@ -95,6 +113,8 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 		return err
 	}
 
+	TimeContract += int64(time.Since(startTime))
+
 	_, err = s.InsertKA(keyContractLength, big.NewInt(int64(bytecodeLength)))
 	if err != nil {
 		return err
@@ -112,6 +132,8 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 }
 
 func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*big.Int, error) {
+	startTime := time.Now()
+
 	storageKeys := make([]string, len(storage))
 	ii := 0
 	for k := range storage {
@@ -200,6 +222,8 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 			vhm[k] = h
 		}
 	}
+
+	TimeStorage += int64(time.Since(startTime))
 
 	auxRes, err := s.InsertStorage(ethAddr, &storage, &chm, &vhm)
 	if err != nil {
