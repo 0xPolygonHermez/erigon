@@ -36,7 +36,6 @@ require (
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/emicklei/dot v1.0.0
 	github.com/emirpasic/gods v1.18.1
-	github.com/ethereum/go-ethereum v1.10.26
 	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
 	github.com/gateway-fm/vectorized-poseidon-gold v0.1.2
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35
