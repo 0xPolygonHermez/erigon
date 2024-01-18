@@ -470,8 +470,10 @@ func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, error) {
 		currentForkId := BytesToUint64(k)
 		if currentForkId == forkId {
 			blockNum = BytesToUint64(v)
-		} else {
+			log.Infof("Got block num %d for forkId %d", blockNum, forkId)
 			break
+		} else {
+			continue
 		}
 	}
 
@@ -485,7 +487,7 @@ func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
 		return err
 	}
 	if tempBlockNum != 0 {
-		log.Debugf("ForkIdBlock already exists: %d", forkId)
+		log.Errorf("Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum)
 		return nil
 	}
 	return db.tx.Put(FORKID_BLOCK, Uint64ToBytes(forkId), Uint64ToBytes(blockNum))
