@@ -548,6 +548,10 @@ func (s *SMT) hashcalcAndSave(in [8]uint64, capacity [4]uint64) ([4]uint64, erro
 	return s.hashSave(in, capacity, h)
 }
 
+// func (s *SMT) hashcalc(in [8]uint64, capacity [4]uint64) ([4]uint64, error) {
+// 	return utils.Hash(in, capacity)
+// }
+
 func (s *SMT) getLastRoot() (utils.NodeKey, error) {
 	or, err := s.Db.GetLastRoot()
 	if err != nil {
