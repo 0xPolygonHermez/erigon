@@ -216,18 +216,23 @@ func (db *HermezDbReader) getByL1Block(table string, l1BlockNo uint64) (*types.L
 		}
 
 		if l1Block == l1BlockNo {
-			if len(v) != 64 {
+			if len(v) != 96 && len(v) != 64 {
 				return nil, fmt.Errorf("invalid hash length")
 			}
 
 			l1TxHash := common.BytesToHash(v[:32])
-			stateRoot := common.BytesToHash(v[32:])
+			stateRoot := common.BytesToHash(v[32:64])
+			var l1InfoRoot common.Hash
+			if len(v) > 64 {
+				l1InfoRoot = common.BytesToHash(v[64:])
+			}
 
 			return &types.L1BatchInfo{
-				BatchNo:   batchNo,
-				L1BlockNo: l1Block,
-				StateRoot: stateRoot,
-				L1TxHash:  l1TxHash,
+				BatchNo:    batchNo,
+				L1BlockNo:  l1Block,
+				StateRoot:  stateRoot,
+				L1TxHash:   l1TxHash,
+				L1InfoRoot: l1InfoRoot,
 			}, nil
 		}
 	}
@@ -254,18 +259,23 @@ func (db *HermezDbReader) getByBatchNo(table string, batchNo uint64) (*types.L1B
 		}
 
 		if batch == batchNo {
-			if len(v) != 64 {
+			if len(v) != 96 && len(v) != 64 {
 				return nil, fmt.Errorf("invalid hash length")
 			}
 
 			l1TxHash := common.BytesToHash(v[:32])
-			stateRoot := common.BytesToHash(v[32:])
+			stateRoot := common.BytesToHash(v[32:64])
+			var l1InfoRoot common.Hash
+			if len(v) > 64 {
+				l1InfoRoot = common.BytesToHash(v[64:])
+			}
 
 			return &types.L1BatchInfo{
-				BatchNo:   batchNo,
-				L1BlockNo: l1Block,
-				StateRoot: stateRoot,
-				L1TxHash:  l1TxHash,
+				BatchNo:    batchNo,
+				L1BlockNo:  l1Block,
+				StateRoot:  stateRoot,
+				L1TxHash:   l1TxHash,
+				L1InfoRoot: l1InfoRoot,
 			}, nil
 		}
 	}
@@ -298,23 +308,30 @@ func (db *HermezDbReader) getLatest(table string) (*types.L1BatchInfo, error) {
 		return nil, err
 	}
 
-	if len(v) != 64 {
+	if len(v) != 96 && len(v) != 64 {
 		return nil, fmt.Errorf("invalid hash length")
 	}
 
 	l1TxHash := common.BytesToHash(v[:32])
-	stateRoot := common.BytesToHash(v[32:])
+	stateRoot := common.BytesToHash(v[32:64])
+	var l1InfoRoot common.Hash
+	if len(v) > 64 {
+		l1InfoRoot = common.BytesToHash(v[64:])
+	}
 
 	return &types.L1BatchInfo{
-		BatchNo:   batchNo,
-		L1BlockNo: l1BlockNo,
-		L1TxHash:  l1TxHash,
-		StateRoot: stateRoot,
+		BatchNo:    batchNo,
+		L1BlockNo:  l1BlockNo,
+		L1TxHash:   l1TxHash,
+		StateRoot:  stateRoot,
+		L1InfoRoot: l1InfoRoot,
 	}, nil
 }
 
-func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash common.Hash, stateRoot common.Hash) error {
-	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), append(l1TxHash.Bytes(), stateRoot.Bytes()...))
+func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash, stateRoot, l1BlockInfo common.Hash) error {
+	val := append(l1TxHash.Bytes(), stateRoot.Bytes()...)
+	val = append(val, l1BlockInfo.Bytes()...)
+	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), val)
 }
 
 func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common.Hash, stateRoot common.Hash) error {

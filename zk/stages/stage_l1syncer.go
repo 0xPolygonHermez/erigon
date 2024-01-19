@@ -118,7 +118,7 @@ Loop:
 			}
 			newVerificationsCount++
 		case sequence := <-sequencesChan:
-			err = hermezDb.WriteSequence(sequence.L1BlockNo, sequence.BatchNo, sequence.L1TxHash, sequence.StateRoot)
+			err = hermezDb.WriteSequence(sequence.L1BlockNo, sequence.BatchNo, sequence.L1TxHash, sequence.StateRoot, sequence.L1InfoRoot)
 			if err != nil {
 				return fmt.Errorf("failed to write batch info, %w", err)
 			}

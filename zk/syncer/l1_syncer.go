@@ -229,11 +229,13 @@ loop:
 func convertResultToBatchInfo(log *ethTypes.Log) types.L1BatchInfo {
 	batchNumber := new(big.Int).SetBytes(log.Topics[1].Bytes())
 	l1TxHash := common.BytesToHash(log.TxHash.Bytes())
+	l1InfoRoot := common.BytesToHash(log.Data)
 	blockNumber := log.BlockNumber
 	return types.L1BatchInfo{
-		BatchNo:   batchNumber.Uint64(),
-		L1BlockNo: blockNumber,
-		L1TxHash:  l1TxHash,
+		BatchNo:    batchNumber.Uint64(),
+		L1BlockNo:  blockNumber,
+		L1TxHash:   l1TxHash,
+		L1InfoRoot: l1InfoRoot,
 	}
 }
 
