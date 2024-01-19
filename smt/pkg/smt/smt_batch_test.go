@@ -2,6 +2,7 @@ package smt_test
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"math/rand"
 	"os"
@@ -38,21 +39,39 @@ func TestValues(t *testing.T) {
 	// t.Logf("%+v -> %d", path, path[0])
 	// t.Logf("%+v -> %d", path2, path2[0])
 
-	s := smt.NewSMT(nil)
-	kvMap := map[utils.NodeKey]utils.NodeValue8{
-		utils.ScalarToNodeKey(big.NewInt(0)): utils.ScalarToNodeValue8(big.NewInt(18)),
-		utils.ScalarToNodeKey(big.NewInt(2)): utils.ScalarToNodeValue8(big.NewInt(18)),
-		// utils.ScalarToNodeKey(big.NewInt(1)): utils.ScalarToNodeValue8(big.NewInt(18)),
-		// utils.ScalarToNodeKey(big.NewInt(19)): utils.ScalarToNodeValue8(big.NewInt(19)),
+	keysRaw := []*big.Int{
+		big.NewInt(0),
+		big.NewInt(2),
+		// big.NewInt(7),
 	}
+	valuesRaw := []*big.Int{
+		big.NewInt(18),
+		big.NewInt(19),
+		big.NewInt(20),
+		big.NewInt(21),
+	}
+
 	keys := []utils.NodeKey{}
-	for k, v := range kvMap {
-		if !v.IsZero() {
-			s.Db.InsertAccountValue(k, v)
-			keys = append(keys, k)
-		}
+	smtBulk := smt.NewSMT(nil)
+	smtIncremental := smt.NewSMT(nil)
+
+	for i := range keysRaw {
+		k := utils.ScalarToNodeKey(keysRaw[i])
+		v := utils.ScalarToNodeValue8(valuesRaw[i])
+		smtBulk.Db.InsertAccountValue(k, v)
+		keys = append(keys, k)
+
+		smtIncremental.InsertKA(k, valuesRaw[i])
 	}
-	s.GenerateFromKVBulk("", keys)
+
+	smtBulk.GenerateFromKVBulk("", keys)
+
+	fmt.Println(smtBulk.Db.GetLastRoot())
+	fmt.Println(smtIncremental.Db.GetLastRoot())
+
+	smt.DumpTree(smtBulk)
+	fmt.Println()
+	smt.DumpTree(smtIncremental)
 }
 
 func TestBatchInsert(t *testing.T) {
