@@ -30,13 +30,29 @@ type Increments struct {
 }
 
 func TestValues(t *testing.T) {
-	nodeKey := utils.ScalarToNodeKey(big.NewInt(11))
-	path := nodeKey.GetPath()
+	// nodeKey := utils.ScalarToNodeKey(big.NewInt(11))
+	// path := nodeKey.GetPath()
 
-	nodeKey2 := utils.RemoveKeyBits(nodeKey, 1)
-	path2 := nodeKey2.GetPath()
-	t.Logf("%+v -> %d", path, path[0])
-	t.Logf("%+v -> %d", path2, path2[0])
+	// nodeKey2 := utils.RemoveKeyBits(nodeKey, 1)
+	// path2 := nodeKey2.GetPath()
+	// t.Logf("%+v -> %d", path, path[0])
+	// t.Logf("%+v -> %d", path2, path2[0])
+
+	s := smt.NewSMT(nil)
+	kvMap := map[utils.NodeKey]utils.NodeValue8{
+		utils.ScalarToNodeKey(big.NewInt(0)): utils.ScalarToNodeValue8(big.NewInt(18)),
+		utils.ScalarToNodeKey(big.NewInt(2)): utils.ScalarToNodeValue8(big.NewInt(18)),
+		// utils.ScalarToNodeKey(big.NewInt(1)): utils.ScalarToNodeValue8(big.NewInt(18)),
+		// utils.ScalarToNodeKey(big.NewInt(19)): utils.ScalarToNodeValue8(big.NewInt(19)),
+	}
+	keys := []utils.NodeKey{}
+	for k, v := range kvMap {
+		if !v.IsZero() {
+			s.Db.InsertAccountValue(k, v)
+			keys = append(keys, k)
+		}
+	}
+	s.GenerateFromKVBulk("", keys)
 }
 
 func TestBatchInsert(t *testing.T) {
