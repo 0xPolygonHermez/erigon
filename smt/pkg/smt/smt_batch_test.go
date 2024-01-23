@@ -18,19 +18,22 @@ type Increments struct {
 	Storage  map[string]string
 }
 
-func TestValues(t *testing.T) {
-	// nodeKey := utils.ScalarToNodeKey(big.NewInt(11))
+func TestBatchInsert(t *testing.T) {
+	// nodeKey := utils.ScalarToNodeKey(big.NewInt(31))
 	// path := nodeKey.GetPath()
 
-	// nodeKey2 := utils.RemoveKeyBits(nodeKey, 1)
+	// nodeKey2 := utils.RemoveKeyBits(nodeKey, 2)
 	// path2 := nodeKey2.GetPath()
 	// t.Logf("%+v -> %d", path, path[0])
 	// t.Logf("%+v -> %d", path2, path2[0])
 
 	keysRaw := []*big.Int{
-		big.NewInt(0),
-		big.NewInt(2),
-		// big.NewInt(7),
+		// big.NewInt(8),
+		big.NewInt(1),
+		big.NewInt(31),
+		// big.NewInt(0),
+		// big.NewInt(2),
+		// big.NewInt(21232),
 	}
 	valuesRaw := []*big.Int{
 		big.NewInt(18),
@@ -39,37 +42,55 @@ func TestValues(t *testing.T) {
 		big.NewInt(21),
 	}
 
-	keys := []utils.NodeKey{}
-	keyPointers := []*utils.NodeKey{}
-	valuePointers := []*utils.NodeValue8{}
-	smtBulk := smt.NewSMT(nil)
+	// keyPointers := []*utils.NodeKey{}
+	// valuePointers := []*utils.NodeValue8{}
+
 	smtIncremental := smt.NewSMT(nil)
+	smtBatched := smt.NewSMT(nil)
 
 	for i := range keysRaw {
 		k := utils.ScalarToNodeKey(keysRaw[i])
 		v := utils.ScalarToNodeValue8(valuesRaw[i])
-		smtBulk.Db.InsertAccountValue(k, v)
-		keys = append(keys, k)
-		keyPointers = append(keyPointers, &k)
-		valuePointers = append(valuePointers, &v)
 
+		// keyPointers = append(keyPointers, &k)
+		// valuePointers = append(valuePointers, &v)
+
+		// incremental insert
 		smtIncremental.InsertKA(k, valuesRaw[i])
+
+		_, err := smtBatched.InsertBatch([]*utils.NodeKey{&k}, []*utils.NodeValue8{&v}, nil, nil)
+		assert.NilError(t, err)
+
+		smtIncremental.DumpTree()
+		fmt.Println()
+		smtBatched.DumpTree()
+		fmt.Println()
+		fmt.Println()
+		fmt.Println()
+
+		smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
+		smtBatchedRootHash, _ := smtBatched.Db.GetLastRoot()
+		assert.Equal(t, utils.ConvertBigIntToHex(smtBatchedRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 	}
 
-	// smtBulk.GenerateFromKVBulk("", keys)
+	// batch insert
+	// _, err := smtBatched.InsertBatch(keyPointers, valuePointers, nil, nil)
+	// assert.NilError(t, err)
 
-	fmt.Println(smtBulk.Db.GetLastRoot())
-	fmt.Println(smtIncremental.Db.GetLastRoot())
+	// smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
+	// smtBatchedRootHash, _ := smtBatched.Db.GetLastRoot()
+	// assert.Equal(t, utils.ConvertBigIntToHex(smtBatchedRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 
-	smtBulk.DumpTree()
-	fmt.Println()
-	smtIncremental.DumpTree()
-	fmt.Println()
-	_, err := smtBulk.InsertBatch(keyPointers, valuePointers, nil, nil)
-	assert.NilError(t, err)
+	// smtIncremental.DumpTree()
+	// fmt.Println()
+	// smtBatched.DumpTree()
+	// fmt.Println()
+
+	// fmt.Println(smtIncremental.Db.GetLastRoot())
+	// fmt.Println(smtBatched.Db.GetLastRoot())
 }
 
-// func TestBatchInsert(t *testing.T) {
+// func TestBatchInsertPerformance(t *testing.T) {
 // 	ctx := context.Background()
 
 // 	dbPath := "/tmp/erigon-db"
@@ -101,10 +122,11 @@ func TestValues(t *testing.T) {
 // 	}
 
 // 	db.CreateEriDbBuckets(dbTransaction)
-// 	smtDb := db.NewEriDb(dbTransaction)
+// 	// smtDb := db.NewEriDb(dbTransaction)
 
-// 	s := smt.NewSMT(smtDb)
-// 	initialTreeSize := int64(1000000)
+// 	s := smt.NewSMT(nil)
+// 	// initialTreeSize := int64(1000000)
+// 	initialTreeSize := int64(1000)
 // 	keys := []utils.NodeKey{}
 // 	kvMap := map[utils.NodeKey]utils.NodeValue8{}
 // 	rand.Seed(1)
@@ -125,7 +147,7 @@ func TestValues(t *testing.T) {
 
 // 	t.Logf("Batch insert %d values in %v\n", initialTreeSize, time.Since(startTime))
 
-// 	incrementTreeSize := 1000
+// 	incrementTreeSize := 400
 // 	increments := make([]*Increments, 0)
 // 	for i := 0; i < incrementTreeSize; i++ {
 // 		storage := make(map[string]string)
@@ -160,6 +182,20 @@ func TestValues(t *testing.T) {
 // 		}
 // 	}
 // 	t.Logf("Incremental insert %d values in %v (Accounts %v, Contract %v, Storage %v InsertSingle %v InsertRecalc %v)\n", incrementTreeSize, time.Since(startTime), smt.TimeAccount, smt.TimeContract, smt.TimeStorage, smt.TimeInsertSingle, smt.TimeInsertRecalc)
+
+// 	// incrementalRoot, _ := s.Db.GetLastRoot()
+// 	// t.Logf("Incremental root %v", incrementalRoot)
+
+// 	smtBatch := smt.NewSMT(nil)
+// 	startTime = time.Now()
+// 	smtBatch.InsertBatch(smt.KeyPointers, smt.ValuePointers, nil, nil)
+// 	t.Logf("Incremental insert %d values in %v\n", incrementTreeSize, time.Since(startTime))
+// 	// batchRoot, _ := smtBatch.Db.GetLastRoot()
+// 	// t.Logf("Incremental root %v", batchRoot)
+
+// 	smtIncrementalRootHash, _ := s.Db.GetLastRoot()
+// 	smtBatchedRootHash, _ := smtBatch.Db.GetLastRoot()
+// 	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchedRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 
 // 	dbTransaction.Commit()
 // 	t.Cleanup(func() {

@@ -7,6 +7,9 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
+var KeyPointers = []*utils.NodeKey{}
+var ValuePointers = []*utils.NodeValue8{}
+
 func (s *SMT) DumpTree() {
 	rootNodeKey, _ := s.getLastRoot()
 	dumpTree(s, rootNodeKey, 0, []int{}, 12)
@@ -28,9 +31,13 @@ func dumpTree(smt *SMT, nodeKey utils.NodeKey, level int, path []int, printDepth
 
 	if nodeValue.IsFinalNode() {
 		rKey := utils.NodeKeyFromBigIntArray(nodeValue[0:4])
+		rKeyPath := rKey.GetPath()
 		leafValueHash := utils.NodeKeyFromBigIntArray(nodeValue[4:8])
 		totalKey := utils.JoinKey(path, rKey)
 		leafPath := totalKey.GetPath()
+		if len(rKeyPath) != 256 {
+			fmt.Println()
+		}
 		fmt.Printf("|")
 		for i := 0; i < level; i++ {
 			fmt.Printf("=")
@@ -39,7 +46,7 @@ func dumpTree(smt *SMT, nodeKey utils.NodeKey, level int, path []int, printDepth
 		for i := level * 2; i < printDepth; i++ {
 			fmt.Printf("-")
 		}
-		fmt.Printf(" # %s -> %+v", convertPathToBinaryString(leafPath), leafValueHash)
+		fmt.Printf(" # %s -> %+v hash(%s)", convertPathToBinaryString(leafPath), leafValueHash, utils.ConvertBigIntToHex(utils.ArrayToScalar(nodeKey[:])))
 		fmt.Println()
 		return
 	} else {
@@ -51,6 +58,7 @@ func dumpTree(smt *SMT, nodeKey utils.NodeKey, level int, path []int, printDepth
 		for i := level * 2; i < printDepth; i++ {
 			fmt.Printf("-")
 		}
+		fmt.Printf(" # hashLeft(%s) <-> hashRight(%s)", utils.ConvertBigIntToHex(utils.ArrayBigToScalar(nodeValue[0:4])), utils.ConvertBigIntToHex(utils.ArrayBigToScalar(nodeValue[4:8])))
 		fmt.Println()
 	}
 

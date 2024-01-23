@@ -407,6 +407,20 @@ func ConcatArrays4(a, b [4]uint64) [8]uint64 {
 	return result
 }
 
+func ConcatArrays8AndCapacity(in [8]uint64, capacity [4]uint64) NodeValue12 {
+	var sl []uint64
+	sl = append(sl, in[:]...)
+	sl = append(sl, capacity[:]...)
+
+	v := NodeValue12{}
+	for i, val := range sl {
+		b := new(big.Int)
+		v[i] = b.SetUint64(val)
+	}
+
+	return v
+}
+
 func RemoveKeyBits(k NodeKey, nBits int) NodeKey {
 	var auxk NodeKey
 	fullLevels := nBits / 4
@@ -420,6 +434,18 @@ func RemoveKeyBits(k NodeKey, nBits int) NodeKey {
 	}
 
 	return auxk
+}
+
+func ZeroUpToNumber(path []int, number int) NodeKey {
+	result := make([]int, len(path))
+
+	copy(result, path)
+	for i := 0; i < number; i++ {
+		result[i] = 0
+	}
+
+	a, _ := NodeKeyFromPath(result)
+	return a
 }
 
 func ScalarToArrayBig12(scalar *big.Int) []*big.Int {

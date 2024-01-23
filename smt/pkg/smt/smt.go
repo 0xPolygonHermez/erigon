@@ -196,6 +196,9 @@ func (s *SMT) insertSingle(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint6
 }
 
 func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, oldRoot utils.NodeKey) (*SMTResponse, error) {
+	KeyPointers = append(KeyPointers, &k)
+	ValuePointers = append(ValuePointers, &v)
+
 	startTime := time.Now()
 
 	newRoot := oldRoot
