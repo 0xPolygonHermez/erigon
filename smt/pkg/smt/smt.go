@@ -131,6 +131,10 @@ func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) 
 	return s.insertSingle(key, *v, [4]uint64{})
 }
 
+func (s *SMT) Insert(key utils.NodeKey, value utils.NodeValue8) (*SMTResponse, error) {
+	return s.insertSingle(key, value, [4]uint64{})
+}
+
 func (s *SMT) InsertStorage(ethAddr string, storage *map[string]string, chm *map[string]*utils.NodeValue8, vhm *map[string][4]uint64) (*SMTResponse, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
@@ -199,7 +203,7 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 	KeyPointers = append(KeyPointers, &k)
 	ValuePointers = append(ValuePointers, &v)
 
-	startTime := time.Now()
+	// startTime := time.Now()
 
 	newRoot := oldRoot
 
@@ -485,8 +489,8 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 	utils.RemoveOver(siblings, level+1)
 
-	TimeInsertSingle += int64(time.Since(startTime))
-	startTime = time.Now()
+	// TimeInsertSingle += int64(time.Since(startTime))
+	// startTime = time.Now()
 
 	for level >= 0 {
 		hashValueIn, err := utils.NodeValue8FromBigIntArray(siblings[level][0:8])
@@ -509,7 +513,7 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 		}
 	}
 
-	TimeInsertRecalc += int64(time.Since(startTime))
+	// TimeInsertRecalc += int64(time.Since(startTime))
 
 	_ = oldRoot
 

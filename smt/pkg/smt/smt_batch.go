@@ -2,17 +2,13 @@ package smt
 
 import (
 	"fmt"
+	"sync"
 
+	"github.com/dgravesa/go-parallel/parallel"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
-/*
-NodeKey -> Value
-NodeKey { Hash(rKey, Hash(Value)) } -> rKey, Hash(Value), 1
-NodeKey { Hash(LeftNodeKey, RightNodeKey) } -> LeftNodeKey, RightNodeKey, 0
-*/
-
-func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeValue8, nodeValuesHashes []*[4]uint64, workingRootNodeKey *utils.NodeKey) (*SMTResponse, error) {
+func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeValue8, nodeValuesHashes []*[4]uint64, rootNodeKey *utils.NodeKey) (*SMTResponse, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 
@@ -30,142 +26,70 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 		return nil, err
 	}
 
-	err = calculateRootNodeKeyIfNil(s, &workingRootNodeKey)
+	err = calculateRootNodeKeyIfNil(s, &rootNodeKey)
 	if err != nil {
 		return nil, err
 	}
 
 	for i := 0; i < size; i++ {
-		var nodePathLevel int = -1
+		insertingNodeKey := nodeKeys[i]
+		insertingNodeValue := nodeValues[i]
+		insertingNodeValueHash := nodeValuesHashes[i]
 
-		var nextWorkingNodeKey *utils.NodeKey
-		var nextWorkingSmtBatchNode **smtBatchNode
-
-		var workingSmtBatchNodeParent *smtBatchNode
-		workingSmtBatchNode := &smtBatchNodeRoot
-		workingNodeKey := workingRootNodeKey
-		workingRKey := *nodeKeys[i]
-
-		nodePath := nodeKeys[i].GetPath()
-
-		for {
-			if (*workingSmtBatchNode) == nil { // update in-memory structure from db
-				if !workingNodeKey.IsZero() {
-					dbNodeValue, err := s.Db.Get(*workingNodeKey)
-					if err != nil {
-						return nil, err
-					}
-
-					nodeLeftKeyOrRkey := utils.NodeKeyFromBigIntArray(dbNodeValue[0:4])
-					nodeRightKeyOrValueHash := utils.NodeKeyFromBigIntArray(dbNodeValue[4:8])
-					*workingSmtBatchNode = &smtBatchNode{
-						parentNode:              workingSmtBatchNodeParent,
-						nodeLeftKeyOrRkey:       &nodeLeftKeyOrRkey,
-						nodeRightKeyOrValueHash: &nodeRightKeyOrValueHash,
-						leaf:                    dbNodeValue.IsFinalNode(),
-					}
-				} else {
-					if nodePathLevel != -1 {
-						return nil, fmt.Errorf("nodekey is zero at non-root level")
-					}
-				}
-			}
-
-			if (*workingSmtBatchNode) == nil {
-				if nodePathLevel != -1 {
-					return nil, fmt.Errorf("working smt pointer is nil at non-root level")
-				}
-				break
-			}
-
-			nodePathLevel++
-
-			if (*workingSmtBatchNode).isLeaf() {
-				break
-			}
-
-			direction := nodePath[nodePathLevel]
-			nextWorkingNodeKey = (*workingSmtBatchNode).getNextNodeKey(direction)
-			nextWorkingSmtBatchNode = (*workingSmtBatchNode).getChildByDirection(direction)
-			if nextWorkingNodeKey.IsZero() && (*nextWorkingSmtBatchNode) == nil {
-				break
-			}
-
-			workingNodeKey = nextWorkingNodeKey
-			workingSmtBatchNodeParent = *workingSmtBatchNode
-			workingSmtBatchNode = nextWorkingSmtBatchNode
+		insertingNodePathLevel, insertingNodePath, insertingPointerToSmtBatchNode, err := findInsertingPoint(s, insertingNodeKey, rootNodeKey, &smtBatchNodeRoot)
+		if err != nil {
+			return nil, err
 		}
 
-		nodeValue := nodeValues[i]
-		nodeValueHash := nodeValuesHashes[i]
-
 		// special case if root does not exists yet
-		if (*workingSmtBatchNode) == nil {
-			if !nodeValue.IsZero() {
-				*workingSmtBatchNode = newSmtBatchNodeLeaf(&workingRKey, (*utils.NodeKey)(nodeValueHash), nil)
+		if (*insertingPointerToSmtBatchNode) == nil {
+			if !insertingNodeValue.IsZero() {
+				*insertingPointerToSmtBatchNode = newSmtBatchNodeLeaf(insertingNodeKey, (*utils.NodeKey)(insertingNodeValueHash), nil)
 			} else {
 				// nothing to delete
 			}
-
-			// dumpBatchTreeFromMemory(smtBatchNodeRoot, 0, make([]int, 0), 12)
-			// fmt.Println()
 			continue
 		}
 
-		workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
-		if !nodeValue.IsZero() {
-			if !((*workingSmtBatchNode).isLeaf()) {
-				nodePathDirection := nodePath[nodePathLevel]
-				nextWorkingSmtBatchNode = (*workingSmtBatchNode).getChildByDirection(nodePathDirection)
-				if (*nextWorkingSmtBatchNode) != nil {
-					return nil, fmt.Errorf("branch has already been taken")
+		insertingRemainingKey := utils.RemoveKeyBits(*insertingNodeKey, insertingNodePathLevel)
+		if !insertingNodeValue.IsZero() {
+			if !((*insertingPointerToSmtBatchNode).isLeaf()) {
+				if insertingPointerToSmtBatchNode, err = (*insertingPointerToSmtBatchNode).createALeafInEmptyDirection(insertingNodePath, insertingNodePathLevel, insertingNodeKey); err != nil {
+					return nil, err
+				}
+				insertingRemainingKey = *((*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey)
+				insertingNodePathLevel++
+			}
+
+			if !((*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey.IsEqualTo(insertingRemainingKey)) {
+				currentTreeNodePath := utils.JoinKey(insertingNodePath[:insertingNodePathLevel], *(*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey).GetPath()
+				for insertingNodePath[insertingNodePathLevel] == currentTreeNodePath[insertingNodePathLevel] {
+					insertingPointerToSmtBatchNode = (*insertingPointerToSmtBatchNode).moveLeafByAddingALeafInDirection(insertingNodePath, insertingNodePathLevel)
+					insertingNodePathLevel++
 				}
 
-				nodePathLevel++
-				workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
-				*nextWorkingSmtBatchNode = newSmtBatchNodeLeaf(&workingRKey, nil, *workingSmtBatchNode)
-				workingSmtBatchNode = nextWorkingSmtBatchNode
-			}
+				(*insertingPointerToSmtBatchNode).moveLeafByAddingALeafInDirection(currentTreeNodePath, insertingNodePathLevel)
 
-			if !((*workingSmtBatchNode).isLeaf()) {
-				return nil, fmt.Errorf("has a branch on a place where leaf is expected")
-			}
-
-			if !((*workingSmtBatchNode).nodeLeftKeyOrRkey.IsEqualTo(workingRKey)) {
-				workingNodePath := utils.JoinKey(nodePath[:nodePathLevel], *(*workingSmtBatchNode).nodeLeftKeyOrRkey).GetPath()
-				for nodePath[nodePathLevel] == workingNodePath[nodePathLevel] {
-					workingNodePathDirection := workingNodePath[nodePathLevel]
-					workingSmtBatchNode = (*workingSmtBatchNode).moveLeafByAddingALeafInDirection(workingNodePathDirection, nodePath[:nodePathLevel])
-
-					nodePathLevel++
-					workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
+				if insertingPointerToSmtBatchNode, err = (*insertingPointerToSmtBatchNode).createALeafInEmptyDirection(insertingNodePath, insertingNodePathLevel, insertingNodeKey); err != nil {
+					return nil, err
 				}
-
-				workingNodePathDirection := workingNodePath[nodePathLevel]
-				(*workingSmtBatchNode).moveLeafByAddingALeafInDirection(workingNodePathDirection, nodePath[:nodePathLevel])
-
-				nodePathDirection := nodePath[nodePathLevel]
-				nextWorkingSmtBatchNode = (*workingSmtBatchNode).getChildByDirection(nodePathDirection)
-				nodePathLevel++
-				workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
-				*nextWorkingSmtBatchNode = newSmtBatchNodeLeaf(&workingRKey, nil, *workingSmtBatchNode)
-				workingSmtBatchNode = nextWorkingSmtBatchNode
+				insertingRemainingKey = *((*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey)
+				insertingNodePathLevel++
 			}
 
-			(*workingSmtBatchNode).nodeRightKeyOrValueHash = (*utils.NodeKey)(nodeValueHash)
+			(*insertingPointerToSmtBatchNode).nodeRightKeyOrValueHash = (*utils.NodeKey)(insertingNodeValueHash)
+		} else {
+			//TODO: implement delete
 		}
-
-		// dumpBatchTreeFromMemory(smtBatchNodeRoot, 0, make([]int, 0), 12)
-		// fmt.Println()
 	}
 
 	if smtBatchNodeRoot == nil {
-		workingRootNodeKey = &utils.NodeKey{0, 0, 0, 0}
+		rootNodeKey = &utils.NodeKey{0, 0, 0, 0}
 	} else {
 		calculateAndSaveHashesDfs(s, smtBatchNodeRoot)
-		workingRootNodeKey = (*utils.NodeKey)(smtBatchNodeRoot.hash)
+		rootNodeKey = (*utils.NodeKey)(smtBatchNodeRoot.hash)
 	}
-	if err := s.setLastRoot(*workingRootNodeKey); err != nil {
+	if err := s.setLastRoot(*rootNodeKey); err != nil {
 		return nil, err
 	}
 
@@ -178,11 +102,10 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 
 	// dumpBatchTreeFromMemory(smtBatchNodeRoot, 0, make([]int, 0), 12)
 	// fmt.Println()
-	// dumpTree(s, (*workingRootNodeKey), 0, []int{}, 12)
 
 	return &SMTResponse{
 		Mode:          "batch insert",
-		NewRootScalar: workingRootNodeKey,
+		NewRootScalar: rootNodeKey,
 	}, nil
 }
 
@@ -203,14 +126,47 @@ func validateDataLengths(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeValu
 	return nil
 }
 
-// TODO: implement threads
 func calculateNodeValueHashesIfMissing(s *SMT, nodeValues []*utils.NodeValue8, nodeValuesHashes *[]*[4]uint64) error {
-	for i, nodeValue := range nodeValues {
+	var globalError error
+	size := len(nodeValues)
+	cpuNum := parallel.DefaultNumGoroutines()
+
+	if size > (cpuNum << 2) {
+		var wg sync.WaitGroup
+		itemsPerCpu := (size + cpuNum - 1) / cpuNum
+
+		wg.Add(cpuNum)
+
+		for cpuIndex := 0; cpuIndex < cpuNum; cpuIndex++ {
+			go func(cpuIndexInThread int) {
+				defer wg.Done()
+				startIndex := cpuIndexInThread * itemsPerCpu
+				endIndex := startIndex + itemsPerCpu
+				if endIndex > size {
+					endIndex = size
+				}
+				err := calculateNodeValueHashesIfMissingInInterval(s, nodeValues, nodeValuesHashes, startIndex, endIndex)
+				if err != nil {
+					globalError = err
+				}
+			}(cpuIndex)
+		}
+
+		wg.Wait()
+	} else {
+		globalError = calculateNodeValueHashesIfMissingInInterval(s, nodeValues, nodeValuesHashes, 0, len(nodeValues))
+	}
+
+	return globalError
+}
+
+func calculateNodeValueHashesIfMissingInInterval(s *SMT, nodeValues []*utils.NodeValue8, nodeValuesHashes *[]*[4]uint64, startIndex, endIndex int) error {
+	for i := startIndex; i < endIndex; i++ {
 		if (*nodeValuesHashes)[i] != nil {
 			continue
 		}
 
-		nodeValueHashObj, err := s.hashcalc(nodeValue.ToUintArray(), utils.BranchCapacity)
+		nodeValueHashObj, err := s.hashcalc(nodeValues[i].ToUintArray(), utils.BranchCapacity)
 		if err != nil {
 			return err
 		}
@@ -232,9 +188,70 @@ func calculateRootNodeKeyIfNil(s *SMT, root **utils.NodeKey) error {
 	return nil
 }
 
+func findInsertingPoint(s *SMT, insertingNodeKey, insertingPointerNodeKey *utils.NodeKey, insertingPointerToSmtBatchNode **smtBatchNode) (int, []int, **smtBatchNode, error) {
+	var insertingNodePathLevel int = -1
+
+	var nextInsertingPointerNodeKey *utils.NodeKey
+	var nextInsertingPointerToSmtBatchNode **smtBatchNode
+
+	var insertingPointerToSmtBatchNodeParent *smtBatchNode
+
+	insertingNodePath := insertingNodeKey.GetPath()
+
+	for {
+		if (*insertingPointerToSmtBatchNode) == nil { // update in-memory structure from db
+			if !insertingPointerNodeKey.IsZero() {
+				dbNodeValue, err := s.Db.Get(*insertingPointerNodeKey)
+				if err != nil {
+					return -2, []int{}, insertingPointerToSmtBatchNode, err
+				}
+
+				nodeLeftKeyOrRemainingKey := utils.NodeKeyFromBigIntArray(dbNodeValue[0:4])
+				nodeRightKeyOrValueHash := utils.NodeKeyFromBigIntArray(dbNodeValue[4:8])
+				*insertingPointerToSmtBatchNode = &smtBatchNode{
+					parentNode:                insertingPointerToSmtBatchNodeParent,
+					nodeLeftKeyOrRemainingKey: &nodeLeftKeyOrRemainingKey,
+					nodeRightKeyOrValueHash:   &nodeRightKeyOrValueHash,
+					leaf:                      dbNodeValue.IsFinalNode(),
+				}
+			} else {
+				if insertingNodePathLevel != -1 {
+					return -2, []int{}, insertingPointerToSmtBatchNode, fmt.Errorf("nodekey is zero at non-root level")
+				}
+			}
+		}
+
+		if (*insertingPointerToSmtBatchNode) == nil {
+			if insertingNodePathLevel != -1 {
+				return -2, []int{}, insertingPointerToSmtBatchNode, fmt.Errorf("working smt pointer is nil at non-root level")
+			}
+			break
+		}
+
+		insertingNodePathLevel++
+
+		if (*insertingPointerToSmtBatchNode).isLeaf() {
+			break
+		}
+
+		insertDirection := insertingNodePath[insertingNodePathLevel]
+		nextInsertingPointerNodeKey = (*insertingPointerToSmtBatchNode).getNextNodeKeyInDirection(insertDirection)
+		nextInsertingPointerToSmtBatchNode = (*insertingPointerToSmtBatchNode).getChildInDirection(insertDirection)
+		if nextInsertingPointerNodeKey.IsZero() && (*nextInsertingPointerToSmtBatchNode) == nil {
+			break
+		}
+
+		insertingPointerNodeKey = nextInsertingPointerNodeKey
+		insertingPointerToSmtBatchNodeParent = *insertingPointerToSmtBatchNode
+		insertingPointerToSmtBatchNode = nextInsertingPointerToSmtBatchNode
+	}
+
+	return insertingNodePathLevel, insertingNodePath, insertingPointerToSmtBatchNode, nil
+}
+
 func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode) error {
 	if smtBatchNode.isLeaf() {
-		hashObj, err := s.hashcalcAndSave(utils.ConcatArrays4(*smtBatchNode.nodeLeftKeyOrRkey, *smtBatchNode.nodeRightKeyOrValueHash), utils.LeafCapacity)
+		hashObj, err := s.hashcalcAndSave(utils.ConcatArrays4(*smtBatchNode.nodeLeftKeyOrRemainingKey, *smtBatchNode.nodeRightKeyOrValueHash), utils.LeafCapacity)
 		if err != nil {
 			return err
 		}
@@ -248,7 +265,7 @@ func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode) error {
 		calculateAndSaveHashesDfs(s, smtBatchNode.leftNode)
 		totalHash.SetHalfValue(*smtBatchNode.leftNode.hash, 0)
 	} else {
-		totalHash.SetHalfValue(*smtBatchNode.nodeLeftKeyOrRkey, 0)
+		totalHash.SetHalfValue(*smtBatchNode.nodeLeftKeyOrRemainingKey, 0)
 	}
 
 	if smtBatchNode.rightNode != nil {
@@ -267,24 +284,24 @@ func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode) error {
 }
 
 type smtBatchNode struct {
-	nodeLeftKeyOrRkey       *utils.NodeKey
-	nodeRightKeyOrValueHash *utils.NodeKey
-	leaf                    bool
-	parentNode              *smtBatchNode // if nil => this is the root node
-	leftNode                *smtBatchNode
-	rightNode               *smtBatchNode
-	hash                    *[4]uint64
+	nodeLeftKeyOrRemainingKey *utils.NodeKey
+	nodeRightKeyOrValueHash   *utils.NodeKey
+	leaf                      bool
+	parentNode                *smtBatchNode // if nil => this is the root node
+	leftNode                  *smtBatchNode
+	rightNode                 *smtBatchNode
+	hash                      *[4]uint64
 }
 
-func newSmtBatchNodeLeaf(nodeLeftKeyOrRkey, nodeRightKeyOrValueHash *utils.NodeKey, parentNode *smtBatchNode) *smtBatchNode {
+func newSmtBatchNodeLeaf(nodeLeftKeyOrRemainingKey, nodeRightKeyOrValueHash *utils.NodeKey, parentNode *smtBatchNode) *smtBatchNode {
 	return &smtBatchNode{
-		nodeLeftKeyOrRkey:       nodeLeftKeyOrRkey,
-		nodeRightKeyOrValueHash: nodeRightKeyOrValueHash,
-		leaf:                    true,
-		parentNode:              parentNode,
-		leftNode:                nil,
-		rightNode:               nil,
-		hash:                    nil,
+		nodeLeftKeyOrRemainingKey: nodeLeftKeyOrRemainingKey,
+		nodeRightKeyOrValueHash:   nodeRightKeyOrValueHash,
+		leaf:                      true,
+		parentNode:                parentNode,
+		leftNode:                  nil,
+		rightNode:                 nil,
+		hash:                      nil,
 	}
 }
 
@@ -292,15 +309,15 @@ func (sbn *smtBatchNode) isLeaf() bool {
 	return sbn.leaf
 }
 
-func (sbn *smtBatchNode) getNextNodeKey(direction int) *utils.NodeKey {
+func (sbn *smtBatchNode) getNextNodeKeyInDirection(direction int) *utils.NodeKey {
 	if direction == 0 {
-		return sbn.nodeLeftKeyOrRkey
+		return sbn.nodeLeftKeyOrRemainingKey
 	} else {
 		return sbn.nodeRightKeyOrValueHash
 	}
 }
 
-func (sbn *smtBatchNode) getChildByDirection(direction int) **smtBatchNode {
+func (sbn *smtBatchNode) getChildInDirection(direction int) **smtBatchNode {
 	if direction == 0 {
 		return &sbn.leftNode
 	} else {
@@ -308,14 +325,28 @@ func (sbn *smtBatchNode) getChildByDirection(direction int) **smtBatchNode {
 	}
 }
 
-func (sbn *smtBatchNode) moveLeafByAddingALeafInDirection(direction int, nodePath []int) **smtBatchNode {
-	childPointer := sbn.getChildByDirection(direction)
+func (sbn *smtBatchNode) createALeafInEmptyDirection(insertingNodePath []int, insertingNodePathLevel int, insertingNodeKey *utils.NodeKey) (**smtBatchNode, error) {
+	direction := insertingNodePath[insertingNodePathLevel]
+	childPointer := sbn.getChildInDirection(direction)
+	if (*childPointer) != nil {
+		return nil, fmt.Errorf("branch has already been taken")
+	}
+	remainingKey := utils.RemoveKeyBits(*insertingNodeKey, insertingNodePathLevel+1)
+	*childPointer = newSmtBatchNodeLeaf(&remainingKey, nil, sbn)
+	return childPointer, nil
+}
 
-	nodeKey := utils.JoinKey(nodePath, *sbn.nodeLeftKeyOrRkey)
-	workingSmtBatchNodeRkey := utils.RemoveKeyBits(*nodeKey, len(nodePath)+1)
+func (sbn *smtBatchNode) moveLeafByAddingALeafInDirection(insertingNodeKey []int, insertingNodeKeyLevel int) **smtBatchNode {
+	direction := insertingNodeKey[insertingNodeKeyLevel]
+	insertingNodeKeyUpToLevel := insertingNodeKey[:insertingNodeKeyLevel]
 
-	*childPointer = newSmtBatchNodeLeaf(&workingSmtBatchNodeRkey, sbn.nodeRightKeyOrValueHash, sbn)
-	sbn.nodeLeftKeyOrRkey = &utils.NodeKey{0, 0, 0, 0}
+	childPointer := sbn.getChildInDirection(direction)
+
+	nodeKey := utils.JoinKey(insertingNodeKeyUpToLevel, *sbn.nodeLeftKeyOrRemainingKey)
+	remainingKey := utils.RemoveKeyBits(*nodeKey, len(insertingNodeKeyUpToLevel)+1)
+
+	*childPointer = newSmtBatchNodeLeaf(&remainingKey, sbn.nodeRightKeyOrValueHash, sbn)
+	sbn.nodeLeftKeyOrRemainingKey = &utils.NodeKey{0, 0, 0, 0}
 	sbn.nodeRightKeyOrValueHash = &utils.NodeKey{0, 0, 0, 0}
 	sbn.leaf = false
 
@@ -335,9 +366,9 @@ func dumpBatchTreeFromMemory(sbn *smtBatchNode, level int, path []int, printDept
 	}
 
 	if sbn.isLeaf() {
-		rKey := sbn.nodeLeftKeyOrRkey
+		remainingKey := sbn.nodeLeftKeyOrRemainingKey
 		leafValueHash := sbn.nodeRightKeyOrValueHash
-		totalKey := utils.JoinKey(path, *rKey)
+		totalKey := utils.JoinKey(path, *remainingKey)
 		leafPath := totalKey.GetPath()
 		fmt.Printf("|")
 		for i := 0; i < level; i++ {

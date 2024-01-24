@@ -30,9 +30,9 @@ type Increments struct {
 	Storage  map[string]string
 }
 
-func TestBatchInsert(t *testing.T) {
+func TestBatchSimpleInsert(t *testing.T) {
 	keysRaw := []*big.Int{
-		// big.NewInt(8),
+		big.NewInt(8),
 		big.NewInt(1),
 		big.NewInt(31),
 		// big.NewInt(0),
@@ -52,7 +52,7 @@ func TestBatchInsert(t *testing.T) {
 	valuePointers := []*utils.NodeValue8{}
 
 	smtIncremental := smt.NewSMT(nil)
-	smtBatched := smt.NewSMT(nil)
+	smtBatch := smt.NewSMT(nil)
 
 	for i := range keysRaw {
 		k := utils.ScalarToNodeKey(keysRaw[i])
@@ -65,19 +65,62 @@ func TestBatchInsert(t *testing.T) {
 		smtIncremental.InsertKA(k, valuesRaw[i])
 	}
 
-	_, err := smtBatched.InsertBatch(keyPointers, valuePointers, nil, nil)
+	_, err := smtBatch.InsertBatch(keyPointers, valuePointers, nil, nil)
 	assert.NilError(t, err)
 
 	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
-	smtBatchedRootHash, _ := smtBatched.Db.GetLastRoot()
-	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchedRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
+	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
+	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 
 	smtIncremental.DumpTree()
 	fmt.Println()
-	smtBatched.DumpTree()
+	smtBatch.DumpTree()
 	fmt.Println()
 	fmt.Println()
 	fmt.Println()
+}
+
+func TestBatchRawInsert(t *testing.T) {
+	keysForBatch := []*utils.NodeKey{}
+	valuesForBatch := []*utils.NodeValue8{}
+
+	keysForIncremental := []utils.NodeKey{}
+	valuesForIncremental := []utils.NodeValue8{}
+
+	smtIncremental := smt.NewSMT(nil)
+	smtBatch := smt.NewSMT(nil)
+
+	rand.Seed(1)
+	size := 1 << 0
+	for i := 0; i < size; i++ {
+		rawKey := big.NewInt(rand.Int63())
+		rawValue := big.NewInt(rand.Int63())
+
+		k := utils.ScalarToNodeKey(rawKey)
+		vArray := utils.ScalarToArrayBig(rawValue)
+		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+
+		keysForBatch = append(keysForBatch, &k)
+		valuesForBatch = append(valuesForBatch, v)
+
+		keysForIncremental = append(keysForIncremental, k)
+		valuesForIncremental = append(valuesForIncremental, *v)
+
+	}
+
+	startTime := time.Now()
+	for i := range keysForIncremental {
+		smtIncremental.Insert(keysForIncremental[i], valuesForIncremental[i])
+	}
+	t.Logf("Incremental insert %d values in %v\n", len(keysForIncremental), time.Since(startTime))
+
+	startTime = time.Now()
+	smtBatch.InsertBatch(keysForBatch, valuesForBatch, nil, nil)
+	t.Logf("Batch insert %d values in %v\n", len(keysForBatch), time.Since(startTime))
+
+	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
+	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
+	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 }
 
 func TestCompareAllTreesInsertTimesAndFinalHashesUsingDiskDb(t *testing.T) {
@@ -133,7 +176,8 @@ func compareAllTreesInsertTimesAndFinalHashes(t *testing.T, smtIncremental, smtB
 	t.Logf("Incremental insert %d values in %v (Accounts %v, Contract %v, Storage %v InsertSingle %v InsertRecalc %v)\n", len(smt.KeyPointers), time.Since(startTime), smt.TimeAccount, smt.TimeContract, smt.TimeStorage, smt.TimeInsertSingle, smt.TimeInsertRecalc)
 
 	startTime = time.Now()
-	smtBatch.InsertBatch(smt.KeyPointers, smt.ValuePointers, nil, nil)
+	_, err := smtBatch.InsertBatch(smt.KeyPointers, smt.ValuePointers, nil, nil)
+	assert.NilError(t, err)
 	t.Logf("Batch insert %d values in %v\n", len(smt.KeyPointers), time.Since(startTime))
 
 	keys := []utils.NodeKey{}
@@ -191,8 +235,9 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 }
 
 func prepareData() []*Increments {
-	incrementTreeSize := 1200
+	incrementTreeSize := 1500
 	increments := make([]*Increments, 0)
+	rand.Seed(1)
 	for i := 0; i < incrementTreeSize; i++ {
 		storage := make(map[string]string)
 		addressBytes := make([]byte, 20)
