@@ -112,21 +112,17 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 			continue
 		}
 
-		// workingRKey = utils.RemoveKeyBits(workingRKey, nodePathLevel)
-		workingRKey = utils.ZeroUpToNumber(nodePath, nodePathLevel)
-		workingRKeyPath := workingRKey.GetPath()
+		workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
 		if !nodeValue.IsZero() {
 			if !((*workingSmtBatchNode).isLeaf()) {
-				direction := nodePath[nodePathLevel]
-				nextWorkingSmtBatchNode = (*workingSmtBatchNode).getChildByDirection(direction)
+				nodePathDirection := nodePath[nodePathLevel]
+				nextWorkingSmtBatchNode = (*workingSmtBatchNode).getChildByDirection(nodePathDirection)
 				if (*nextWorkingSmtBatchNode) != nil {
 					return nil, fmt.Errorf("branch has already been taken")
 				}
 
 				nodePathLevel++
-				// workingRKey = utils.RemoveKeyBits(workingRKey, nodePathLevel)
-				workingRKey = utils.ZeroUpToNumber(nodePath, nodePathLevel)
-				workingRKeyPath = workingRKey.GetPath()
+				workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
 				*nextWorkingSmtBatchNode = newSmtBatchNodeLeaf(&workingRKey, nil, *workingSmtBatchNode)
 				workingSmtBatchNode = nextWorkingSmtBatchNode
 			}
@@ -136,47 +132,37 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 			}
 
 			if !((*workingSmtBatchNode).nodeLeftKeyOrRkey.IsEqualTo(workingRKey)) {
-				workingNodePath := (*workingSmtBatchNode).nodeLeftKeyOrRkey.GetPath()
+				workingNodePath := utils.JoinKey(nodePath[:nodePathLevel], *(*workingSmtBatchNode).nodeLeftKeyOrRkey).GetPath()
 				for nodePath[nodePathLevel] == workingNodePath[nodePathLevel] {
-					direction := nodePath[nodePathLevel]
-					workingSmtBatchNode = (*workingSmtBatchNode).moveLeafByAddingALeafInDirection(direction, nodePathLevel)
+					workingNodePathDirection := workingNodePath[nodePathLevel]
+					workingSmtBatchNode = (*workingSmtBatchNode).moveLeafByAddingALeafInDirection(workingNodePathDirection, nodePath[:nodePathLevel])
 
 					nodePathLevel++
-					// workingRKey = utils.RemoveKeyBits(workingRKey, nodePathLevel)
-					workingRKey = utils.ZeroUpToNumber(nodePath, nodePathLevel)
-					workingRKeyPath = workingRKey.GetPath()
+					workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
 				}
 
-				direction := nodePath[nodePathLevel]
-				workingDirection := workingNodePath[nodePathLevel]
-				(*workingSmtBatchNode).moveLeafByAddingALeafInDirection(workingDirection, nodePathLevel)
+				workingNodePathDirection := workingNodePath[nodePathLevel]
+				(*workingSmtBatchNode).moveLeafByAddingALeafInDirection(workingNodePathDirection, nodePath[:nodePathLevel])
 
+				nodePathDirection := nodePath[nodePathLevel]
+				nextWorkingSmtBatchNode = (*workingSmtBatchNode).getChildByDirection(nodePathDirection)
 				nodePathLevel++
-				// workingRKey = utils.RemoveKeyBits(workingRKey, nodePathLevel)
-				workingRKey = utils.ZeroUpToNumber(nodePath, nodePathLevel)
-				workingRKeyPath = workingRKey.GetPath()
-
-				nextWorkingSmtBatchNode = (*workingSmtBatchNode).getChildByDirection(direction)
+				workingRKey = utils.RemoveKeyBits(*nodeKeys[i], nodePathLevel)
 				*nextWorkingSmtBatchNode = newSmtBatchNodeLeaf(&workingRKey, nil, *workingSmtBatchNode)
 				workingSmtBatchNode = nextWorkingSmtBatchNode
 			}
 
 			(*workingSmtBatchNode).nodeRightKeyOrValueHash = (*utils.NodeKey)(nodeValueHash)
-
-			if workingRKeyPath == nil {
-				return nil, fmt.Errorf("DA BE")
-			}
 		}
 
 		// dumpBatchTreeFromMemory(smtBatchNodeRoot, 0, make([]int, 0), 12)
 		// fmt.Println()
 	}
 
-	calculateAndSaveHashesDfs(s, smtBatchNodeRoot)
-
 	if smtBatchNodeRoot == nil {
 		workingRootNodeKey = &utils.NodeKey{0, 0, 0, 0}
 	} else {
+		calculateAndSaveHashesDfs(s, smtBatchNodeRoot)
 		workingRootNodeKey = (*utils.NodeKey)(smtBatchNodeRoot.hash)
 	}
 	if err := s.setLastRoot(*workingRootNodeKey); err != nil {
@@ -322,12 +308,11 @@ func (sbn *smtBatchNode) getChildByDirection(direction int) **smtBatchNode {
 	}
 }
 
-func (sbn *smtBatchNode) moveLeafByAddingALeafInDirection(direction, nodePathLevel int) **smtBatchNode {
+func (sbn *smtBatchNode) moveLeafByAddingALeafInDirection(direction int, nodePath []int) **smtBatchNode {
 	childPointer := sbn.getChildByDirection(direction)
 
-	// workingSmtBatchNodeRkey := utils.RemoveKeyBits(*sbn.nodeLeftKeyOrRkey, nodePathLevel+1)
-	p := sbn.nodeLeftKeyOrRkey.GetPath()
-	workingSmtBatchNodeRkey := utils.ZeroUpToNumber(p, nodePathLevel+1)
+	nodeKey := utils.JoinKey(nodePath, *sbn.nodeLeftKeyOrRkey)
+	workingSmtBatchNodeRkey := utils.RemoveKeyBits(*nodeKey, len(nodePath)+1)
 
 	*childPointer = newSmtBatchNodeLeaf(&workingSmtBatchNodeRkey, sbn.nodeRightKeyOrValueHash, sbn)
 	sbn.nodeLeftKeyOrRkey = &utils.NodeKey{0, 0, 0, 0}

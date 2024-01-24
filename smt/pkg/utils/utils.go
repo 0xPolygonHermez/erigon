@@ -436,18 +436,6 @@ func RemoveKeyBits(k NodeKey, nBits int) NodeKey {
 	return auxk
 }
 
-func ZeroUpToNumber(path []int, number int) NodeKey {
-	result := make([]int, len(path))
-
-	copy(result, path)
-	for i := 0; i < number; i++ {
-		result[i] = 0
-	}
-
-	a, _ := NodeKeyFromPath(result)
-	return a
-}
-
 func ScalarToArrayBig12(scalar *big.Int) []*big.Int {
 	scalar = new(big.Int).Set(scalar)
 	mask := new(big.Int)
