@@ -71,7 +71,9 @@ func WriteCanonicalHash(db kv.Putter, hash libcommon.Hash, number uint64) error 
 func TruncateCanonicalHash(tx kv.RwTx, blockFrom uint64, deleteHeaders bool) error {
 	if err := tx.ForEach(kv.HeaderCanonical, hexutility.EncodeTs(blockFrom), func(k, v []byte) error {
 		if deleteHeaders {
-			deleteHeader(tx, libcommon.BytesToHash(v), blockFrom)
+			if err := DeleteHeader(tx, libcommon.BytesToHash(v), blockFrom); err != nil {
+				return err
+			}
 		}
 		return tx.Delete(kv.HeaderCanonical, k)
 	}); err != nil {
@@ -339,14 +341,16 @@ func WriteHeader(db kv.Putter, header *types.Header) {
 	}
 }
 
-// deleteHeader - dangerous, use DeleteAncientBlocks/TruncateBlocks methods
-func deleteHeader(db kv.Deleter, hash libcommon.Hash, number uint64) {
+// DeleteHeader - dangerous, use DeleteAncientBlocks/TruncateBlocks methods
+func DeleteHeader(db kv.Deleter, hash libcommon.Hash, number uint64) error {
 	if err := db.Delete(kv.Headers, dbutils.HeaderKey(number, hash)); err != nil {
-		log.Crit("Failed to delete header", "err", err)
+		return fmt.Errorf("Failed to delete header: %v", err)
 	}
 	if err := db.Delete(kv.HeaderNumber, hash.Bytes()); err != nil {
-		log.Crit("Failed to delete hash to number mapping", "err", err)
+		return fmt.Errorf("Failed to delete hash to number mapping: %v", err)
 	}
+
+	return nil
 }
 
 // ReadBodyRLP retrieves the block body (transactions and uncles) in RLP encoding.
@@ -740,6 +744,13 @@ func WriteSenders(db kv.Putter, hash libcommon.Hash, number uint64, senders []li
 	}
 	if err := db.Put(kv.Senders, dbutils.BlockBodyKey(number, hash), data); err != nil {
 		return fmt.Errorf("failed to store block senders: %w", err)
+	}
+	return nil
+}
+
+func DeleteSenders(db kv.Deleter, hash libcommon.Hash, number uint64) error {
+	if err := db.Delete(kv.Senders, dbutils.BlockBodyKey(number, hash)); err != nil {
+		return fmt.Errorf("failed to delete block senders: %w", err)
 	}
 	return nil
 }

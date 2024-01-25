@@ -516,11 +516,12 @@ Loop:
 
 		gers := []*dstypes.GerUpdate{}
 
-		blockHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
+		preExecuteHeaderHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 		if err != nil {
 			return err
 		}
-		block, _, err := cfg.blockReader.BlockWithSenders(ctx, tx, blockHash, blockNum)
+
+		block, senders, err := cfg.blockReader.BlockWithSenders(ctx, tx, preExecuteHeaderHash, blockNum)
 		if err != nil {
 			return err
 		}
@@ -529,7 +530,7 @@ Loop:
 			continue
 		}
 
-		header, err := cfg.blockReader.Header(ctx, tx, blockHash, blockNum)
+		header, err := cfg.blockReader.Header(ctx, tx, preExecuteHeaderHash, blockNum)
 		if err != nil {
 			return err
 		}
@@ -571,7 +572,7 @@ Loop:
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {
-					cfg.hd.ReportBadHeaderPoS(blockHash, block.ParentHash())
+					cfg.hd.ReportBadHeaderPoS(preExecuteHeaderHash, block.ParentHash())
 				}
 				if cfg.badBlockHalt {
 					return err
@@ -634,15 +635,29 @@ Loop:
 			 provide it.  We also need to update the canonical hash, so we can retrieve this newly updated header
 			 later.
 		*/
+		headerHash := header.Hash()
 		rawdb.WriteHeader(tx, header)
-		err = rawdb.WriteCanonicalHash(tx, header.Hash(), blockNum)
-		if err != nil {
+		if err := rawdb.WriteCanonicalHash(tx, headerHash, blockNum); err != nil {
 			return fmt.Errorf("failed to write header: %v", err)
 		}
 
-		err = eridb.WriteBody(header.Number, header.Hash(), block.Transactions())
-		if err != nil {
+		if err = eridb.WriteBody(header.Number, headerHash, block.Transactions()); err != nil {
 			return fmt.Errorf("failed to write body: %v", err)
+		}
+
+		// [zkevm] senders were saved in stage_senders for headerHashes based on incomplete headers
+		// in stage execute we complete the headers and senders should be moved to the correct headerHash
+		// also we should delete other ata based on the old hash, since it is unaccessable now
+		if err := rawdb.WriteSenders(tx, headerHash, blockNum, senders); err != nil {
+			return fmt.Errorf("failed to write senders: %v", err)
+		}
+
+		if err := rawdb.DeleteSenders(tx, preExecuteHeaderHash, blockNum); err != nil {
+			return fmt.Errorf("failed to delete senders: %v", err)
+		}
+
+		if err := rawdb.DeleteHeader(tx, preExecuteHeaderHash, blockNum); err != nil {
+			return fmt.Errorf("failed to delete header: %v", err)
 		}
 
 		// write the new block lookup entries
