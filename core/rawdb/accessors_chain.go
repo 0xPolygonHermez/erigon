@@ -340,15 +340,13 @@ func WriteHeader(db kv.Putter, header *types.Header) {
 }
 
 // deleteHeader - dangerous, use DeleteAncientBlocks/TruncateBlocks methods
-func deleteHeader(db kv.Deleter, hash libcommon.Hash, number uint64) error {
+func deleteHeader(db kv.Deleter, hash libcommon.Hash, number uint64) {
 	if err := db.Delete(kv.Headers, dbutils.HeaderKey(number, hash)); err != nil {
 		log.Crit("Failed to delete header", "err", err)
 	}
 	if err := db.Delete(kv.HeaderNumber, hash.Bytes()); err != nil {
 		log.Crit("Failed to delete hash to number mapping", "err", err)
 	}
-
-	return nil
 }
 
 // ReadBodyRLP retrieves the block body (transactions and uncles) in RLP encoding.
@@ -742,13 +740,6 @@ func WriteSenders(db kv.Putter, hash libcommon.Hash, number uint64, senders []li
 	}
 	if err := db.Put(kv.Senders, dbutils.BlockBodyKey(number, hash), data); err != nil {
 		return fmt.Errorf("failed to store block senders: %w", err)
-	}
-	return nil
-}
-
-func DeleteSenders(db kv.Deleter, hash libcommon.Hash, number uint64) error {
-	if err := db.Delete(kv.Senders, dbutils.BlockBodyKey(number, hash)); err != nil {
-		return fmt.Errorf("failed to delete block senders: %w", err)
 	}
 	return nil
 }

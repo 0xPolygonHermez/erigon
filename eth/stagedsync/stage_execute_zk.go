@@ -277,7 +277,7 @@ Loop:
 			return fmt.Errorf("failed to write senders: %v", err)
 		}
 
-		if err := rawdb.DeleteSenders(tx, preExecuteHeaderHash, blockNum); err != nil {
+		if err := rawdbZk.DeleteSenders(tx, preExecuteHeaderHash, blockNum); err != nil {
 			return fmt.Errorf("failed to delete senders: %v", err)
 		}
 

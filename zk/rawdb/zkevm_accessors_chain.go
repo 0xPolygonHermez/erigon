@@ -36,3 +36,10 @@ func DeleteHeader(db kv.Deleter, hash libcommon.Hash, number uint64) error {
 
 	return nil
 }
+
+func DeleteSenders(db kv.Deleter, hash libcommon.Hash, number uint64) error {
+	if err := db.Delete(kv.Senders, dbutils.BlockBodyKey(number, hash)); err != nil {
+		return fmt.Errorf("failed to delete block senders: %w", err)
+	}
+	return nil
+}
