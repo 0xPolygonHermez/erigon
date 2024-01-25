@@ -15,6 +15,7 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 	var size int = len(nodeKeys)
 	var err error
 	var smtBatchNodeRoot *smtBatchNode = nil
+	valueHashesToDelete := []*[4]uint64{}
 
 	err = validateDataLengths(nodeKeys, nodeValues, &nodeValuesHashes)
 	if err != nil {
@@ -45,9 +46,8 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 		if (*insertingPointerToSmtBatchNode) == nil {
 			if !insertingNodeValue.IsZero() {
 				*insertingPointerToSmtBatchNode = newSmtBatchNodeLeaf(insertingNodeKey, (*utils.NodeKey)(insertingNodeValueHash), nil)
-			} else {
-				// nothing to delete
 			}
+			// else branch would be for deleting a value but the root does not exists => there is nothing to delete
 			continue
 		}
 
@@ -64,22 +64,56 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 			if !((*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey.IsEqualTo(insertingRemainingKey)) {
 				currentTreeNodePath := utils.JoinKey(insertingNodePath[:insertingNodePathLevel], *(*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey).GetPath()
 				for insertingNodePath[insertingNodePathLevel] == currentTreeNodePath[insertingNodePathLevel] {
-					insertingPointerToSmtBatchNode = (*insertingPointerToSmtBatchNode).moveLeafByAddingALeafInDirection(insertingNodePath, insertingNodePathLevel)
+					insertingPointerToSmtBatchNode = (*insertingPointerToSmtBatchNode).expandLeafByAddingALeafInDirection(insertingNodePath, insertingNodePathLevel)
 					insertingNodePathLevel++
 				}
 
-				(*insertingPointerToSmtBatchNode).moveLeafByAddingALeafInDirection(currentTreeNodePath, insertingNodePathLevel)
+				(*insertingPointerToSmtBatchNode).expandLeafByAddingALeafInDirection(currentTreeNodePath, insertingNodePathLevel)
 
 				if insertingPointerToSmtBatchNode, err = (*insertingPointerToSmtBatchNode).createALeafInEmptyDirection(insertingNodePath, insertingNodePathLevel, insertingNodeKey); err != nil {
 					return nil, err
 				}
-				insertingRemainingKey = *((*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey)
+				// there is no need to update insertingRemainingKey because it is not needed anymore therefore its value is incorrect if used after this line
+				// insertingRemainingKey = *((*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey)
 				insertingNodePathLevel++
 			}
 
+			if (*insertingPointerToSmtBatchNode).nodeRightKeyOrValueHash != nil {
+				valueHashesToDelete = append(valueHashesToDelete, (*[4]uint64)((*insertingPointerToSmtBatchNode).nodeRightKeyOrValueHash))
+			}
 			(*insertingPointerToSmtBatchNode).nodeRightKeyOrValueHash = (*utils.NodeKey)(insertingNodeValueHash)
 		} else {
-			//TODO: implement delete
+			if (*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey.IsEqualTo(insertingRemainingKey) {
+				valueHashesToDelete = append(valueHashesToDelete, (*[4]uint64)((*insertingPointerToSmtBatchNode).nodeRightKeyOrValueHash))
+
+				parentAfterDelete := &((*insertingPointerToSmtBatchNode).parentNode)
+				*insertingPointerToSmtBatchNode = nil
+				insertingPointerToSmtBatchNode = parentAfterDelete
+				insertingNodePathLevel--
+				// there is no need to update insertingRemainingKey because it is not needed anymore therefore its value is incorrect if used after this line
+				// insertingRemainingKey = utils.RemoveKeyBits(*insertingNodeKey, insertingNodePathLevel)
+			}
+
+			for {
+				// the root node has been deleted so we can safely break
+				if *insertingPointerToSmtBatchNode == nil {
+					break
+				}
+
+				// a leaf (with mismatching remaining key) => nothing to collapse
+				if (*insertingPointerToSmtBatchNode).isLeaf() {
+					break
+				}
+
+				// does not have a single leaf => nothing to collapse
+				theSingleNodeLeaf, theSingleNodeLeafDirection := (*insertingPointerToSmtBatchNode).getTheSingleLeafAndDirectionIfAny()
+				if theSingleNodeLeaf == nil {
+					break
+				}
+
+				insertingPointerToSmtBatchNode = (*insertingPointerToSmtBatchNode).collapseLeafByRemovingTheSingleLeaf(insertingNodePath, insertingNodePathLevel, theSingleNodeLeaf, theSingleNodeLeafDirection)
+				insertingNodePathLevel--
+			}
 		}
 	}
 
@@ -93,10 +127,16 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 		return nil, err
 	}
 
+	for _, valueHashToDelete := range valueHashesToDelete {
+		// fmt.Println(valueHashToDelete)
+		s.Db.DeleteByNodeKey(*valueHashToDelete)
+	}
 	for i, nodeValue := range nodeValues {
-		_, err = s.hashSave(nodeValue.ToUintArray(), utils.BranchCapacity, *nodeValuesHashes[i])
-		if err != nil {
-			return nil, err
+		if !nodeValue.IsZero() {
+			_, err = s.hashSave(nodeValue.ToUintArray(), utils.BranchCapacity, *nodeValuesHashes[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -309,6 +349,16 @@ func (sbn *smtBatchNode) isLeaf() bool {
 	return sbn.leaf
 }
 
+func (sbn *smtBatchNode) getTheSingleLeafAndDirectionIfAny() (*smtBatchNode, int) {
+	if sbn.leftNode != nil && sbn.rightNode == nil && sbn.leftNode.isLeaf() {
+		return sbn.leftNode, 0
+	}
+	if sbn.leftNode == nil && sbn.rightNode != nil && sbn.rightNode.isLeaf() {
+		return sbn.rightNode, 1
+	}
+	return nil, -1
+}
+
 func (sbn *smtBatchNode) getNextNodeKeyInDirection(direction int) *utils.NodeKey {
 	if direction == 0 {
 		return sbn.nodeLeftKeyOrRemainingKey
@@ -336,14 +386,14 @@ func (sbn *smtBatchNode) createALeafInEmptyDirection(insertingNodePath []int, in
 	return childPointer, nil
 }
 
-func (sbn *smtBatchNode) moveLeafByAddingALeafInDirection(insertingNodeKey []int, insertingNodeKeyLevel int) **smtBatchNode {
+func (sbn *smtBatchNode) expandLeafByAddingALeafInDirection(insertingNodeKey []int, insertingNodeKeyLevel int) **smtBatchNode {
 	direction := insertingNodeKey[insertingNodeKeyLevel]
 	insertingNodeKeyUpToLevel := insertingNodeKey[:insertingNodeKeyLevel]
 
 	childPointer := sbn.getChildInDirection(direction)
 
 	nodeKey := utils.JoinKey(insertingNodeKeyUpToLevel, *sbn.nodeLeftKeyOrRemainingKey)
-	remainingKey := utils.RemoveKeyBits(*nodeKey, len(insertingNodeKeyUpToLevel)+1)
+	remainingKey := utils.RemoveKeyBits(*nodeKey, insertingNodeKeyLevel+1)
 
 	*childPointer = newSmtBatchNodeLeaf(&remainingKey, sbn.nodeRightKeyOrValueHash, sbn)
 	sbn.nodeLeftKeyOrRemainingKey = &utils.NodeKey{0, 0, 0, 0}
@@ -353,47 +403,17 @@ func (sbn *smtBatchNode) moveLeafByAddingALeafInDirection(insertingNodeKey []int
 	return childPointer
 }
 
-func dumpBatchTreeFromMemory(sbn *smtBatchNode, level int, path []int, printDepth int) {
-	if sbn == nil {
-		if level == 0 {
-			fmt.Printf("Empty tree\n")
-		}
-		return
-	}
+func (sbn *smtBatchNode) collapseLeafByRemovingTheSingleLeaf(insertingNodeKey []int, insertingNodeKeyLevel int, theSingleLeaf *smtBatchNode, theSingleNodeLeafDirection int) **smtBatchNode {
+	insertingNodeKeyUpToLevel := insertingNodeKey[:insertingNodeKeyLevel+1]
+	insertingNodeKeyUpToLevel[insertingNodeKeyLevel] = theSingleNodeLeafDirection
+	nodeKey := utils.JoinKey(insertingNodeKeyUpToLevel, *theSingleLeaf.nodeLeftKeyOrRemainingKey)
+	remainingKey := utils.RemoveKeyBits(*nodeKey, insertingNodeKeyLevel)
 
-	if !sbn.isLeaf() {
-		dumpBatchTreeFromMemory(sbn.rightNode, level+1, append(path, 1), printDepth)
-	}
+	sbn.nodeLeftKeyOrRemainingKey = &remainingKey
+	sbn.nodeRightKeyOrValueHash = theSingleLeaf.nodeRightKeyOrValueHash
+	sbn.leaf = true
+	sbn.leftNode = nil
+	sbn.rightNode = nil
 
-	if sbn.isLeaf() {
-		remainingKey := sbn.nodeLeftKeyOrRemainingKey
-		leafValueHash := sbn.nodeRightKeyOrValueHash
-		totalKey := utils.JoinKey(path, *remainingKey)
-		leafPath := totalKey.GetPath()
-		fmt.Printf("|")
-		for i := 0; i < level; i++ {
-			fmt.Printf("=")
-		}
-		fmt.Printf("%s", convertPathToBinaryString(path))
-		for i := level * 2; i < printDepth; i++ {
-			fmt.Printf("-")
-		}
-		fmt.Printf(" # %s -> %+v", convertPathToBinaryString(leafPath), leafValueHash)
-		fmt.Println()
-		return
-	} else {
-		fmt.Printf("|")
-		for i := 0; i < level; i++ {
-			fmt.Printf("=")
-		}
-		fmt.Printf("%s", convertPathToBinaryString(path))
-		for i := level * 2; i < printDepth; i++ {
-			fmt.Printf("-")
-		}
-		fmt.Println()
-	}
-
-	if !sbn.isLeaf() {
-		dumpBatchTreeFromMemory(sbn.leftNode, level+1, append(path, 0), printDepth)
-	}
+	return &sbn.parentNode
 }

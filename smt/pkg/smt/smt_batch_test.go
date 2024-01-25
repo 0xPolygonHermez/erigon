@@ -33,19 +33,24 @@ type Increments struct {
 func TestBatchSimpleInsert(t *testing.T) {
 	keysRaw := []*big.Int{
 		big.NewInt(8),
+		big.NewInt(8),
 		big.NewInt(1),
 		big.NewInt(31),
+		big.NewInt(31),
 		// big.NewInt(0),
-		// big.NewInt(2),
+		// big.NewInt(8),
+		// big.NewInt(1),
 		// big.NewInt(21232),
 	}
 	valuesRaw := []*big.Int{
+		big.NewInt(17),
 		big.NewInt(18),
 		big.NewInt(19),
 		big.NewInt(20),
-		big.NewInt(21),
-		big.NewInt(21),
-		big.NewInt(21),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
 	}
 
 	keyPointers := []*utils.NodeKey{}
@@ -68,16 +73,16 @@ func TestBatchSimpleInsert(t *testing.T) {
 	_, err := smtBatch.InsertBatch(keyPointers, valuePointers, nil, nil)
 	assert.NilError(t, err)
 
-	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
-	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
-	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
-
 	smtIncremental.DumpTree()
 	fmt.Println()
 	smtBatch.DumpTree()
 	fmt.Println()
 	fmt.Println()
 	fmt.Println()
+
+	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
+	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
+	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 }
 
 func TestBatchRawInsert(t *testing.T) {
@@ -91,7 +96,7 @@ func TestBatchRawInsert(t *testing.T) {
 	smtBatch := smt.NewSMT(nil)
 
 	rand.Seed(1)
-	size := 1 << 0
+	size := 1 << 16
 	for i := 0; i < size; i++ {
 		rawKey := big.NewInt(rand.Int63())
 		rawValue := big.NewInt(rand.Int63())
@@ -106,6 +111,21 @@ func TestBatchRawInsert(t *testing.T) {
 		keysForIncremental = append(keysForIncremental, k)
 		valuesForIncremental = append(valuesForIncremental, *v)
 
+	}
+	sizeToDelete := 1 << 18
+	for i := 0; i < sizeToDelete; i++ {
+		rawValue := big.NewInt(0)
+		vArray := utils.ScalarToArrayBig(rawValue)
+		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+
+		keyForBatch := keysForBatch[i]
+		keyForIncremental := keysForIncremental[i]
+
+		keysForBatch = append(keysForBatch, keyForBatch)
+		valuesForBatch = append(valuesForBatch, v)
+
+		keysForIncremental = append(keysForIncremental, keyForIncremental)
+		valuesForIncremental = append(valuesForIncremental, *v)
 	}
 
 	startTime := time.Now()
@@ -173,7 +193,7 @@ func compareAllTreesInsertTimesAndFinalHashes(t *testing.T, smtIncremental, smtB
 			_, _ = smtIncremental.SetContractStorage(increment.Address, increment.Storage)
 		}
 	}
-	t.Logf("Incremental insert %d values in %v (Accounts %v, Contract %v, Storage %v InsertSingle %v InsertRecalc %v)\n", len(smt.KeyPointers), time.Since(startTime), smt.TimeAccount, smt.TimeContract, smt.TimeStorage, smt.TimeInsertSingle, smt.TimeInsertRecalc)
+	t.Logf("Incremental insert %d values in %v\n", len(smt.KeyPointers), time.Since(startTime))
 
 	startTime = time.Now()
 	_, err := smtBatch.InsertBatch(smt.KeyPointers, smt.ValuePointers, nil, nil)

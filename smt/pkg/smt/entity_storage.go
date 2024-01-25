@@ -13,7 +13,6 @@ import (
 )
 
 func (s *SMT) SetAccountState(ethAddr string, balance, nonce *big.Int) (*big.Int, error) {
-	// startTime := time.Now()
 	keyBalance, err := utils.KeyEthAddrBalance(ethAddr)
 	if err != nil {
 		return nil, err
@@ -33,8 +32,6 @@ func (s *SMT) SetAccountState(ethAddr string, balance, nonce *big.Int) (*big.Int
 	if err != nil {
 		return nil, err
 	}
-
-	// TimeAccount += int64(time.Since(startTime))
 
 	auxRes, err := s.InsertKA(keyNonce, nonce)
 
@@ -63,7 +60,6 @@ func (s *SMT) SetAccountStorage(addr libcommon.Address, acc *accounts.Account) e
 }
 
 func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
-	// startTime := time.Now()
 	keyContractCode, err := utils.KeyContractCode(ethAddr)
 	if err != nil {
 		return err
@@ -112,8 +108,6 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 		return err
 	}
 
-	// TimeContract += int64(time.Since(startTime))
-
 	_, err = s.InsertKA(keyContractLength, big.NewInt(int64(bytecodeLength)))
 	if err != nil {
 		return err
@@ -131,8 +125,6 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 }
 
 func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*big.Int, error) {
-	// startTime := time.Now()
-
 	storageKeys := make([]string, len(storage))
 	ii := 0
 	for k := range storage {
@@ -221,8 +213,6 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 			vhm[k] = h
 		}
 	}
-
-	// TimeStorage += int64(time.Since(startTime))
 
 	auxRes, err := s.InsertStorage(ethAddr, &storage, &chm, &vhm)
 	if err != nil {

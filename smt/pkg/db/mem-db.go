@@ -184,6 +184,16 @@ func (m *MemDb) Delete(key string) error {
 	return nil
 }
 
+func (m *MemDb) DeleteByNodeKey(key utils.NodeKey) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+	delete(m.Db, k)
+	return nil
+}
+
 func (m *MemDb) IsEmpty() bool {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done

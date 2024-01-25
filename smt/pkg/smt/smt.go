@@ -29,6 +29,7 @@ type DB interface {
 	InsertHashKey(key utils.NodeKey, value utils.NodeKey) error
 	GetHashKey(key utils.NodeKey) (utils.NodeKey, error)
 	Delete(string) error
+	DeleteByNodeKey(key utils.NodeKey) error
 
 	SetLastRoot(lr *big.Int) error
 	GetLastRoot() (*big.Int, error)
@@ -202,8 +203,6 @@ func (s *SMT) insertSingle(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint6
 func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, oldRoot utils.NodeKey) (*SMTResponse, error) {
 	KeyPointers = append(KeyPointers, &k)
 	ValuePointers = append(ValuePointers, &v)
-
-	// startTime := time.Now()
 
 	newRoot := oldRoot
 
@@ -489,9 +488,6 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 	utils.RemoveOver(siblings, level+1)
 
-	// TimeInsertSingle += int64(time.Since(startTime))
-	// startTime = time.Now()
-
 	for level >= 0 {
 		hashValueIn, err := utils.NodeValue8FromBigIntArray(siblings[level][0:8])
 		if err != nil {
@@ -512,8 +508,6 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 			}
 		}
 	}
-
-	// TimeInsertRecalc += int64(time.Since(startTime))
 
 	_ = oldRoot
 

@@ -239,6 +239,12 @@ func (m *EriDb) Delete(key string) error {
 	return m.tx.Delete(TableSmt, []byte(key))
 }
 
+func (m *EriDb) DeleteByNodeKey(key utils.NodeKey) error {
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+	return m.tx.Delete(TableSmt, []byte(k))
+}
+
 func (m *EriDb) PrintDb() {
 	err := m.tx.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		println(string(k), string(v))

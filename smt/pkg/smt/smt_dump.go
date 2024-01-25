@@ -68,6 +68,51 @@ func dumpTree(smt *SMT, nodeKey utils.NodeKey, level int, path []int, printDepth
 	}
 }
 
+func dumpBatchTreeFromMemory(sbn *smtBatchNode, level int, path []int, printDepth int) {
+	if sbn == nil {
+		if level == 0 {
+			fmt.Printf("Empty tree\n")
+		}
+		return
+	}
+
+	if !sbn.isLeaf() {
+		dumpBatchTreeFromMemory(sbn.rightNode, level+1, append(path, 1), printDepth)
+	}
+
+	if sbn.isLeaf() {
+		remainingKey := sbn.nodeLeftKeyOrRemainingKey
+		leafValueHash := sbn.nodeRightKeyOrValueHash
+		totalKey := utils.JoinKey(path, *remainingKey)
+		leafPath := totalKey.GetPath()
+		fmt.Printf("|")
+		for i := 0; i < level; i++ {
+			fmt.Printf("=")
+		}
+		fmt.Printf("%s", convertPathToBinaryString(path))
+		for i := level * 2; i < printDepth; i++ {
+			fmt.Printf("-")
+		}
+		fmt.Printf(" # %s -> %+v", convertPathToBinaryString(leafPath), leafValueHash)
+		fmt.Println()
+		return
+	} else {
+		fmt.Printf("|")
+		for i := 0; i < level; i++ {
+			fmt.Printf("=")
+		}
+		fmt.Printf("%s", convertPathToBinaryString(path))
+		for i := level * 2; i < printDepth; i++ {
+			fmt.Printf("-")
+		}
+		fmt.Println()
+	}
+
+	if !sbn.isLeaf() {
+		dumpBatchTreeFromMemory(sbn.leftNode, level+1, append(path, 0), printDepth)
+	}
+}
+
 func convertPathToBinaryString(path []int) string {
 	out := ""
 
