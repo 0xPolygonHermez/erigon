@@ -71,9 +71,7 @@ func WriteCanonicalHash(db kv.Putter, hash libcommon.Hash, number uint64) error 
 func TruncateCanonicalHash(tx kv.RwTx, blockFrom uint64, deleteHeaders bool) error {
 	if err := tx.ForEach(kv.HeaderCanonical, hexutility.EncodeTs(blockFrom), func(k, v []byte) error {
 		if deleteHeaders {
-			if err := DeleteHeader(tx, libcommon.BytesToHash(v), blockFrom); err != nil {
-				return err
-			}
+			deleteHeader(tx, libcommon.BytesToHash(v), blockFrom)
 		}
 		return tx.Delete(kv.HeaderCanonical, k)
 	}); err != nil {
@@ -341,13 +339,13 @@ func WriteHeader(db kv.Putter, header *types.Header) {
 	}
 }
 
-// DeleteHeader - dangerous, use DeleteAncientBlocks/TruncateBlocks methods
-func DeleteHeader(db kv.Deleter, hash libcommon.Hash, number uint64) error {
+// deleteHeader - dangerous, use DeleteAncientBlocks/TruncateBlocks methods
+func deleteHeader(db kv.Deleter, hash libcommon.Hash, number uint64) error {
 	if err := db.Delete(kv.Headers, dbutils.HeaderKey(number, hash)); err != nil {
-		return fmt.Errorf("Failed to delete header: %v", err)
+		log.Crit("Failed to delete header", "err", err)
 	}
 	if err := db.Delete(kv.HeaderNumber, hash.Bytes()); err != nil {
-		return fmt.Errorf("Failed to delete hash to number mapping: %v", err)
+		log.Crit("Failed to delete hash to number mapping", "err", err)
 	}
 
 	return nil
