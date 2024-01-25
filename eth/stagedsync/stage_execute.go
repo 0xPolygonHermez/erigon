@@ -73,7 +73,7 @@ type headerDownloader interface {
 	ReportBadHeaderPoS(badHeader, lastValidAncestor common.Hash)
 }
 
-type HermezDbExecute interface {
+type HermezDb interface {
 	GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error)
 }
 
@@ -495,7 +495,7 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 	initialBlock := stageProgress + 1
 	eridb := erigon_db.NewErigonDb(tx)
 Loop:
-	for blockNum := stageProgress + 1; blockNum <= 948546; blockNum++ {
+	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		stageProgress = blockNum
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
@@ -520,7 +520,6 @@ Loop:
 		if err != nil {
 			return err
 		}
-
 		block, _, err := cfg.blockReader.BlockWithSenders(ctx, tx, blockHash, blockNum)
 		if err != nil {
 			return err
@@ -635,14 +634,13 @@ Loop:
 			 provide it.  We also need to update the canonical hash, so we can retrieve this newly updated header
 			 later.
 		*/
-		headerHash := header.Hash()
 		rawdb.WriteHeader(tx, header)
-		err = rawdb.WriteCanonicalHash(tx, headerHash, blockNum)
+		err = rawdb.WriteCanonicalHash(tx, header.Hash(), blockNum)
 		if err != nil {
 			return fmt.Errorf("failed to write header: %v", err)
 		}
 
-		err = eridb.WriteBody(header.Number, headerHash, block.Transactions())
+		err = eridb.WriteBody(header.Number, header.Hash(), block.Transactions())
 		if err != nil {
 			return fmt.Errorf("failed to write body: %v", err)
 		}
