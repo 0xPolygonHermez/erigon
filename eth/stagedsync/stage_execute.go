@@ -74,7 +74,7 @@ type headerDownloader interface {
 }
 
 type HermezDb interface {
-	GetBlockGlobalExitRoot(l2BlockNo uint64) (*common.Hash, *common.Hash, error)
+	GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, error)
 }
 
 type ExecuteBlockCfg struct {
@@ -173,19 +173,10 @@ func executeBlock(
 	// 	return err
 	// }
 
-	var emptyHash = common.Hash{0}
-
 	for _, ger := range gers {
-		if ger.L1BlockHash != emptyHash || ger.GlobalExitRoot == emptyHash {
-			// etrog - if l1blockhash is set, this is an etrog GER
-			if err := utils.WriteGlobalExitRootEtrog(stateWriter, ger.GlobalExitRoot); err != nil {
-				return err
-			}
-		} else {
-			// [zkevm] - add GER if there is one for this batch
-			if err := utils.WriteGlobalExitRoot(stateReader, stateWriter, ger.GlobalExitRoot, ger.Timestamp); err != nil {
-				return err
-			}
+		// [zkevm] - add GER if there is one for this batch
+		if err := utils.WriteGlobalExitRoot(stateReader, stateWriter, ger.GlobalExitRoot, ger.Timestamp); err != nil {
+			return err
 		}
 	}
 
@@ -558,7 +549,7 @@ Loop:
 			gers = append(gers, gersInBetween...)
 		}
 
-		blockGer, l1BlockHash, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
+		blockGer, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
 		if err != nil {
 			return err
 		}
@@ -566,7 +557,6 @@ Loop:
 		blockGerUpdate := dstypes.GerUpdate{
 			GlobalExitRoot: blockGer,
 			Timestamp:      header.Time,
-			L1BlockHash:    l1BlockHash,
 		}
 		gers = append(gers, &blockGerUpdate)
 		//[zkevm] finished getting gers

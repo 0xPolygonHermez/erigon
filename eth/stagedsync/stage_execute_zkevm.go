@@ -2,6 +2,7 @@ package stagedsync
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -12,13 +13,19 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
+	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/eth/calltracer"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/eth/tracers/logger"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/olddb"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
@@ -173,7 +180,7 @@ Loop:
 			gers = append(gers, gersInBetween...)
 		}
 
-		blockGer, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
+		blockGer, l1BlockHash, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
 		if err != nil {
 			return err
 		}
@@ -181,6 +188,7 @@ Loop:
 		blockGerUpdate := dstypes.GerUpdate{
 			GlobalExitRoot: blockGer,
 			Timestamp:      header.Time,
+			L1BlockHash:    l1BlockHash,
 		}
 		gers = append(gers, &blockGerUpdate)
 		//[zkevm] finished getting gers
@@ -191,7 +199,7 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		if err = executeBlock(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
+		if err = executeBlockZk(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {
@@ -322,6 +330,118 @@ Loop:
 		log.Info(fmt.Sprintf("[%s] Completed on", logPrefix), "block", stageProgress)
 	}
 	return stoppedErr
+}
+
+func executeBlockZk(
+	block *types.Block,
+	header *types.Header,
+	tx kv.RwTx,
+	batch ethdb.Database,
+	gers []*dstypes.GerUpdate,
+	cfg ExecuteBlockCfg,
+	vmConfig vm.Config, // emit copy, because will modify it
+	writeChangesets bool,
+	writeReceipts bool,
+	writeCallTraces bool,
+	initialCycle bool,
+	stateStream bool,
+	roHermezDb state.ReadOnlyHermezDb,
+) error {
+	blockNum := block.NumberU64()
+
+	stateReader, stateWriter, err := newStateReaderWriter(batch, tx, block, writeChangesets, cfg.accumulator, initialCycle, stateStream)
+	if err != nil {
+		return err
+	}
+
+	// [zkevm] - write the global exit root inside the batch so we can unwind it
+	// [zkevm] push the global exit root for the related batch into the db ahead of batch execution
+	blockNoBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(blockNoBytes, blockNum)
+
+	var emptyHash = common.Hash{0}
+
+	for _, ger := range gers {
+		if ger.L1BlockHash != emptyHash || ger.GlobalExitRoot == emptyHash {
+			// etrog - if l1blockhash is set, this is an etrog GER
+			if err := utils.WriteGlobalExitRootEtrog(stateWriter, ger.GlobalExitRoot); err != nil {
+				return err
+			}
+		} else {
+			// [zkevm] - add GER if there is one for this batch
+			if err := utils.WriteGlobalExitRoot(stateReader, stateWriter, ger.GlobalExitRoot, ger.Timestamp); err != nil {
+				return err
+			}
+		}
+	}
+
+	// [zkevm] - finished writing global exit root to state
+
+	// where the magic happens
+	getHeader := func(hash common.Hash, number uint64) *types.Header {
+		h, _ := cfg.blockReader.Header(context.Background(), tx, hash, number)
+		return h
+	}
+
+	getTracer := func(txIndex int, txHash common.Hash) (vm.EVMLogger, error) {
+		// return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
+		return logger.NewStructLogger(&logger.LogConfig{}), nil
+	}
+
+	callTracer := calltracer.NewCallTracer()
+	vmConfig.Debug = true
+	vmConfig.Tracer = callTracer
+
+	var receipts types.Receipts
+	var stateSyncReceipt *types.Receipt
+	var execRs *core.EphemeralExecResult
+	isBor := cfg.chainConfig.Bor != nil
+	getHashFn := core.GetHashFn(block.Header(), getHeader)
+
+	if isBor {
+		execRs, err = core.ExecuteBlockEphemerallyBor(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer)
+	} else {
+		// for zkEVM no receipts
+		//vmConfig.NoReceipts = true
+		execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx, roHermezDb)
+	}
+	if err != nil {
+		return err
+	}
+	receipts = execRs.Receipts
+	stateSyncReceipt = execRs.StateSyncReceipt
+
+	// [zkevm] - add in the state root to the receipts.  As we only have one tx per block
+	// for now just add the header root to the receipt
+	for _, r := range receipts {
+		r.PostState = header.Root.Bytes()
+	}
+
+	header.GasUsed = uint64(execRs.GasUsed)
+	header.ReceiptHash = types.DeriveSha(receipts)
+	header.Bloom = execRs.Bloom
+
+	if writeReceipts {
+		if err = rawdb.AppendReceipts(tx, blockNum, receipts); err != nil {
+			return err
+		}
+
+		if stateSyncReceipt != nil && stateSyncReceipt.Status == types.ReceiptStatusSuccessful {
+			if err := rawdb.WriteBorReceipt(tx, block.Hash(), block.NumberU64(), stateSyncReceipt); err != nil {
+				return err
+			}
+		}
+	}
+
+	if cfg.changeSetHook != nil {
+		if hasChangeSet, ok := stateWriter.(HasChangeSetWriter); ok {
+			cfg.changeSetHook(blockNum, hasChangeSet.ChangeSetWriter())
+		}
+	}
+	if writeCallTraces {
+		return callTracer.WriteToDb(tx, block, *cfg.vmConfig)
+	}
+	return nil
 }
 
 func UnwindExecutionStageZk(u *UnwindState, s *StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) (err error) {
