@@ -496,10 +496,6 @@ func SpawnExecuteBlocksStage(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint
 	eridb := erigon_db.NewErigonDb(tx)
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
-		if blockNum > 5 {
-			break
-		}
-
 		stageProgress = blockNum
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {

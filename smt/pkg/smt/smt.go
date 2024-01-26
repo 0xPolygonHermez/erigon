@@ -16,7 +16,6 @@ import (
 	"github.com/TwiN/gocache/v2"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
-	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -52,9 +51,6 @@ type SMT struct {
 	CacheHitFrequency map[string]int
 
 	clearUpMutex sync.Mutex
-
-	enablePathRecording bool
-	retainList          trie.RetainList
 }
 
 type SMTResponse struct {
@@ -71,7 +67,6 @@ func NewSMT(database DB) *SMT {
 		Db:                database,
 		Cache:             gocache.NewCache().WithMaxSize(10000).WithEvictionPolicy(gocache.LeastRecentlyUsed),
 		CacheHitFrequency: make(map[string]int),
-		retainList:        *trie.NewRetainList(0),
 	}
 }
 
@@ -93,14 +88,6 @@ func (s *SMT) SetLastRoot(lr *big.Int) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func (s *SMT) EnablePathRecording() {
-	s.enablePathRecording = true
-}
-
-func (s *SMT) DisablePathRecording() {
-	s.enablePathRecording = false
 }
 
 func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
