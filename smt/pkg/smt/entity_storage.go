@@ -69,30 +69,9 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 		return err
 	}
 
-	hashedBytecode, err := utils.HashContractBytecode(bytecode)
+	bi, bytecodeLength, err := convertBytecodeToBigInt(bytecode)
 	if err != nil {
 		return err
-	}
-
-	var parsedBytecode string
-
-	if strings.HasPrefix(bytecode, "0x") {
-		parsedBytecode = bytecode[2:]
-	} else {
-		parsedBytecode = bytecode
-	}
-
-	if len(parsedBytecode)%2 != 0 {
-		parsedBytecode = "0" + parsedBytecode
-	}
-
-	bytecodeLength := len(parsedBytecode) / 2
-
-	bi := utils.ConvertHexToBigInt(hashedBytecode)
-
-	if len(bytecode) == 0 {
-		bytecodeLength = 0
-		bi = big.NewInt(0)
 	}
 
 	_, err = s.InsertKA(keyContractCode, bi)
@@ -222,14 +201,118 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 	return auxRes.NewRootScalar.ToBigInt(), nil
 }
 
-func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
-	base := 10
-	if strings.HasPrefix(v, "0x") {
-		v = v[2:]
-		base = 16
+func (s *SMT) SetStorage(accChanges map[libcommon.Address]*accounts.Account, codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) ([]*utils.NodeKey, []*utils.NodeValue8, error) {
+	initialCapacity := len(accChanges) + len(codeChanges) + len(storageChanges)
+	keysBatchStorage := make([]*utils.NodeKey, 0, initialCapacity)
+	valuesBatchStorage := make([]*utils.NodeValue8, 0, initialCapacity)
+
+	for addr, acc := range accChanges {
+		ethAddr := addr.String()
+		keyBalance, err := utils.KeyEthAddrBalance(ethAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+		keyNonce, err := utils.KeyEthAddrNonce(ethAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if err = s.InsertKeySource(&keyBalance, utils.KEY_BALANCE, &addr, &common.Hash{}); err != nil {
+			return nil, nil, err
+		}
+
+		if err = s.InsertKeySource(&keyNonce, utils.KEY_NONCE, &addr, &common.Hash{}); err != nil {
+			return nil, nil, err
+		}
+
+		balance := big.NewInt(0)
+		nonce := big.NewInt(0)
+		if acc != nil {
+			balance = acc.Balance.ToBig()
+			nonce = new(big.Int).SetUint64(acc.Nonce)
+		}
+
+		keysBatchStorage = append(keysBatchStorage, &keyBalance)
+		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, balance); err != nil {
+			return nil, nil, err
+		}
+
+		keysBatchStorage = append(keysBatchStorage, &keyNonce)
+		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, nonce); err != nil {
+			return nil, nil, err
+		}
 	}
 
-	val, _ := new(big.Int).SetString(v, base)
+	for addr, code := range codeChanges {
+		ethAddr := addr.String()
+		keyContractCode, err := utils.KeyContractCode(ethAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+		keyContractLength, err := utils.KeyContractLength(ethAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		bi, bytecodeLength, err := convertBytecodeToBigInt(code)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if err = s.InsertKeySource(&keyContractCode, utils.SC_CODE, &addr, &common.Hash{}); err != nil {
+			return nil, nil, err
+		}
+		if err = s.InsertKeySource(&keyContractLength, utils.SC_LENGTH, &addr, &common.Hash{}); err != nil {
+			return nil, nil, err
+		}
+
+		keysBatchStorage = append(keysBatchStorage, &keyContractCode)
+		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, bi); err != nil {
+			return nil, nil, err
+		}
+
+		keysBatchStorage = append(keysBatchStorage, &keyContractLength)
+		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, big.NewInt(int64(bytecodeLength))); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	for addr, storage := range storageChanges {
+		ethAddr := addr.String()
+		ethAddrBigInt := utils.ConvertHexToBigInt(ethAddr)
+		ethAddrBigIngArray := utils.ScalarToArrayBig(ethAddrBigInt)
+
+		for k, v := range storage {
+			keyStoragePosition, err := utils.KeyContractStorage(ethAddrBigIngArray, k)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			sp, _ := utils.StrValToBigInt(k)
+			hash := common.BigToHash(sp)
+			if err = s.InsertKeySource(&keyStoragePosition, utils.SC_STORAGE, &addr, &hash); err != nil {
+				return nil, nil, err
+			}
+
+			valueBigInt := convertStrintToBigInt(v)
+			keysBatchStorage = append(keysBatchStorage, &keyStoragePosition)
+			if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, valueBigInt); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
+	_, err := s.InsertBatch(keysBatchStorage, valuesBatchStorage, nil, nil)
+	return keysBatchStorage, valuesBatchStorage, err
+}
+
+func (s *SMT) InsertKeySource(nodeKey *utils.NodeKey, key int, accountAddr *libcommon.Address, storagePosition *libcommon.Hash) error {
+	ks := utils.EncodeKeySource(key, *accountAddr, *storagePosition)
+	return s.Db.InsertKeySource(*nodeKey, ks)
+}
+
+func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
+	val := convertStrintToBigInt(v)
 
 	x := utils.ScalarToArrayBig(val)
 	value, err := utils.NodeValue8FromBigIntArray(x)
@@ -243,4 +326,53 @@ func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
 	}
 
 	return value, h, nil
+}
+
+func convertStrintToBigInt(v string) *big.Int {
+	base := 10
+	if strings.HasPrefix(v, "0x") {
+		v = v[2:]
+		base = 16
+	}
+
+	val, _ := new(big.Int).SetString(v, base)
+	return val
+}
+
+func appendToValuesBatchStorageBigInt(valuesBatchStorage []*utils.NodeValue8, value *big.Int) ([]*utils.NodeValue8, error) {
+	nodeValue, err := utils.NodeValue8FromBigInt(value)
+	if err != nil {
+		return nil, err
+	}
+	return append(valuesBatchStorage, nodeValue), nil
+}
+
+func convertBytecodeToBigInt(bytecode string) (*big.Int, int, error) {
+	hashedBytecode, err := utils.HashContractBytecode(bytecode)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var parsedBytecode string
+
+	if strings.HasPrefix(bytecode, "0x") {
+		parsedBytecode = bytecode[2:]
+	} else {
+		parsedBytecode = bytecode
+	}
+
+	if len(parsedBytecode)%2 != 0 {
+		parsedBytecode = "0" + parsedBytecode
+	}
+
+	bytecodeLength := len(parsedBytecode) / 2
+
+	bi := utils.ConvertHexToBigInt(hashedBytecode)
+
+	if len(bytecode) == 0 {
+		bytecodeLength = 0
+		bi = big.NewInt(0)
+	}
+
+	return bi, bytecodeLength, nil
 }

@@ -120,7 +120,7 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 	if smtBatchNodeRoot == nil {
 		rootNodeKey = &utils.NodeKey{0, 0, 0, 0}
 	} else {
-		calculateAndSaveHashesDfs(s, smtBatchNodeRoot)
+		calculateAndSaveHashesDfs(s, smtBatchNodeRoot, make([]int, 256), 0)
 		rootNodeKey = (*utils.NodeKey)(smtBatchNodeRoot.hash)
 	}
 	if err := s.setLastRoot(*rootNodeKey); err != nil {
@@ -289,12 +289,16 @@ func findInsertingPoint(s *SMT, insertingNodeKey, insertingPointerNodeKey *utils
 	return insertingNodePathLevel, insertingNodePath, insertingPointerToSmtBatchNode, nil
 }
 
-func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode) error {
+func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, level int) error {
 	if smtBatchNode.isLeaf() {
 		hashObj, err := s.hashcalcAndSave(utils.ConcatArrays4(*smtBatchNode.nodeLeftKeyOrRemainingKey, *smtBatchNode.nodeRightKeyOrValueHash), utils.LeafCapacity)
 		if err != nil {
 			return err
 		}
+
+		nodeKey := utils.JoinKey(path[:level], *smtBatchNode.nodeRightKeyOrValueHash)
+		s.Db.InsertHashKey(hashObj, *nodeKey)
+
 		smtBatchNode.hash = &hashObj
 		return nil
 	}
@@ -302,14 +306,16 @@ func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode) error {
 	var totalHash utils.NodeValue8
 
 	if smtBatchNode.leftNode != nil {
-		calculateAndSaveHashesDfs(s, smtBatchNode.leftNode)
+		path[level+1] = 0
+		calculateAndSaveHashesDfs(s, smtBatchNode.leftNode, path, level+1)
 		totalHash.SetHalfValue(*smtBatchNode.leftNode.hash, 0)
 	} else {
 		totalHash.SetHalfValue(*smtBatchNode.nodeLeftKeyOrRemainingKey, 0)
 	}
 
 	if smtBatchNode.rightNode != nil {
-		calculateAndSaveHashesDfs(s, smtBatchNode.rightNode)
+		path[level+1] = 1
+		calculateAndSaveHashesDfs(s, smtBatchNode.rightNode, path, level+1)
 		totalHash.SetHalfValue(*smtBatchNode.rightNode.hash, 1)
 	} else {
 		totalHash.SetHalfValue(*smtBatchNode.nodeRightKeyOrValueHash, 1)

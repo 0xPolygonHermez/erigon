@@ -410,28 +410,32 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] Progress inserting values", logPrefix), uint64(total))
 
 	// update the tree
-	for addr, acc := range accChanges {
-		if err := updateAccInTree(dbSmt, addr, acc); err != nil {
-			stopProgressPrinter()
-			return trie.EmptyRoot, err
-		}
-		progressChan <- 1
-	}
+	// for addr, acc := range accChanges {
+	// 	if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
+	// 		stopProgressPrinter()
+	// 		return trie.EmptyRoot, err
+	// 	}
+	// 	progressChan <- 1
+	// }
 
-	for addr, code := range codeChanges {
-		if err := dbSmt.SetContractBytecode(addr.String(), code); err != nil {
-			stopProgressPrinter()
-			return trie.EmptyRoot, err
-		}
-		progressChan <- 1
-	}
+	// for addr, code := range codeChanges {
+	// 	if err := dbSmt.SetContractBytecode(addr.String(), code); err != nil {
+	// 		stopProgressPrinter()
+	// 		return trie.EmptyRoot, err
+	// 	}
+	// 	progressChan <- 1
+	// }
 
-	for addr, storage := range storageChanges {
-		if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
-			stopProgressPrinter()
-			return trie.EmptyRoot, err
-		}
-		progressChan <- 1
+	// for addr, storage := range storageChanges {
+	// 	if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
+	// 		stopProgressPrinter()
+	// 		return trie.EmptyRoot, err
+	// 	}
+	// 	progressChan <- 1
+	// }
+	if _, _, err := dbSmt.SetStorage(accChanges, codeChanges, storageChanges); err != nil {
+		stopProgressPrinter()
+		return trie.EmptyRoot, err
 	}
 	stopProgressPrinter()
 
@@ -574,7 +578,7 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashe
 
 		// update the tree
 		for addr, acc := range accChanges {
-			if err := updateAccInTree(dbSmt, addr, acc); err != nil {
+			if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
 				return trie.EmptyRoot, err
 			}
 		}
@@ -594,7 +598,7 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashe
 	}
 
 	for _, k := range accDeletes {
-		if err := updateAccInTree(dbSmt, k, nil); err != nil {
+		if err := dbSmt.SetAccountStorage(k, nil); err != nil {
 			return trie.EmptyRoot, err
 		}
 	}
@@ -615,16 +619,16 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashe
 	return hash, nil
 }
 
-func updateAccInTree(smt *smt.SMT, addr libcommon.Address, acc *accounts.Account) error {
-	if acc != nil {
-		n := new(big.Int).SetUint64(acc.Nonce)
-		_, err := smt.SetAccountState(addr.String(), acc.Balance.ToBig(), n)
-		return err
-	}
+// func updateAccInTree(smt *smt.SMT, addr libcommon.Address, acc *accounts.Account) error {
+// 	if acc != nil {
+// 		n := new(big.Int).SetUint64(acc.Nonce)
+// 		_, err := smt.SetAccountState(addr.String(), acc.Balance.ToBig(), n)
+// 		return err
+// 	}
 
-	_, err := smt.SetAccountState(addr.String(), big.NewInt(0), big.NewInt(0))
-	return err
-}
+// 	_, err := smt.SetAccountState(addr.String(), big.NewInt(0), big.NewInt(0))
+// 	return err
+// }
 
 func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *ZkInterHashesCfg, logPrefix string) error {
 	hash := libcommon.BigToHash(dbSmt.LastRoot())
