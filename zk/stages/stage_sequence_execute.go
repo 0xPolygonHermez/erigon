@@ -78,7 +78,7 @@ type SequenceBlockCfg struct {
 	changeSetHook ChangeSetHook
 	chainConfig   *chain.Config
 	engine        consensus.Engine
-	vmConfig      *vm.Config
+	zkVmConfig    *vm.ZkConfig
 	badBlockHalt  bool
 	stateStream   bool
 	accumulator   *shards.Accumulator
@@ -102,7 +102,7 @@ func StageSequenceBlocksCfg(
 	changeSetHook ChangeSetHook,
 	chainConfig *chain.Config,
 	engine consensus.Engine,
-	vmConfig *vm.Config,
+	vmConfig *vm.ZkConfig,
 	accumulator *shards.Accumulator,
 	stateStream bool,
 	badBlockHalt bool,
@@ -125,7 +125,7 @@ func StageSequenceBlocksCfg(
 		changeSetHook: changeSetHook,
 		chainConfig:   chainConfig,
 		engine:        engine,
-		vmConfig:      vmConfig,
+		zkVmConfig:    vmConfig,
 		dirs:          dirs,
 		accumulator:   accumulator,
 		stateStream:   stateStream,
@@ -426,7 +426,7 @@ func attemptAddTransaction(
 	getHeader := func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(tx, hash, number) }
 
 	// set the counter collector on the config so that we can gather info during the execution
-	cfg.vmConfig.CounterCollector = txCounters.ExecutionCounters()
+	cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
 
 	receipt, _, err := core.ApplyTransaction(
 		cfg.chainConfig,
@@ -439,7 +439,7 @@ func attemptAddTransaction(
 		header,
 		transaction,
 		&header.GasUsed,
-		*cfg.vmConfig,
+		cfg.zkVmConfig.Config,
 		parentHeader.ExcessDataGas,
 		zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED)
 
