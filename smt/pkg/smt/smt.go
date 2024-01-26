@@ -41,7 +41,7 @@ type DB interface {
 
 type DebuggableDB interface {
 	DB
-	PrintDb()
+	PrintDb(c func(k string, v string))
 	GetDb() map[string][]string
 }
 
@@ -556,9 +556,9 @@ func (s *SMT) setLastRoot(newRoot utils.NodeKey) error {
 
 // Utility functions for debugging
 
-func (s *SMT) PrintDb() {
+func (s *SMT) PrintDb(c func(k string, v string)) {
 	if debugDB, ok := s.Db.(DebuggableDB); ok {
-		debugDB.PrintDb()
+		debugDB.PrintDb(c)
 	}
 }
 

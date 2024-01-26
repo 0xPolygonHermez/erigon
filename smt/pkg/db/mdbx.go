@@ -252,9 +252,11 @@ func (m *EriDb) Delete(key string) error {
 	return m.tx.Delete(TableSmt, []byte(key))
 }
 
-func (m *EriDb) PrintDb() {
+func (m *EriDb) PrintDb(c func(k string, v string)) {
 	err := m.tx.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
-		println(string(k), string(v))
+		if c != nil {
+			c(string(k), string(v))
+		}
 		return nil
 	})
 	if err != nil {

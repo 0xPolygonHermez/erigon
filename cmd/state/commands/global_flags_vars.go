@@ -19,6 +19,8 @@ var (
 	snapshotsCli    bool
 	chain           string
 	logdir          string
+	verifyStateGap  uint64
+	rpc             string
 )
 
 func must(err error) {
@@ -58,4 +60,12 @@ func withSnapshotBlocks(cmd *cobra.Command) {
 
 func withChain(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&chain, "chain", "", "pick a chain to assume (mainnet, sepolia, etc.)")
+}
+
+func withGap(cmd *cobra.Command) {
+	cmd.Flags().Uint64Var(&verifyStateGap, "gap", 1000000, "gap for check state")
+}
+
+func withRpc(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&rpc, "rpc", "", "rpc for remote node")
 }

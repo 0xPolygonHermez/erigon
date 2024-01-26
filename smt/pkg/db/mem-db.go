@@ -195,7 +195,7 @@ func (m *MemDb) IsEmpty() bool {
 	return len(m.Db) == 0
 }
 
-func (m *MemDb) PrintDb() {
+func (m *MemDb) PrintDb(c func(k string, v string)) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
 
