@@ -23,6 +23,7 @@ import (
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -411,10 +412,18 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 	if debug != nil {
 		dbg = *debug
 	}
-	return api.getWitness(ctx, api.db, blockNrOrHash, dbg)
+	return api.getWitness(ctx, api.db, blockNrOrHash, rpc.BlockNumberOrHashWithNumber(0), dbg)
 }
 
-func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, debug bool) (hexutility.Bytes, error) {
+func (api *APIImpl) GetBlockRangeWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, debug *bool) (hexutility.Bytes, error) {
+	dbg := false
+	if debug != nil {
+		dbg = *debug
+	}
+	return api.getWitness(ctx, api.db, blockNrOrHash, endBlockNrOrHash, dbg)
+}
+
+func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, debug bool) (hexutility.Bytes, error) {
 	tx, err := db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -451,7 +460,6 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		return nil, nil
 	}
 
-	// prevHeader, err := api._blockReader.HeaderByNumber(ctx, tx, blockNr-1)
 	if err != nil {
 		return nil, err
 	}
@@ -514,12 +522,97 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		if err != nil {
 			return nil, err
 		}
+
+		tx = batch
+	}
+
+	chainConfig, err := api.chainConfig(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	reader, err := rpchelper.CreateHistoryStateReader(tx, blockNr, 0, false, chainConfig.ChainName)
+	if err != nil {
+		return nil, err
+	}
+
+	prevHeader, err := api._blockReader.HeaderByNumber(ctx, tx, blockNr-1)
+	if err != nil {
+		return nil, err
+	}
+
+	tds := state.NewTrieDbState(prevHeader.Root, tx, blockNr-1, reader)
+
+	tds.SetResolveReads(true)
+
+	tds.StartNewBuffer()
+	trieStateWriter := tds.TrieStateWriter()
+
+	statedb := state.New(tds)
+
+	getHeader := func(hash libcommon.Hash, number uint64) *types.Header {
+		h, e := api._blockReader.Header(ctx, tx, hash, number)
+		if e != nil {
+			log.Error("getHeader error", "number", number, "hash", hash, "err", e)
+		}
+		return h
+	}
+
+	getHashFn := core.GetHashFn(block.Header(), getHeader)
+
+	usedGas := new(uint64)
+	gp := new(core.GasPool).AddGas(block.GasLimit())
+	var receipts types.Receipts
+
+	engine, ok := api.engine().(consensus.Engine)
+
+	if !ok {
+		return nil, fmt.Errorf("engine is not consensus.Engine")
+	}
+
+	chainReader := stagedsync.NewChainReaderImpl(chainConfig, tx, nil)
+
+	vmConfig := vm.Config{}
+
+	if err := core.InitializeBlockExecution(engine, chainReader, block.Header(), block.Transactions(), block.Uncles(), chainConfig, statedb, nil); err != nil {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for i, txn := range block.Transactions() {
+		statedb.Prepare(txn.Hash(), block.Hash(), i)
+
+		effectiveGasPricePercentage, err := api.getEffectiveGasPricePercentage(tx, txn.Hash())
+		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, api.engine(), nil, gp, statedb, trieStateWriter, block.Header(), txn, usedGas, vmConfig, nil, effectiveGasPricePercentage)
+		if err != nil {
+			return nil, err
+		}
+
+		if !chainConfig.IsByzantium(block.NumberU64()) {
+			tds.StartNewBuffer()
+		}
+
+		receipts = append(receipts, receipt)
+	}
+
+	if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil); err != nil {
+		fmt.Printf("Finalize of block %d failed: %v\n", blockNr, err)
+		return nil, err
+	}
+
+	statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), block.Header().Time), trieStateWriter)
+
+	rl, err := tds.ResolveSMTRetainList()
+
+	if err != nil {
+		return nil, err
 	}
 
 	eridb := db2.NewEriDb(batch)
 	smtTrie := smt.NewSMT(eridb)
 
-	witness, err := smt.BuildWitness(smtTrie, nil, ctx)
+	witness, err := smt.BuildWitness(smtTrie, rl, ctx)
 
 	if err != nil {
 		return nil, err
