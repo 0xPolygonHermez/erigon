@@ -93,6 +93,7 @@ func NewSequencerZkStages(ctx context.Context,
 	forkValidator *engineapi.ForkValidator,
 	engine consensus.Engine,
 	datastreamServer *datastreamer.StreamServer,
+	l1Syncer *syncer.L1Syncer,
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
 ) []*stagedsync.Stage {
@@ -105,6 +106,7 @@ func NewSequencerZkStages(ctx context.Context,
 
 	return zkStages.SequencerZkStages(ctx,
 		stagedsync.StageCumulativeIndexCfg(db),
+		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, l1Syncer),
 		zkStages.StageDataStreamCatchupCfg(datastreamServer, db),
 		zkStages.StageSequencerInterhashesCfg(db, notifications.Accumulator),
 		zkStages.StageSequenceBlocksCfg(
