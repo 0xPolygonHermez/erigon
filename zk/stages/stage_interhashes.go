@@ -122,7 +122,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	smt := smt.NewSMT(eridb)
 
 	if s.BlockNumber == 0 || shouldRegenerate {
-		if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt, cfg, &expectedRootHash, ctx, quit); err != nil {
+		if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt); err != nil {
 			return trie.EmptyRoot, err
 		}
 	} else {
@@ -141,7 +141,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		}
 		expectedRootHash = syncHeadHeader.Root
 		headerHash = syncHeadHeader.Hash()
-		if root, err = zkIncrementIntermediateHashes(logPrefix, s, tx, eridb, smt, incrementTo, cfg, &expectedRootHash, quit); err != nil {
+		if root, err = zkIncrementIntermediateHashes(logPrefix, s, tx, eridb, smt, incrementTo, cfg.checkRoot, &expectedRootHash, quit); err != nil {
 			return trie.EmptyRoot, err
 		}
 	}
@@ -216,7 +216,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	return nil
 }
 
-func regenerateIntermediateHashes(logPrefix string, db kv.RwTx, eridb *db2.EriDb, smtIn *smt.SMT, cfg ZkInterHashesCfg, expectedRootHash *libcommon.Hash, ctx context.Context, quitCh <-chan struct{}) (libcommon.Hash, error) {
+func regenerateIntermediateHashes(logPrefix string, db kv.RwTx, eridb *db2.EriDb, smtIn *smt.SMT) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 
@@ -318,7 +318,7 @@ func regenerateIntermediateHashes(logPrefix string, db kv.RwTx, eridb *db2.EriDb
 	return libcommon.BigToHash(root), nil
 }
 
-func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, db kv.RwTx, eridb *db2.EriDb, dbSmt *smt.SMT, to uint64, cfg ZkInterHashesCfg, expectedRootHash *libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
+func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, db kv.RwTx, eridb *db2.EriDb, dbSmt *smt.SMT, to uint64, checkRoot bool, expectedRootHash *libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Increment trie hashes started", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
 	defer log.Info(fmt.Sprintf("[%s] Increment ended", logPrefix))
 
@@ -441,7 +441,7 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes finished. Commiting batch", logPrefix))
 
-	if err := verifyLastHash(dbSmt, expectedRootHash, &cfg, logPrefix); err != nil {
+	if err := verifyLastHash(dbSmt, expectedRootHash, checkRoot, logPrefix); err != nil {
 		eridb.RollbackBatch()
 		log.Error("failed to verify hash")
 		return trie.EmptyRoot, err
@@ -603,7 +603,7 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashe
 		}
 	}
 
-	if err := verifyLastHash(dbSmt, expectedRootHash, &cfg, logPrefix); err != nil {
+	if err := verifyLastHash(dbSmt, expectedRootHash, cfg.checkRoot, logPrefix); err != nil {
 		log.Error("failed to verify hash")
 		eridb.RollbackBatch()
 		return trie.EmptyRoot, err
@@ -630,10 +630,10 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashe
 // 	return err
 // }
 
-func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, cfg *ZkInterHashesCfg, logPrefix string) error {
+func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *libcommon.Hash, checkRoot bool, logPrefix string) error {
 	hash := libcommon.BigToHash(dbSmt.LastRoot())
 
-	if cfg.checkRoot && hash != *expectedRootHash {
+	if checkRoot && hash != *expectedRootHash {
 		log.Warn(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
 		return nil
 	}
@@ -759,7 +759,9 @@ func insertContractStorageToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, 
 			keys = append(keys, keyStoragePosition)
 			db.InsertAccountValue(keyStoragePosition, *parsedValue)
 
-			ks := utils.EncodeKeySource(utils.SC_STORAGE, utils.ConvertHexToAddress(ethAddr), common.Hash{})
+			sp, _ := utils.StrValToBigInt(k)
+
+			ks := utils.EncodeKeySource(utils.SC_STORAGE, utils.ConvertHexToAddress(ethAddr), common.BigToHash(sp))
 			db.InsertKeySource(keyStoragePosition, ks)
 		}
 	}

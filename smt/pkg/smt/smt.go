@@ -30,6 +30,7 @@ type DB interface {
 	GetHashKey(key utils.NodeKey) (utils.NodeKey, error)
 	Delete(string) error
 	DeleteByNodeKey(key utils.NodeKey) error
+	GetCode(codeHash []byte) ([]byte, error)
 
 	SetLastRoot(lr *big.Int) error
 	GetLastRoot() (*big.Int, error)
