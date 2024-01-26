@@ -549,7 +549,7 @@ Loop:
 			gers = append(gers, gersInBetween...)
 		}
 
-		blockGer, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
+		blockGer, _, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
 		if err != nil {
 			return err
 		}
