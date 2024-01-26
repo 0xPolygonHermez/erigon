@@ -19,6 +19,7 @@ const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // l2blockno 
 const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"             // txHash -> txPricePercentage
 const STATE_ROOTS = "hermez_stateRoots"                            // l2blockno -> stateRoot
 const L1_INFO_TREE_UPDATES = "l1_info_tree_updates"                // index -> L1InfoTreeUpdate
+const BLOCK_L1_INFO_TREE_INDEX = "block_l1_info_tree_index"        // block number -> l1 info tree index
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -76,6 +77,10 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		return err
 	}
 	err = tx.CreateBucket(L1_INFO_TREE_UPDATES)
+	if err != nil {
+		return err
+	}
+	err = tx.CreateBucket(BLOCK_L1_INFO_TREE_INDEX)
 	if err != nil {
 		return err
 	}
@@ -489,43 +494,63 @@ func (db *HermezDbReader) GetStateRoot(l2BlockNo uint64) (common.Hash, error) {
 	return common.BytesToHash(data), nil
 }
 
-func (db *HermezDb) WriteL1InfoTreeUpdate(update types.L1InfoTreeUpdate) error {
+func (db *HermezDb) WriteL1InfoTreeUpdate(update *types.L1InfoTreeUpdate) error {
 	marshalled := update.Marshall()
 	idx := Uint64ToBytes(update.Index)
 	return db.tx.Put(L1_INFO_TREE_UPDATES, idx, marshalled)
 }
 
-func (db *HermezDbReader) GetL1InfoTreeUpdate(idx uint64) (types.L1InfoTreeUpdate, error) {
+func (db *HermezDbReader) GetL1InfoTreeUpdate(idx uint64) (*types.L1InfoTreeUpdate, error) {
 	data, err := db.tx.GetOne(L1_INFO_TREE_UPDATES, Uint64ToBytes(idx))
 	if err != nil {
-		return types.L1InfoTreeUpdate{}, err
+		return nil, err
 	}
-	update := types.L1InfoTreeUpdate{}
+	if len(data) == 0 {
+		return nil, nil
+	}
+	update := &types.L1InfoTreeUpdate{}
 	update.Unmarshall(data)
 	return update, nil
 }
 
-func (db *HermezDbReader) GetLatestL1InfoTreeUpdate() (types.L1InfoTreeUpdate, bool, error) {
+func (db *HermezDbReader) GetLatestL1InfoTreeUpdate() (*types.L1InfoTreeUpdate, bool, error) {
 	cursor, err := db.tx.Cursor(L1_INFO_TREE_UPDATES)
 	if err != nil {
-		return types.L1InfoTreeUpdate{}, false, err
+		return nil, false, err
 	}
 	defer cursor.Close()
 
 	count, err := cursor.Count()
 	if err != nil {
-		return types.L1InfoTreeUpdate{}, false, err
+		return nil, false, err
 	}
 	if count == 0 {
-		return types.L1InfoTreeUpdate{}, false, nil
+		return nil, false, nil
 	}
 
 	_, v, err := cursor.Last()
 	if err != nil {
-		return types.L1InfoTreeUpdate{}, false, err
+		return nil, false, err
+	}
+	if len(v) == 0 {
+		return nil, false, nil
 	}
 
-	result := types.L1InfoTreeUpdate{}
+	result := &types.L1InfoTreeUpdate{}
 	result.Unmarshall(v)
 	return result, true, nil
+}
+
+func (db *HermezDb) WriteBlockL1InfoTreeIndex(blockNumber uint64, l1Index uint64) error {
+	k := Uint64ToBytes(blockNumber)
+	v := Uint64ToBytes(l1Index)
+	return db.tx.Put(BLOCK_L1_INFO_TREE_INDEX, k, v)
+}
+
+func (db *HermezDbReader) GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, error) {
+	v, err := db.tx.GetOne(BLOCK_L1_INFO_TREE_INDEX, Uint64ToBytes(blockNumber))
+	if err != nil {
+		return 0, err
+	}
+	return BytesToUint64(v), nil
 }

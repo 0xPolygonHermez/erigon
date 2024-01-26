@@ -88,7 +88,7 @@ Loop:
 			rollupExitRoot := l.Topics[2]
 			combined := append(mainnetExitRoot.Bytes(), rollupExitRoot.Bytes()...)
 			ger := keccak256.Hash(combined)
-			update := types.L1InfoTreeUpdate{
+			update := &types.L1InfoTreeUpdate{
 				GER:             common.BytesToHash(ger),
 				MainnetExitRoot: mainnetExitRoot,
 				RollupExitRoot:  rollupExitRoot,

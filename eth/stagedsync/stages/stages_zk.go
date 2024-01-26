@@ -26,4 +26,5 @@ var (
 	VerificationsStateRootCheck SyncStage = "VerificationStateRootCheck"
 	ForkId                      SyncStage = "ForkId"
 	L1InfoTree                  SyncStage = "L1InfoTree"
+	HighestUsedL1InfoIndex      SyncStage = "HighestUsedL1InfoTree"
 )

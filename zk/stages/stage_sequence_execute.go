@@ -175,6 +175,11 @@ func SpawnSequencingStage(
 		return err
 	}
 
+	hermezDb, err := hermez_db.NewHermezDb(tx)
+	if err != nil {
+		return err
+	}
+
 	/*
 		batch: here we need to open up a new batch ready to populate with transactions.
 
@@ -188,6 +193,12 @@ func SpawnSequencingStage(
 		After the condition is met we need to close the batch and hold it in the db for a future stage to submit this
 		for proving
 	*/
+
+	lastBatch, err := stages.GetStageProgress(tx, stages.HighestSeenBatchNumber)
+	if err != nil {
+		return err
+	}
+	thisBatch := lastBatch + 1
 
 	batchCounters := vm.NewBatchCounterCollector(80)
 
@@ -275,7 +286,6 @@ func SpawnSequencingStage(
 		Cfg: *cfg.chainConfig,
 		Db:  tx,
 	}
-	hermezDb, err := hermez_db.NewHermezDb(tx)
 
 	var excessDataGas *big.Int
 	if parentBlock != nil {
@@ -336,13 +346,22 @@ func SpawnSequencingStage(
 		return err
 	}
 
+	// now process the senders to avoid a stage by itself
+	if err := addSenders(cfg, newNum, finalTransactions, tx, finalHeader); err != nil {
+		return err
+	}
+
 	// now add in the zk batch to block references
-	if err := hermezDb.WriteBlockBatch(newNum.Uint64(), newNum.Uint64()); err != nil {
+	if err := hermezDb.WriteBlockBatch(newNum.Uint64(), thisBatch); err != nil {
 		return fmt.Errorf("write block batch error: %v", err)
 	}
 
-	// now process the senders to avoid a stage by itself
-	if err := addSenders(cfg, newNum, finalTransactions, tx, finalHeader); err != nil {
+	// calculate and store the l1 info tree index used for this block
+	l1InfoIndex, err := calculateNextL1Index(newNum.Uint64(), tx, hermezDb)
+	if err != nil {
+		return err
+	}
+	if err = hermezDb.WriteBlockL1InfoTreeIndex(newNum.Uint64(), l1InfoIndex); err != nil {
 		return err
 	}
 
@@ -354,7 +373,10 @@ func SpawnSequencingStage(
 	if err = stages.SaveStageProgress(tx, stages.Headers, newNum.Uint64()); err != nil {
 		return err
 	}
-	if err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, newNum.Uint64()); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, thisBatch); err != nil {
+		return err
+	}
+	if err = stages.SaveStageProgress(tx, stages.HighestUsedL1InfoIndex, l1InfoIndex); err != nil {
 		return err
 	}
 
@@ -447,6 +469,40 @@ func attemptAddTransaction(
 	overflow = batchCounters.CheckForOverflow()
 
 	return receipt, overflow, err
+}
+
+// will be called at the start of every new block created within a batch to figure out if there is a new GER
+// we can use or not.  In the special case that this is the first block we just return 0 as we need to use the
+// 0 index first before we can use 1+
+func calculateNextL1Index(blockNumber uint64, tx kv.RwTx, hermezDb *hermez_db.HermezDb) (uint64, error) {
+	// always default to 0 and only update this if the next available index has reached finality
+	var nextL1Index uint64 = 0
+
+	// special case for the first block, we must use the 0 index first
+	if blockNumber == 1 {
+		return 0, nil
+	}
+
+	// check which was the last used index
+	lastInfoIndex, err := stages.GetStageProgress(tx, stages.HighestUsedL1InfoIndex)
+	if err != nil {
+		return 0, err
+	}
+
+	// check if the next index is there and if it has reached finality or not
+	l1Info, err := hermezDb.GetL1InfoTreeUpdate(lastInfoIndex + 1)
+	if err != nil {
+		return 0, err
+	}
+
+	// check that we have reached finality on the l1 info tree event before using it
+	now := time.Now()
+	target := now.Add(-(12 * time.Minute))
+	if l1Info != nil && l1Info.Timestamp < uint64(target.Unix()) {
+		nextL1Index = l1Info.Index
+	}
+
+	return nextL1Index, nil
 }
 
 func UnwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) (err error) {
