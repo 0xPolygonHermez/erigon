@@ -19,6 +19,10 @@ import (
 	"github.com/ledgerwatch/log/v3"
 
 	"bytes"
+	"io"
+	"math/big"
+	"sync/atomic"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/chain"
@@ -50,9 +54,6 @@ import (
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/secp256k1"
-	"io"
-	"math/big"
-	"sync/atomic"
 )
 
 const (
@@ -208,7 +209,7 @@ func executeBlock(
 	var execRs *core.EphemeralExecResult
 	getHashFn := core.GetHashFn(block.Header(), getHeader)
 
-	execRs, err = core.ExecuteBlockEphemerally(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, stagedsync.NewChainReaderImpl(cfg.chainConfig /*config*/, tx /*tx*/, cfg.blockReader /*blockReader*/), getTracer, tx, roHermezDb)
+	execRs, err = core.ExecuteBlockEphemerallyZk(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, stagedsync.NewChainReaderImpl(cfg.chainConfig /*config*/, tx /*tx*/, cfg.blockReader /*blockReader*/), getTracer, tx, roHermezDb)
 	if err != nil {
 		return err
 	}
