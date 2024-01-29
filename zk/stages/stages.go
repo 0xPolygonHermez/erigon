@@ -13,7 +13,7 @@ import (
 func SequencerZkStages(
 	ctx context.Context,
 	cumulativeIndex stagedsync.CumulativeIndexCfg,
-	l1InfoTreeCfg L1InfoTreeCfg,
+	l1InfoTreeCfg L1SequencerSyncCfg,
 	dataStreamCatchupCfg DataStreamCatchupCfg,
 	sequencerInterhashesCfg SequencerInterhashesCfg,
 	exec SequenceBlockCfg,
@@ -46,15 +46,15 @@ func SequencerZkStages(
 		*/
 		{
 			ID:          stages2.L1Syncer,
-			Description: "L1 Info Tree Updates",
+			Description: "L1 Sequencer Sync Updates",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnL1InfoTreeStage(s, u, tx, l1InfoTreeCfg, ctx, firstCycle, quiet)
+				return SpawnL1SequencerSyncStage(s, u, tx, l1InfoTreeCfg, ctx, firstCycle, quiet)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
-				return UnwindL1InfoTreeStage(u, tx, l1InfoTreeCfg, ctx)
+				return UnwindL1SequencerSyncStage(u, tx, l1InfoTreeCfg, ctx)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
-				return PruneL1InfoTreeStage(p, tx, l1InfoTreeCfg, ctx)
+				return PruneL1SequencerSyncStage(p, tx, l1InfoTreeCfg, ctx)
 			},
 		},
 		{

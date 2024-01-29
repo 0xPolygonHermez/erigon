@@ -725,7 +725,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			// if we are sequencing transactions, we do the sequencing loop...
 
 			etherMan := newEtherMan(cfg)
-			l1Topics := [][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic}}
+			l1Topics := [][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic, contracts.InitialSequenceBatchesTopic}}
 			zkL1Syncer := syncer.NewL1Syncer(
 				etherMan.EthClient,
 				cfg.L1ContractAddress,
