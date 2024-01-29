@@ -209,6 +209,19 @@ func SpawnSequencingStage(
 	stateReader := state.NewPlainStateReader(tx)
 	ibs := state.New(stateReader)
 
+	// calculate and store the l1 info tree index used for this block
+	l1InfoIndex, l1Info, err := calculateNextL1IndexToUse(nextBlockNum, tx, hermezDb)
+	if err != nil {
+		return err
+	}
+	if err = hermezDb.WriteBlockL1InfoTreeIndex(nextBlockNum, l1InfoIndex); err != nil {
+		return err
+	}
+
+	if err := handleStateForNewBlockStarting(executionAt, l1Info, ibs, hermezDb); err != nil {
+		return err
+	}
+
 	header := &types.Header{
 		ParentHash: parentBlock.Hash(),
 		Coinbase:   common.Address{},
@@ -356,15 +369,6 @@ func SpawnSequencingStage(
 		return fmt.Errorf("write block batch error: %v", err)
 	}
 
-	// calculate and store the l1 info tree index used for this block
-	l1InfoIndex, err := calculateNextL1Index(newNum.Uint64(), tx, hermezDb)
-	if err != nil {
-		return err
-	}
-	if err = hermezDb.WriteBlockL1InfoTreeIndex(newNum.Uint64(), l1InfoIndex); err != nil {
-		return err
-	}
-
 	// now update stages that will be used later on in stageloop.go and other stages. As we're the sequencer
 	// we won't have headers stage for example as we're already writing them here
 	if err = stages.SaveStageProgress(tx, stages.Execution, newNum.Uint64()); err != nil {
@@ -389,7 +393,37 @@ func SpawnSequencingStage(
 	return nil
 }
 
-func addSenders(cfg SequenceBlockCfg, newNum *big.Int, finalTransactions types.Transactions, tx kv.RwTx, finalHeader *types.Header) error {
+func handleStateForNewBlockStarting(
+	lastBlockNumber uint64,
+	l1info *zktypes.L1InfoTreeUpdate,
+	ibs *state.IntraBlockState,
+	db *hermez_db.HermezDb,
+) error {
+	// first we need to write the last (block number -> hash pair) to the scalable contract
+	if err := ibs.ScalableSetBlockNumberToHash(lastBlockNumber, db); err != nil {
+		return err
+	}
+
+	// handle writing to the ger manager contract
+	if l1info != nil {
+		// first check if this ger has already been written
+		l1BlockHash := ibs.ReadGerManagerL1BlockHash(l1info.GER)
+		if l1BlockHash != (common.Hash{}) {
+			// not in the contract so let's write it!
+			ibs.WriteGerManagerL1BlockHash(l1info.GER, l1info.ParentHash)
+		}
+	}
+
+	return nil
+}
+
+func addSenders(
+	cfg SequenceBlockCfg,
+	newNum *big.Int,
+	finalTransactions types.Transactions,
+	tx kv.RwTx,
+	finalHeader *types.Header,
+) error {
 	signer := types.MakeSigner(cfg.chainConfig, newNum.Uint64())
 	cryptoContext := secp256k1.ContextForThread(1)
 	var senders []common.Address
@@ -474,35 +508,36 @@ func attemptAddTransaction(
 // will be called at the start of every new block created within a batch to figure out if there is a new GER
 // we can use or not.  In the special case that this is the first block we just return 0 as we need to use the
 // 0 index first before we can use 1+
-func calculateNextL1Index(blockNumber uint64, tx kv.RwTx, hermezDb *hermez_db.HermezDb) (uint64, error) {
+func calculateNextL1IndexToUse(blockNumber uint64, tx kv.RwTx, hermezDb *hermez_db.HermezDb) (uint64, *zktypes.L1InfoTreeUpdate, error) {
 	// always default to 0 and only update this if the next available index has reached finality
 	var nextL1Index uint64 = 0
 
 	// special case for the first block, we must use the 0 index first
 	if blockNumber == 1 {
-		return 0, nil
+		return 0, nil, nil
 	}
 
 	// check which was the last used index
 	lastInfoIndex, err := stages.GetStageProgress(tx, stages.HighestUsedL1InfoIndex)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	// check if the next index is there and if it has reached finality or not
 	l1Info, err := hermezDb.GetL1InfoTreeUpdate(lastInfoIndex + 1)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	// check that we have reached finality on the l1 info tree event before using it
+	// todo: [zkevm] think of a better way to handle finality
 	now := time.Now()
 	target := now.Add(-(12 * time.Minute))
 	if l1Info != nil && l1Info.Timestamp < uint64(target.Unix()) {
 		nextL1Index = l1Info.Index
 	}
 
-	return nextL1Index, nil
+	return nextL1Index, l1Info, nil
 }
 
 func UnwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) (err error) {

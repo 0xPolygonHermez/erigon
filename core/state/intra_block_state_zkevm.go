@@ -2,10 +2,17 @@ package state
 
 import (
 	"errors"
-	"github.com/ledgerwatch/erigon/common"
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+)
+
+var (
+	saddr      = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	sl0        = libcommon.HexToHash("0x0")
+	gerAddress = libcommon.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
 )
 
 type ReadOnlyHermezDb interface {
@@ -22,9 +29,6 @@ func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
 }
 
 func (sdb *IntraBlockState) ScalableSetTxNum() {
-	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-	sl0 := libcommon.HexToHash("0x0")
-
 	txNum := uint256.NewInt(0)
 	sdb.GetState(saddr, &sl0, txNum)
 
@@ -40,9 +44,6 @@ func (sdb *IntraBlockState) ScalableSetTxNum() {
 }
 
 func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) error {
-	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-	sl0 := libcommon.HexToHash("0x0")
-
 	txNum := uint256.NewInt(0)
 	sdb.GetState(saddr, &sl0, txNum)
 
@@ -64,4 +65,40 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) 
 	}
 
 	return nil
+}
+
+func (sdb *IntraBlockState) ScalableSetBlockNumberToHash(blockNumber uint64, rodb ReadOnlyHermezDb) error {
+	d1 := common.LeftPadBytes(hermez_db.Uint64ToBytes(blockNumber), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+	rpcHash, err := rodb.GetStateRoot(blockNumber)
+	if err != nil {
+		return err
+	}
+	rpcU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
+	sdb.SetState(saddr, &mkh, *rpcU256)
+	return nil
+}
+
+func (sdb *IntraBlockState) ReadGerManagerL1BlockHash(ger libcommon.Hash) libcommon.Hash {
+	d1 := common.LeftPadBytes(ger.Bytes(), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(0).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+	key := uint256.NewInt(0)
+	sdb.GetState(gerAddress, &mkh, key)
+	if key.Uint64() == 0 {
+		return libcommon.Hash{}
+	}
+	return libcommon.BytesToHash(key.Bytes())
+}
+
+func (sdb *IntraBlockState) WriteGerManagerL1BlockHash(ger, l1BlockHash libcommon.Hash) {
+	d1 := common.LeftPadBytes(ger.Bytes(), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(0).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+	val := uint256.NewInt(0).SetBytes(l1BlockHash.Bytes())
+	sdb.SetState(gerAddress, &mkh, *val)
 }
