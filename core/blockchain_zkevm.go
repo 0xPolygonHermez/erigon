@@ -137,7 +137,7 @@ func ExecuteBlockEphemerallyZk(
 	// [zkevm] todo: calculate it
 	var l1InfoRoot *libcommon.Hash
 
-	ibs.PostExecuteStateSet(chainConfig, blockBatchNum, block.NumberU64(), l1InfoRoot)
+	ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), l1InfoRoot, &stateRoot)
 
 	receiptSha := types.DeriveSha(receipts)
 	// [zkevm] todo

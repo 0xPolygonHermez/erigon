@@ -162,11 +162,11 @@ func ExecuteBlockEphemerally(
 			}
 		}
 
-		// [zkevm] - set smt root hash in magic account
-		err = ibs.ScalableSetSmtRootHash(roHermezDb)
-		if err != nil {
-			return nil, err
-		}
+		// // [zkevm] - set smt root hash in magic account
+		// err = ibs.ScalableSetSmtRootHash(roHermezDb)
+		// if err != nil {
+		// 	return nil, err
+		// }
 	}
 
 	receiptSha := types.DeriveSha(receipts)
