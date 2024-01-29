@@ -131,7 +131,9 @@ func ExecuteBlockEphemerallyZk(
 				receipts = append(receipts, receipt)
 			}
 		}
-
+		if !chainConfig.IsEtrog(block.NumberU64()) {
+			ibs.ScalableSetSmtRootHash(roHermezDb)
+		}
 	}
 
 	// [zkevm] todo: calculate it

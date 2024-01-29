@@ -34,13 +34,10 @@ func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
 }
 
 func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, blockNum uint64, l1InfoRoot, stateRoot *libcommon.Hash) {
-	saddr := libcommon.HexToAddress(ADDRESS_SCALABLE_L2)
 	//ETROG
 	if chainConfig.IsEtrog(blockNum) {
+		saddr := libcommon.HexToAddress(ADDRESS_SCALABLE_L2)
 		sdb.scalableSetBlockInfoRoot(&saddr, l1InfoRoot)
-	} else {
-		// save state root
-		sdb.scalableSetBlockHash(&saddr, blockNum-1, stateRoot)
 	}
 }
 
@@ -98,4 +95,31 @@ func (sdb *IntraBlockState) scalableSetBlockHash(saddr *libcommon.Address, block
 	hashAsBigU := uint256.NewInt(0).SetBytes(blockHash.Bytes())
 
 	sdb.SetState(*saddr, &mkh, *hashAsBigU)
+}
+
+func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) error {
+	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	sl0 := libcommon.HexToHash("0x0")
+
+	txNum := uint256.NewInt(0)
+	sdb.GetState(saddr, &sl0, txNum)
+
+	// create mapping with keccak256(txnum,1) -> smt root
+	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+
+	rpcHash, err := roHermezDb.GetStateRoot(txNum.Uint64())
+	if err != nil {
+		return err
+	}
+
+	if txNum.Uint64() >= 1 {
+		// set mapping of keccak256(txnum,1) -> smt root
+		rpcHashU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
+		sdb.SetState(saddr, &mkh, *rpcHashU256)
+	}
+
+	return nil
 }
