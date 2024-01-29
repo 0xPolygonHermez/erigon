@@ -14,7 +14,7 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 
 	var size int = len(nodeKeys)
 	var err error
-	var smtBatchNodeRoot *smtBatchNode = nil
+	var smtBatchNodeRoot *smtBatchNode
 	valueHashesToDelete := []*[4]uint64{}
 
 	err = validateDataLengths(nodeKeys, nodeValues, &nodeValuesHashes)
@@ -37,7 +37,7 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 		insertingNodeValue := nodeValues[i]
 		insertingNodeValueHash := nodeValuesHashes[i]
 
-		insertingNodePathLevel, insertingNodePath, insertingPointerToSmtBatchNode, err := findInsertingPoint(s, insertingNodeKey, rootNodeKey, &smtBatchNodeRoot)
+		insertingNodePathLevel, insertingNodePath, insertingPointerToSmtBatchNode, err := findInsertingPoint(s, insertingNodeKey, rootNodeKey, &smtBatchNodeRoot, insertingNodeValue.IsZero())
 		if err != nil {
 			return nil, err
 		}
@@ -89,6 +89,7 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 				parentAfterDelete := &((*insertingPointerToSmtBatchNode).parentNode)
 				*insertingPointerToSmtBatchNode = nil
 				insertingPointerToSmtBatchNode = parentAfterDelete
+				(*insertingPointerToSmtBatchNode).updateKeysAfterDelete()
 				insertingNodePathLevel--
 				// there is no need to update insertingRemainingKey because it is not needed anymore therefore its value is incorrect if used after this line
 				// insertingRemainingKey = utils.RemoveKeyBits(*insertingNodeKey, insertingNodePathLevel)
@@ -128,7 +129,6 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 	}
 
 	for _, valueHashToDelete := range valueHashesToDelete {
-		// fmt.Println(valueHashToDelete)
 		s.Db.DeleteByNodeKey(*valueHashToDelete)
 	}
 	for i, nodeValue := range nodeValues {
@@ -228,7 +228,8 @@ func calculateRootNodeKeyIfNil(s *SMT, root **utils.NodeKey) error {
 	return nil
 }
 
-func findInsertingPoint(s *SMT, insertingNodeKey, insertingPointerNodeKey *utils.NodeKey, insertingPointerToSmtBatchNode **smtBatchNode) (int, []int, **smtBatchNode, error) {
+func findInsertingPoint(s *SMT, insertingNodeKey, insertingPointerNodeKey *utils.NodeKey, insertingPointerToSmtBatchNode **smtBatchNode, fetchDirectSiblings bool) (int, []int, **smtBatchNode, error) {
+	var err error
 	var insertingNodePathLevel int = -1
 
 	var nextInsertingPointerNodeKey *utils.NodeKey
@@ -241,18 +242,9 @@ func findInsertingPoint(s *SMT, insertingNodeKey, insertingPointerNodeKey *utils
 	for {
 		if (*insertingPointerToSmtBatchNode) == nil { // update in-memory structure from db
 			if !insertingPointerNodeKey.IsZero() {
-				dbNodeValue, err := s.Db.Get(*insertingPointerNodeKey)
+				*insertingPointerToSmtBatchNode, err = fetchNodeDataFromDb(s, insertingPointerNodeKey, insertingPointerToSmtBatchNodeParent)
 				if err != nil {
 					return -2, []int{}, insertingPointerToSmtBatchNode, err
-				}
-
-				nodeLeftKeyOrRemainingKey := utils.NodeKeyFromBigIntArray(dbNodeValue[0:4])
-				nodeRightKeyOrValueHash := utils.NodeKeyFromBigIntArray(dbNodeValue[4:8])
-				*insertingPointerToSmtBatchNode = &smtBatchNode{
-					parentNode:                insertingPointerToSmtBatchNodeParent,
-					nodeLeftKeyOrRemainingKey: &nodeLeftKeyOrRemainingKey,
-					nodeRightKeyOrValueHash:   &nodeRightKeyOrValueHash,
-					leaf:                      dbNodeValue.IsFinalNode(),
 				}
 			} else {
 				if insertingNodePathLevel != -1 {
@@ -272,6 +264,22 @@ func findInsertingPoint(s *SMT, insertingNodeKey, insertingPointerNodeKey *utils
 
 		if (*insertingPointerToSmtBatchNode).isLeaf() {
 			break
+		}
+
+		if fetchDirectSiblings {
+			// load direct siblings of a non-leaf from the DB
+			if (*insertingPointerToSmtBatchNode).leftNode == nil {
+				(*insertingPointerToSmtBatchNode).leftNode, err = fetchNodeDataFromDb(s, (*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey, (*insertingPointerToSmtBatchNode))
+				if err != nil {
+					return -2, []int{}, insertingPointerToSmtBatchNode, err
+				}
+			}
+			if (*insertingPointerToSmtBatchNode).rightNode == nil {
+				(*insertingPointerToSmtBatchNode).rightNode, err = fetchNodeDataFromDb(s, (*insertingPointerToSmtBatchNode).nodeRightKeyOrValueHash, (*insertingPointerToSmtBatchNode))
+				if err != nil {
+					return -2, []int{}, insertingPointerToSmtBatchNode, err
+				}
+			}
 		}
 
 		insertDirection := insertingNodePath[insertingNodePathLevel]
@@ -351,6 +359,26 @@ func newSmtBatchNodeLeaf(nodeLeftKeyOrRemainingKey, nodeRightKeyOrValueHash *uti
 	}
 }
 
+func fetchNodeDataFromDb(s *SMT, nodeKey *utils.NodeKey, parentNode *smtBatchNode) (*smtBatchNode, error) {
+	if nodeKey.IsZero() {
+		return nil, nil
+	}
+
+	dbNodeValue, err := s.Db.Get(*nodeKey)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeLeftKeyOrRemainingKey := utils.NodeKeyFromBigIntArray(dbNodeValue[0:4])
+	nodeRightKeyOrValueHash := utils.NodeKeyFromBigIntArray(dbNodeValue[4:8])
+	return &smtBatchNode{
+		parentNode:                parentNode,
+		nodeLeftKeyOrRemainingKey: &nodeLeftKeyOrRemainingKey,
+		nodeRightKeyOrValueHash:   &nodeRightKeyOrValueHash,
+		leaf:                      dbNodeValue.IsFinalNode(),
+	}, nil
+}
+
 func (sbn *smtBatchNode) isLeaf() bool {
 	return sbn.leaf
 }
@@ -378,6 +406,15 @@ func (sbn *smtBatchNode) getChildInDirection(direction int) **smtBatchNode {
 		return &sbn.leftNode
 	} else {
 		return &sbn.rightNode
+	}
+}
+
+func (sbn *smtBatchNode) updateKeysAfterDelete() {
+	if sbn.leftNode == nil {
+		sbn.nodeLeftKeyOrRemainingKey = &utils.NodeKey{0, 0, 0, 0}
+	}
+	if sbn.rightNode == nil {
+		sbn.nodeRightKeyOrValueHash = &utils.NodeKey{0, 0, 0, 0}
 	}
 }
 
