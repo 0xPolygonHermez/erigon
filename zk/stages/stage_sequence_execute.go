@@ -218,7 +218,9 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	if err := handleStateForNewBlockStarting(executionAt, l1Info, ibs, hermezDb); err != nil {
+	newBlockTimestamp := uint64(time.Now().Unix())
+
+	if err := handleStateForNewBlockStarting(executionAt, newBlockTimestamp, l1Info, ibs, hermezDb); err != nil {
 		return err
 	}
 
@@ -229,7 +231,7 @@ func SpawnSequencingStage(
 		Number:     new(big.Int).SetUint64(nextBlockNum),
 		GasLimit:   math.MaxUint64,
 		GasUsed:    0,
-		Time:       0,
+		Time:       newBlockTimestamp,
 		Extra:      nil,
 	}
 
@@ -395,6 +397,7 @@ func SpawnSequencingStage(
 
 func handleStateForNewBlockStarting(
 	lastBlockNumber uint64,
+	newBlockTimestamp uint64,
 	l1info *zktypes.L1InfoTreeUpdate,
 	ibs *state.IntraBlockState,
 	db *hermez_db.HermezDb,
@@ -403,6 +406,19 @@ func handleStateForNewBlockStarting(
 	if err := ibs.ScalableSetBlockNumberToHash(lastBlockNumber, db); err != nil {
 		return err
 	}
+
+	// now lets check the timestamp for this block and that it's valid
+	contractTimestamp := ibs.ScalableGetTimestamp()
+	if contractTimestamp == 0 {
+		return fmt.Errorf("expected a timestamp to be present in the scalable contract")
+	}
+	// todo: [zkevm] how do we perform this check as it varies per block
+	//if newBlockTimestamp >= 1_000_000 {
+	//	return fmt.Errorf("delta timestamp for new block is too high")
+	//}
+
+	// all valid so let's write the timestamp to the scalable contract
+	ibs.ScalableSetTimestamp(newBlockTimestamp)
 
 	// handle writing to the ger manager contract
 	if l1info != nil {
@@ -415,6 +431,13 @@ func handleStateForNewBlockStarting(
 	}
 
 	return nil
+}
+
+func handleStateForBlockEnding(newBlockNumber uint64) {
+	//todo: [zkevm] store the block hash as step 1
+	// then add the hash to the state and store the new hash/state root
+	// we need this so that we can return the pre/post block hash for the
+	// data stream later on
 }
 
 func addSenders(

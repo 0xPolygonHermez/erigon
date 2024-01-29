@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	saddr      = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-	sl0        = libcommon.HexToHash("0x0")
-	gerAddress = libcommon.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
+	systemAddress     = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	slot0             = libcommon.HexToHash("0x0")
+	slot2             = libcommon.HexToHash("0x2")
+	gerManagerAddress = libcommon.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
 )
 
 type ReadOnlyHermezDb interface {
@@ -30,22 +31,22 @@ func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
 
 func (sdb *IntraBlockState) ScalableSetTxNum() {
 	txNum := uint256.NewInt(0)
-	sdb.GetState(saddr, &sl0, txNum)
+	sdb.GetState(systemAddress, &slot0, txNum)
 
 	txNum.Add(txNum, uint256.NewInt(1))
 
-	if !sdb.Exist(saddr) {
+	if !sdb.Exist(systemAddress) {
 		// create account if not exists
-		sdb.CreateAccount(saddr, true)
+		sdb.CreateAccount(systemAddress, true)
 	}
 
 	// set incremented tx num in state
-	sdb.SetState(saddr, &sl0, *txNum)
+	sdb.SetState(systemAddress, &slot0, *txNum)
 }
 
 func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) error {
 	txNum := uint256.NewInt(0)
-	sdb.GetState(saddr, &sl0, txNum)
+	sdb.GetState(systemAddress, &slot0, txNum)
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
@@ -61,7 +62,7 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) 
 	if txNum.Uint64() >= 1 {
 		// set mapping of keccak256(txnum,1) -> smt root
 		rpcHashU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
-		sdb.SetState(saddr, &mkh, *rpcHashU256)
+		sdb.SetState(systemAddress, &mkh, *rpcHashU256)
 	}
 
 	return nil
@@ -77,7 +78,7 @@ func (sdb *IntraBlockState) ScalableSetBlockNumberToHash(blockNumber uint64, rod
 		return err
 	}
 	rpcU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
-	sdb.SetState(saddr, &mkh, *rpcU256)
+	sdb.SetState(systemAddress, &mkh, *rpcU256)
 	return nil
 }
 
@@ -87,7 +88,7 @@ func (sdb *IntraBlockState) ReadGerManagerL1BlockHash(ger libcommon.Hash) libcom
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := libcommon.BytesToHash(mapKey)
 	key := uint256.NewInt(0)
-	sdb.GetState(gerAddress, &mkh, key)
+	sdb.GetState(gerManagerAddress, &mkh, key)
 	if key.Uint64() == 0 {
 		return libcommon.Hash{}
 	}
@@ -100,5 +101,16 @@ func (sdb *IntraBlockState) WriteGerManagerL1BlockHash(ger, l1BlockHash libcommo
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := libcommon.BytesToHash(mapKey)
 	val := uint256.NewInt(0).SetBytes(l1BlockHash.Bytes())
-	sdb.SetState(gerAddress, &mkh, *val)
+	sdb.SetState(gerManagerAddress, &mkh, *val)
+}
+
+func (sdb *IntraBlockState) ScalableGetTimestamp() uint64 {
+	timestamp := uint256.NewInt(0)
+	sdb.GetState(systemAddress, &slot2, timestamp)
+	return timestamp.Uint64()
+}
+
+func (sdb *IntraBlockState) ScalableSetTimestamp(newTimestamp uint64) {
+	val := uint256.NewInt(newTimestamp)
+	sdb.SetState(systemAddress, &slot2, *val)
 }
