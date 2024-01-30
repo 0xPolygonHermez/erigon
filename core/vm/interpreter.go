@@ -28,12 +28,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm/stack"
 )
 
-var pool = sync.Pool{
-	New: func() any {
-		return NewMemory()
-	},
-}
-
 // Config are the configuration options for the Interpreter
 type Config struct {
 	Debug         bool      // Enables debugging
@@ -48,6 +42,12 @@ type Config struct {
 	RestoreState  bool      // Revert all changes made to the state (useful for constant system calls)
 
 	ExtraEips []int // Additional EIPS that are to be enabled
+}
+
+var pool = sync.Pool{
+	New: func() any {
+		return NewMemory()
+	},
 }
 
 func (vmConfig *Config) HasEip3860(rules *chain.Rules) bool {
