@@ -201,7 +201,7 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 	return auxRes.NewRootScalar.ToBigInt(), nil
 }
 
-func (s *SMT) SetStorage(accChanges map[libcommon.Address]*accounts.Account, codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) ([]*utils.NodeKey, []*utils.NodeValue8, error) {
+func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*accounts.Account, codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) ([]*utils.NodeKey, []*utils.NodeValue8, error) {
 	initialCapacity := len(accChanges) + len(codeChanges) + len(storageChanges)
 	keysBatchStorage := make([]*utils.NodeKey, 0, initialCapacity)
 	valuesBatchStorage := make([]*utils.NodeValue8, 0, initialCapacity)
@@ -314,7 +314,7 @@ func (s *SMT) SetStorage(accChanges map[libcommon.Address]*accounts.Account, cod
 	// 	fmt.Printf("INSERT %d %d %d %d -> HASH %v\n", a[0], a[1], a[2], a[3], res.NewRootScalar)
 	// }
 
-	_, err := s.InsertBatch(keysBatchStorage, valuesBatchStorage, nil, nil)
+	_, err := s.InsertBatch(logPrefix, keysBatchStorage, valuesBatchStorage, nil, nil)
 	return keysBatchStorage, valuesBatchStorage, err
 }
 

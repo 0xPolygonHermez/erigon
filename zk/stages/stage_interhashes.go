@@ -117,6 +117,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	var root libcommon.Hash
 
 	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > cfg.zk.RebuildTreeAfter
+	shouldRegenerate = false
 
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb)
@@ -151,6 +152,8 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	hashErr := verifyStateRoot(smt, &expectedRootHash, &cfg, logPrefix, to, tx)
 	if hashErr != nil {
 		panic(fmt.Errorf("state root mismatch (checking state and RPC): %w, %s", hashErr, root.Hex()))
+	} else {
+		panic(fmt.Errorf("MANUAL STOP state root mismatch (checking state and RPC): %w, %s", hashErr, root.Hex()))
 	}
 
 	if cfg.checkRoot && root != expectedRootHash {
@@ -414,37 +417,37 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 
 	total := len(accChanges) + len(codeChanges) + len(storageChanges)
 
-	_, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] Progress inserting values", logPrefix), uint64(total))
+	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] Progress inserting values", logPrefix), uint64(total))
 
 	// update the tree
-	// for addr, acc := range accChanges {
-	// 	if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
-	// 		stopProgressPrinter()
-	// 		return trie.EmptyRoot, err
-	// 	}
-	// 	progressChan <- 1
-	// }
-
-	// for addr, code := range codeChanges {
-	// 	if err := dbSmt.SetContractBytecode(addr.String(), code); err != nil {
-	// 		stopProgressPrinter()
-	// 		return trie.EmptyRoot, err
-	// 	}
-	// 	progressChan <- 1
-	// }
-
-	// for addr, storage := range storageChanges {
-	// 	if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
-	// 		stopProgressPrinter()
-	// 		return trie.EmptyRoot, err
-	// 	}
-	// 	progressChan <- 1
-	// }
-
-	if _, _, err := dbSmt.SetStorage(accChanges, codeChanges, storageChanges); err != nil {
-		stopProgressPrinter()
-		return trie.EmptyRoot, err
+	for addr, acc := range accChanges {
+		if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
+			stopProgressPrinter()
+			return trie.EmptyRoot, err
+		}
+		progressChan <- 1
 	}
+
+	for addr, code := range codeChanges {
+		if err := dbSmt.SetContractBytecode(addr.String(), code); err != nil {
+			stopProgressPrinter()
+			return trie.EmptyRoot, err
+		}
+		progressChan <- 1
+	}
+
+	for addr, storage := range storageChanges {
+		if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
+			stopProgressPrinter()
+			return trie.EmptyRoot, err
+		}
+		progressChan <- 1
+	}
+
+	// if _, _, err := dbSmt.SetStorage(logPrefix, accChanges, codeChanges, storageChanges); err != nil {
+	// 	stopProgressPrinter()
+	// 	return trie.EmptyRoot, err
+	// }
 	// for _, a := range smt.KeyPointers {
 	// 	fmt.Printf("%d %d %d %d\n", a[0], a[1], a[2], a[3])
 	// }

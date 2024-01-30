@@ -6,9 +6,10 @@ import (
 
 	"github.com/dgravesa/go-parallel/parallel"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/zk"
 )
 
-func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeValue8, nodeValuesHashes []*[4]uint64, rootNodeKey *utils.NodeKey) (*SMTResponse, error) {
+func (s *SMT) InsertBatch(logPrefix string, nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeValue8, nodeValuesHashes []*[4]uint64, rootNodeKey *utils.NodeKey) (*SMTResponse, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 
@@ -17,22 +18,34 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 	var smtBatchNodeRoot *smtBatchNode
 	valueHashesToDelete := []*[4]uint64{}
 
+	//start a progress checker
+	progressChan, stopProgressPrinter := zk.ProgressPrinterWithoutValues(fmt.Sprintf("[%s] SMT incremental progress", logPrefix), uint64(size)*3)
+	defer stopProgressPrinter()
+
 	err = validateDataLengths(nodeKeys, nodeValues, &nodeValuesHashes)
 	if err != nil {
 		return nil, err
 	}
+
+	progressChan <- uint64(size / 3)
 
 	err = calculateNodeValueHashesIfMissing(s, nodeValues, &nodeValuesHashes)
 	if err != nil {
 		return nil, err
 	}
 
+	progressChan <- uint64(size / 3 * 2)
+
 	err = calculateRootNodeKeyIfNil(s, &rootNodeKey)
 	if err != nil {
 		return nil, err
 	}
 
+	progressChan <- uint64(size)
+
 	for i := 0; i < size; i++ {
+		progressChan <- uint64(size + i)
+
 		insertingNodeKey := nodeKeys[i]
 		insertingNodeValue := nodeValues[i]
 		insertingNodeValueHash := nodeValuesHashes[i]
@@ -139,6 +152,8 @@ func (s *SMT) InsertBatch(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeVal
 			}
 		}
 	}
+
+	progressChan <- uint64(size * 3)
 
 	// dumpBatchTreeFromMemory(smtBatchNodeRoot, 0, make([]int, 0), 12)
 	// fmt.Println()
