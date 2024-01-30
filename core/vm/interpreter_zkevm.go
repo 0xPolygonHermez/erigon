@@ -23,7 +23,12 @@ func NewZKEVMInterpreter(evm VMInterpreter, cfg ZkConfig) *EVMInterpreter {
 	case evm.ChainRules().IsBerlin:
 		jt = &zkevmForkID4InstructionSet
 	}
+
+	// here we need to copy the jump table every time as we're about to wrap it with the zk counters handling
+	// if we don't take a copy of this it will be wrapped over and over again causing a deeper and deeper stack
+	// and duplicating the zk counters handling
 	jt = copyJumpTable(jt)
+
 	if len(cfg.Config.ExtraEips) > 0 {
 		for i, eip := range cfg.Config.ExtraEips {
 			if err := EnableEIP(eip, jt); err != nil {
