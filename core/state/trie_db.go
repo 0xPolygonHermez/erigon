@@ -186,6 +186,10 @@ func (tds *TrieDbState) SetNoHistory(nh bool) {
 	tds.noHistory = nh
 }
 
+func (tds *TrieDbState) SetStateReader(sr StateReader) {
+	tds.stateReader = sr
+}
+
 func (tds *TrieDbState) Copy() *TrieDbState {
 	tds.tMu.Lock()
 	tcopy := *tds.t
