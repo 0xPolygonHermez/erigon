@@ -2,7 +2,6 @@ package stagedsync
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -31,7 +30,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/tracers/logger"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/olddb"
-	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	rawdbZk "github.com/ledgerwatch/erigon/zk/rawdb"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
@@ -135,20 +133,6 @@ Loop:
 			break
 		}
 
-		//[zkevm] - get the last batch number so we can check for empty batches in between it and the new one
-		lastBatchInserted, err := hermezDb.GetBatchNoByL2Block(stageProgress - 1)
-		if err != nil {
-			return fmt.Errorf("failed to get last batch inserted: %v", err)
-		}
-
-		// write batches between last block and this if they exist
-		currentBatch, err := hermezDb.GetBatchNoByL2Block(blockNum)
-		if err != nil {
-			return err
-		}
-
-		gers := []*dstypes.GerUpdate{}
-
 		preExecuteHeaderHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 		if err != nil {
 			return err
@@ -172,30 +156,6 @@ Loop:
 			continue
 		}
 
-		//[zkevm] get batches between last block and this one
-		// plus this blocks ger
-		gersInBetween, err := hermezDb.GetBatchGlobalExitRoots(lastBatchInserted, currentBatch)
-		if err != nil {
-			return err
-		}
-
-		if gersInBetween != nil {
-			gers = append(gers, gersInBetween...)
-		}
-
-		blockGer, l1BlockHash, err := hermezDb.GetBlockGlobalExitRoot(blockNum)
-		if err != nil {
-			return err
-		}
-
-		blockGerUpdate := dstypes.GerUpdate{
-			GlobalExitRoot: blockGer,
-			Timestamp:      header.Time,
-			L1BlockHash:    l1BlockHash,
-		}
-		gers = append(gers, &blockGerUpdate)
-		//[zkevm] finished getting gers
-
 		lastLogTx += uint64(block.Transactions().Len())
 
 		// Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
@@ -205,7 +165,7 @@ Loop:
 		if err = updateZkEVMBlockCfg(&cfg, hermezDb, logPrefix); err != nil {
 			return err
 		}
-		if err = executeBlockZk(block, header, tx, batch, gers, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
+		if err = executeBlockZk(block, header, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {
@@ -343,7 +303,6 @@ func executeBlockZk(
 	header *types.Header,
 	tx kv.RwTx,
 	batch ethdb.Database,
-	gers []*dstypes.GerUpdate,
 	cfg ExecuteBlockCfg,
 	vmConfig vm.Config, // emit copy, because will modify it
 	writeChangesets bool,
@@ -359,29 +318,6 @@ func executeBlockZk(
 	if err != nil {
 		return err
 	}
-
-	// [zkevm] - write the global exit root inside the batch so we can unwind it
-	// [zkevm] push the global exit root for the related batch into the db ahead of batch execution
-	blockNoBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(blockNoBytes, blockNum)
-
-	var emptyHash = common.Hash{0}
-
-	for _, ger := range gers {
-		if ger.L1BlockHash != emptyHash || ger.GlobalExitRoot == emptyHash {
-			// etrog - if l1blockhash is set, this is an etrog GER
-			if err := utils.WriteGlobalExitRootEtrog(stateWriter, ger.GlobalExitRoot); err != nil {
-				return err
-			}
-		} else {
-			// [zkevm] - add GER if there is one for this batch
-			if err := utils.WriteGlobalExitRoot(stateReader, stateWriter, ger.GlobalExitRoot, ger.Timestamp); err != nil {
-				return err
-			}
-		}
-	}
-
-	// [zkevm] - finished writing global exit root to state
 
 	// where the magic happens
 	getHeader := func(hash common.Hash, number uint64) *types.Header {

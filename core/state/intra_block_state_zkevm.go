@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
+	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 )
 
 const (
@@ -23,6 +24,9 @@ const (
 type ReadOnlyHermezDb interface {
 	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
 	GetStateRoot(l2BlockNo uint64) (libcommon.Hash, error)
+	GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error)
+	GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error)
+	GetBlockGlobalExitRoot(l2BlockNo uint64) (libcommon.Hash, libcommon.Hash, error)
 }
 
 func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
@@ -35,7 +39,7 @@ func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
 
 func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, blockNum uint64, l1InfoRoot, stateRoot *libcommon.Hash) {
 	//ETROG
-	if chainConfig.IsEtrog(blockNum) {
+	if chainConfig.IsForkID7Etrog(blockNum) {
 		saddr := libcommon.HexToAddress(ADDRESS_SCALABLE_L2)
 		sdb.scalableSetBlockInfoRoot(&saddr, l1InfoRoot)
 	}
@@ -54,7 +58,7 @@ func (sdb *IntraBlockState) PreExecuteStateSet(chainConfig *chain.Config, block 
 	sdb.scalableSetBlockNum(&saddr, blockNum)
 
 	//ETROG
-	if chainConfig.IsEtrog(blockNum) {
+	if chainConfig.IsForkID7Etrog(blockNum) {
 		//save block timestamp
 		sdb.scalableSetTimestamp(&saddr, block.Time())
 

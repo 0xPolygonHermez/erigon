@@ -27,6 +27,7 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
+	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -34,6 +35,8 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 // ExecuteBlockEphemerally runs a block from provided stateReader and
@@ -73,6 +76,7 @@ func ExecuteBlockEphemerallyZk(
 			excessDataGas = ph.ExcessDataGas
 		}
 	}
+
 	if !vmConfig.ReadOnly {
 		if err := InitializeBlockExecution(engine, chainReader, block.Header(), block.Transactions(), block.Uncles(), chainConfig, ibs, excessDataGas); err != nil {
 			return nil, err
@@ -89,7 +93,79 @@ func ExecuteBlockEphemerallyZk(
 	if err != nil {
 		return nil, err
 	}
+
+	blockNum := block.NumberU64()
+
+	gers := []*dstypes.GerUpdate{}
+
+	//[zkevm] - get the last batch number so we can check for empty batches in between it and the new one
+	lastBatchInserted, err := roHermezDb.GetBatchNoByL2Block(blockNum - 1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last batch inserted: %v", err)
+	}
+
+	// write batches between last block and this if they exist
+	currentBatch, err := roHermezDb.GetBatchNoByL2Block(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	//[zkevm] get batches between last block and this one
+	// plus this blocks ger
+	gersInBetween, err := roHermezDb.GetBatchGlobalExitRoots(lastBatchInserted, currentBatch)
+	if err != nil {
+		return nil, err
+	}
+
+	if gersInBetween != nil {
+		gers = append(gers, gersInBetween...)
+	}
+
+	blockGer, l1BlockHash, err := roHermezDb.GetBlockGlobalExitRoot(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	blockGerUpdate := dstypes.GerUpdate{
+		GlobalExitRoot: blockGer,
+		Timestamp:      header.Time,
+	}
+	gers = append(gers, &blockGerUpdate)
+
+	var emptyHash = libcommon.Hash{0}
+
+	for _, ger := range gers {
+		if ger.L1BlockHash != emptyHash || ger.GlobalExitRoot == emptyHash {
+			// etrog - if l1blockhash is set, this is an etrog GER
+			if err := utils.WriteGlobalExitRootEtrog(stateWriter, ger.GlobalExitRoot); err != nil {
+				return nil, err
+			}
+		} else {
+			// [zkevm] - add GER if there is one for this batch
+			if err := utils.WriteGlobalExitRoot(stateReader, stateWriter, ger.GlobalExitRoot, ger.Timestamp); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// [zkevm] - finished writing global exit root to state
+
 	ibs.PreExecuteStateSet(chainConfig, block, &stateRoot)
+
+	blockInfoTree := blockinfo.NewBlockInfoTree()
+	parentHash := block.ParentHash()
+	coinbase := block.Coinbase()
+	if err := blockInfoTree.InitBlockHeader(
+		&parentHash,
+		&coinbase,
+		blockNum,
+		block.GasLimit(),
+		block.Time(),
+		&blockGer,
+		&l1BlockHash,
+	); err != nil {
+		return nil, err
+	}
 
 	noop := state.NewNoopWriter()
 	for i, tx := range block.Transactions() {
@@ -131,7 +207,7 @@ func ExecuteBlockEphemerallyZk(
 				receipts = append(receipts, receipt)
 			}
 		}
-		if !chainConfig.IsEtrog(block.NumberU64()) {
+		if !chainConfig.IsForkID7Etrog(block.NumberU64()) {
 			ibs.ScalableSetSmtRootHash(roHermezDb)
 		}
 	}

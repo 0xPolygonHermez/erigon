@@ -20,6 +20,7 @@ const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"                 // l2blockno 
 const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // l2blockno -> GER
 const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"             // txHash -> txPricePercentage
 const STATE_ROOTS = "hermez_stateRoots"                            // l2blockno -> stateRoot
+const L1_BLOCK_HASH = "hermez_l1BlockHash"                         // l2blockno -> l1BlockHash
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -44,42 +45,37 @@ func NewHermezDb(tx kv.RwTx) (*HermezDb, error) {
 }
 
 func CreateHermezBuckets(tx kv.RwTx) error {
-	err := tx.CreateBucket(L1VERIFICATIONS)
-	if err != nil {
+	if err := tx.CreateBucket(L1VERIFICATIONS); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(L1SEQUENCES)
-	if err != nil {
+	if err := tx.CreateBucket(L1SEQUENCES); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(FORKIDS)
-	if err != nil {
+	if err := tx.CreateBucket(FORKIDS); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(FORKID_BLOCK)
-	if err != nil {
+	if err := tx.CreateBucket(FORKID_BLOCK); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(BLOCKBATCHES)
-	if err != nil {
+	if err := tx.CreateBucket(BLOCKBATCHES); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(GLOBAL_EXIT_ROOTS)
-	if err != nil {
+	if err := tx.CreateBucket(GLOBAL_EXIT_ROOTS); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(GLOBAL_EXIT_ROOTS_BATCHES)
-	if err != nil {
+	if err := tx.CreateBucket(GLOBAL_EXIT_ROOTS_BATCHES); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(TX_PRICE_PERCENTAGE)
-	if err != nil {
+	if err := tx.CreateBucket(TX_PRICE_PERCENTAGE); err != nil {
 		return err
 	}
-	err = tx.CreateBucket(STATE_ROOTS)
-	if err != nil {
+	if err := tx.CreateBucket(STATE_ROOTS); err != nil {
 		return err
 	}
+	if err := tx.CreateBucket(L1_BLOCK_HASH); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -371,7 +367,6 @@ func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash,
 
 	return h, l1BlockHash, nil
 }
-
 func (db *HermezDb) WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error {
 	return db.tx.Put(GLOBAL_EXIT_ROOTS_BATCHES, Uint64ToBytes(batchNumber), ger.EncodeToBytes())
 }
