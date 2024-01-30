@@ -231,14 +231,6 @@ func (c *Config) IsForkID7Etrog(num uint64) bool {
 	return isForked(c.ForkID7EtrogBlock, num)
 }
 
-func (c *Config) IsEtrog(num uint64) bool {
-	return isForked(c.ForkID7EtrogBlock, num)
-}
-
-func (c *Config) IsDragonfruit(num uint64) bool {
-	return isForked(c.ForkID5DragonfruitBlock, num)
-}
-
 // CheckCompatible checks whether scheduled fork transitions have been imported
 // with a mismatching chain configuration.
 func (c *Config) CheckCompatible(newcfg *Config, height uint64) *chain.ConfigCompatError {
