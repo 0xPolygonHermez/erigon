@@ -391,6 +391,11 @@ var (
 		Usage: "Ethereum L1 topic for sequence",
 		Value: "",
 	}
+	L1RollupAddressFlag = cli.StringFlag{
+		Name:  "zkevm.l1-rollup-address",
+		Usage: "Ethereum L1 rollup address",
+		Value: "",
+	}
 	L1BlockRangeFlag = cli.Uint64Flag{
 		Name:  "zkevm.l1-block-range",
 		Usage: "Ethereum L1 block range used to filter verifications and sequences",

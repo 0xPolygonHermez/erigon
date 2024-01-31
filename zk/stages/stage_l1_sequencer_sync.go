@@ -171,8 +171,31 @@ func handleInitialSequenceBatches(
 	db *hermez_db.HermezDb,
 	l ethTypes.Log,
 ) error {
-	// todo: [zkevm] figure out what to store here and how.  We need the tx information from this log for injecting
-	// the initial batch and the associated GER for the first block + timestamp
+	l1Block, err := cfg.syncer.GetBlock(l.BlockNumber)
+	if err != nil {
+		return err
+	}
+
+	// the log appears to have some trailing 24 bytes of all 0s in it.  Not sure why but we can't handle the
+	// TX without trimming these off
+	trailingCutoff := len(l.Data) - 24
+
+	txData := l.Data[128:trailingCutoff]
+
+	ib := &types.L1InjectedBatch{
+		L1BlockNumber:      l.BlockNumber,
+		Timestamp:          l1Block.Time(),
+		L1BlockHash:        l1Block.Hash(),
+		L1ParentHash:       l1Block.ParentHash(),
+		LastGlobalExitRoot: common.BytesToHash(l.Data[31:64]),
+		Sequencer:          common.BytesToAddress(l.Data[76:96]),
+		Transaction:        txData,
+	}
+
+	if err = db.WriteL1InjectedBatch(ib); err != nil {
+		return err
+	}
+
 	return nil
 }
 
