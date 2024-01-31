@@ -164,3 +164,8 @@ func (sdb *IntraBlockState) ScalableSetBlockHeight(newHeight uint64) {
 	val := uint256.NewInt(newHeight)
 	sdb.SetState(systemAddress, &slot0, *val)
 }
+
+func (sdb *IntraBlockState) ScalableWriteLatestBlockInfoRoot(root *big.Int) {
+	val, _ := uint256.FromBig(root)
+	sdb.SetState(systemAddress, &slot3, *val)
+}

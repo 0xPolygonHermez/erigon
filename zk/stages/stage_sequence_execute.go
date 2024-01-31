@@ -40,6 +40,8 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
+	smt2 "github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
@@ -439,7 +441,7 @@ func finaliseBlock(
 		return fmt.Errorf("write block batch error: %v", err)
 	}
 
-	return nil
+	return handleStateForBlockEnding(ibs, transactions, receipts)
 }
 
 func handleStateForNewBlockStarting(
@@ -488,11 +490,35 @@ func handleStateForNewBlockStarting(
 	return nil
 }
 
-func handleStateForBlockEnding(newBlockNumber uint64) {
-	//todo: [zkevm] store the block info tree root as step 1 into scalable contract slot 3
-	// then add the hash to the state and store the new hash/state root
-	// we need this so that we can return the pre/post block hash for the
-	// data stream later on
+// todo: [zkevm] the block info root here is always 0 if there are no logs for the block
+func handleStateForBlockEnding(ibs *state.IntraBlockState, transactions []types.Transaction, receipts []*types.Receipt) error {
+	smt := smt2.NewSMT(nil)
+
+	var err error
+	root := big.NewInt(0)
+
+	for tIdx, trx := range transactions {
+		receipt := receipts[tIdx]
+		for lIdx, _ := range receipt.Logs {
+			root, err = blockinfo.BuildBlockInfoTree(
+				smt,
+				big.NewInt(int64(tIdx)),
+				receipt.Logs,
+				big.NewInt(int64(lIdx)),
+				big.NewInt(0).SetUint64(receipt.Status),
+				trx.Hash().Big(),
+				big.NewInt(0).SetUint64(receipt.CumulativeGasUsed),
+				big.NewInt(1), // effective percentage
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	ibs.ScalableWriteLatestBlockInfoRoot(root)
+
+	return nil
 }
 
 func addSenders(
