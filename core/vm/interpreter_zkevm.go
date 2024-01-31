@@ -11,6 +11,13 @@ type ZkConfig struct {
 	CounterCollector *CounterCollector
 }
 
+func NewZkConfig(config Config, counterCollector *CounterCollector) ZkConfig {
+	return ZkConfig{
+		Config:           config,
+		CounterCollector: counterCollector,
+	}
+}
+
 // NewZKEVMInterpreter returns a new instance of the Interpreter.
 func NewZKEVMInterpreter(evm VMInterpreter, cfg ZkConfig) *EVMInterpreter {
 	var jt *JumpTable
