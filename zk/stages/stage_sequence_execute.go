@@ -218,7 +218,7 @@ func SpawnSequencingStage(
 			Timestamp:  injected.Timestamp,
 		}
 		// todo [zkevm] need to figure out what state changes to what in an injected batch scenario
-		if err := handleStateForNewBlockStarting(true, executionAt, injected.Timestamp, fakeL1Info, ibs, hermezDb); err != nil {
+		if err := handleStateForNewBlockStarting(true, executionAt, injected.Timestamp, fakeL1Info, ibs, tx); err != nil {
 			return err
 		}
 		txn, receipt, err := handleInjectedBatch(cfg, tx, ibs, injected, header, parentBlock)
@@ -232,6 +232,11 @@ func SpawnSequencingStage(
 		}
 		if err := updateSequencerProgress(tx, nextBlockNum, thisBatch, 0); err != nil {
 			return err
+		}
+		if freshTx {
+			if err := tx.Commit(); err != nil {
+				return err
+			}
 		}
 		// force us to move on to the next stages
 		return nil
@@ -251,7 +256,7 @@ func SpawnSequencingStage(
 	if err = hermezDb.WriteBlockL1InfoTreeIndex(nextBlockNum, l1InfoIndex); err != nil {
 		return err
 	}
-	if err := handleStateForNewBlockStarting(true, executionAt, newBlockTimestamp, l1Info, ibs, hermezDb); err != nil {
+	if err := handleStateForNewBlockStarting(false, executionAt, newBlockTimestamp, l1Info, ibs, tx); err != nil {
 		return err
 	}
 
@@ -340,7 +345,6 @@ func handleInjectedBatch(
 	header *types.Header,
 	parentBlock *types.Block,
 ) (*types.Transaction, *types.Receipt, error) {
-
 	txs, _, _, err := tx.DecodeTxs(injected.Transaction, 5)
 	if err != nil {
 		return nil, nil, err
@@ -444,28 +448,32 @@ func handleStateForNewBlockStarting(
 	newBlockTimestamp uint64,
 	l1info *zktypes.L1InfoTreeUpdate,
 	ibs *state.IntraBlockState,
-	db *hermez_db.HermezDb,
+	tx kv.Tx,
 ) error {
-	// first we need to write the last (block number -> hash pair) to the scalable contract
-	if err := ibs.ScalableSetBlockNumberToHash(lastBlockNumber, db); err != nil {
-		return err
-	}
-
-	// now lets check the timestamp for this block and that it's valid if we're not handling the injected batch
-	// the injected batch will fail the check as we haven't written any times to the contract yet
+	contractTimestamp := ibs.ScalableGetTimestamp()
 	if !injectedBatch {
-		contractTimestamp := ibs.ScalableGetTimestamp()
 		if contractTimestamp == 0 {
 			return fmt.Errorf("expected a timestamp to be present in the scalable contract")
 		}
 		// todo: [zkevm] how do we perform this check as it varies per block
+		// todo: [zkevm] rejected batches still need proving so not sure how to handle this one here
 		//if newBlockTimestamp >= 1_000_000 {
 		//	return fmt.Errorf("delta timestamp for new block is too high")
 		//}
 	}
 
-	// all valid so let's write the timestamp to the scalable contract
-	ibs.ScalableSetTimestamp(newBlockTimestamp)
+	// only write the timestamp if it is greater than the current contract timestamp
+	if newBlockTimestamp > contractTimestamp {
+		ibs.ScalableSetTimestamp(newBlockTimestamp)
+	}
+
+	// now we need to write the last (block number -> state root pair) to the scalable contract
+	if err := ibs.ScalableSetBlockNumberToHash(lastBlockNumber, tx); err != nil {
+		return err
+	}
+
+	// now update the latest block number in the scalable contract ahead of time
+	ibs.ScalableSetBlockHeight(lastBlockNumber + 1)
 
 	// handle writing to the ger manager contract
 	if l1info != nil {
@@ -481,7 +489,7 @@ func handleStateForNewBlockStarting(
 }
 
 func handleStateForBlockEnding(newBlockNumber uint64) {
-	//todo: [zkevm] store the block hash as step 1
+	//todo: [zkevm] store the block info tree root as step 1 into scalable contract slot 3
 	// then add the hash to the state and store the new hash/state root
 	// we need this so that we can return the pre/post block hash for the
 	// data stream later on

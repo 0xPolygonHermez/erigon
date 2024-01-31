@@ -154,3 +154,13 @@ func (sdb *IntraBlockState) ScalableGetTimestamp() uint64 {
 	sdb.GetState(ADDRESS_SCALABLE_L2, &TIMESTAMP_STORAGE_POS, timestamp)
 	return timestamp.Uint64()
 }
+
+func (sdb *IntraBlockState) ScalableSetTimestamp(newTimestamp uint64) {
+	val := uint256.NewInt(newTimestamp)
+	sdb.SetState(systemAddress, &slot2, *val)
+}
+
+func (sdb *IntraBlockState) ScalableSetBlockHeight(newHeight uint64) {
+	val := uint256.NewInt(newHeight)
+	sdb.SetState(systemAddress, &slot0, *val)
+}
