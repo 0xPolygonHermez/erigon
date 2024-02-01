@@ -676,17 +676,7 @@ func (api *APIImpl) GetTransactionReceipt(ctx context.Context, txnHash common.Ha
 		return nil, fmt.Errorf("block has less receipts than expected: %d <= %d, block: %d", len(receipts), int(txnIndex), blockNum)
 	}
 
-	effectiveGasPricePercentage, err := api.getEffectiveGasPricePercentage(tx, txn.Hash())
-	if err != nil {
-		return nil, err
-	}
-
-	fields := marshalReceipt(receipts[txnIndex], block.Transactions()[txnIndex], cc, block.HeaderNoCopy(), txnHash, true)
-
-	// zkevm - override effectiveGasPrice to consider effectiveGasPricePercentage
-	fields["effectiveGasPrice"] = core.CalculateEffectiveGas(txn.GetPrice(), effectiveGasPricePercentage)
-
-	return fields, nil
+	return api.addEffectiveGasPercentage(marshalReceipt(receipts[txnIndex], txn, cc, block.HeaderNoCopy(), txnHash, true), tx, txn)
 }
 
 // GetBlockReceipts - receipts for individual block
@@ -780,7 +770,6 @@ func marshalReceipt(receipt *types.Receipt, txn types.Transaction, chainConfig *
 		gasPrice := new(big.Int).Add(header.BaseFee, txn.GetEffectiveGasTip(baseFee).ToBig())
 		fields["effectiveGasPrice"] = hexutil.Uint64(gasPrice.Uint64())
 	}
-
 	// Assign receipt status.
 	fields["status"] = hexutil.Uint64(receipt.Status)
 	if receipt.Logs == nil {
