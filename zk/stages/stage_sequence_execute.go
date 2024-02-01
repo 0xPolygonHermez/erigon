@@ -210,29 +210,8 @@ func SpawnSequencingStage(
 	// here we have a special case and need to inject in the initial batch on the network before
 	// we can continue accepting transactions from the pool
 	if executionAt == 0 {
-		injected, err := hermezDb.GetL1InjectedBatch(0)
+		err = processInjectedInitialBatch(hermezDb, ibs, tx, cfg, header, parentBlock, stateReader)
 		if err != nil {
-			return err
-		}
-		fakeL1Info := &zktypes.L1InfoTreeUpdate{
-			GER:        injected.LastGlobalExitRoot,
-			ParentHash: injected.L1ParentHash,
-			Timestamp:  injected.Timestamp,
-		}
-		// todo [zkevm] need to figure out what state changes to what in an injected batch scenario
-		if err := handleStateForNewBlockStarting(true, executionAt, injected.Timestamp, fakeL1Info, ibs, tx); err != nil {
-			return err
-		}
-		txn, receipt, err := handleInjectedBatch(cfg, tx, ibs, injected, header, parentBlock)
-		if err != nil {
-			return err
-		}
-		txns := types.Transactions{*txn}
-		receipts := types.Receipts{receipt}
-		if err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, thisBatch); err != nil {
-			return err
-		}
-		if err := updateSequencerProgress(tx, nextBlockNum, thisBatch, 0); err != nil {
 			return err
 		}
 		if freshTx {
@@ -240,7 +219,6 @@ func SpawnSequencingStage(
 				return err
 			}
 		}
-		// force us to move on to the next stages
 		return nil
 	}
 
@@ -336,6 +314,49 @@ func SpawnSequencingStage(
 		}
 	}
 
+	return nil
+}
+
+const (
+	injectedBatchNumber      = 1
+	injectedBatchBlockNumber = 1
+)
+
+func processInjectedInitialBatch(
+	hermezDb *hermez_db.HermezDb,
+	ibs *state.IntraBlockState,
+	tx kv.RwTx,
+	cfg SequenceBlockCfg,
+	header *types.Header,
+	parentBlock *types.Block,
+	stateReader *state.PlainStateReader,
+) error {
+	injected, err := hermezDb.GetL1InjectedBatch(0)
+	if err != nil {
+		return err
+	}
+	fakeL1Info := &zktypes.L1InfoTreeUpdate{
+		GER:        injected.LastGlobalExitRoot,
+		ParentHash: injected.L1ParentHash,
+		Timestamp:  injected.Timestamp,
+	}
+	// todo [zkevm] need to figure out what state changes to what in an injected batch scenario
+	if err := handleStateForNewBlockStarting(true, 0, injected.Timestamp, fakeL1Info, ibs, tx); err != nil {
+		return err
+	}
+	txn, receipt, err := handleInjectedBatch(cfg, tx, ibs, injected, header, parentBlock)
+	if err != nil {
+		return err
+	}
+	txns := types.Transactions{*txn}
+	receipts := types.Receipts{receipt}
+	if err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, injectedBatchNumber); err != nil {
+		return err
+	}
+	if err := updateSequencerProgress(tx, injectedBatchBlockNumber, injectedBatchNumber, 0); err != nil {
+		return err
+	}
+	// force us to move on to the next stages
 	return nil
 }
 

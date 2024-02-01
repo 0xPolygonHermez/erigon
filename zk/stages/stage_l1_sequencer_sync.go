@@ -166,6 +166,15 @@ func handleL1InfoTreeUpdate(
 	return nil
 }
 
+const (
+	injectedBatchLogTrailingBytes        = 24
+	injectedBatchLogTransactionStartByte = 128
+	injectedBatchLastGerStartByte        = 31
+	injectedBatchLastGerEndByte          = 64
+	injectedBatchSequencerStartByte      = 76
+	injectedBatchSequencerEndByte        = 96
+)
+
 func handleInitialSequenceBatches(
 	cfg L1SequencerSyncCfg,
 	db *hermez_db.HermezDb,
@@ -178,17 +187,17 @@ func handleInitialSequenceBatches(
 
 	// the log appears to have some trailing 24 bytes of all 0s in it.  Not sure why but we can't handle the
 	// TX without trimming these off
-	trailingCutoff := len(l.Data) - 24
+	trailingCutoff := len(l.Data) - injectedBatchLogTrailingBytes
 
-	txData := l.Data[128:trailingCutoff]
+	txData := l.Data[injectedBatchLogTransactionStartByte:trailingCutoff]
 
 	ib := &types.L1InjectedBatch{
 		L1BlockNumber:      l.BlockNumber,
 		Timestamp:          l1Block.Time(),
 		L1BlockHash:        l1Block.Hash(),
 		L1ParentHash:       l1Block.ParentHash(),
-		LastGlobalExitRoot: common.BytesToHash(l.Data[31:64]),
-		Sequencer:          common.BytesToAddress(l.Data[76:96]),
+		LastGlobalExitRoot: common.BytesToHash(l.Data[injectedBatchLastGerStartByte:injectedBatchLastGerEndByte]),
+		Sequencer:          common.BytesToAddress(l.Data[injectedBatchSequencerStartByte:injectedBatchSequencerEndByte]),
 		Transaction:        txData,
 	}
 
