@@ -17,6 +17,7 @@ zkevm.l1-first-block: 4794475
 zkevm.rpc-ratelimit: 250
 txpool.disable: true
 torrent.port: 42070
+zkevm.datastream-version: 2
 
 externalcl: true
 http.api : ["eth","debug","net","trace","web3","erigon","zkevm"]

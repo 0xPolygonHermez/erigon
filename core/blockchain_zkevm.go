@@ -135,7 +135,7 @@ func ExecuteBlockEphemerallyZk(
 	var emptyHash = libcommon.Hash{0}
 
 	for _, ger := range gers {
-		if ger.L1BlockHash != emptyHash || ger.GlobalExitRoot == emptyHash {
+		if ger.GlobalExitRoot == emptyHash {
 			// etrog - if l1blockhash is set, this is an etrog GER
 			if err := utils.WriteGlobalExitRootEtrog(stateWriter, ger.GlobalExitRoot); err != nil {
 				return nil, err

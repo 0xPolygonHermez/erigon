@@ -427,6 +427,11 @@ var (
 		Usage: "RPC rate limit in requests per second.",
 		Value: 0,
 	}
+	DatastreamVersionFlag = cli.IntFlag{
+		Name:  "zkevm.datastream-version",
+		Usage: "Stream version indicator 1: PreBigEndian, 2: BigEndian.",
+		Value: 1,
+	}
 	DataStreamPort = cli.UintFlag{
 		Name:  "zkevm.data-stream-port",
 		Usage: "Define the port used for the zkevm data stream",

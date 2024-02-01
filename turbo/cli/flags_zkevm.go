@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -39,6 +40,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1GERManagerContractAddress: libcommon.HexToAddress(ctx.String(utils.L1GERManagerContractAddressFlag.Name)),
 		L1FirstBlock:                ctx.Uint64(utils.L1FirstBlockFlag.Name),
 		RpcRateLimits:               ctx.Int(utils.RpcRateLimitsFlag.Name),
+		DatastreamVersion:           ctx.Int(utils.DatastreamVersionFlag.Name),
 		RebuildTreeAfter:            ctx.Uint64(utils.RebuildTreeAfterFlag.Name),
 	}
 

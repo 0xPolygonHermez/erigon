@@ -179,6 +179,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.L1GERManagerContractAddressFlag,
 	&utils.L1FirstBlockFlag,
 	&utils.RpcRateLimitsFlag,
+	&utils.DatastreamVersionFlag,
 	&utils.RebuildTreeAfterFlag,
 	&utils.DataStreamHost,
 	&utils.DataStreamPort,

@@ -18,6 +18,7 @@ type Zk struct {
 	L1GERManagerContractAddress common.Address
 	L1FirstBlock                uint64
 	RpcRateLimits               int
+	DatastreamVersion           int
 
 	RebuildTreeAfter uint64
 }

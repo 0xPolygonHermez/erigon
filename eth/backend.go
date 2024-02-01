@@ -830,7 +830,7 @@ func initDataStreamClient(cfg *ethconfig.Zk) *client.StreamClient {
 	// Create client
 	log.Info("Starting datastream client...")
 	// retry connection
-	datastreamClient := client.NewClient(cfg.L2DataStreamerUrl)
+	datastreamClient := client.NewClient(cfg.L2DataStreamerUrl, cfg.DatastreamVersion)
 
 	for i := 0; i < 30; i++ {
 		// Start client (connect to the server)

@@ -18,6 +18,7 @@ zkevm.l1-query-delay: 6000
 zkevm.l1-first-block: 8577775
 zkevm.rpc-ratelimit: 250
 torrent.port: 42071
+zkevm.datastream-version: 1
 
 externalcl: true
 http.api : ["eth","debug","net","trace","web3","erigon","zkevm"]
