@@ -6,9 +6,13 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
+	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 )
 
+/*
+Contrived tests of the SMT inserts (compared with test cases from the JS implementation)
+*/
 func TestBlockInfoHeader(t *testing.T) {
 	tests := []struct {
 		BlockHash          string
@@ -57,7 +61,7 @@ func TestBlockInfoHeader(t *testing.T) {
 		ger := common.HexToHash(test.FinalGER)
 		l1BlochHash := common.HexToHash(test.L1BlochHash)
 
-		infoTree.InitBlockHeader(
+		err := infoTree.InitBlockHeader(
 			&blockHash,
 			&coinbaseAddress,
 			test.NewBlockNumber,
@@ -66,11 +70,148 @@ func TestBlockInfoHeader(t *testing.T) {
 			&ger,
 			&l1BlochHash,
 		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		root := common.BigToHash(infoTree.GetRoot()).Hex()
 
 		if root != test.FinalBlockInfoRoot {
 			t.Fatalf("expected root %s, got %s", test.FinalBlockInfoRoot, root)
+		}
+	}
+}
+
+func TestSetBlockTx(t *testing.T) {
+	tests := []struct {
+		txIndex             int
+		receipt             ethTypes.Receipt
+		logIndex            int64
+		cumulativeGasUsed   uint64
+		effectivePercentage uint8
+		finalBlockInfoRoot  string
+	}{
+		{
+			txIndex: 0,
+			receipt: ethTypes.Receipt{
+				Status: 1,
+				TxHash: common.HexToHash("0xd2a69c7d3c99953bae9d273f2375b2653bd4ec47a05eefc5fc7c041d07fba8a0"),
+				Logs: []*types.Log{
+					{
+						Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+						Topics: []common.Hash{
+							common.HexToHash("0000000000000000000000000000000000000000000000000000000000000001"),
+						},
+						Data: common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000").Bytes(),
+					},
+					{
+						Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+						Topics: []common.Hash{
+							common.HexToHash("0000000000000000000000000000000000000000000000000000000000000004"),
+							common.HexToHash("0000000000000000000000000000000000000000000000000000000000000005"),
+							common.HexToHash("0000000000000000000000000000000000000000000000000000000000000006"),
+						},
+						Data: common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000").Bytes(),
+					},
+					{
+						Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+						Topics: []common.Hash{
+							common.HexToHash("0000000000000000000000000000000000000000000000000000000000000001"),
+							common.HexToHash("0000000000000000000000000000000000000000000000000000000000000002"),
+						},
+						Data: common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000").Bytes(),
+					},
+				},
+			},
+			logIndex:            0,
+			cumulativeGasUsed:   26336,
+			effectivePercentage: 255,
+			finalBlockInfoRoot:  "0x763711586b99a8c51ddfb765ff17ad8beb9312b246126d84ff02cea3cfc39828",
+		}, {
+			txIndex: 0,
+			receipt: ethTypes.Receipt{
+				Status: 0,
+				TxHash: common.HexToHash("0xac65e2fd657a4ee6318cc66cf98b05ae74ce3f0f3982370af951176e7b599c2c"),
+				Logs:   []*types.Log{},
+			},
+			logIndex:            0,
+			cumulativeGasUsed:   21000,
+			effectivePercentage: 0,
+			finalBlockInfoRoot:  "0xeb85acdbf2dd2d0c9b2637124520b09816065596a2e6f8d8869ffd22850371e4",
+		}, {
+			txIndex: 0,
+			receipt: ethTypes.Receipt{
+				Status: 1,
+				TxHash: common.HexToHash("0xac65e2fd657a4ee6318cc66cf98b05ae74ce3f0f3982370af951176e7b599c2c"),
+				Logs:   []*types.Log{},
+			},
+			logIndex:            0,
+			cumulativeGasUsed:   21000,
+			effectivePercentage: 255,
+			finalBlockInfoRoot:  "0x4d94273d5028e71194fc29e4e73e1d94a392e65e5cc64ca86a80b3811fd18f51",
+		}, {
+			txIndex: 0,
+			receipt: ethTypes.Receipt{
+				Status: 1,
+				TxHash: common.HexToHash("0x8f9b0375a6b0f1bd9d54ff499921766828ae8e5314fc44a494736b5c4cc3bb56"),
+				Logs:   []*types.Log{},
+			},
+			logIndex:            0,
+			cumulativeGasUsed:   10000,
+			effectivePercentage: 255,
+			finalBlockInfoRoot:  "0x42e4e630df29444b15bf553e03354cb4bac013220ca0cea2ea88e8f5efc26131",
+		},
+	}
+
+	for _, test := range tests {
+		infoTree := NewBlockInfoTree()
+
+		root, err := infoTree.SetBlockTx(
+			test.txIndex,
+			&test.receipt,
+			test.logIndex,
+			test.cumulativeGasUsed,
+			test.effectivePercentage,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rootHex := common.BigToHash(root).Hex()
+
+		if rootHex != test.finalBlockInfoRoot {
+			t.Fatalf("expected root %s, got %s", test.finalBlockInfoRoot, rootHex)
+		}
+	}
+}
+
+func TestBlockComulativeGasUsed(t *testing.T) {
+	tests := []struct {
+		gasUsed      uint64
+		expectedRoot string
+	}{
+		{
+			gasUsed:      26336,
+			expectedRoot: "0x5cd280355924dcf29ac41ccae98d678091d182af191443f3c92562e1c1c64254",
+		}, {
+			gasUsed:      21000,
+			expectedRoot: "0x9cfdda40abe9331804fe6b55be89421bd74ca56e9da719e39bbf5518e08155e1",
+		}, {
+			gasUsed:      10000,
+			expectedRoot: "0x32cc19445bc8843c9f432cad24c3c6ea198734547d996bb977a2011c04d917f8",
+		},
+	}
+
+	for i, test := range tests {
+		infoTree := NewBlockInfoTree()
+
+		root, err := infoTree.SetBlockGasUsed(test.gasUsed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		actualRoot := common.BigToHash(root).Hex()
+		// root taken from JS implementation
+		if actualRoot != test.expectedRoot {
+			t.Fatalf("Test %d expected root %s, got %s", i+1, test.expectedRoot, actualRoot)
 		}
 	}
 }
@@ -128,10 +269,6 @@ func TestBlockInfo(t *testing.T) {
 		t.Fatalf("expected root %s, got %s", expectedRoot, actualRoot)
 	}
 }
-
-/*
-Contrived tests of the SMT inserts (compared with test cases from the JS implementation)
-*/
 
 func TestSetL2BlockHash(t *testing.T) {
 	tests := []struct {

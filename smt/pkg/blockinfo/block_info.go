@@ -59,6 +59,72 @@ func (b *BlockInfoTree) InitBlockHeader(oldBlockHash *libcommon.Hash, coinbase *
 	return nil
 }
 
+func (b *BlockInfoTree) SetBlockTx(
+	txIndex int,
+	receipt *ethTypes.Receipt,
+	logIndex int64,
+	cumulativeGasUsed uint64,
+	effectivePercentage uint8,
+) (*big.Int, error) {
+	txIndexBig := big.NewInt(int64(txIndex))
+	_, err := setL2TxHash(b.smt, txIndexBig, receipt.TxHash.Big())
+	if err != nil {
+		return nil, err
+	}
+	_, err = setTxStatus(b.smt, txIndexBig, big.NewInt(int64(receipt.Status)))
+	if err != nil {
+		return nil, err
+	}
+	_, err = setCumulativeGasUsed(b.smt, txIndexBig, big.NewInt(int64(cumulativeGasUsed)))
+	if err != nil {
+		return nil, err
+	}
+
+	// now encode the logs
+	for _, log := range receipt.Logs {
+		reducedTopics := ""
+		for _, topic := range log.Topics {
+			reducedTopics += fmt.Sprintf("%x", topic)
+		}
+
+		logToEncode := fmt.Sprintf("0x%x%s", log.Data, reducedTopics)
+
+		hash, err := utils.HashContractBytecode(logToEncode)
+		if err != nil {
+			return nil, err
+		}
+
+		logEncodedBig := utils.ConvertHexToBigInt(hash)
+		_, err = setTxLog(b.smt, txIndexBig, big.NewInt(logIndex), logEncodedBig)
+		if err != nil {
+			return nil, err
+		}
+
+		// increment log index
+		logIndex += 1
+	}
+
+	root, err := setTxEffectivePercentage(b.smt, txIndexBig, big.NewInt(int64(effectivePercentage)))
+	if err != nil {
+		return nil, err
+	}
+
+	return root, nil
+}
+
+func (b *BlockInfoTree) SetBlockGasUsed(gasUsed uint64) (*big.Int, error) {
+	key, err := KeyBlockHeaderParams(big.NewInt(IndexBlockHeaderParamGasUsed))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := b.smt.InsertKA(key, big.NewInt(int64(gasUsed)))
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.NewRootScalar.ToBigInt(), nil
+}
+
 func BuildBlockInfoTree(
 	smt *smt.SMT,
 	txIndex *big.Int,

@@ -168,11 +168,13 @@ func ExecuteBlockEphemerallyZk(
 	}
 
 	noop := state.NewNoopWriter()
-	for i, tx := range block.Transactions() {
-		ibs.Prepare(tx.Hash(), block.Hash(), i)
+	cumulativeGasUsed := uint64(0)
+	logIndex := int64(0)
+	for txIndex, tx := range block.Transactions() {
+		ibs.Prepare(tx.Hash(), block.Hash(), txIndex)
 		writeTrace := false
 		if vmConfig.Debug && vmConfig.Tracer == nil {
-			tracer, err := getTracer(i, tx.Hash())
+			tracer, err := getTracer(txIndex, tx.Hash())
 			if err != nil {
 				return nil, fmt.Errorf("could not obtain tracer: %w", err)
 			}
@@ -198,9 +200,9 @@ func ExecuteBlockEphemerallyZk(
 
 		if err != nil {
 			if !vmConfig.StatelessExec {
-				return nil, fmt.Errorf("could not apply tx %d from block %d [%v]: %w", i, block.NumberU64(), tx.Hash().Hex(), err)
+				return nil, fmt.Errorf("could not apply tx %d from block %d [%v]: %w", txIndex, block.NumberU64(), tx.Hash().Hex(), err)
 			}
-			rejectedTxs = append(rejectedTxs, &RejectedTx{i, err.Error()})
+			rejectedTxs = append(rejectedTxs, &RejectedTx{txIndex, err.Error()})
 		} else {
 			includedTxs = append(includedTxs, tx)
 			if !vmConfig.NoReceipts {
@@ -210,12 +212,32 @@ func ExecuteBlockEphemerallyZk(
 		if !chainConfig.IsForkID7Etrog(block.NumberU64()) {
 			ibs.ScalableSetSmtRootHash(roHermezDb)
 		}
+
+		//block info tree
+		cumulativeGasUsed += receipt.GasUsed
+		_, err = blockInfoTree.SetBlockTx(
+			txIndex,
+			receipt,
+			logIndex,
+			cumulativeGasUsed,
+			effectiveGasPricePercentage,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// increment logIndex for next turn
+		// log idex counts all the logs in all txs in the block
+		logIndex += int64(len(receipt.Logs))
 	}
 
-	// [zkevm] todo: calculate it
-	var l1InfoRoot *libcommon.Hash
-
-	ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), l1InfoRoot, &stateRoot)
+	// [zkevm] - set the block info tree root
+	root, err := blockInfoTree.SetBlockGasUsed(cumulativeGasUsed)
+	if err != nil {
+		return nil, err
+	}
+	l1InfoRoot := libcommon.BigToHash(root)
+	ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), &l1InfoRoot, &stateRoot)
 
 	receiptSha := types.DeriveSha(receipts)
 	// [zkevm] todo
