@@ -19,7 +19,9 @@ func (s *SMT) InsertBatch(logPrefix string, nodeKeys []*utils.NodeKey, nodeValue
 	valueHashesToDelete := []*[4]uint64{}
 
 	//start a progress checker
-	progressChan, stopProgressPrinter := zk.ProgressPrinterWithoutValues(fmt.Sprintf("[%s] SMT incremental progress", logPrefix), uint64(size)*3)
+	preprocessStage := uint64(size) / 10
+	finalizeStage := preprocessStage
+	progressChan, stopProgressPrinter := zk.ProgressPrinterWithoutValues(fmt.Sprintf("[%s] SMT incremental progress", logPrefix), uint64(size)+preprocessStage+finalizeStage)
 	defer stopProgressPrinter()
 
 	err = validateDataLengths(nodeKeys, nodeValues, &nodeValuesHashes)
@@ -27,24 +29,20 @@ func (s *SMT) InsertBatch(logPrefix string, nodeKeys []*utils.NodeKey, nodeValue
 		return nil, err
 	}
 
-	progressChan <- uint64(size / 3)
-
 	err = calculateNodeValueHashesIfMissing(s, nodeValues, &nodeValuesHashes)
 	if err != nil {
 		return nil, err
 	}
 
-	progressChan <- uint64(size / 3 * 2)
+	progressChan <- uint64(preprocessStage)
 
 	err = calculateRootNodeKeyIfNil(s, &rootNodeKey)
 	if err != nil {
 		return nil, err
 	}
 
-	progressChan <- uint64(size)
-
 	for i := 0; i < size; i++ {
-		progressChan <- uint64(size + i)
+		progressChan <- preprocessStage + uint64(i)
 
 		insertingNodeKey := nodeKeys[i]
 		insertingNodeValue := nodeValues[i]
@@ -153,7 +151,7 @@ func (s *SMT) InsertBatch(logPrefix string, nodeKeys []*utils.NodeKey, nodeValue
 		}
 	}
 
-	progressChan <- uint64(size * 3)
+	progressChan <- preprocessStage + uint64(size) + finalizeStage
 
 	// dumpBatchTreeFromMemory(smtBatchNodeRoot, 0, make([]int, 0), 12)
 	// fmt.Println()

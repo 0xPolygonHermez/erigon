@@ -24,9 +24,7 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-type Increments struct {
-	// Balance  *big.Int
-	// Nonce    *big.Int
+type BatchInsertDataHolder struct {
 	acc             accounts.Account
 	AddressAccount  libcommon.Address
 	AddressContract libcommon.Address
@@ -34,7 +32,64 @@ type Increments struct {
 	Storage         map[string]string
 }
 
-func TestBatchDebug(t *testing.T) {
+func TestBatchSimpleInsert(t *testing.T) {
+	keysRaw := []*big.Int{
+		big.NewInt(8),
+		big.NewInt(8),
+		big.NewInt(1),
+		big.NewInt(31),
+		big.NewInt(31),
+		big.NewInt(0),
+		big.NewInt(8),
+		big.NewInt(1),
+		// big.NewInt(21232),
+	}
+	valuesRaw := []*big.Int{
+		big.NewInt(17),
+		big.NewInt(18),
+		big.NewInt(19),
+		big.NewInt(20),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+	}
+
+	keyPointers := []*utils.NodeKey{}
+	valuePointers := []*utils.NodeValue8{}
+
+	smtIncremental := smt.NewSMT(nil)
+	smtBatch := smt.NewSMT(nil)
+
+	for i := range keysRaw {
+		k := utils.ScalarToNodeKey(keysRaw[i])
+		vArray := utils.ScalarToArrayBig(valuesRaw[i])
+		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+
+		keyPointers = append(keyPointers, &k)
+		valuePointers = append(valuePointers, v)
+
+		smtIncremental.InsertKA(k, valuesRaw[i])
+	}
+
+	_, err := smtBatch.InsertBatch("", keyPointers, valuePointers, nil, nil)
+	assert.NilError(t, err)
+
+	smtIncremental.DumpTree()
+	fmt.Println()
+	smtBatch.DumpTree()
+	fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
+	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
+	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
+
+	// assertHashKeys(t, smtIncremental, smtBatch)
+}
+
+func TestBatchDelete(t *testing.T) {
 	keys := []utils.NodeKey{
 		utils.NodeKey{10768458483543229763, 12393104588695647110, 7306859896719697582, 4178785141502415085},
 		utils.NodeKey{7512520260500009967, 3751662918911081259, 9113133324668552163, 12072005766952080289},
@@ -82,7 +137,7 @@ func TestBatchDebug(t *testing.T) {
 
 	for i, k := range keys {
 		smtIncremental.Insert(k, values[i])
-		smtBatch.InsertBatch([]*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
+		smtBatch.InsertBatch("", []*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
 
 		smtIncremental.DumpTree()
 		fmt.Println()
@@ -98,63 +153,6 @@ func TestBatchDebug(t *testing.T) {
 	fmt.Println()
 	smtBatch.DumpTree()
 	fmt.Println()
-}
-
-func TestBatchSimpleInsert(t *testing.T) {
-	keysRaw := []*big.Int{
-		big.NewInt(8),
-		// big.NewInt(8),
-		// big.NewInt(1),
-		// big.NewInt(31),
-		// big.NewInt(31),
-		// big.NewInt(0),
-		// big.NewInt(8),
-		// big.NewInt(1),
-		// big.NewInt(21232),
-	}
-	valuesRaw := []*big.Int{
-		big.NewInt(17),
-		big.NewInt(18),
-		big.NewInt(19),
-		big.NewInt(20),
-		big.NewInt(0),
-		big.NewInt(0),
-		big.NewInt(0),
-		big.NewInt(0),
-	}
-
-	keyPointers := []*utils.NodeKey{}
-	valuePointers := []*utils.NodeValue8{}
-
-	smtIncremental := smt.NewSMT(nil)
-	smtBatch := smt.NewSMT(nil)
-
-	for i := range keysRaw {
-		k := utils.ScalarToNodeKey(keysRaw[i])
-		vArray := utils.ScalarToArrayBig(valuesRaw[i])
-		v, _ := utils.NodeValue8FromBigIntArray(vArray)
-
-		keyPointers = append(keyPointers, &k)
-		valuePointers = append(valuePointers, v)
-
-		smtIncremental.InsertKA(k, valuesRaw[i])
-	}
-
-	_, err := smtBatch.InsertBatch(keyPointers, valuePointers, nil, nil)
-	assert.NilError(t, err)
-
-	smtIncremental.DumpTree()
-	fmt.Println()
-	smtBatch.DumpTree()
-	fmt.Println()
-	fmt.Println()
-	fmt.Println()
-
-	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
-	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
-	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
-
-	// assertHashKeys(t, smtIncremental, smtBatch)
 }
 
 func TestBatchRawInsert(t *testing.T) {
@@ -207,7 +205,7 @@ func TestBatchRawInsert(t *testing.T) {
 	t.Logf("Incremental insert %d values in %v\n", len(keysForIncremental), time.Since(startTime))
 
 	startTime = time.Now()
-	_, err := smtBatch.InsertBatch(keysForBatch, valuesForBatch, nil, nil)
+	_, err := smtBatch.InsertBatch("", keysForBatch, valuesForBatch, nil, nil)
 	assert.NilError(t, err)
 	t.Logf("Batch insert %d values in %v\n", len(keysForBatch), time.Since(startTime))
 
@@ -254,7 +252,7 @@ func TestCompareAllTreesInsertTimesAndFinalHashesUsingInMemoryDb(t *testing.T) {
 }
 
 func compareAllTreesInsertTimesAndFinalHashes(t *testing.T, smtIncremental, smtBulk, smtBatch *smt.SMT) {
-	increments, totalInserts := prepareData()
+	batchInsertDataHolders, totalInserts := prepareData()
 
 	var incrementalError error
 
@@ -262,10 +260,10 @@ func compareAllTreesInsertTimesAndFinalHashes(t *testing.T, smtIncremental, smtB
 	codeChanges := make(map[libcommon.Address]string)
 	storageChanges := make(map[libcommon.Address]map[string]string)
 
-	for _, increment := range increments {
-		accChanges[increment.AddressAccount] = &increment.acc
-		codeChanges[increment.AddressContract] = increment.Bytecode
-		storageChanges[increment.AddressContract] = increment.Storage
+	for _, batchInsertDataHolder := range batchInsertDataHolders {
+		accChanges[batchInsertDataHolder.AddressAccount] = &batchInsertDataHolder.acc
+		codeChanges[batchInsertDataHolder.AddressContract] = batchInsertDataHolder.Bytecode
+		storageChanges[batchInsertDataHolder.AddressContract] = batchInsertDataHolder.Storage
 	}
 
 	startTime := time.Now()
@@ -291,7 +289,7 @@ func compareAllTreesInsertTimesAndFinalHashes(t *testing.T, smtIncremental, smtB
 	t.Logf("Incremental insert %d values in %v\n", totalInserts, time.Since(startTime))
 
 	startTime = time.Now()
-	keyPointers, valuePointers, err := smtBatch.SetStorage(accChanges, codeChanges, storageChanges)
+	keyPointers, valuePointers, err := smtBatch.SetStorage("", accChanges, codeChanges, storageChanges)
 	assert.NilError(t, err)
 	t.Logf("Batch insert %d values in %v\n", totalInserts, time.Since(startTime))
 
@@ -350,12 +348,12 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 	return database, dbTransaction, db.NewEriDb(dbTransaction)
 }
 
-func prepareData() ([]*Increments, int) {
+func prepareData() ([]*BatchInsertDataHolder, int) {
 	storageSize := 1500
-	incrementTreeSize := 96
-	increments := make([]*Increments, 0)
+	treeSize := 96
+	batchInsertDataHolders := make([]*BatchInsertDataHolder, 0)
 	rand.Seed(1)
-	for i := 0; i < incrementTreeSize; i++ {
+	for i := 0; i < treeSize; i++ {
 		storage := make(map[string]string)
 		addressAccountBytes := make([]byte, 20)
 		addressContractBytes := make([]byte, 20)
@@ -374,7 +372,7 @@ func prepareData() ([]*Increments, int) {
 		acc.Balance = *uint256.NewInt(rand.Uint64())
 		acc.Nonce = rand.Uint64()
 
-		increments = append(increments, &Increments{
+		batchInsertDataHolders = append(batchInsertDataHolders, &BatchInsertDataHolder{
 			acc: acc,
 			// Balance:  big.NewInt(rand.Int63()),
 			// Nonce:    big.NewInt(rand.Int63()),
@@ -385,7 +383,7 @@ func prepareData() ([]*Increments, int) {
 		})
 	}
 
-	return increments, incrementTreeSize*4 + incrementTreeSize*storageSize
+	return batchInsertDataHolders, treeSize*4 + treeSize*storageSize
 }
 
 func assertHashKeys(t *testing.T, smtIncremental *smt.SMT, smtBatch *smt.SMT) {
