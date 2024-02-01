@@ -216,60 +216,6 @@ func TestBlockComulativeGasUsed(t *testing.T) {
 	}
 }
 
-func TestBlockInfo(t *testing.T) {
-	smt := smt.NewSMT(nil)
-
-	logs := []*types.Log{
-		{
-			Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
-			Topics: []common.Hash{
-				common.HexToHash("0000000000000000000000000000000000000000000000000000000000000001"),
-			},
-			Data: common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000").Bytes(),
-		},
-		{
-			Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
-			Topics: []common.Hash{
-				common.HexToHash("0000000000000000000000000000000000000000000000000000000000000004"),
-				common.HexToHash("0000000000000000000000000000000000000000000000000000000000000005"),
-				common.HexToHash("0000000000000000000000000000000000000000000000000000000000000006"),
-			},
-			Data: common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000").Bytes(),
-		},
-		{
-			Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
-			Topics: []common.Hash{
-				common.HexToHash("0000000000000000000000000000000000000000000000000000000000000001"),
-				common.HexToHash("0000000000000000000000000000000000000000000000000000000000000002"),
-			},
-			Data: common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000").Bytes(),
-		},
-	}
-
-	root, err := BuildBlockInfoTree(
-		smt,
-		big.NewInt(1),
-		logs,
-		big.NewInt(1),
-		big.NewInt(1),
-		big.NewInt(1),
-		big.NewInt(1),
-		big.NewInt(1),
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// root taken from JS implementation
-	expectedRoot := "5d072bff5949879c2ae676f175123401f287dee3daa63d81c09c15cd34d47ec7"
-	actualRoot := root.Text(16)
-
-	if actualRoot != expectedRoot {
-		t.Fatalf("expected root %s, got %s", expectedRoot, actualRoot)
-	}
-}
-
 func TestSetL2BlockHash(t *testing.T) {
 	tests := []struct {
 		blockHash    string

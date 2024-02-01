@@ -2,7 +2,6 @@ package state
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
@@ -13,12 +12,13 @@ import (
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 )
 
-const (
-	LAST_BLOCK_STORAGE_POS      = "0x0"
-	STATE_ROOT_STORAGE_POS      = "0x1"
-	TIMESTAMP_STORAGE_POS       = "0x2"
-	BLOCK_INFO_ROOT_STORAGE_POS = "0x3"
-	ADDRESS_SCALABLE_L2         = "0x000000000000000000000000000000005ca1ab1e"
+var (
+	LAST_BLOCK_STORAGE_POS      = libcommon.HexToHash("0x0")
+	STATE_ROOT_STORAGE_POS      = libcommon.HexToHash("0x1")
+	TIMESTAMP_STORAGE_POS       = libcommon.HexToHash("0x2")
+	BLOCK_INFO_ROOT_STORAGE_POS = libcommon.HexToHash("0x3")
+	ADDRESS_SCALABLE_L2         = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+	GER_MANAGER_ADDRESS         = libcommon.HexToAddress("0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA")
 )
 
 type ReadOnlyHermezDb interface {
@@ -40,73 +40,60 @@ func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
 func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, blockNum uint64, l1InfoRoot, stateRoot *libcommon.Hash) {
 	//ETROG
 	if chainConfig.IsForkID7Etrog(blockNum) {
-		saddr := libcommon.HexToAddress(ADDRESS_SCALABLE_L2)
-		sdb.scalableSetBlockInfoRoot(&saddr, l1InfoRoot)
+		sdb.scalableSetBlockInfoRoot(l1InfoRoot)
 	}
 }
 
 func (sdb *IntraBlockState) PreExecuteStateSet(chainConfig *chain.Config, block *types.Block, stateRoot *libcommon.Hash) {
-	saddr := libcommon.HexToAddress(ADDRESS_SCALABLE_L2)
-
-	if !sdb.Exist(saddr) {
+	if !sdb.Exist(ADDRESS_SCALABLE_L2) {
 		// create account if not exists
-		sdb.CreateAccount(saddr, true)
+		sdb.CreateAccount(ADDRESS_SCALABLE_L2, true)
 	}
 
 	blockNum := block.Number().Uint64()
 	//save block number
-	sdb.scalableSetBlockNum(&saddr, blockNum)
+	sdb.scalableSetBlockNum(blockNum)
 
 	//ETROG
 	if chainConfig.IsForkID7Etrog(blockNum) {
 		//save block timestamp
-		sdb.scalableSetTimestamp(&saddr, block.Time())
+		sdb.ScalableSetTimestamp(block.Time())
 
 		//save prev block hash
-		sdb.scalableSetBlockHash(&saddr, blockNum-1, stateRoot)
+		sdb.scalableSetBlockHash(blockNum-1, stateRoot)
 	}
 }
 
-func (sdb *IntraBlockState) scalableSetBlockInfoRoot(saddr *libcommon.Address, l1InfoRoot *libcommon.Hash) {
-	l1InfoRootSlot := libcommon.HexToHash(BLOCK_INFO_ROOT_STORAGE_POS)
-
-	fmt.Println("l1InfoRoot", l1InfoRoot.Hex())
+func (sdb *IntraBlockState) scalableSetBlockInfoRoot(l1InfoRoot *libcommon.Hash) {
 	l1InfoRootBigU := uint256.NewInt(0).SetBytes(l1InfoRoot.Bytes())
 
-	sdb.SetState(*saddr, &l1InfoRootSlot, *l1InfoRootBigU)
+	sdb.SetState(ADDRESS_SCALABLE_L2, &BLOCK_INFO_ROOT_STORAGE_POS, *l1InfoRootBigU)
 
 }
-func (sdb *IntraBlockState) scalableSetBlockNum(saddr *libcommon.Address, blockNum uint64) {
-	txNumSlot := libcommon.HexToHash(LAST_BLOCK_STORAGE_POS)
-
-	sdb.SetState(*saddr, &txNumSlot, *uint256.NewInt(blockNum))
+func (sdb *IntraBlockState) scalableSetBlockNum(blockNum uint64) {
+	sdb.SetState(ADDRESS_SCALABLE_L2, &LAST_BLOCK_STORAGE_POS, *uint256.NewInt(blockNum))
 }
 
-func (sdb *IntraBlockState) scalableSetTimestamp(saddr *libcommon.Address, timestamp uint64) {
-	timestampSlot := libcommon.HexToHash(TIMESTAMP_STORAGE_POS)
-
-	sdb.SetState(*saddr, &timestampSlot, *uint256.NewInt(timestamp))
+func (sdb *IntraBlockState) ScalableSetTimestamp(timestamp uint64) {
+	sdb.SetState(ADDRESS_SCALABLE_L2, &TIMESTAMP_STORAGE_POS, *uint256.NewInt(timestamp))
 }
 
-func (sdb *IntraBlockState) scalableSetBlockHash(saddr *libcommon.Address, blockNum uint64, blockHash *libcommon.Hash) {
+func (sdb *IntraBlockState) scalableSetBlockHash(blockNum uint64, blockHash *libcommon.Hash) {
 	// create mapping with keccak256(blockNum,position) -> smt root
 	d1 := common.LeftPadBytes(uint256.NewInt(blockNum).Bytes(), 32)
-	posI, _ := uint256.FromHex(STATE_ROOT_STORAGE_POS)
-	d2 := common.LeftPadBytes(posI.Bytes(), 32)
+	d2 := common.LeftPadBytes(STATE_ROOT_STORAGE_POS.Bytes(), 32)
 	mapKey := keccak256.Hash(d1, d2)
 	mkh := libcommon.BytesToHash(mapKey)
 
 	hashAsBigU := uint256.NewInt(0).SetBytes(blockHash.Bytes())
 
-	sdb.SetState(*saddr, &mkh, *hashAsBigU)
+	sdb.SetState(ADDRESS_SCALABLE_L2, &mkh, *hashAsBigU)
 }
 
 func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) error {
-	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-	sl0 := libcommon.HexToHash("0x0")
-
 	txNum := uint256.NewInt(0)
-	sdb.GetState(saddr, &sl0, txNum)
+	slot0 := libcommon.HexToHash("0x0")
+	sdb.GetState(ADDRESS_SCALABLE_L2, &slot0, txNum)
 
 	// create mapping with keccak256(txnum,1) -> smt root
 	d1 := common.LeftPadBytes(txNum.Bytes(), 32)
@@ -122,8 +109,48 @@ func (sdb *IntraBlockState) ScalableSetSmtRootHash(roHermezDb ReadOnlyHermezDb) 
 	if txNum.Uint64() >= 1 {
 		// set mapping of keccak256(txnum,1) -> smt root
 		rpcHashU256 := uint256.NewInt(0).SetBytes(rpcHash.Bytes())
-		sdb.SetState(saddr, &mkh, *rpcHashU256)
+		sdb.SetState(ADDRESS_SCALABLE_L2, &mkh, *rpcHashU256)
 	}
 
 	return nil
+}
+
+func (sdb *IntraBlockState) ScalableSetBlockNumberToHash(blockNumber uint64, rodb ReadOnlyHermezDb) error {
+	rpcHash, err := rodb.GetStateRoot(blockNumber)
+	if err != nil {
+		return err
+	}
+
+	sdb.scalableSetBlockHash(blockNumber, &rpcHash)
+
+	return nil
+}
+
+func (sdb *IntraBlockState) ReadGerManagerL1BlockHash(ger libcommon.Hash) libcommon.Hash {
+	d1 := common.LeftPadBytes(ger.Bytes(), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(0).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+	key := uint256.NewInt(0)
+	sdb.GetState(GER_MANAGER_ADDRESS, &mkh, key)
+	if key.Uint64() == 0 {
+		return libcommon.Hash{}
+	}
+	return libcommon.BytesToHash(key.Bytes())
+}
+
+func (sdb *IntraBlockState) WriteGerManagerL1BlockHash(ger, l1BlockHash libcommon.Hash) {
+	d1 := common.LeftPadBytes(ger.Bytes(), 32)
+	d2 := common.LeftPadBytes(uint256.NewInt(0).Bytes(), 32)
+	mapKey := keccak256.Hash(d1, d2)
+	mkh := libcommon.BytesToHash(mapKey)
+	val := uint256.NewInt(0).SetBytes(l1BlockHash.Bytes())
+	sdb.SetState(GER_MANAGER_ADDRESS, &mkh, *val)
+}
+
+func (sdb *IntraBlockState) ScalableGetTimestamp() uint64 {
+	timestamp := uint256.NewInt(0)
+
+	sdb.GetState(ADDRESS_SCALABLE_L2, &TIMESTAMP_STORAGE_POS, timestamp)
+	return timestamp.Uint64()
 }
