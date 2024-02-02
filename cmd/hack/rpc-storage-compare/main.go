@@ -203,6 +203,6 @@ func compareCodeHash(accountHash, value string) {
 	commonHash := libcommon.HexToHash(remoteValueDecode).Bytes()
 	value2 := common.Bytes2Hex(keccak256.Hash(commonHash))
 	if value != value2 {
-		fmt.Printf("Nonce ismatch detected for %s. Local: %d, Remote: %d\n", accountHash, value, value2)
+		fmt.Printf("Nonce mismatch detected for %s. Local: %s, Remote: %s\n", accountHash, value, value2)
 	}
 }

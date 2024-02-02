@@ -209,6 +209,10 @@ func runGenesisTestMdbx(tb testing.TB, filename string) {
 		tb.Fatal("Failed to open db: ", err)
 	}
 	sdb := db2.NewEriDb(tx)
+	err = db2.CreateEriDbBuckets(tx)
+	if err != nil {
+		tb.Fatal("Failed to create db buckets: ", err)
+	}
 
 	smt := NewSMT(sdb)
 
@@ -307,5 +311,9 @@ func getTempMdbx() (*db2.EriDb, kv.RwDB, error) {
 		return nil, nil, err
 	}
 	sdb := db2.NewEriDb(tx)
+	err = db2.CreateEriDbBuckets(tx)
+	if err != nil {
+		return nil, nil, err
+	}
 	return sdb, dbi, nil
 }
