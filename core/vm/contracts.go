@@ -110,16 +110,6 @@ var PrecompiledContractsBLS = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{18}): &bls12381MapG2{},
 }
 
-var PrecompiledContractsEtrog = map[libcommon.Address]PrecompiledContract{
-	libcommon.BytesToAddress([]byte{1}): &ecrecover{},
-	libcommon.BytesToAddress([]byte{2}): &sha256hash{},
-	libcommon.BytesToAddress([]byte{3}): &dataCopy{},
-	libcommon.BytesToAddress([]byte{4}): &bigModExp{eip2565: true},
-	libcommon.BytesToAddress([]byte{5}): &bn256AddIstanbul{},
-	libcommon.BytesToAddress([]byte{6}): &bn256ScalarMulIstanbul{},
-	libcommon.BytesToAddress([]byte{7}): &bn256PairingIstanbul{},
-}
-
 var PrecompiledContractsDragonfruit = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{1}): &ecrecover{},
 	libcommon.BytesToAddress([]byte{2}): &dataCopy{},
@@ -147,7 +137,7 @@ func init() {
 	for k := range PrecompiledContractsBerlin {
 		PrecompiledAddressesBerlin = append(PrecompiledAddressesBerlin, k)
 	}
-	for k := range PrecompiledContractsEtrog {
+	for k := range PrecompiledContractForkID7Etrog {
 		PrecompiledAddressesEtrog = append(PrecompiledAddressesEtrog, k)
 	}
 	for k := range PrecompiledContractsDragonfruit {
