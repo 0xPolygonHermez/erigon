@@ -25,8 +25,10 @@ type DB interface {
 	GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error)
 	InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) error
 	InsertKeySource(key utils.NodeKey, value []byte) error
+	DeleteKeySource(key utils.NodeKey) error
 	GetKeySource(key utils.NodeKey) ([]byte, error)
 	InsertHashKey(key utils.NodeKey, value utils.NodeKey) error
+	DeleteHashKey(key utils.NodeKey) error
 	GetHashKey(key utils.NodeKey) (utils.NodeKey, error)
 	Delete(string) error
 	DeleteByNodeKey(key utils.NodeKey) error
@@ -520,11 +522,11 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 }
 
 func (s *SMT) hashSave(in [8]uint64, capacity, h [4]uint64) ([4]uint64, error) {
-	cacheKey := fmt.Sprintf("%v-%v", in, capacity)
-	if cachedValue, exists := s.Cache.Get(cacheKey); exists {
-		s.CacheHitFrequency[cacheKey]++
-		return cachedValue.([4]uint64), nil
-	}
+	// cacheKey := fmt.Sprintf("%v-%v", in, capacity)
+	// if cachedValue, exists := s.Cache.Get(cacheKey); exists {
+	// 	s.CacheHitFrequency[cacheKey]++
+	// 	return cachedValue.([4]uint64), nil
+	// }
 
 	var sl []uint64
 	sl = append(sl, in[:]...)
@@ -538,7 +540,7 @@ func (s *SMT) hashSave(in [8]uint64, capacity, h [4]uint64) ([4]uint64, error) {
 
 	err := s.Db.Insert(h, v)
 
-	s.Cache.Set(cacheKey, h)
+	// s.Cache.Set(cacheKey, h)
 
 	return h, err
 }

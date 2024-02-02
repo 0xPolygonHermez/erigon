@@ -81,8 +81,8 @@ func dumpBatchTreeFromMemory(sbn *smtBatchNode, level int, path []int, printDept
 	}
 
 	if sbn.isLeaf() {
-		remainingKey := sbn.nodeLeftKeyOrRemainingKey
-		leafValueHash := sbn.nodeRightKeyOrValueHash
+		remainingKey := sbn.nodeLeftHashOrRemainingKey
+		leafValueHash := sbn.nodeRightHashOrValueHash
 		totalKey := utils.JoinKey(path, *remainingKey)
 		leafPath := totalKey.GetPath()
 		fmt.Printf("|")

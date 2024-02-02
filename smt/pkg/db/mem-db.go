@@ -127,14 +127,23 @@ func (m *MemDb) InsertKeySource(key utils.NodeKey, value []byte) error {
 	return nil
 }
 
+func (m *MemDb) DeleteKeySource(key utils.NodeKey) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
+	keyConc := utils.ArrayToScalar(key[:])
+
+	delete(m.DbKeySource, keyConc.String())
+	return nil
+}
+
 func (m *MemDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
 
 	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
 
-	s, ok := m.DbKeySource[k]
+	s, ok := m.DbKeySource[keyConc.String()]
 
 	if !ok {
 		return nil, fmt.Errorf("key not found")
@@ -153,6 +162,17 @@ func (m *MemDb) InsertHashKey(key utils.NodeKey, value utils.NodeKey) error {
 	valConc := utils.ArrayToScalar(value[:])
 
 	m.DbHashKey[k] = valConc.Bytes()
+	return nil
+}
+
+func (m *MemDb) DeleteHashKey(key utils.NodeKey) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+
+	delete(m.DbHashKey, k)
 	return nil
 }
 

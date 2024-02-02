@@ -202,6 +202,8 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string) (*bi
 }
 
 func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*accounts.Account, codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) ([]*utils.NodeKey, []*utils.NodeValue8, error) {
+	var isDelete bool
+
 	initialCapacity := len(accChanges) + len(codeChanges) + len(storageChanges)
 	keysBatchStorage := make([]*utils.NodeKey, 0, initialCapacity)
 	valuesBatchStorage := make([]*utils.NodeValue8, 0, initialCapacity)
@@ -217,14 +219,6 @@ func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*acc
 			return nil, nil, err
 		}
 
-		if err = s.InsertKeySource(&keyBalance, utils.KEY_BALANCE, &addr, &common.Hash{}); err != nil {
-			return nil, nil, err
-		}
-
-		if err = s.InsertKeySource(&keyNonce, utils.KEY_NONCE, &addr, &common.Hash{}); err != nil {
-			return nil, nil, err
-		}
-
 		balance := big.NewInt(0)
 		nonce := big.NewInt(0)
 		if acc != nil {
@@ -233,13 +227,32 @@ func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*acc
 		}
 
 		keysBatchStorage = append(keysBatchStorage, &keyBalance)
-		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, balance); err != nil {
+		if valuesBatchStorage, isDelete, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, balance); err != nil {
 			return nil, nil, err
+		}
+		if !isDelete {
+			if err = s.InsertKeySource(&keyBalance, utils.KEY_BALANCE, &addr, &common.Hash{}); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			if err = s.DeleteKeySource(&keyBalance); err != nil {
+				return nil, nil, err
+			}
+
 		}
 
 		keysBatchStorage = append(keysBatchStorage, &keyNonce)
-		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, nonce); err != nil {
+		if valuesBatchStorage, isDelete, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, nonce); err != nil {
 			return nil, nil, err
+		}
+		if !isDelete {
+			if err = s.InsertKeySource(&keyNonce, utils.KEY_NONCE, &addr, &common.Hash{}); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			if err = s.DeleteKeySource(&keyNonce); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
@@ -259,21 +272,32 @@ func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*acc
 			return nil, nil, err
 		}
 
-		if err = s.InsertKeySource(&keyContractCode, utils.SC_CODE, &addr, &common.Hash{}); err != nil {
-			return nil, nil, err
-		}
-		if err = s.InsertKeySource(&keyContractLength, utils.SC_LENGTH, &addr, &common.Hash{}); err != nil {
-			return nil, nil, err
-		}
-
 		keysBatchStorage = append(keysBatchStorage, &keyContractCode)
-		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, bi); err != nil {
+		if valuesBatchStorage, isDelete, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, bi); err != nil {
 			return nil, nil, err
+		}
+		if !isDelete {
+			if err = s.InsertKeySource(&keyContractCode, utils.SC_CODE, &addr, &common.Hash{}); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			if err = s.DeleteKeySource(&keyContractCode); err != nil {
+				return nil, nil, err
+			}
 		}
 
 		keysBatchStorage = append(keysBatchStorage, &keyContractLength)
-		if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, big.NewInt(int64(bytecodeLength))); err != nil {
+		if valuesBatchStorage, isDelete, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, big.NewInt(int64(bytecodeLength))); err != nil {
 			return nil, nil, err
+		}
+		if !isDelete {
+			if err = s.InsertKeySource(&keyContractLength, utils.SC_LENGTH, &addr, &common.Hash{}); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			if err = s.DeleteKeySource(&keyContractLength); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
@@ -288,16 +312,21 @@ func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*acc
 				return nil, nil, err
 			}
 
-			sp, _ := utils.StrValToBigInt(k)
-			hash := common.BigToHash(sp)
-			if err = s.InsertKeySource(&keyStoragePosition, utils.SC_STORAGE, &addr, &hash); err != nil {
-				return nil, nil, err
-			}
-
 			valueBigInt := convertStrintToBigInt(v)
 			keysBatchStorage = append(keysBatchStorage, &keyStoragePosition)
-			if valuesBatchStorage, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, valueBigInt); err != nil {
+			if valuesBatchStorage, isDelete, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, valueBigInt); err != nil {
 				return nil, nil, err
+			}
+			if !isDelete {
+				sp, _ := utils.StrValToBigInt(k)
+				hash := common.BigToHash(sp)
+				if err = s.InsertKeySource(&keyStoragePosition, utils.SC_STORAGE, &addr, &hash); err != nil {
+					return nil, nil, err
+				}
+			} else {
+				if err = s.DeleteKeySource(&keyStoragePosition); err != nil {
+					return nil, nil, err
+				}
 			}
 		}
 	}
@@ -321,6 +350,10 @@ func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*acc
 func (s *SMT) InsertKeySource(nodeKey *utils.NodeKey, key int, accountAddr *libcommon.Address, storagePosition *libcommon.Hash) error {
 	ks := utils.EncodeKeySource(key, *accountAddr, *storagePosition)
 	return s.Db.InsertKeySource(*nodeKey, ks)
+}
+
+func (s *SMT) DeleteKeySource(nodeKey *utils.NodeKey) error {
+	return s.Db.DeleteKeySource(*nodeKey)
 }
 
 func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
@@ -351,12 +384,12 @@ func convertStrintToBigInt(v string) *big.Int {
 	return val
 }
 
-func appendToValuesBatchStorageBigInt(valuesBatchStorage []*utils.NodeValue8, value *big.Int) ([]*utils.NodeValue8, error) {
+func appendToValuesBatchStorageBigInt(valuesBatchStorage []*utils.NodeValue8, value *big.Int) ([]*utils.NodeValue8, bool, error) {
 	nodeValue, err := utils.NodeValue8FromBigInt(value)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return append(valuesBatchStorage, nodeValue), nil
+	return append(valuesBatchStorage, nodeValue), nodeValue.IsZero(), nil
 }
 
 func convertBytecodeToBigInt(bytecode string) (*big.Int, int, error) {

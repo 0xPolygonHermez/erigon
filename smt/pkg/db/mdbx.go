@@ -193,6 +193,12 @@ func (m *EriDb) InsertKeySource(key utils.NodeKey, value []byte) error {
 	return m.tx.Put(TableMetadata, keyConc.Bytes(), value)
 }
 
+func (m *EriDb) DeleteKeySource(key utils.NodeKey) error {
+	keyConc := utils.ArrayToScalar(key[:])
+
+	return m.tx.Delete(TableMetadata, keyConc.Bytes())
+}
+
 func (m *EriDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
@@ -214,6 +220,11 @@ func (m *EriDb) InsertHashKey(key utils.NodeKey, value utils.NodeKey) error {
 	valConc := utils.ArrayToScalar(value[:])
 
 	return m.tx.Put(TableHashKey, keyConc.Bytes(), valConc.Bytes())
+}
+
+func (m *EriDb) DeleteHashKey(key utils.NodeKey) error {
+	keyConc := utils.ArrayToScalar(key[:])
+	return m.tx.Delete(TableHashKey, keyConc.Bytes())
 }
 
 func (m *EriDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {

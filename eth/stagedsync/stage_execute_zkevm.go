@@ -15,6 +15,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 
+	"math/big"
+
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -25,7 +27,6 @@ import (
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	rawdbZk "github.com/ledgerwatch/erigon/zk/rawdb"
 	"github.com/ledgerwatch/erigon/zk/utils"
-	"math/big"
 )
 
 func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool, quiet bool) (err error) {
@@ -300,6 +301,10 @@ Loop:
 			gas = 0
 			tx.CollectMetrics()
 			Metrics[stages.Execution].Set(blockNum)
+		}
+
+		if blockNum%1000 == 0 {
+			break
 		}
 	}
 

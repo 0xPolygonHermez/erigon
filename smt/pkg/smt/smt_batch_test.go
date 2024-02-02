@@ -41,8 +41,7 @@ func TestBatchSimpleInsert(t *testing.T) {
 		big.NewInt(31),
 		big.NewInt(0),
 		big.NewInt(8),
-		big.NewInt(1),
-		// big.NewInt(21232),
+		// big.NewInt(1),
 	}
 	valuesRaw := []*big.Int{
 		big.NewInt(17),
@@ -52,7 +51,7 @@ func TestBatchSimpleInsert(t *testing.T) {
 		big.NewInt(0),
 		big.NewInt(0),
 		big.NewInt(0),
-		big.NewInt(0),
+		// big.NewInt(0),
 	}
 
 	keyPointers := []*utils.NodeKey{}
@@ -86,7 +85,7 @@ func TestBatchSimpleInsert(t *testing.T) {
 	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
 	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 
-	// assertHashKeys(t, smtIncremental, smtBatch)
+	assertSmtDbStructure(t, smtBatch, false)
 }
 
 func TestBatchDelete(t *testing.T) {
@@ -137,12 +136,8 @@ func TestBatchDelete(t *testing.T) {
 
 	for i, k := range keys {
 		smtIncremental.Insert(k, values[i])
-		smtBatch.InsertBatch("", []*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
-
-		smtIncremental.DumpTree()
-		fmt.Println()
-		smtBatch.DumpTree()
-		fmt.Println()
+		_, err := smtBatch.InsertBatch("", []*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
+		assert.NilError(t, err)
 
 		smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
 		smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
@@ -153,6 +148,8 @@ func TestBatchDelete(t *testing.T) {
 	fmt.Println()
 	smtBatch.DumpTree()
 	fmt.Println()
+
+	assertSmtDbStructure(t, smtBatch, false)
 }
 
 func TestBatchRawInsert(t *testing.T) {
@@ -182,21 +179,6 @@ func TestBatchRawInsert(t *testing.T) {
 		valuesForIncremental = append(valuesForIncremental, *v)
 
 	}
-	sizeToDelete := 1 << 16
-	for i := 0; i < sizeToDelete; i++ {
-		rawValue := big.NewInt(0)
-		vArray := utils.ScalarToArrayBig(rawValue)
-		v, _ := utils.NodeValue8FromBigIntArray(vArray)
-
-		keyForBatch := keysForBatch[i]
-		keyForIncremental := keysForIncremental[i]
-
-		keysForBatch = append(keysForBatch, keyForBatch)
-		valuesForBatch = append(valuesForBatch, v)
-
-		keysForIncremental = append(keysForIncremental, keyForIncremental)
-		valuesForIncremental = append(valuesForIncremental, *v)
-	}
 
 	startTime := time.Now()
 	for i := range keysForIncremental {
@@ -212,6 +194,46 @@ func TestBatchRawInsert(t *testing.T) {
 	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
 	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
 	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
+
+	assertSmtDbStructure(t, smtBatch, false)
+
+	// DELETE
+	keysForBatchDelete := []*utils.NodeKey{}
+	valuesForBatchDelete := []*utils.NodeValue8{}
+
+	keysForIncrementalDelete := []utils.NodeKey{}
+	valuesForIncrementalDelete := []utils.NodeValue8{}
+
+	sizeToDelete := 1 << 14
+	for i := 0; i < sizeToDelete; i++ {
+		rawValue := big.NewInt(0)
+		vArray := utils.ScalarToArrayBig(rawValue)
+		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+
+		deleteIndex := rand.Intn(size)
+
+		keyForBatchDelete := keysForBatch[deleteIndex]
+		keyForIncrementalDelete := keysForIncremental[deleteIndex]
+
+		keysForBatchDelete = append(keysForBatchDelete, keyForBatchDelete)
+		valuesForBatchDelete = append(valuesForBatchDelete, v)
+
+		keysForIncrementalDelete = append(keysForIncrementalDelete, keyForIncrementalDelete)
+		valuesForIncrementalDelete = append(valuesForIncrementalDelete, *v)
+	}
+
+	startTime = time.Now()
+	for i := range keysForIncrementalDelete {
+		smtIncremental.Insert(keysForIncrementalDelete[i], valuesForIncrementalDelete[i])
+	}
+	t.Logf("Incremental delete %d values in %v\n", len(keysForIncrementalDelete), time.Since(startTime))
+
+	startTime = time.Now()
+	_, err = smtBatch.InsertBatch("", keysForBatchDelete, valuesForBatchDelete, nil, nil)
+	assert.NilError(t, err)
+	t.Logf("Batch delete %d values in %v\n", len(keysForBatchDelete), time.Since(startTime))
+
+	assertSmtDbStructure(t, smtBatch, false)
 }
 
 func TestCompareAllTreesInsertTimesAndFinalHashesUsingDiskDb(t *testing.T) {
@@ -311,7 +333,7 @@ func compareAllTreesInsertTimesAndFinalHashes(t *testing.T, smtIncremental, smtB
 	assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 	assert.Equal(t, utils.ConvertBigIntToHex(smtBulkRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
 
-	// assertHashKeys(t, smtIncremental, smtBatch)
+	assertSmtDbStructure(t, smtBatch, true)
 }
 
 func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
@@ -349,8 +371,8 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 }
 
 func prepareData() ([]*BatchInsertDataHolder, int) {
-	storageSize := 1500
-	treeSize := 96
+	treeSize := 1500
+	storageSize := 96
 	batchInsertDataHolders := make([]*BatchInsertDataHolder, 0)
 	rand.Seed(1)
 	for i := 0; i < treeSize; i++ {
@@ -386,14 +408,82 @@ func prepareData() ([]*BatchInsertDataHolder, int) {
 	return batchInsertDataHolders, treeSize*4 + treeSize*storageSize
 }
 
-func assertHashKeys(t *testing.T, smtIncremental *smt.SMT, smtBatch *smt.SMT) {
-	if actualIncrementalDb, ok := smtIncremental.Db.(*db.MemDb); ok {
-		actualBatchDb := smtBatch.Db.(*db.MemDb)
+func assertSmtDbStructure(t *testing.T, s *smt.SMT, testMetadata bool) {
+	smtBatchRootHash, _ := s.Db.GetLastRoot()
 
-		for k, v := range actualIncrementalDb.DbHashKey {
-			actualValue, found := actualBatchDb.DbHashKey[k]
-			assert.Equal(t, found, true)
-			assert.DeepEqual(t, v, actualValue)
-		}
+	actualDb, ok := s.Db.(*db.MemDb)
+	if !ok {
+		return
 	}
+
+	usedNodeHashesMap := make(map[string]*utils.NodeKey)
+	assertSmtTreeDbStructure(t, s, utils.ScalarToRoot(smtBatchRootHash), usedNodeHashesMap)
+
+	assert.Equal(t, len(usedNodeHashesMap), len(actualDb.Db))
+	for k := range usedNodeHashesMap {
+		_, found := actualDb.Db[k]
+		assert.Equal(t, true, found)
+	}
+
+	totalLeaves := assertHashToKeyDbStrcture(t, s, utils.ScalarToRoot(smtBatchRootHash), testMetadata)
+	assert.Equal(t, totalLeaves, len(actualDb.DbHashKey))
+	if testMetadata {
+		assert.Equal(t, totalLeaves, len(actualDb.DbKeySource))
+	}
+}
+
+func assertSmtTreeDbStructure(t *testing.T, s *smt.SMT, nodeHash utils.NodeKey, usedNodeHashesMap map[string]*utils.NodeKey) {
+	if nodeHash.IsZero() {
+		return
+	}
+
+	dbNodeValue, err := s.Db.Get(nodeHash)
+	assert.NilError(t, err)
+
+	nodeHashHex := utils.ConvertBigIntToHex(utils.ArrayToScalar(nodeHash[:]))
+	usedNodeHashesMap[nodeHashHex] = &nodeHash
+
+	if dbNodeValue.IsFinalNode() {
+		nodeValueHash := utils.NodeKeyFromBigIntArray(dbNodeValue[4:8])
+		dbNodeValue, err = s.Db.Get(nodeValueHash)
+		assert.NilError(t, err)
+
+		nodeHashHex := utils.ConvertBigIntToHex(utils.ArrayToScalar(nodeValueHash[:]))
+		usedNodeHashesMap[nodeHashHex] = &nodeValueHash
+		return
+	}
+
+	assertSmtTreeDbStructure(t, s, utils.NodeKeyFromBigIntArray(dbNodeValue[0:4]), usedNodeHashesMap)
+	assertSmtTreeDbStructure(t, s, utils.NodeKeyFromBigIntArray(dbNodeValue[4:8]), usedNodeHashesMap)
+}
+
+func assertHashToKeyDbStrcture(t *testing.T, smtBatch *smt.SMT, nodeHash utils.NodeKey, testMetadata bool) int {
+	if nodeHash.IsZero() {
+		return 0
+	}
+
+	dbNodeValue, err := smtBatch.Db.Get(nodeHash)
+	assert.NilError(t, err)
+
+	if dbNodeValue.IsFinalNode() {
+		memDb := smtBatch.Db.(*db.MemDb)
+
+		nodeKey, err := smtBatch.Db.GetHashKey(nodeHash)
+		assert.NilError(t, err)
+
+		keyConc := utils.ArrayToScalar(nodeHash[:])
+		k := utils.ConvertBigIntToHex(keyConc)
+		_, found := memDb.DbHashKey[k]
+		assert.Equal(t, found, true)
+
+		if testMetadata {
+			keyConc = utils.ArrayToScalar(nodeKey[:])
+
+			_, found = memDb.DbKeySource[keyConc.String()]
+			assert.Equal(t, found, true)
+		}
+		return 1
+	}
+
+	return assertHashToKeyDbStrcture(t, smtBatch, utils.NodeKeyFromBigIntArray(dbNodeValue[0:4]), testMetadata) + assertHashToKeyDbStrcture(t, smtBatch, utils.NodeKeyFromBigIntArray(dbNodeValue[4:8]), testMetadata)
 }
