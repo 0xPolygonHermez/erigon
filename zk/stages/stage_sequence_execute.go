@@ -229,14 +229,14 @@ func SpawnSequencingStage(
 	batchCounters.StartNewBlock()
 
 	// calculate and store the l1 info tree index used for this block
-	l1InfoIndex, l1Info, err := calculateNextL1IndexToUse(nextBlockNum, tx, hermezDb)
+	l1TreeUpdateIndex, l1TreeUpdate, err := calculateNextL1TreeUpdateToUse(tx, hermezDb)
 	if err != nil {
 		return err
 	}
-	if err = hermezDb.WriteBlockL1InfoTreeIndex(nextBlockNum, l1InfoIndex); err != nil {
+	if err = hermezDb.WriteBlockL1InfoTreeIndex(nextBlockNum, l1TreeUpdateIndex); err != nil {
 		return err
 	}
-	if err := handleStateForNewBlockStarting(false, executionAt, newBlockTimestamp, l1Info, ibs, tx); err != nil {
+	if err := handleStateForNewBlockStarting(false, executionAt, newBlockTimestamp, l1TreeUpdate, ibs, tx); err != nil {
 		return err
 	}
 
@@ -300,11 +300,16 @@ func SpawnSequencingStage(
 		}
 	}
 
-	if err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch); err != nil {
+	block, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch)
+	if err != nil {
 		return err
 	}
 
-	if err := updateSequencerProgress(tx, nextBlockNum, thisBatch, l1InfoIndex); err != nil {
+	if err := handleStateForBlockEnding(ibs, block, l1TreeUpdate); err != nil {
+		return err
+	}
+
+	if err := updateSequencerProgress(tx, nextBlockNum, thisBatch, l1TreeUpdateIndex); err != nil {
 		return err
 	}
 
@@ -335,13 +340,13 @@ func processInjectedInitialBatch(
 	if err != nil {
 		return err
 	}
-	fakeL1Info := &zktypes.L1InfoTreeUpdate{
+	fakeL1TreeUpdate := &zktypes.L1InfoTreeUpdate{
 		GER:        injected.LastGlobalExitRoot,
 		ParentHash: injected.L1ParentHash,
 		Timestamp:  injected.Timestamp,
 	}
 	// todo [zkevm] need to figure out what state changes to what in an injected batch scenario
-	if err := handleStateForNewBlockStarting(true, 0, injected.Timestamp, fakeL1Info, ibs, tx); err != nil {
+	if err := handleStateForNewBlockStarting(true, 0, injected.Timestamp, fakeL1TreeUpdate, ibs, tx); err != nil {
 		return err
 	}
 	txn, receipt, err := handleInjectedBatch(cfg, tx, ibs, injected, header, parentBlock)
@@ -350,7 +355,11 @@ func processInjectedInitialBatch(
 	}
 	txns := types.Transactions{*txn}
 	receipts := types.Receipts{receipt}
-	if err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, injectedBatchNumber); err != nil {
+	block, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, injectedBatchNumber)
+	if err != nil {
+		return err
+	}
+	if err := handleStateForBlockEnding(ibs, block, fakeL1TreeUpdate); err != nil {
 		return err
 	}
 	if err := updateSequencerProgress(tx, injectedBatchBlockNumber, injectedBatchNumber, 0); err != nil {
@@ -395,7 +404,7 @@ func finaliseBlock(
 	transactions []types.Transaction,
 	receipts types.Receipts,
 	thisBatch uint64,
-) error {
+) (*types.Block, error) {
 
 	stateWriter := state.NewPlainStateWriter(tx, tx, newHeader.Number.Uint64())
 	//stateWriter := state.NewPlainStateWriter(batch, tx, block.NumberU64())
@@ -425,7 +434,7 @@ func finaliseBlock(
 		excessDataGas,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	finalHeader := finalBlock.Header()
@@ -436,33 +445,33 @@ func finaliseBlock(
 	rawdb.WriteHeader(tx, finalHeader)
 	err = rawdb.WriteCanonicalHash(tx, finalHeader.Hash(), newNum.Uint64())
 	if err != nil {
-		return fmt.Errorf("failed to write header: %v", err)
+		return nil, fmt.Errorf("failed to write header: %v", err)
 	}
 
 	erigonDB := erigon_db.NewErigonDb(tx)
 	err = erigonDB.WriteBody(newNum, finalHeader.Hash(), finalTransactions)
 	if err != nil {
-		return fmt.Errorf("failed to write body: %v", err)
+		return nil, fmt.Errorf("failed to write body: %v", err)
 	}
 
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(tx, finalBlock)
 
 	if err = rawdb.WriteReceipts(tx, newNum.Uint64(), finalReceipts); err != nil {
-		return err
+		return nil, err
 	}
 
 	// now process the senders to avoid a stage by itself
 	if err := addSenders(cfg, newNum, finalTransactions, tx, finalHeader); err != nil {
-		return err
+		return nil, err
 	}
 
 	// now add in the zk batch to block references
 	if err := hermezDb.WriteBlockBatch(newNum.Uint64(), thisBatch); err != nil {
-		return fmt.Errorf("write block batch error: %v", err)
+		return nil, fmt.Errorf("write block batch error: %v", err)
 	}
 
-	return handleStateForBlockEnding(ibs, transactions, receipts)
+	return finalBlock, nil
 }
 
 func handleStateForNewBlockStarting(
@@ -511,30 +520,29 @@ func handleStateForNewBlockStarting(
 	return nil
 }
 
-// todo: [zkevm] the block info root here is always 0 if there are no logs for the block
-func handleStateForBlockEnding(ibs *state.IntraBlockState, transactions []types.Transaction, receipts []*types.Receipt) error {
+func handleStateForBlockEnding(ibs *state.IntraBlockState, block *types.Block, l1TreeUpdate *zktypes.L1InfoTreeUpdate) error {
 	smt := smt2.NewSMT(nil)
 
-	var err error
-	root := big.NewInt(0)
+	ger := common.Hash{}
+	l1Hash := common.Hash{}
 
-	for tIdx, trx := range transactions {
-		receipt := receipts[tIdx]
-		for lIdx, _ := range receipt.Logs {
-			root, err = blockinfo.BuildBlockInfoTree(
-				smt,
-				big.NewInt(int64(tIdx)),
-				receipt.Logs,
-				big.NewInt(int64(lIdx)),
-				big.NewInt(0).SetUint64(receipt.Status),
-				trx.Hash().Big(),
-				big.NewInt(0).SetUint64(receipt.CumulativeGasUsed),
-				big.NewInt(1), // effective percentage
-			)
-			if err != nil {
-				return err
-			}
-		}
+	if l1TreeUpdate != nil {
+		ger = l1TreeUpdate.GER
+		l1Hash = l1TreeUpdate.ParentHash
+	}
+
+	root, err := blockinfo.BuildBlockInfoTree(
+		smt,
+		block.Hash().Big(),
+		new(big.Int).SetBytes(block.Coinbase().Bytes()),
+		block.Number(),
+		new(big.Int).SetUint64(block.GasLimit()),
+		new(big.Int).SetUint64(block.Time()),
+		new(big.Int).SetBytes(ger.Bytes()),
+		new(big.Int).SetBytes(l1Hash.Bytes()),
+	)
+	if err != nil {
+		return err
 	}
 
 	ibs.ScalableWriteLatestBlockInfoRoot(root)
@@ -633,14 +641,9 @@ func attemptAddTransaction(
 // will be called at the start of every new block created within a batch to figure out if there is a new GER
 // we can use or not.  In the special case that this is the first block we just return 0 as we need to use the
 // 0 index first before we can use 1+
-func calculateNextL1IndexToUse(blockNumber uint64, tx kv.RwTx, hermezDb *hermez_db.HermezDb) (uint64, *zktypes.L1InfoTreeUpdate, error) {
+func calculateNextL1TreeUpdateToUse(tx kv.RwTx, hermezDb *hermez_db.HermezDb) (uint64, *zktypes.L1InfoTreeUpdate, error) {
 	// always default to 0 and only update this if the next available index has reached finality
 	var nextL1Index uint64 = 0
-
-	// special case for the first block, we must use the 0 index first
-	if blockNumber == 1 {
-		return 0, nil, nil
-	}
 
 	// check which was the last used index
 	lastInfoIndex, err := stages.GetStageProgress(tx, stages.HighestUsedL1InfoIndex)
