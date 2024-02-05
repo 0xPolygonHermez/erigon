@@ -41,7 +41,6 @@ import (
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
-	smt2 "github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
@@ -236,9 +235,9 @@ func SpawnSequencingStage(
 	if err = hermezDb.WriteBlockL1InfoTreeIndex(nextBlockNum, l1TreeUpdateIndex); err != nil {
 		return err
 	}
-	if err := handleStateForNewBlockStarting(false, executionAt, newBlockTimestamp, l1TreeUpdate, ibs, tx); err != nil {
-		return err
-	}
+
+	parentRoot := parentBlock.Root()
+	ibs.PreExecuteStateSet(cfg.chainConfig, nextBlockNum, newBlockTimestamp, &parentRoot)
 
 	// start waiting for a new transaction to arrive
 	ticker := time.NewTicker(10 * time.Second)
@@ -300,12 +299,19 @@ func SpawnSequencingStage(
 		}
 	}
 
-	block, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch)
+	block, _, _, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch)
 	if err != nil {
 		return err
 	}
 
-	if err := handleStateForBlockEnding(ibs, block, l1TreeUpdate); err != nil {
+	l1BlockHash := common.Hash{}
+	ger := common.Hash{}
+	if l1TreeUpdate != nil {
+		l1BlockHash = l1TreeUpdate.ParentHash
+		ger = l1TreeUpdate.GER
+	}
+
+	if err := postBlockStateHandling(cfg, ibs, block, ger, l1BlockHash, parentBlock.Hash(), addedTransactions, addedReceipts); err != nil {
 		return err
 	}
 
@@ -345,27 +351,67 @@ func processInjectedInitialBatch(
 		ParentHash: injected.L1ParentHash,
 		Timestamp:  injected.Timestamp,
 	}
-	// todo [zkevm] need to figure out what state changes to what in an injected batch scenario
-	if err := handleStateForNewBlockStarting(true, 0, injected.Timestamp, fakeL1TreeUpdate, ibs, tx); err != nil {
+
+	parentRoot := parentBlock.Root()
+	if err := handleStateForNewBlockStarting(cfg.chainConfig, 1, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, ibs); err != nil {
 		return err
 	}
+
 	txn, receipt, err := handleInjectedBatch(cfg, tx, ibs, injected, header, parentBlock)
 	if err != nil {
 		return err
 	}
 	txns := types.Transactions{*txn}
 	receipts := types.Receipts{receipt}
-	block, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, injectedBatchNumber)
+	finalBlock, _, finalReceipts, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, injectedBatchNumber)
 	if err != nil {
 		return err
 	}
-	if err := handleStateForBlockEnding(ibs, block, fakeL1TreeUpdate); err != nil {
+
+	if err := postBlockStateHandling(cfg, ibs, finalBlock, injected.LastGlobalExitRoot, injected.L1ParentHash, parentBlock.Hash(), txns, finalReceipts); err != nil {
 		return err
 	}
+
 	if err := updateSequencerProgress(tx, injectedBatchBlockNumber, injectedBatchNumber, 0); err != nil {
 		return err
 	}
-	// force us to move on to the next stages
+
+	return nil
+}
+
+func postBlockStateHandling(
+	cfg SequenceBlockCfg,
+	ibs *state.IntraBlockState,
+	block *types.Block,
+	ger common.Hash,
+	l1BlockHash common.Hash,
+	parentHash common.Hash,
+	transactions types.Transactions,
+	receipts []*types.Receipt,
+) error {
+	infoTree := blockinfo.NewBlockInfoTree()
+	coinbase := block.Coinbase()
+	if err := infoTree.InitBlockHeader(&parentHash, &coinbase, block.NumberU64(), block.GasLimit(), block.Time(), &ger, &l1BlockHash); err != nil {
+		return err
+	}
+	var logIndex int64 = 0
+	for i := 0; i < len(transactions); i++ {
+		receipt := receipts[i]
+		// todo: how to set the effective gas percentage as a the sequencer
+		_, err := infoTree.SetBlockTx(i, receipt, logIndex, receipt.CumulativeGasUsed, 0)
+		if err != nil {
+			return err
+		}
+		logIndex += int64(len(receipt.Logs))
+	}
+
+	root, err := infoTree.SetBlockGasUsed(block.GasUsed())
+	if err != nil {
+		return err
+	}
+
+	rootHash := common.BigToHash(root)
+	ibs.PostExecuteStateSet(cfg.chainConfig, block.NumberU64(), &rootHash)
 	return nil
 }
 
@@ -404,7 +450,7 @@ func finaliseBlock(
 	transactions []types.Transaction,
 	receipts types.Receipts,
 	thisBatch uint64,
-) (*types.Block, error) {
+) (*types.Block, []types.Transaction, []*types.Receipt, error) {
 
 	stateWriter := state.NewPlainStateWriter(tx, tx, newHeader.Number.Uint64())
 	//stateWriter := state.NewPlainStateWriter(batch, tx, block.NumberU64())
@@ -434,7 +480,7 @@ func finaliseBlock(
 		excessDataGas,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	finalHeader := finalBlock.Header()
@@ -445,67 +491,44 @@ func finaliseBlock(
 	rawdb.WriteHeader(tx, finalHeader)
 	err = rawdb.WriteCanonicalHash(tx, finalHeader.Hash(), newNum.Uint64())
 	if err != nil {
-		return nil, fmt.Errorf("failed to write header: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to write header: %v", err)
 	}
 
 	erigonDB := erigon_db.NewErigonDb(tx)
 	err = erigonDB.WriteBody(newNum, finalHeader.Hash(), finalTransactions)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write body: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to write body: %v", err)
 	}
 
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(tx, finalBlock)
 
 	if err = rawdb.WriteReceipts(tx, newNum.Uint64(), finalReceipts); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	// now process the senders to avoid a stage by itself
 	if err := addSenders(cfg, newNum, finalTransactions, tx, finalHeader); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	// now add in the zk batch to block references
 	if err := hermezDb.WriteBlockBatch(newNum.Uint64(), thisBatch); err != nil {
-		return nil, fmt.Errorf("write block batch error: %v", err)
+		return nil, nil, nil, fmt.Errorf("write block batch error: %v", err)
 	}
 
-	return finalBlock, nil
+	return finalBlock, finalTransactions, finalReceipts, nil
 }
 
 func handleStateForNewBlockStarting(
-	injectedBatch bool,
-	lastBlockNumber uint64,
-	newBlockTimestamp uint64,
+	chainConfig *chain.Config,
+	blockNumber uint64,
+	timestamp uint64,
+	stateRoot *common.Hash,
 	l1info *zktypes.L1InfoTreeUpdate,
 	ibs *state.IntraBlockState,
-	tx kv.Tx,
 ) error {
-	contractTimestamp := ibs.ScalableGetTimestamp()
-	if !injectedBatch {
-		if contractTimestamp == 0 {
-			return fmt.Errorf("expected a timestamp to be present in the scalable contract")
-		}
-		// todo: [zkevm] how do we perform this check as it varies per block
-		// todo: [zkevm] rejected batches still need proving so not sure how to handle this one here
-		//if newBlockTimestamp >= 1_000_000 {
-		//	return fmt.Errorf("delta timestamp for new block is too high")
-		//}
-	}
-
-	// only write the timestamp if it is greater than the current contract timestamp
-	if newBlockTimestamp > contractTimestamp {
-		ibs.ScalableSetTimestamp(newBlockTimestamp)
-	}
-
-	// now we need to write the last (block number -> state root pair) to the scalable contract
-	if err := ibs.ScalableSetBlockNumberToHash(lastBlockNumber, tx); err != nil {
-		return err
-	}
-
-	// now update the latest block number in the scalable contract ahead of time
-	ibs.ScalableSetBlockHeight(lastBlockNumber + 1)
+	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
 
 	// handle writing to the ger manager contract
 	if l1info != nil {
@@ -520,34 +543,41 @@ func handleStateForNewBlockStarting(
 	return nil
 }
 
-func handleStateForBlockEnding(ibs *state.IntraBlockState, block *types.Block, l1TreeUpdate *zktypes.L1InfoTreeUpdate) error {
-	smt := smt2.NewSMT(nil)
-
-	ger := common.Hash{}
-	l1Hash := common.Hash{}
+func generateBlockInfoRoot(block *types.Block, l1TreeUpdate *zktypes.L1InfoTreeUpdate) (*common.Hash, error) {
+	ger := &common.Hash{}
+	l1Hash := &common.Hash{}
 
 	if l1TreeUpdate != nil {
-		ger = l1TreeUpdate.GER
-		l1Hash = l1TreeUpdate.ParentHash
+		ger = &l1TreeUpdate.GER
+		l1Hash = &l1TreeUpdate.ParentHash
 	}
 
-	root, err := blockinfo.BuildBlockInfoTree(
-		smt,
-		block.Hash().Big(),
-		new(big.Int).SetBytes(block.Coinbase().Bytes()),
-		block.Number(),
-		new(big.Int).SetUint64(block.GasLimit()),
-		new(big.Int).SetUint64(block.Time()),
-		new(big.Int).SetBytes(ger.Bytes()),
-		new(big.Int).SetBytes(l1Hash.Bytes()),
+	parentHash := block.ParentHash()
+	coinbase := block.Coinbase()
+
+	infoTree := blockinfo.NewBlockInfoTree()
+	err := infoTree.InitBlockHeader(
+		&parentHash,
+		&coinbase,
+		block.NumberU64(),
+		block.GasLimit(),
+		block.Time(),
+		ger,
+		l1Hash,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	ibs.ScalableWriteLatestBlockInfoRoot(root)
+	root, err := infoTree.SetBlockGasUsed(block.GasUsed())
 
-	return nil
+	if err != nil {
+		return nil, err
+	}
+
+	hash := common.BigToHash(root)
+
+	return &hash, nil
 }
 
 func addSenders(

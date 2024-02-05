@@ -84,9 +84,11 @@ Loop:
 		case l := <-logChan:
 			switch l.Topics[0] {
 			case contracts.UpdateL1InfoTreeTopic:
-				if err := handleL1InfoTreeUpdate(cfg, hermezDb, l, latestUpdate, found); err != nil {
+				latestUpdate, err = handleL1InfoTreeUpdate(cfg, hermezDb, l, latestUpdate, found)
+				if err != nil {
 					return err
 				}
+				found = true
 			case contracts.InitialSequenceBatchesTopic:
 				if err := handleInitialSequenceBatches(cfg, hermezDb, l); err != nil {
 					return err
@@ -125,10 +127,10 @@ func handleL1InfoTreeUpdate(
 	l ethTypes.Log,
 	latestUpdate *types.L1InfoTreeUpdate,
 	found bool,
-) error {
+) (*types.L1InfoTreeUpdate, error) {
 	if len(l.Topics) != 3 {
 		log.Warn("Received log for info tree that did not have 3 topics")
-		return nil
+		return nil, nil
 	}
 	mainnetExitRoot := l.Topics[1]
 	rollupExitRoot := l.Topics[2]
@@ -143,7 +145,6 @@ func handleL1InfoTreeUpdate(
 	if !found {
 		// starting from a fresh db here, so we need to create index 0
 		update.Index = 0
-		found = true
 	} else {
 		// increment the index from the previous entry
 		update.Index = latestUpdate.Index + 1
@@ -153,17 +154,15 @@ func handleL1InfoTreeUpdate(
 	// to this event
 	block, err := cfg.syncer.GetBlock(l.BlockNumber)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	update.ParentHash = block.ParentHash()
 	update.Timestamp = block.Time()
 
-	latestUpdate = update
-
 	if err = hermezDb.WriteL1InfoTreeUpdate(update); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return update, nil
 }
 
 const (
