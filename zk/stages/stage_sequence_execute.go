@@ -543,43 +543,6 @@ func handleStateForNewBlockStarting(
 	return nil
 }
 
-func generateBlockInfoRoot(block *types.Block, l1TreeUpdate *zktypes.L1InfoTreeUpdate) (*common.Hash, error) {
-	ger := &common.Hash{}
-	l1Hash := &common.Hash{}
-
-	if l1TreeUpdate != nil {
-		ger = &l1TreeUpdate.GER
-		l1Hash = &l1TreeUpdate.ParentHash
-	}
-
-	parentHash := block.ParentHash()
-	coinbase := block.Coinbase()
-
-	infoTree := blockinfo.NewBlockInfoTree()
-	err := infoTree.InitBlockHeader(
-		&parentHash,
-		&coinbase,
-		block.NumberU64(),
-		block.GasLimit(),
-		block.Time(),
-		ger,
-		l1Hash,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	root, err := infoTree.SetBlockGasUsed(block.GasUsed())
-
-	if err != nil {
-		return nil, err
-	}
-
-	hash := common.BigToHash(root)
-
-	return &hash, nil
-}
-
 func addSenders(
 	cfg SequenceBlockCfg,
 	newNum *big.Int,
