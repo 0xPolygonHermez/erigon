@@ -5,6 +5,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"math"
+	"math/big"
 )
 
 var ErrZkCounterOverspend = errors.New("virtual zk counters overspend")
@@ -411,6 +412,64 @@ func (cc *CounterCollector) mLoad32() {
 func (cc *CounterCollector) maskAddress() {
 	cc.Deduct(S, 6)
 	cc.Deduct(B, 1)
+}
+
+func (cc *CounterCollector) processChangeL2Block(smtLevels int) {
+	cc.Deduct(S, 70)
+	cc.Deduct(B, 4+4)
+	cc.Deduct(P, 6*smtLevels)
+	cc.Deduct(K, 2)
+	cc.consolidateBlock()
+	cc.setupNewBlockInfoTree()
+	cc.verifyMerkleProof()
+}
+
+func (cc *CounterCollector) setupNewBlockInfoTree() {
+	cc.Deduct(S, 40)
+	cc.Deduct(B, 7)
+	cc.Deduct(P, 6*MCPL)
+}
+
+func (cc *CounterCollector) verifyMerkleProof() {
+	cc.Deduct(S, 250)
+	cc.Deduct(K, 33)
+}
+
+func (cc *CounterCollector) decodeChangeL2BlockTx() {
+	cc.Deduct(S, 20)
+	cc.multiCall(cc.addBatchHashData, 3)
+}
+
+func (cc *CounterCollector) ecAdd() {
+	cc.Deduct(S, 323)
+	cc.Deduct(B, 33)
+	cc.Deduct(A, 40)
+}
+
+func (cc *CounterCollector) ecMul() {
+	cc.Deduct(S, 162890)
+	cc.Deduct(B, 16395)
+	cc.Deduct(A, 19161)
+}
+
+func (cc *CounterCollector) ecPairing(inputsCount int) {
+	cc.Deduct(S, 16+inputsCount*184017+171253)
+	cc.Deduct(B, inputsCount*3986+650)
+	cc.Deduct(A, inputsCount*13694+15411)
+}
+
+func (cc *CounterCollector) modExp(bLen, mLen, eLen int, base, exponent, modulus *big.Int) {
+	steps, binary, arith := expectedModExpCounters(
+		int(math.Ceil(float64(bLen)/32)),
+		int(math.Ceil(float64(mLen)/32)),
+		int(math.Ceil(float64(eLen)/32)),
+		base,
+		exponent,
+		modulus,
+	)
+	cc.Deduct(S, int(steps.Int64()))
+	cc.Deduct(B, int(binary.Int64()))
+	cc.Deduct(A, int(arith.Int64()))
 }
 
 func (cc *CounterCollector) multiCall(call func(), times int) {
