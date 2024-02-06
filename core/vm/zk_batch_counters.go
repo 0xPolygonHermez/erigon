@@ -124,6 +124,10 @@ func (bcc *BatchCounterCollector) CombineCollectors() Counters {
 			combined[k].used += v.used
 			combined[k].remaining -= v.used
 		}
+		for k, v := range tx.processingCounters.counters {
+			combined[k].used += v.used
+			combined[k].remaining -= v.used
+		}
 	}
 
 	return combined

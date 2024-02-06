@@ -1,9 +1,7 @@
 package vm
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"math"
@@ -39,104 +37,6 @@ var (
 	D CounterKey = "D"
 	P CounterKey = "P"
 )
-
-type TransactionCounter struct {
-	transaction       types.Transaction
-	rlpCounters       *CounterCollector
-	executionCounters *CounterCollector
-}
-
-func NewTransactionCounter(transaction types.Transaction) *TransactionCounter {
-	tc := &TransactionCounter{
-		transaction:       transaction,
-		rlpCounters:       NewCounterCollector(),
-		executionCounters: NewCounterCollector(),
-	}
-
-	return tc
-}
-
-func (tc *TransactionCounter) CalculateRlp() error {
-	var rlpBytes []byte
-	buffer := bytes.NewBuffer(rlpBytes)
-	err := tc.transaction.EncodeRLP(buffer)
-	if err != nil {
-		return err
-	}
-
-	gasLimitHex := fmt.Sprintf("%x", tc.transaction.GetGas())
-	gasPriceHex := fmt.Sprintf("%x", tc.transaction.GetPrice().Uint64())
-	valueHex := fmt.Sprintf("%x", tc.transaction.GetValue().Uint64())
-	chainIdHex := fmt.Sprintf("%x", tc.transaction.GetChainID().Uint64())
-	nonceHex := fmt.Sprintf("%x", tc.transaction.GetNonce())
-
-	txRlpLength := len(rlpBytes)
-	txDataLen := len(rlpBytes)
-	gasLimitLength := len(gasLimitHex) / 2
-	gasPriceLength := len(gasPriceHex) / 2
-	valueLength := len(valueHex) / 2
-	chainIdLength := len(chainIdHex) / 2
-	nonceLength := len(nonceHex) / 2
-
-	collector := NewCounterCollector()
-	collector.Deduct(S, 250)
-	collector.Deduct(B, 1+1)
-	collector.Deduct(K, int(math.Ceil(float64(txRlpLength+1)/136)))
-	collector.Deduct(P, int(math.Ceil(float64(txRlpLength+1)/56)))
-	collector.Deduct(D, int(math.Ceil(float64(txRlpLength+1)/56)))
-	collector.multiCall(collector.addBatchHashData, 21)
-	/**
-	from the original JS implementation:
-
-	 * We need to calculate the counters consumption of `_checkNonLeadingZeros`, which calls `_getLenBytes`
-	 * _checkNonLeadingZeros is called 7 times
-	 * The worst case scenario each time `_checkNonLeadingZeros`+ `_getLenBytes` is called is the following:
-	 * readList -> approx 300000 bytes -> the size can be expressed with 3 bytes -> len(hex(300000)) = 3 bytes
-	 * gasPrice -> 256 bits -> 32 bytes
-	 * gasLimit -> 64 bits -> 8 bytes
-	 * value -> 256 bits -> 32 bytes
-	 * dataLen -> 300000 bytes -> xxxx bytes
-	 * chainId -> 64 bits -> 8 bytes
-	 * nonce -> 64 bits -> 8 bytes
-	*/
-	collector.Deduct(S, 6*7) // Steps to call _checkNonLeadingZeros 7 times
-
-	// inside a little forEach in the JS implementation
-	collector.getLenBytes(3)
-	collector.getLenBytes(gasPriceLength)
-	collector.getLenBytes(gasLimitLength)
-	collector.getLenBytes(valueLength)
-	collector.getLenBytes(txDataLen)
-	collector.getLenBytes(chainIdLength)
-	collector.getLenBytes(nonceLength)
-
-	collector.divArith()
-	collector.multiCall(collector.addHashTx, 9+int(math.Floor(float64(txDataLen)/32)))
-	collector.multiCall(collector.addL2HashTx, 8+int(math.Floor(float64(txDataLen)/32)))
-	collector.multiCall(collector.addBatchHashByteByByte, txDataLen)
-	collector.SHLarith()
-
-	v, r, s := tc.transaction.RawSignatureValues()
-	err = collector.ecRecover(v, r, s, false)
-	if err != nil {
-		return err
-	}
-
-	tc.rlpCounters = collector
-
-	return nil
-}
-
-func (tc *TransactionCounter) DecodeChangeL2Block() {
-	collector := NewCounterCollector()
-	collector.Deduct(S, 20)
-	collector.multiCall(collector.addBatchHashData, 3)
-	tc.rlpCounters = collector
-}
-
-func (tc *TransactionCounter) ExecutionCounters() *CounterCollector {
-	return tc.executionCounters
-}
 
 type CounterManager struct {
 	currentCounters    Counters
@@ -259,7 +159,7 @@ func (cc *CounterCollector) mLoadX() {
 }
 
 func (cc *CounterCollector) offsetUtil() {
-	cc.Deduct(S, 12)
+	cc.Deduct(S, 10)
 	cc.Deduct(B, 1)
 }
 
@@ -329,10 +229,10 @@ func (cc *CounterCollector) ecRecover(v, r, s *uint256.Int, isPrecompiled bool) 
 	}
 
 	// handle a dodgy signature
-	if r.Uint64() == 0 || fnecMinusOne.Lt(r) || s.Uint64() == 0 || upperLimit.Lt(s) || v.Uint64() != 27 && v.Uint64() != 28 {
+	if r.Uint64() == 0 || fnecMinusOne.Lt(r) || s.Uint64() == 0 || upperLimit.Lt(s) || (v.Uint64() != 27 && v.Uint64() != 28) {
 		cc.Deduct(S, 45)
-		cc.Deduct(B, 8)
 		cc.Deduct(A, 2)
+		cc.Deduct(B, 8)
 		return nil
 	}
 
@@ -363,6 +263,7 @@ func (cc *CounterCollector) ecRecover(v, r, s *uint256.Int, isPrecompiled bool) 
 		r2 = fpec.Clone().Neg(r)
 	}
 
+	// in js this is converting a boolean to a number and checking for 0 on the less-than check
 	if r2.Lt(fpec) {
 		// do not have a root
 		cc.Deduct(S, 4527)
@@ -405,6 +306,111 @@ func (cc *CounterCollector) invFnEc() {
 	cc.Deduct(S, 12)
 	cc.Deduct(B, 2)
 	cc.Deduct(A, 2)
+}
+
+func (cc *CounterCollector) isColdAddress() {
+	cc.Deduct(S, 100)
+	cc.Deduct(B, 2+1)
+	cc.Deduct(P, 2*MCPL)
+}
+
+func (cc *CounterCollector) addArith() {
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+}
+
+func (cc *CounterCollector) subArith() {
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+}
+
+func (cc *CounterCollector) mulArith() {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 1)
+	cc.Deduct(A, 1)
+}
+
+func (cc *CounterCollector) fillBlockInfoTreeWithTxReceipt(smtLevels int) {
+	cc.Deduct(S, 20)
+	cc.Deduct(P, 3*smtLevels)
+}
+
+func (cc *CounterCollector) processContractCall(smtLevels int, bytecodeLength int, isDeploy bool, isCreate bool, isCreate2 bool) {
+	cc.Deduct(S, 40)
+	cc.Deduct(B, 4+1)
+	cc.Deduct(P, 1)
+	cc.Deduct(D, 1)
+	cc.Deduct(P, 2*smtLevels)
+	cc.moveBalances(smtLevels)
+
+	if isDeploy || isCreate || isCreate2 {
+		cc.Deduct(S, 15)
+		cc.Deduct(B, 2)
+		cc.Deduct(P, 2*smtLevels)
+		cc.checkBytecodeStartsEF()
+		cc.hashPoseidonLinearFromMemory(bytecodeLength)
+		if isCreate {
+			cc.Deduct(S, 40)
+			cc.Deduct(K, 1)
+		} else if isCreate2 {
+			cc.Deduct(S, 40)
+			cc.divArith()
+			cc.Deduct(K, int(math.Ceil(float64(bytecodeLength+1)/136)+1))
+			cc.multiCall(cc.mLoad32, int(math.Floor(float64(bytecodeLength)/32)))
+			cc.mLoadX()
+			cc.SHRarith()
+			cc.Deduct(K, 1)
+			cc.maskAddress()
+		}
+	} else {
+		cc.Deduct(P, int(math.Ceil(float64(bytecodeLength+1)/56)))
+		cc.Deduct(D, int(math.Ceil(float64(bytecodeLength+1)/56)))
+		if bytecodeLength >= 56 {
+			cc.divArith()
+		}
+	}
+}
+
+func (cc *CounterCollector) moveBalances(smtLevels int) {
+	cc.Deduct(S, 25)
+	cc.Deduct(B, 3+2)
+	cc.Deduct(P, 4*smtLevels)
+}
+
+func (cc *CounterCollector) checkBytecodeStartsEF() {
+	cc.Deduct(S, 20)
+	cc.mLoadX()
+	cc.SHRarith()
+}
+
+func (cc *CounterCollector) hashPoseidonLinearFromMemory(memSize int) {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 1+1)
+	cc.Deduct(P, int(math.Ceil(float64(memSize+1))/56))
+	cc.Deduct(D, int(math.Ceil(float64(memSize+1))/56))
+	cc.divArith()
+	cc.multiCall(cc.hashPoseidonLinearFromMemoryLoop, int(math.Floor(float64(memSize)/32)))
+	cc.mLoadX()
+	cc.SHRarith()
+}
+
+func (cc *CounterCollector) hashPoseidonLinearFromMemoryLoop() {
+	cc.Deduct(S, 8)
+	cc.mLoad32()
+}
+
+func (cc *CounterCollector) mLoad32() {
+	cc.Deduct(S, 40)
+	cc.Deduct(B, 2)
+	cc.Deduct(M, 1)
+	cc.offsetUtil()
+	cc.SHRarith()
+	cc.SHLarith()
+}
+
+func (cc *CounterCollector) maskAddress() {
+	cc.Deduct(S, 6)
+	cc.Deduct(B, 1)
 }
 
 func (cc *CounterCollector) multiCall(call func(), times int) {
