@@ -154,6 +154,11 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		panic(fmt.Errorf("state root mismatch (checking state and RPC): %w, %s", hashErr, root.Hex()))
 	}
 
+	err = assertTraverse(ctx, smt)
+	if err != nil {
+		panic(err)
+	}
+
 	if cfg.checkRoot && root != expectedRootHash {
 		log.Error(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
 		if cfg.badBlockHalt {
@@ -413,46 +418,46 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 		}
 	}
 
-	// total := len(accChanges) + len(codeChanges) + len(storageChanges)
+	total := len(accChanges) + len(codeChanges) + len(storageChanges)
 
-	// progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] Progress inserting values", logPrefix), uint64(total))
+	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] Progress inserting values", logPrefix), uint64(total))
 
 	// update the tree
-	// for addr, acc := range accChanges {
-	// 	if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
-	// 		stopProgressPrinter()
-	// 		return trie.EmptyRoot, err
-	// 	}
-	// 	progressChan <- 1
-	// }
-
-	// for addr, code := range codeChanges {
-	// 	if err := dbSmt.SetContractBytecode(addr.String(), code); err != nil {
-	// 		stopProgressPrinter()
-	// 		return trie.EmptyRoot, err
-	// 	}
-	// 	progressChan <- 1
-	// }
-
-	// for addr, storage := range storageChanges {
-	// 	if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
-	// 		stopProgressPrinter()
-	// 		return trie.EmptyRoot, err
-	// 	}
-	// 	progressChan <- 1
-	// }
-
-	if _, _, err := dbSmt.SetStorage(logPrefix, accChanges, codeChanges, storageChanges); err != nil {
-		// stopProgressPrinter()
-		return trie.EmptyRoot, err
+	for addr, acc := range accChanges {
+		if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
+			stopProgressPrinter()
+			return trie.EmptyRoot, err
+		}
+		progressChan <- 1
 	}
+
+	for addr, code := range codeChanges {
+		if err := dbSmt.SetContractBytecode(addr.String(), code); err != nil {
+			stopProgressPrinter()
+			return trie.EmptyRoot, err
+		}
+		progressChan <- 1
+	}
+
+	for addr, storage := range storageChanges {
+		if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
+			stopProgressPrinter()
+			return trie.EmptyRoot, err
+		}
+		progressChan <- 1
+	}
+
+	// if _, _, err := dbSmt.SetStorage(logPrefix, accChanges, codeChanges, storageChanges); err != nil {
+	// 	// stopProgressPrinter()
+	// 	return trie.EmptyRoot, err
+	// }
 	// for _, a := range smt.KeyPointers {
 	// 	fmt.Printf("%d %d %d %d\n", a[0], a[1], a[2], a[3])
 	// }
 	// for _, a := range smt.ValuePointers {
 	// 	fmt.Println(a.ToUintArray())
 	// }
-	// stopProgressPrinter()
+	stopProgressPrinter()
 
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes finished. Commiting batch", logPrefix))
 
@@ -905,4 +910,59 @@ func stateRootByTxNo(txNo *big.Int, l2RpcUrl string) (*libcommon.Hash, error) {
 	h := libcommon.HexToHash(stateRoot)
 
 	return &h, nil
+}
+
+func assertTraverse(ctx context.Context, s *smt.SMT) error {
+	smtBatchRootHash, _ := s.Db.GetLastRoot()
+
+	if smtBatchRootHash == nil {
+		return nil
+	}
+
+	action := func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) (bool, error) {
+		if v.IsFinalNode() {
+			actualK, err := s.Db.GetHashKey(k)
+			if err != nil {
+				return false, err
+			}
+
+			keySource, err := s.Db.GetKeySource(actualK)
+			if err != nil {
+				return false, err
+			}
+
+			t, _, _, err := utils.DecodeKeySource(keySource)
+			if err != nil {
+				return false, err
+			}
+
+			valHash := v.Get4to8()
+			v, err := s.Db.Get(*valHash)
+			if err != nil {
+				return false, err
+			}
+
+			if v[0] == nil {
+				return false, fmt.Errorf("value is missing in the db")
+			}
+
+			vInBytes := utils.ArrayBigToScalar(utils.BigIntArrayFromNodeValue8(v.GetNodeValue8())).Bytes()
+			if vInBytes == nil {
+				return false, fmt.Errorf("error in converting to bytes")
+			}
+
+			if t == utils.SC_CODE {
+				_, err := s.Db.GetCode(vInBytes)
+
+				if err != nil {
+					return false, err
+				}
+			}
+
+			return false, nil
+		}
+
+		return true, nil
+	}
+	return s.Traverse(ctx, smtBatchRootHash, action)
 }

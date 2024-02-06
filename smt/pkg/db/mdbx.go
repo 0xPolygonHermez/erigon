@@ -153,6 +153,16 @@ func (m *EriDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	return m.tx.Put(TableSmt, []byte(k), []byte(v))
 }
 
+func (m *EriDb) Delete(key string) error {
+	return m.tx.Delete(TableSmt, []byte(key))
+}
+
+func (m *EriDb) DeleteByNodeKey(key utils.NodeKey) error {
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+	return m.tx.Delete(TableSmt, []byte(k))
+}
+
 func (m *EriDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
@@ -257,16 +267,6 @@ func (m *EriDb) GetCode(codeHash []byte) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-func (m *EriDb) Delete(key string) error {
-	return m.tx.Delete(TableSmt, []byte(key))
-}
-
-func (m *EriDb) DeleteByNodeKey(key utils.NodeKey) error {
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
-	return m.tx.Delete(TableSmt, []byte(k))
 }
 
 func (m *EriDb) PrintDb() {

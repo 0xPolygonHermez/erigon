@@ -90,16 +90,18 @@ func (s *SMT) InsertBatch(logPrefix string, nodeKeys []*utils.NodeKey, nodeValue
 				if insertingPointerToSmtBatchNode, err = (*insertingPointerToSmtBatchNode).createALeafInEmptyDirection(insertingNodePath, insertingNodePathLevel, insertingNodeKey); err != nil {
 					return nil, err
 				}
-				// there is no need to update insertingRemainingKey because it is not needed anymore therefore its value is incorrect if used after this line
+				// EXPLAIN THE LINE BELOW: there is no need to update insertingRemainingKey because it is not needed anymore therefore its value is incorrect if used after this line
 				// insertingRemainingKey = *((*insertingPointerToSmtBatchNode).nodeLeftKeyOrRemainingKey)
 				insertingNodePathLevel++
 			}
 
-			updateNodeHashesForDelete(nodeHashesForDelete, []*utils.NodeKey{(*insertingPointerToSmtBatchNode).nodeRightHashOrValueHash})
+			// EXPLAIN THE LINE BELOW: cannot delete the old values because it might be used as a value of an another node
+			// updateNodeHashesForDelete(nodeHashesForDelete, []*utils.NodeKey{(*insertingPointerToSmtBatchNode).nodeRightHashOrValueHash})
 			(*insertingPointerToSmtBatchNode).nodeRightHashOrValueHash = (*utils.NodeKey)(insertingNodeValueHash)
 		} else {
 			if (*insertingPointerToSmtBatchNode).nodeLeftHashOrRemainingKey.IsEqualTo(insertingRemainingKey) {
-				updateNodeHashesForDelete(nodeHashesForDelete, []*utils.NodeKey{(*insertingPointerToSmtBatchNode).nodeRightHashOrValueHash})
+				// EXPLAIN THE LINE BELOW: cannot delete the old values because it might be used as a value of an another node
+				// updateNodeHashesForDelete(nodeHashesForDelete, []*utils.NodeKey{(*insertingPointerToSmtBatchNode).nodeRightHashOrValueHash})
 
 				parentAfterDelete := &((*insertingPointerToSmtBatchNode).parentNode)
 				*insertingPointerToSmtBatchNode = nil
@@ -108,7 +110,7 @@ func (s *SMT) InsertBatch(logPrefix string, nodeKeys []*utils.NodeKey, nodeValue
 					(*insertingPointerToSmtBatchNode).updateHashesAfterDelete()
 				}
 				insertingNodePathLevel--
-				// there is no need to update insertingRemainingKey because it is not needed anymore therefore its value is incorrect if used after this line
+				// EXPLAIN THE LINE BELOW: there is no need to update insertingRemainingKey because it is not needed anymore therefore its value is incorrect if used after this line
 				// insertingRemainingKey = utils.RemoveKeyBits(*insertingNodeKey, insertingNodePathLevel)
 			}
 

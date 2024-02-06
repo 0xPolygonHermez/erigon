@@ -303,7 +303,7 @@ Loop:
 			Metrics[stages.Execution].Set(blockNum)
 		}
 
-		if blockNum%1000 == 0 {
+		if blockNum%5000 == 0 {
 			break
 		}
 	}
