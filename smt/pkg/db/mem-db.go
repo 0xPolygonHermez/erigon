@@ -203,6 +203,8 @@ func (m *MemDb) GetCode(codeHash []byte) ([]byte, error) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
 
+	codeHash = utils.ResizeHashTo32BytesByPrefixingWithZeroes(codeHash)
+
 	s, ok := m.DbCode[fmt.Sprintf("0x%x", codeHash)]
 
 	if !ok {
