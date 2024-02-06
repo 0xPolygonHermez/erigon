@@ -161,12 +161,6 @@ func ExecuteBlockEphemerally(
 				receipts = append(receipts, receipt)
 			}
 		}
-
-		// [zkevm] - set smt root hash in magic account
-		err = ibs.ScalableSetSmtRootHash(roHermezDb)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	receiptSha := types.DeriveSha(receipts)
@@ -382,6 +376,7 @@ func SysCallContract(contract libcommon.Address, data []byte, chainConfig chain.
 		msg.Gas(),
 		msg.Value(),
 		false,
+		0,
 	)
 	if isBor && err != nil {
 		return nil, nil

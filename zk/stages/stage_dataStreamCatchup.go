@@ -44,6 +44,7 @@ func SpawnStageDataStreamCatchup(
 
 	if stream == nil {
 		// skip the stage if there is no streamer provided
+		log.Info(fmt.Sprintf("[%s]: no streamer provided, skipping stage", logPrefix))
 		return nil
 	}
 
@@ -77,7 +78,7 @@ func SpawnStageDataStreamCatchup(
 			return err
 		}
 
-		ger, err := reader.GetBlockGlobalExitRoot(genesis.NumberU64())
+		ger, _, err := reader.GetBlockGlobalExitRoot(genesis.NumberU64())
 		if err != nil {
 			return err
 		}
@@ -176,7 +177,6 @@ func SpawnStageDataStreamCatchup(
 
 	// Start on the current batch number + 1
 	currentBatchNumber++
-	target := highestSeenBatchNumber - currentBatchNumber
 
 	var currentGER = common.Hash{}
 	logTicker := time.NewTicker(10 * time.Second)
@@ -195,7 +195,7 @@ LOOP:
 		case <-logTicker.C:
 			log.Info(fmt.Sprintf("[%s]: progress", logPrefix),
 				"batch", currentBatchNumber,
-				"target", highestSeenBatchNumber, "%", math.Round(float64(total)/float64(target)*100),
+				"target", highestSeenBatchNumber, "%", math.Round(float64(currentBatchNumber)/float64(highestSeenBatchNumber)*100),
 				"currentBlock", currentBlock)
 		default:
 		}
@@ -239,7 +239,7 @@ LOOP:
 				return err
 			}
 
-			ger, err := reader.GetBlockGlobalExitRoot(blockNumber)
+			ger, _, err := reader.GetBlockGlobalExitRoot(blockNumber)
 			if err != nil {
 				return err
 			}
@@ -306,8 +306,8 @@ LOOP:
 	}
 
 	log.Info(fmt.Sprintf("[%s]: stage complete", logPrefix),
-		"batch", currentBatchNumber,
-		"target", highestSeenBatchNumber, "%", math.Round(float64(total)/float64(target)*100),
+		"batch", currentBatchNumber-1,
+		"target", highestSeenBatchNumber, "%", math.Round(float64(currentBatchNumber-1)/float64(highestSeenBatchNumber)*100),
 		"currentBlock", currentBlock)
 
 	return err

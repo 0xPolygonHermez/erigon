@@ -2,9 +2,10 @@ package core
 
 import (
 	"math/big"
-	"github.com/ledgerwatch/erigon/params"
-	"github.com/ledgerwatch/erigon/core/types"
+
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 )
@@ -36,6 +37,16 @@ func HermezBlueberryGenesisBlock() *types.Genesis {
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
 		Alloc:      readPrealloc("allocs/hermez-blueberry.json"),
+	}
+}
+
+func HermezEtrogGenesisBlock() *types.Genesis {
+	return &types.Genesis{
+		Config:     params.HermezEtrogChainConfig,
+		Timestamp:  1703260380,
+		GasLimit:   0x0,
+		Difficulty: big.NewInt(0x0),
+		Alloc:      readPrealloc("allocs/hermez-etrog.json"),
 	}
 }
 
@@ -107,7 +118,7 @@ func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr lib
 
 	// store the account storage
 	if len(sm) > 0 {
-		r, err = s.SetContractStorage(addr.String(), sm)
+		r, err = s.SetContractStorage(addr.String(), sm, nil)
 	}
 	return r, nil
 }

@@ -111,10 +111,12 @@ var PrecompiledContractsBLS = map[libcommon.Address]PrecompiledContract{
 }
 
 var (
-	PrecompiledAddressesBerlin    []libcommon.Address
-	PrecompiledAddressesIstanbul  []libcommon.Address
-	PrecompiledAddressesByzantium []libcommon.Address
-	PrecompiledAddressesHomestead []libcommon.Address
+	PrecompiledAddressesBerlin      []libcommon.Address
+	PrecompiledAddressesIstanbul    []libcommon.Address
+	PrecompiledAddressesByzantium   []libcommon.Address
+	PrecompiledAddressesHomestead   []libcommon.Address
+	PrecompiledAddressesEtrog       []libcommon.Address
+	PrecompiledAddressesDragonfruit []libcommon.Address
 )
 
 func init() {
@@ -130,11 +132,21 @@ func init() {
 	for k := range PrecompiledContractsBerlin {
 		PrecompiledAddressesBerlin = append(PrecompiledAddressesBerlin, k)
 	}
+	for k := range PrecompiledContractsForkID5Dragonfruit {
+		PrecompiledAddressesDragonfruit = append(PrecompiledAddressesDragonfruit, k)
+	}
+	for k := range PrecompiledContractForkID7Etrog {
+		PrecompiledAddressesEtrog = append(PrecompiledAddressesEtrog, k)
+	}
 }
 
 // ActivePrecompiles returns the precompiles enabled with the current configuration.
 func ActivePrecompiles(rules *chain.Rules) []libcommon.Address {
 	switch {
+	case rules.IsForkID7Etrog:
+		return PrecompiledAddressesEtrog
+	case rules.IsForkID5Dragonfruit:
+		return PrecompiledAddressesDragonfruit
 	case rules.IsBerlin:
 		return PrecompiledAddressesBerlin
 	case rules.IsIstanbul:

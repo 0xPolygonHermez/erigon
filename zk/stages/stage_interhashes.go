@@ -205,7 +205,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	}
 	expectedRootHash := syncHeadHeader.Root
 
-	root, err := unwindZkSMT(s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, cfg, &expectedRootHash, quit)
+	root, err := unwindZkSMT(s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, false, &expectedRootHash, quit)
 	if err != nil {
 		return err
 	}
@@ -418,10 +418,14 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 		}
 	}
 
-	total := len(accChanges) + len(codeChanges) + len(storageChanges)
+	storageTotal := 0
+	for _, v := range storageChanges {
+		storageTotal += len(v)
+	}
+
+	total := len(accChanges) + len(codeChanges) + storageTotal
 
 	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] Progress inserting values", logPrefix), uint64(total))
-
 	// update the tree
 	for addr, acc := range accChanges {
 		if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
@@ -440,11 +444,10 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 	}
 
 	for addr, storage := range storageChanges {
-		if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
+		if _, err := dbSmt.SetContractStorage(addr.String(), storage, progressChan); err != nil {
 			stopProgressPrinter()
 			return trie.EmptyRoot, err
 		}
-		progressChan <- 1
 	}
 
 	// if _, _, err := dbSmt.SetStorage(logPrefix, accChanges, codeChanges, storageChanges); err != nil {
@@ -477,7 +480,7 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 	return hash, nil
 }
 
-func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashesCfg, expectedRootHash *libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
+func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, expectedRootHash *libcommon.Hash, quit <-chan struct{}) (libcommon.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Unwind trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Unwind ended", logPrefix))
 
@@ -609,7 +612,7 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashe
 		}
 
 		for addr, storage := range storageChanges {
-			if _, err := dbSmt.SetContractStorage(addr.String(), storage); err != nil {
+			if _, err := dbSmt.SetContractStorage(addr.String(), storage, nil); err != nil {
 				return trie.EmptyRoot, err
 			}
 		}
@@ -623,7 +626,7 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, cfg ZkInterHashe
 		}
 	}
 
-	if err := verifyLastHash(dbSmt, expectedRootHash, cfg.checkRoot, logPrefix); err != nil {
+	if err := verifyLastHash(dbSmt, expectedRootHash, checkRoot, logPrefix); err != nil {
 		log.Error("failed to verify hash")
 		eridb.RollbackBatch()
 		return trie.EmptyRoot, err
