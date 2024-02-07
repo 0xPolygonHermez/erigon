@@ -6,6 +6,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"math"
 	"math/big"
+	"strconv"
 )
 
 var ErrZkCounterOverspend = errors.New("virtual zk counters overspend")
@@ -30,13 +31,14 @@ type Counters map[CounterKey]*Counter
 type CounterKey string
 
 var (
-	S CounterKey = "S"
-	A CounterKey = "A"
-	B CounterKey = "B"
-	M CounterKey = "M"
-	K CounterKey = "K"
-	D CounterKey = "D"
-	P CounterKey = "P"
+	S   CounterKey = "S"
+	A   CounterKey = "A"
+	B   CounterKey = "B"
+	M   CounterKey = "M"
+	K   CounterKey = "K"
+	D   CounterKey = "D"
+	P   CounterKey = "P"
+	SHA CounterKey = "SHA"
 )
 
 type CounterManager struct {
@@ -50,12 +52,18 @@ type CounterManager struct {
 }
 
 type CounterCollector struct {
-	counters Counters
+	counters  Counters
+	smtLevels int
 }
 
-func NewCounterCollector() *CounterCollector {
+func calculateSmtLevels(smtMaxLevel uint32) int {
+	return len(strconv.FormatInt(int64(math.Pow(2, float64(smtMaxLevel))+250000), 2))
+}
+
+func NewCounterCollector(smtLevels int) *CounterCollector {
 	return &CounterCollector{
-		counters: defaultCounters(),
+		counters:  defaultCounters(),
+		smtLevels: smtLevels,
 	}
 }
 
@@ -101,6 +109,11 @@ func defaultCounters() Counters {
 			name:          "poseidon",
 			initialAmount: int(math.Floor(totalSteps / 30)),
 		},
+		SHA: {
+			remaining:     int(math.Floor(totalSteps-1)/31488) * 7,
+			name:          "sha256",
+			initialAmount: int(math.Floor(totalSteps-1)/31488) * 7,
+		},
 	}
 }
 
@@ -138,16 +151,20 @@ func WrapJumpTableWithZkCounters(originalTable *JumpTable, counterCalls [256]exe
 
 func SimpleCounterOperations(cc *CounterCollector) [256]executionFunc {
 	calls := [256]executionFunc{
-		ADD: cc.counterOpAdd,
+		ADD:        cc.opAdd,
+		MUL:        cc.opMul,
+		SUB:        cc.opSub,
+		DIV:        cc.opDiv,
+		SDIV:       cc.opSDiv,
+		MOD:        cc.opMod,
+		SMOD:       cc.opSMod,
+		ADDMOD:     cc.opAddMod,
+		MULMOD:     cc.opMulMod,
+		EXP:        cc.opExp,
+		SIGNEXTEND: cc.opSignExtend,
+		BLOCKHASH:  cc.opBlockHash,
 	}
 	return calls
-}
-
-func (cc *CounterCollector) counterOpAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
-	cc.Deduct(S, 10)
-	cc.Deduct(B, 1)
-	return nil, nil
 }
 
 func (cc *CounterCollector) mLoadX() {
@@ -414,10 +431,10 @@ func (cc *CounterCollector) maskAddress() {
 	cc.Deduct(B, 1)
 }
 
-func (cc *CounterCollector) processChangeL2Block(smtLevels int) {
+func (cc *CounterCollector) processChangeL2Block() {
 	cc.Deduct(S, 70)
 	cc.Deduct(B, 4+4)
-	cc.Deduct(P, 6*smtLevels)
+	cc.Deduct(P, 6*cc.smtLevels)
 	cc.Deduct(K, 2)
 	cc.consolidateBlock()
 	cc.setupNewBlockInfoTree()
@@ -435,6 +452,51 @@ func (cc *CounterCollector) verifyMerkleProof() {
 	cc.Deduct(K, 33)
 }
 
+func (cc *CounterCollector) preEcRecover(v, r, s *uint256.Int) error {
+	cc.Deduct(S, 35)
+	cc.Deduct(B, 1)
+	cc.multiCall(cc.readFromCallDataOffset, 4)
+	if err := cc.ecRecover(v, r, s, true); err != nil {
+		return err
+	}
+	cc.mStore32()
+	cc.mStoreX()
+
+	return nil
+}
+
+func (cc *CounterCollector) preECAdd() {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 1)
+	cc.multiCall(cc.readFromCallDataOffset, 4)
+	cc.multiCall(cc.mStore32, 4)
+	cc.mStoreX()
+	cc.ecAdd()
+}
+
+func (cc *CounterCollector) readFromCallDataOffset() {
+	cc.Deduct(S, 25)
+	cc.mLoadX()
+}
+
+func (cc *CounterCollector) mStore32() {
+	cc.Deduct(S, 100)
+	cc.Deduct(B, 1)
+	cc.Deduct(M, 1)
+	cc.offsetUtil()
+	cc.multiCall(cc.SHRarith, 2)
+	cc.multiCall(cc.SHLarith, 2)
+}
+
+func (cc *CounterCollector) mStoreX() {
+	cc.Deduct(S, 100)
+	cc.Deduct(B, 1)
+	cc.Deduct(M, 1)
+	cc.offsetUtil()
+	cc.multiCall(cc.SHRarith, 2)
+	cc.multiCall(cc.SHLarith, 2)
+}
+
 func (cc *CounterCollector) decodeChangeL2BlockTx() {
 	cc.Deduct(S, 20)
 	cc.multiCall(cc.addBatchHashData, 3)
@@ -446,16 +508,53 @@ func (cc *CounterCollector) ecAdd() {
 	cc.Deduct(A, 40)
 }
 
+func (cc *CounterCollector) preECMul() {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 1)
+	cc.multiCall(cc.readFromCallDataOffset, 3)
+	cc.multiCall(cc.mStore32, 4)
+	cc.mStoreX()
+	cc.ecMul()
+}
+
 func (cc *CounterCollector) ecMul() {
 	cc.Deduct(S, 162890)
 	cc.Deduct(B, 16395)
 	cc.Deduct(A, 19161)
 }
 
+func (cc *CounterCollector) preECPairing(inputsCount int) {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 1)
+	cc.multiCall(cc.readFromCallDataOffset, 6)
+	cc.divArith()
+	cc.mStore32()
+	cc.mStoreX()
+	cc.ecPairing(inputsCount)
+}
+
 func (cc *CounterCollector) ecPairing(inputsCount int) {
 	cc.Deduct(S, 16+inputsCount*184017+171253)
 	cc.Deduct(B, inputsCount*3986+650)
 	cc.Deduct(A, inputsCount*13694+15411)
+}
+
+func (cc *CounterCollector) preModExp(callDataLength, returnDataLength, bLen, mLen, eLen int, base, exponent, modulus *big.Int) {
+	cc.Deduct(S, 100)
+	cc.Deduct(B, 20)
+	cc.multiCall(cc.readFromCallDataOffset, 4)
+	cc.SHRarith()
+	cc.multiCall(cc.addArith, 2)
+	cc.multiCall(cc.divArith, 3)
+	cc.multiCall(cc.mulArith, 3)
+	cc.subArith()
+	cc.multiCall(cc.SHLarith, 2)
+	cc.multiCall(cc.mStoreX, 2)
+	cc.multiCall(cc.preModExpLoop, int(math.Floor(float64(callDataLength)/32)))
+	cc.multiCall(cc.preModExpLoop, int(math.Floor(float64(returnDataLength)/32)))
+	if modulus.Uint64() > 0 {
+		cc.modExp(bLen, mLen, eLen, base, exponent, modulus)
+	}
 }
 
 func (cc *CounterCollector) modExp(bLen, mLen, eLen int, base, exponent, modulus *big.Int) {
@@ -472,8 +571,184 @@ func (cc *CounterCollector) modExp(bLen, mLen, eLen int, base, exponent, modulus
 	cc.Deduct(A, int(arith.Int64()))
 }
 
+func (cc *CounterCollector) preModExpLoop() {
+	cc.Deduct(S, 8)
+	cc.mStore32()
+}
+
 func (cc *CounterCollector) multiCall(call func(), times int) {
 	for i := 0; i < times; i++ {
 		call()
 	}
+}
+
+func (cc *CounterCollector) preSha256(callDataLength uint64) {
+	cc.Deduct(S, 100)
+	cc.Deduct(B, 1)
+	cc.Deduct(SHA, int(math.Ceil(float64(callDataLength+1)/64)))
+	cc.multiCall(cc.divArith, 2)
+	cc.mStore32()
+	cc.mStoreX()
+	cc.multiCall(cc.preSha256Loop, int(math.Floor(float64(callDataLength)/32)))
+	cc.readFromCallDataOffset()
+	cc.SHRarith()
+}
+
+func (cc *CounterCollector) preSha256Loop() {
+	cc.Deduct(S, 11)
+	cc.readFromCallDataOffset()
+}
+
+func (cc *CounterCollector) preIdentity(callDataLength, returnDataLength uint64) {
+	cc.Deduct(S, 45)
+	cc.Deduct(B, 2)
+	cc.divArith()
+	// identity loop
+	cc.multiCall(cc.identityLoop, int(math.Floor(float64(callDataLength)/32)))
+	cc.readFromCallDataOffset()
+	cc.mStoreX()
+	// identity return loop
+	cc.multiCall(cc.identityReturnLoop, int(math.Floor(float64(returnDataLength)/32)))
+	cc.mLoadX()
+	cc.mStoreX()
+}
+
+func (cc *CounterCollector) identityLoop() {
+	cc.Deduct(S, 8)
+	cc.readFromCallDataOffset()
+	cc.mStore32()
+}
+
+func (cc *CounterCollector) identityReturnLoop() {
+	cc.Deduct(S, 8)
+	cc.readFromCallDataOffset()
+	cc.mStore32()
+}
+
+func (cc *CounterCollector) abs() {
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 2)
+}
+
+func (cc *CounterCollector) opAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opMul(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 10)
+	cc.mulArith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSub(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opDiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 15)
+	cc.divArith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSDiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 25)
+	cc.Deduct(B, 1)
+	cc.multiCall(cc.abs, 2)
+	cc.divArith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 20)
+	cc.divArith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 20)
+	cc.Deduct(B, 1)
+	cc.multiCall(cc.abs, 2)
+	cc.divArith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opAddMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 30)
+	cc.Deduct(B, 3)
+	cc.Deduct(A, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opMulMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 10)
+	cc.utilMulMod()
+	return nil, nil
+}
+
+func (cc *CounterCollector) utilMulMod() {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 4)
+	cc.Deduct(A, 2)
+	cc.mulArith()
+}
+
+func (cc *CounterCollector) opExp(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 10)
+	exponent := scope.Stack.Peek()
+	exponentLength := len(exponent.Bytes())
+	cc.getLenBytes(exponentLength)
+	cc.expAd(exponentLength * 8)
+	return nil, nil
+}
+
+func (cc *CounterCollector) expAd(inputLength int) {
+	cc.Deduct(S, 30)
+	cc.Deduct(B, 2)
+	cc.getLenBits(inputLength)
+	for i := 0; i < inputLength; i++ {
+		cc.Deduct(S, 12)
+		cc.Deduct(B, 2)
+		cc.divArith()
+		cc.mulArith()
+		cc.mulArith()
+	}
+}
+
+func (cc *CounterCollector) getLenBits(inputLength int) {
+	cc.Deduct(S, 12)
+	for i := 0; i < inputLength; i++ {
+		cc.Deduct(S, 9)
+		cc.Deduct(B, 1)
+		cc.divArith()
+	}
+}
+
+func (cc *CounterCollector) opSignExtend(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 20)
+	cc.Deduct(B, 6)
+	cc.Deduct(P, 2*cc.smtLevels)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opBlockHash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode(scope.Contract.IsCreate)
+	cc.Deduct(S, 20)
+	cc.Deduct(B, 6)
+	cc.Deduct(P, 2*cc.smtLevels)
+	return nil, nil
 }

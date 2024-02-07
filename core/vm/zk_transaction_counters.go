@@ -6,7 +6,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"math"
-	"strconv"
 )
 
 type TransactionCounter struct {
@@ -18,11 +17,11 @@ type TransactionCounter struct {
 }
 
 func NewTransactionCounter(transaction types.Transaction, smtMaxLevel uint32) *TransactionCounter {
-	totalLevel := len(strconv.FormatInt(int64(math.Pow(2, float64(smtMaxLevel))+250000), 2))
+	totalLevel := calculateSmtLevels(smtMaxLevel)
 	tc := &TransactionCounter{
 		transaction:       transaction,
-		rlpCounters:       NewCounterCollector(),
-		executionCounters: NewCounterCollector(),
+		rlpCounters:       NewCounterCollector(totalLevel),
+		executionCounters: NewCounterCollector(totalLevel),
 		smtLevels:         totalLevel,
 	}
 
@@ -51,7 +50,7 @@ func (tc *TransactionCounter) CalculateRlp() error {
 	chainIdLength := len(chainIdHex) / 2
 	nonceLength := len(nonceHex) / 2
 
-	collector := NewCounterCollector()
+	collector := NewCounterCollector(tc.smtLevels)
 	collector.Deduct(S, 250)
 	collector.Deduct(B, 1+1)
 	collector.Deduct(K, int(math.Ceil(float64(txRlpLength+1)/136)))
@@ -114,7 +113,7 @@ func (tc *TransactionCounter) ProcessTx(ibs *state.IntraBlockState, returnData [
 		byteCodeLength = len(contractCode)
 	}
 
-	cc := NewCounterCollector()
+	cc := NewCounterCollector(tc.smtLevels)
 	cc.Deduct(S, 300)
 	cc.Deduct(B, 11+7)
 	cc.Deduct(P, 14*tc.smtLevels)
