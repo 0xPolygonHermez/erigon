@@ -230,6 +230,14 @@ LOOP:
 		skipped = false
 
 		for _, blockNumber := range blockNumbers {
+			// ensure we have the last block if we haven't set it already
+			if lastBlock == nil {
+				lastBlock, err = rawdb.ReadBlockByNumber(tx, blockNumber-1)
+				if err != nil {
+					return err
+				}
+			}
+
 			currentBlock = blockNumber
 			fork, err := reader.GetForkId(currentBatchNumber)
 			if err != nil {
