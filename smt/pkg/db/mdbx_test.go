@@ -78,5 +78,6 @@ func TestEriDbBatch(t *testing.T) {
 
 	// Testing Get method after rollback, expecting no value for the altKey
 	val, err := db.Get(altKey)
+	assert.NoError(t, err)
 	assert.Equal(t, utils.NodeValue12{}, val)
 }

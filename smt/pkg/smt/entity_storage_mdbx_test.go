@@ -204,6 +204,9 @@ func runGenesisTestMdbx(tb testing.TB, filename string) {
 	}
 
 	dbi, err := mdbx.NewTemporaryMdbx()
+	if err != nil {
+		tb.Fatal("Failed to open db: ", err)
+	}
 	tx, err := dbi.BeginRw(context.Background())
 	if err != nil {
 		tb.Fatal("Failed to open db: ", err)
@@ -306,6 +309,9 @@ func runTestVectorsMdbx(t *testing.T, filename string) {
 
 func getTempMdbx() (*db2.EriDb, kv.RwDB, error) {
 	dbi, err := mdbx.NewTemporaryMdbx()
+	if err != nil {
+		return nil, nil, err
+	}
 	tx, err := dbi.BeginRw(context.Background())
 	if err != nil {
 		return nil, nil, err
