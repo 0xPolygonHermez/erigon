@@ -79,7 +79,9 @@ func (b *BlockInfoTree) SetBlockTx(
 	if err != nil {
 		return nil, err
 	}
-	_, err = setCumulativeGasUsed(b.smt, txIndexBig, big.NewInt(int64(cumulativeGasUsed)))
+
+	bigCumulativeGasUsed := big.NewInt(0).SetUint64(cumulativeGasUsed)
+	_, err = setCumulativeGasUsed(b.smt, txIndexBig, bigCumulativeGasUsed)
 	if err != nil {
 		return nil, err
 	}
