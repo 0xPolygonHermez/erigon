@@ -148,7 +148,6 @@ func SpawnStageBatches(
 	highestHashableL2BlockNo := uint64(0)
 
 	writeThreadFinished := false
-	lastGer := common.Hash{}
 	lastForkId64, err := stages.GetStageProgress(tx, stages.ForkId)
 	lastForkId := uint16(lastForkId64)
 	if err != nil {
@@ -170,15 +169,6 @@ func SpawnStageBatches(
 			// skip if we already have this block
 			if l2Block.L2BlockNumber < lastBlockHeight+1 {
 				continue
-			}
-			// checks
-			// if l2Block.L2BlockNumber != lastBlockHeight+1 {
-			// 	return fmt.Errorf("missing block number. Last block number %d, current %d", lastBlockHeight, l2Block.L2BlockNumber)
-			// }
-
-			//TODO: until Cardona datastream is fixed - remove
-			if l2Block.L2BlockNumber == 59057 {
-				l2Block.GlobalExitRoot = common.HexToHash("0x68c6626c02e126df65bd70a633b9863ebd10b042399c98926192856d4f2227ad")
 			}
 
 			// update forkid

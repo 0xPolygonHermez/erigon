@@ -27,7 +27,6 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
-	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -59,10 +58,10 @@ func ExecuteBlockEphemerallyZk(
 	block.Uncles()
 	ibs := state.New(stateReader)
 	header := block.Header()
-
-	usedGas := new(uint64)
+	blockTransaction := block.Transactions()
+	blockGasLimit := block.GasLimit()
 	gp := new(GasPool)
-	gp.AddGas(block.GasLimit())
+	gp.AddGas(blockGasLimit)
 
 	var (
 		rejectedTxs []*RejectedTx
@@ -80,7 +79,7 @@ func ExecuteBlockEphemerallyZk(
 	}
 
 	if !vmConfig.ReadOnly {
-		if err := InitializeBlockExecution(engine, chainReader, block.Header(), block.Transactions(), block.Uncles(), chainConfig, ibs, excessDataGas); err != nil {
+		if err := InitializeBlockExecution(engine, chainReader, header, blockTransaction, block.Uncles(), chainConfig, ibs, excessDataGas); err != nil {
 			return nil, err
 		}
 	}
@@ -90,8 +89,6 @@ func ExecuteBlockEphemerallyZk(
 	}
 
 	blockNum := block.NumberU64()
-
-	gers := []*dstypes.GerUpdate{}
 
 	//[zkevm] - get the last batch number so we can check for empty batches in between it and the new one
 	lastBatchInserted, err := roHermezDb.GetBatchNoByL2Block(blockNum - 1)
@@ -112,38 +109,23 @@ func ExecuteBlockEphemerallyZk(
 		return nil, err
 	}
 
-	if gersInBetween != nil {
-		gers = append(gers, gersInBetween...)
-	}
-
 	blockGer, l1BlockHash, err := roHermezDb.GetBlockGlobalExitRoot(blockNum)
 	if err != nil {
 		return nil, err
 	}
+	blockTime := block.Time()
+	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, blockTime, prevBlockHash, &blockGer, &l1BlockHash, &gersInBetween)
 
-	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, block.Time(), prevBlockHash, &blockGer, &l1BlockHash, &gers)
-
-	if blockNum == 59058 {
-		blockGer = libcommon.HexToHash("0x0")
-		l1BlockHash = libcommon.HexToHash("0x0")
-	}
 	blockInfoTree := blockinfo.NewBlockInfoTree()
 	if chainConfig.IsForkID7Etrog(blockNum) {
 		coinbase := block.Coinbase()
-
-		// TODO: temp datastream fix, remove later
-		// works only for Cardona
-		if blockNum == 59057 {
-			temp := libcommon.HexToHash("0x592a0600b9b96758328d4799c7b1fdac62c280cea8928e0a449642b5e25acb60")
-			prevBlockHash = &temp
-		}
 
 		if err := blockInfoTree.InitBlockHeader(
 			prevBlockHash,
 			&coinbase,
 			blockNum,
-			block.GasLimit(),
-			block.Time(),
+			blockGasLimit,
+			blockTime,
 			&blockGer,
 			&l1BlockHash,
 		); err != nil {
@@ -152,9 +134,10 @@ func ExecuteBlockEphemerallyZk(
 	}
 
 	noop := state.NewNoopWriter()
-	cumulativeGasUsed := uint64(0)
 	logIndex := int64(0)
-	for txIndex, tx := range block.Transactions() {
+	usedGas := new(uint64)
+
+	for txIndex, tx := range blockTransaction {
 		ibs.Prepare(tx.Hash(), block.Hash(), txIndex)
 		writeTrace := false
 		if vmConfig.Debug && vmConfig.Tracer == nil {
@@ -166,7 +149,7 @@ func ExecuteBlockEphemerallyZk(
 			writeTrace = true
 		}
 
-		gp.Reset(block.GasLimit())
+		gp.Reset(blockGasLimit)
 
 		effectiveGasPricePercentage, err := roHermezDb.GetEffectiveGasPricePercentage(tx.Hash())
 		if err != nil {
@@ -199,12 +182,11 @@ func ExecuteBlockEphemerallyZk(
 
 		if chainConfig.IsForkID7Etrog(blockNum) {
 			//block info tree
-			cumulativeGasUsed += receipt.GasUsed
 			_, err = blockInfoTree.SetBlockTx(
 				txIndex,
 				receipt,
 				logIndex,
-				cumulativeGasUsed,
+				*usedGas,
 				effectiveGasPricePercentage,
 			)
 			if err != nil {
@@ -220,7 +202,7 @@ func ExecuteBlockEphemerallyZk(
 	var l1InfoRoot libcommon.Hash
 	if chainConfig.IsForkID7Etrog(blockNum) {
 		// [zkevm] - set the block info tree root
-		root, err := blockInfoTree.SetBlockGasUsed(cumulativeGasUsed)
+		root, err := blockInfoTree.SetBlockGasUsed(*usedGas)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +231,7 @@ func ExecuteBlockEphemerallyZk(
 		//}
 	}
 	if !vmConfig.ReadOnly {
-		txs := block.Transactions()
+		txs := blockTransaction
 		if _, _, _, err := FinalizeBlockExecution(engine, stateReader, block.Header(), txs, block.Uncles(), stateWriter, chainConfig, ibs, receipts, block.Withdrawals(), chainReader, false, excessDataGas); err != nil {
 			return nil, err
 		}
