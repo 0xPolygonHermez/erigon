@@ -121,7 +121,8 @@ func (b *BlockInfoTree) SetBlockGasUsed(gasUsed uint64) (*big.Int, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := b.smt.InsertKA(key, big.NewInt(int64(gasUsed)))
+	gasUsedBig := big.NewInt(0).SetUint64(gasUsed)
+	resp, err := b.smt.InsertKA(key, gasUsedBig)
 	if err != nil {
 		return nil, err
 	}

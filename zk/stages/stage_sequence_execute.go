@@ -22,6 +22,7 @@ import (
 	"math/big"
 
 	"errors"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/chain"
@@ -392,7 +393,7 @@ func postBlockStateHandling(
 ) error {
 	infoTree := blockinfo.NewBlockInfoTree()
 	coinbase := block.Coinbase()
-	if err := infoTree.InitBlockHeader(&parentHash, &coinbase, block.NumberU64(), block.GasLimit(), block.Time(), &ger, &l1BlockHash); err != nil {
+	if err := infoTree.InitBlockHeader(&parentHash, &coinbase, block.NumberU64(), blockinfo.BlockGasLimit, block.Time(), &ger, &l1BlockHash); err != nil {
 		return err
 	}
 	var logIndex int64 = 0
