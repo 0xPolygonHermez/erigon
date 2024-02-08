@@ -136,7 +136,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	}
 	prevBlockHash := header.Root
 Loop:
-	for blockNum := stageProgress + 1; blockNum <= 59057; blockNum++ {
+	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		stageProgress = blockNum
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
