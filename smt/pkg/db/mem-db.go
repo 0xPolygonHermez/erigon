@@ -88,6 +88,24 @@ func (m *MemDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	return nil
 }
 
+func (m *MemDb) Delete(key string) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
+	delete(m.Db, key)
+	return nil
+}
+
+func (m *MemDb) DeleteByNodeKey(key utils.NodeKey) error {
+	m.lock.Lock()         // Lock for writing
+	defer m.lock.Unlock() // Make sure to unlock when done
+
+	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertBigIntToHex(keyConc)
+	delete(m.Db, k)
+	return nil
+}
+
 func (m *MemDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
@@ -224,24 +242,6 @@ func (m *MemDb) AddCode(code []byte) error {
 	}
 
 	m.DbCode[codeHash] = code
-	return nil
-}
-
-func (m *MemDb) Delete(key string) error {
-	m.lock.Lock()         // Lock for writing
-	defer m.lock.Unlock() // Make sure to unlock when done
-
-	delete(m.Db, key)
-	return nil
-}
-
-func (m *MemDb) DeleteByNodeKey(key utils.NodeKey) error {
-	m.lock.Lock()         // Lock for writing
-	defer m.lock.Unlock() // Make sure to unlock when done
-
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
-	delete(m.Db, k)
 	return nil
 }
 

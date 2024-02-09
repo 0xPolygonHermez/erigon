@@ -270,10 +270,6 @@ Loop:
 			tx.CollectMetrics()
 			Metrics[stages.Execution].Set(blockNum)
 		}
-
-		if blockNum%5000 == 0 {
-			break
-		}
 	}
 
 	if err = s.Update(batch, stageProgress); err != nil {

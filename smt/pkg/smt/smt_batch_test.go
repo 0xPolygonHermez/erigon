@@ -41,7 +41,6 @@ func TestBatchSimpleInsert(t *testing.T) {
 		big.NewInt(31),
 		big.NewInt(0),
 		big.NewInt(8),
-		// big.NewInt(1),
 	}
 	valuesRaw := []*big.Int{
 		big.NewInt(17),
@@ -51,7 +50,6 @@ func TestBatchSimpleInsert(t *testing.T) {
 		big.NewInt(0),
 		big.NewInt(0),
 		big.NewInt(0),
-		// big.NewInt(0),
 	}
 
 	keyPointers := []*utils.NodeKey{}
@@ -251,10 +249,6 @@ func TestBatchWitness(t *testing.T) {
 
 	smtIncremental := smt.NewSMT(nil)
 	smtBatch := smt.NewSMT(nil)
-
-	// splitLine := 59
-	// keysBatches := [][]*utils.NodeKey{keys[:splitLine], keys[splitLine:]}
-	// valuesBatches := [][]*utils.NodeValue8{values[:splitLine], values[splitLine:]}
 
 	for i, k := range keys {
 		smtIncremental.Insert(k, values[i])

@@ -135,10 +135,6 @@ func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) 
 	return s.insertSingle(key, *v, [4]uint64{})
 }
 
-func (s *SMT) Insert(key utils.NodeKey, value utils.NodeValue8) (*SMTResponse, error) {
-	return s.insertSingle(key, value, [4]uint64{})
-}
-
 func (s *SMT) InsertStorage(ethAddr string, storage *map[string]string, chm *map[string]*utils.NodeValue8, vhm *map[string][4]uint64, progressChan chan uint64) (*SMTResponse, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
@@ -208,9 +204,6 @@ func (s *SMT) insertSingle(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint6
 }
 
 func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, oldRoot utils.NodeKey) (*SMTResponse, error) {
-	// KeyPointers = append(KeyPointers, &k)
-	// ValuePointers = append(ValuePointers, &v)
-
 	newRoot := oldRoot
 
 	smtResponse := &SMTResponse{
@@ -520,12 +513,12 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 	smtResponse.NewRootScalar = &newRoot
 
-	// fmt.Printf("INSERT %d %d %d %d -> HASH %v\n", k[0], k[1], k[2], k[3], newRoot)
-
 	return smtResponse, nil
 }
 
 func (s *SMT) hashSave(in [8]uint64, capacity, h [4]uint64) ([4]uint64, error) {
+	// DO NOT ENABLE CACHING BECAUSE: 1. It is not needed because we have betch insert. 2. It breaks the batch insert.
+
 	// cacheKey := fmt.Sprintf("%v-%v", in, capacity)
 	// if cachedValue, exists := s.Cache.Get(cacheKey); exists {
 	// 	s.CacheHitFrequency[cacheKey]++

@@ -168,9 +168,6 @@ func (s *SMT) InsertBatch(logPrefix string, nodeKeys []*utils.NodeKey, nodeValue
 
 	progressChan <- preprocessStage + uint64(size) + finalizeStage
 
-	// dumpBatchTreeFromMemory(smtBatchNodeRoot, 0, make([]int, 0), 12)
-	// fmt.Println()
-
 	return &SMTResponse{
 		Mode:          "batch insert",
 		NewRootScalar: rootNodeHash,

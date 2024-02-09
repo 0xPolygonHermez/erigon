@@ -7,9 +7,6 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
-// var KeyPointers = []*utils.NodeKey{}
-// var ValuePointers = []*utils.NodeValue8{}
-
 func (s *SMT) DumpTree() {
 	rootNodeKey, _ := s.getLastRoot()
 	dumpTree(s, rootNodeKey, 0, []int{}, 12)

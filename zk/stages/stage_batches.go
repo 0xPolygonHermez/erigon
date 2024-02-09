@@ -245,7 +245,6 @@ func SpawnStageBatches(
 			writeThreadFinished = true
 		default:
 			//wait at least one block to be written, before continuing
-			atLeastOneBlockWritten = true
 			if atLeastOneBlockWritten {
 				// if no blocks available should and time since last block written is > 500ms
 				// consider that we are at the tip and blocks come in the datastream as they are produced
