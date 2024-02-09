@@ -142,18 +142,18 @@ func SpawnStageDataStreamCatchup(
 
 	switch latest.Type {
 	case server.EntryTypeUpdateGer:
-		currentBatchNumber = binary.LittleEndian.Uint64(latest.Data[0:8])
+		currentBatchNumber = binary.BigEndian.Uint64(latest.Data[0:8])
 	case server.EntryTypeL2BlockEnd:
-		currentL2Block = binary.LittleEndian.Uint64(latest.Data[0:8])
+		currentL2Block = binary.BigEndian.Uint64(latest.Data[0:8])
 		bookmark := types.Bookmark{
 			Type: types.BookmarkTypeStart,
 			From: currentL2Block,
 		}
-		firstEntry, err := stream.GetFirstEventAfterBookmark(bookmark.Encode())
+		firstEntry, err := stream.GetFirstEventAfterBookmark(bookmark.EncodeBigEndian())
 		if err != nil {
 			return err
 		}
-		currentBatchNumber = binary.LittleEndian.Uint64(firstEntry.Data[0:8])
+		currentBatchNumber = binary.BigEndian.Uint64(firstEntry.Data[0:8])
 	}
 
 	var entry = header.TotalEntries
