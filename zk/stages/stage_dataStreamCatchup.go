@@ -253,19 +253,32 @@ LOOP:
 
 			var ger common.Hash
 			var l1BlockHash common.Hash
+
 			l1Index, err := reader.GetBlockL1InfoTreeIndex(blockNumber)
 			if err != nil {
 				return err
 			}
-			if l1Index != 0 {
-				// read the index info itself
-				l1Info, err := reader.GetL1InfoTreeUpdate(l1Index)
+
+			if blockNumber == 1 {
+				// injected batch at the start of the network
+				injected, err := reader.GetL1InjectedBatch(0)
 				if err != nil {
 					return err
 				}
-				if l1Info != nil {
-					ger = l1Info.GER
-					l1BlockHash = l1Info.ParentHash
+				ger = injected.LastGlobalExitRoot
+				l1BlockHash = injected.L1ParentHash
+			} else {
+				// standard behaviour for non-injected or forced batches
+				if l1Index != 0 {
+					// read the index info itself
+					l1Info, err := reader.GetL1InfoTreeUpdate(l1Index)
+					if err != nil {
+						return err
+					}
+					if l1Info != nil {
+						ger = l1Info.GER
+						l1BlockHash = l1Info.ParentHash
+					}
 				}
 			}
 
