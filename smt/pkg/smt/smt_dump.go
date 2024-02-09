@@ -28,13 +28,9 @@ func dumpTree(smt *SMT, nodeKey utils.NodeKey, level int, path []int, printDepth
 
 	if nodeValue.IsFinalNode() {
 		rKey := utils.NodeKeyFromBigIntArray(nodeValue[0:4])
-		// rKeyPath := rKey.GetPath()
 		leafValueHash := utils.NodeKeyFromBigIntArray(nodeValue[4:8])
 		totalKey := utils.JoinKey(path, rKey)
 		leafPath := totalKey.GetPath()
-		// if len(rKeyPath) != 256 {
-		// 	fmt.Println()
-		// }
 		fmt.Printf("|")
 		for i := 0; i < level; i++ {
 			fmt.Printf("=")

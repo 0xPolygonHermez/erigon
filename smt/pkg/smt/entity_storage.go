@@ -331,18 +331,6 @@ func (s *SMT) SetStorage(logPrefix string, accChanges map[libcommon.Address]*acc
 		}
 	}
 
-	// for _, a := range keysBatchStorage {
-	// 	fmt.Printf("%d %d %d %d\n", a[0], a[1], a[2], a[3])
-	// }
-	// for _, a := range valuesBatchStorage {
-	// 	fmt.Println(a.ToUintArray())
-	// }
-
-	// for i, a := range keysBatchStorage {
-	// 	res, _ := s.InsertBatch([]*utils.NodeKey{a}, []*utils.NodeValue8{valuesBatchStorage[i]}, nil, nil)
-	// 	fmt.Printf("INSERT %d %d %d %d -> HASH %v\n", a[0], a[1], a[2], a[3], res.NewRootScalar)
-	// }
-
 	_, err := s.InsertBatch(logPrefix, keysBatchStorage, valuesBatchStorage, nil, nil)
 	return keysBatchStorage, valuesBatchStorage, err
 }
