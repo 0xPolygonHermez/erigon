@@ -35,6 +35,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
+	txTypes "github.com/ledgerwatch/erigon/zk/tx"
 )
 
 // ExecuteBlockEphemerally runs a block from provided stateReader and
@@ -179,9 +180,25 @@ func ExecuteBlockEphemerallyZk(
 			ibs.ScalableSetSmtRootHash(roHermezDb)
 		}
 
+		txSender, _ := tx.GetSender()
 		if chainConfig.IsForkID7Etrog(blockNum) {
+			l2TxHash, err := txTypes.ComputeL2TxHash(
+				chainConfig.ChainID,
+				tx.GetValue(),
+				tx.GetPrice(),
+				tx.GetNonce(),
+				tx.GetGas(),
+				tx.GetTo(),
+				&txSender,
+				tx.GetData(),
+			)
+			if err != nil {
+				return nil, err
+			}
+
 			//block info tree
 			_, err = blockInfoTree.SetBlockTx(
+				&l2TxHash,
 				txIndex,
 				receipt,
 				logIndex,

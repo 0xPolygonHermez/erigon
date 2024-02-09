@@ -64,6 +64,7 @@ func (b *BlockInfoTree) InitBlockHeader(oldBlockHash *libcommon.Hash, coinbase *
 }
 
 func (b *BlockInfoTree) SetBlockTx(
+	l2TxHash *libcommon.Hash,
 	txIndex int,
 	receipt *ethTypes.Receipt,
 	logIndex int64,
@@ -71,7 +72,7 @@ func (b *BlockInfoTree) SetBlockTx(
 	effectivePercentage uint8,
 ) (*big.Int, error) {
 	txIndexBig := big.NewInt(int64(txIndex))
-	_, err := setL2TxHash(b.smt, txIndexBig, receipt.TxHash.Big())
+	_, err := setL2TxHash(b.smt, txIndexBig, l2TxHash.Big())
 	if err != nil {
 		return nil, err
 	}
