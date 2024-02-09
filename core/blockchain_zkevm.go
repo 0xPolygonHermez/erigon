@@ -58,7 +58,7 @@ func ExecuteBlockEphemerallyZk(
 	block.Uncles()
 	ibs := state.New(stateReader)
 	header := block.Header()
-	blockTransaction := block.Transactions()
+	blockTransactions := block.Transactions()
 	blockGasLimit := block.GasLimit()
 	gp := new(GasPool)
 	gp.AddGas(blockGasLimit)
@@ -79,7 +79,7 @@ func ExecuteBlockEphemerallyZk(
 	}
 
 	if !vmConfig.ReadOnly {
-		if err := InitializeBlockExecution(engine, chainReader, header, blockTransaction, block.Uncles(), chainConfig, ibs, excessDataGas); err != nil {
+		if err := InitializeBlockExecution(engine, chainReader, header, blockTransactions, block.Uncles(), chainConfig, ibs, excessDataGas); err != nil {
 			return nil, err
 		}
 	}
@@ -115,7 +115,6 @@ func ExecuteBlockEphemerallyZk(
 	}
 	blockTime := block.Time()
 	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, blockTime, prevBlockHash, &blockGer, &l1BlockHash, &gersInBetween)
-
 	blockInfoTree := blockinfo.NewBlockInfoTree()
 	if chainConfig.IsForkID7Etrog(blockNum) {
 		coinbase := block.Coinbase()
@@ -137,7 +136,7 @@ func ExecuteBlockEphemerallyZk(
 	logIndex := int64(0)
 	usedGas := new(uint64)
 
-	for txIndex, tx := range blockTransaction {
+	for txIndex, tx := range blockTransactions {
 		ibs.Prepare(tx.Hash(), block.Hash(), txIndex)
 		writeTrace := false
 		if vmConfig.Debug && vmConfig.Tracer == nil {
@@ -231,7 +230,7 @@ func ExecuteBlockEphemerallyZk(
 		//}
 	}
 	if !vmConfig.ReadOnly {
-		txs := blockTransaction
+		txs := blockTransactions
 		if _, _, _, err := FinalizeBlockExecution(engine, stateReader, block.Header(), txs, block.Uncles(), stateWriter, chainConfig, ibs, receipts, block.Withdrawals(), chainReader, false, excessDataGas); err != nil {
 			return nil, err
 		}
