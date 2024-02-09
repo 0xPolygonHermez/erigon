@@ -59,9 +59,11 @@ const (
 	stateStreamLimit uint64 = 1_000
 
 	transactionGasLimit = 30000000
-	blockGasLimit       = 1125899906842624
+	blockGasLimit       = 18446744073709551615
 
 	totalVirtualCounterSmtLevel = 80 // todo [zkevm] this should be read from the db
+
+	etrogForkId = 7
 )
 
 var (
@@ -494,6 +496,7 @@ func finaliseBlock(
 	finalHeader := finalBlock.Header()
 	finalHeader.Coinbase = constMiner
 	finalHeader.GasLimit = blockGasLimit
+	finalHeader.ReceiptHash = types.DeriveSha(receipts)
 	newNum := finalBlock.Number()
 
 	rawdb.WriteHeader(tx, finalHeader)
@@ -512,6 +515,10 @@ func finaliseBlock(
 	rawdb.WriteTxLookupEntries(tx, finalBlock)
 
 	if err = rawdb.WriteReceipts(tx, newNum.Uint64(), finalReceipts); err != nil {
+		return err
+	}
+
+	if err = hermezDb.WriteForkId(batch, etrogForkId); err != nil {
 		return err
 	}
 
