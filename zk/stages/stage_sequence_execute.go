@@ -391,6 +391,7 @@ func postBlockStateHandling(
 	if err := infoTree.InitBlockHeader(&parentHash, &coinbase, header.Number.Uint64(), header.GasLimit, header.Time, &ger, &l1BlockHash); err != nil {
 		return err
 	}
+	var err error
 	var logIndex int64 = 0
 	for i := 0; i < len(transactions); i++ {
 		receipt := receipts[i]
@@ -400,6 +401,12 @@ func postBlockStateHandling(
 		sender, ok := t.GetSender()
 		if ok {
 			from = sender
+		} else {
+			signer := types.MakeSigner(cfg.chainConfig, header.Number.Uint64())
+			from, err = t.Sender(*signer)
+			if err != nil {
+				return err
+			}
 		}
 
 		l2TxHash, err := tx.ComputeL2TxHash(
