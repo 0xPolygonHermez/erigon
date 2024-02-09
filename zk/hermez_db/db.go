@@ -16,13 +16,15 @@ const L1SEQUENCES = "hermez_l1Sequences"                           // l1blockno,
 const FORKIDS = "hermez_forkIds"                                   // batchNo -> forkId
 const FORKID_BLOCK = "hermez_forkIdBlock"                          // forkId -> startBlock
 const BLOCKBATCHES = "hermez_blockBatches"                         // l2blockno -> batchno
-const GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"                 // l2blockno -> GER
-const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // l2blockno -> GER
+const GLOBAL_EXIT_ROOTS = "hermez_globalExitRootsSaved"            // GER -> true
+const BLOCK_GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"           // l2blockno -> GER
+const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches" // batchkno -> GER
 const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"             // txHash -> txPricePercentage
 const STATE_ROOTS = "hermez_stateRoots"                            // l2blockno -> stateRoot
 const L1_INFO_TREE_UPDATES = "l1_info_tree_updates"                // index -> L1InfoTreeUpdate
 const BLOCK_L1_INFO_TREE_INDEX = "block_l1_info_tree_index"        // block number -> l1 info tree index
 const L1_INJECTED_BATCHES = "l1_injected_batches"                  // index increasing by 1 -> injected batch for the start of the chain
+const BLOCK_INFO_ROOTS = "block_info_roots"                        // block number -> block info root hash
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -54,12 +56,14 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		FORKID_BLOCK,
 		BLOCKBATCHES,
 		GLOBAL_EXIT_ROOTS,
+		BLOCK_GLOBAL_EXIT_ROOTS,
 		GLOBAL_EXIT_ROOTS_BATCHES,
 		TX_PRICE_PERCENTAGE,
 		STATE_ROOTS,
 		L1_INFO_TREE_UPDATES,
 		BLOCK_L1_INFO_TREE_INDEX,
 		L1_INJECTED_BATCHES,
+		BLOCK_INFO_ROOTS,
 	}
 	for _, t := range tables {
 		if err := tx.CreateBucket(t); err != nil {
@@ -328,9 +332,21 @@ func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
 	return db.tx.Put(BLOCKBATCHES, Uint64ToBytes(l2BlockNo), Uint64ToBytes(batchNo))
 }
 
+func (db *HermezDb) WriteGlobalExitRoot(ger common.Hash) error {
+	return db.tx.Put(GLOBAL_EXIT_ROOTS, ger.Bytes(), []byte{1})
+}
+
+func (db *HermezDbReader) GetGlobalExitRoot(ger common.Hash) (bool, error) {
+	bytes, err := db.tx.GetOne(GLOBAL_EXIT_ROOTS, ger.Bytes())
+	if err != nil {
+		return false, err
+	}
+	return len(bytes) > 0, nil
+}
+
 func (db *HermezDb) WriteBlockGlobalExitRoot(l2BlockNo uint64, ger, l1BlockHash common.Hash) error {
 	key := ConcatGerKey(l2BlockNo, l1BlockHash)
-	return db.tx.Put(GLOBAL_EXIT_ROOTS, key, ger.Bytes())
+	return db.tx.Put(BLOCK_GLOBAL_EXIT_ROOTS, key, ger.Bytes())
 }
 
 func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash, common.Hash, error) {
@@ -338,7 +354,7 @@ func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash,
 	var l1BlockHash common.Hash
 
 	blockNoBytes := Uint64ToBytes(l2BlockNo)
-	err := db.tx.ForPrefix(GLOBAL_EXIT_ROOTS, blockNoBytes, func(k, v []byte) error {
+	err := db.tx.ForPrefix(BLOCK_GLOBAL_EXIT_ROOTS, blockNoBytes, func(k, v []byte) error {
 		h = common.BytesToHash(v)
 		if len(k) == 40 {
 			l1BlockHash = common.BytesToHash(k[8:])
@@ -351,7 +367,8 @@ func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash,
 
 	return h, l1BlockHash, nil
 }
-func (db *HermezDb) WriteBatchGBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error {
+
+func (db *HermezDb) WriteBatchGlobalExitRoot(batchNumber uint64, ger dstypes.GerUpdate) error {
 	return db.tx.Put(GLOBAL_EXIT_ROOTS_BATCHES, Uint64ToBytes(batchNumber), ger.EncodeToBytes())
 }
 
@@ -411,7 +428,7 @@ func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) 
 
 func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) error {
 	for i := fromBlockNum; i <= toBlockNum; i++ {
-		err := db.tx.Delete(GLOBAL_EXIT_ROOTS, Uint64ToBytes(i))
+		err := db.tx.Delete(BLOCK_GLOBAL_EXIT_ROOTS, Uint64ToBytes(i))
 		if err != nil {
 			return err
 		}
@@ -633,4 +650,19 @@ func (db *HermezDb) GetL1InjectedBatch(index uint64) (*types.L1InjectedBatch, er
 		return nil, err
 	}
 	return ib, nil
+}
+
+func (db *HermezDb) WriteBlockInfoRoot(blockNumber uint64, root common.Hash) error {
+	k := Uint64ToBytes(blockNumber)
+	return db.tx.Put(BLOCK_INFO_ROOTS, k, root.Bytes())
+}
+
+func (db *HermezDbReader) GetBlockInfoRoot(blockNumber uint64) (common.Hash, error) {
+	k := Uint64ToBytes(blockNumber)
+	data, err := db.tx.GetOne(BLOCK_INFO_ROOTS, k)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	res := common.BytesToHash(data)
+	return res, nil
 }

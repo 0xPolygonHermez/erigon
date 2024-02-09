@@ -22,6 +22,7 @@ import (
 	"math/big"
 
 	"errors"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/chain"
@@ -58,9 +59,9 @@ const (
 	stateStreamLimit uint64 = 1_000
 
 	transactionGasLimit = 30000000
-	blockGasLimit       = 30000000
+	blockGasLimit       = 1125899906842624
 
-	batchCounterSmtLevel = 80 // todo [zkevm] this should be read from the db
+	totalVirtualCounterSmtLevel = 80 // todo [zkevm] this should be read from the db
 )
 
 var (
@@ -205,6 +206,8 @@ func SpawnSequencingStage(
 
 	stateReader := state.NewPlainStateReader(tx)
 	ibs := state.New(stateReader)
+	parentRoot := parentBlock.Root()
+	ibs.PreExecuteStateSet(cfg.chainConfig, nextBlockNum, newBlockTimestamp, &parentRoot)
 
 	// here we have a special case and need to inject in the initial batch on the network before
 	// we can continue accepting transactions from the pool
@@ -221,7 +224,7 @@ func SpawnSequencingStage(
 		return nil
 	}
 
-	batchCounters := vm.NewBatchCounterCollector(batchCounterSmtLevel)
+	batchCounters := vm.NewBatchCounterCollector(totalVirtualCounterSmtLevel)
 
 	// whilst in the 1 batch = 1 block = 1 tx flow we can immediately add in the changeL2BlockTx calculation
 	// as this is the first tx we can skip the overflow check
@@ -235,9 +238,6 @@ func SpawnSequencingStage(
 	if err = hermezDb.WriteBlockL1InfoTreeIndex(nextBlockNum, l1TreeUpdateIndex); err != nil {
 		return err
 	}
-
-	parentRoot := parentBlock.Root()
-	ibs.PreExecuteStateSet(cfg.chainConfig, nextBlockNum, newBlockTimestamp, &parentRoot)
 
 	// start waiting for a new transaction to arrive
 	ticker := time.NewTicker(10 * time.Second)
@@ -299,11 +299,6 @@ func SpawnSequencingStage(
 		}
 	}
 
-	block, _, _, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch)
-	if err != nil {
-		return err
-	}
-
 	l1BlockHash := common.Hash{}
 	ger := common.Hash{}
 	if l1TreeUpdate != nil {
@@ -311,11 +306,11 @@ func SpawnSequencingStage(
 		ger = l1TreeUpdate.GER
 	}
 
-	if err := postBlockStateHandling(cfg, ibs, block, ger, l1BlockHash, parentBlock.Hash(), addedTransactions, addedReceipts); err != nil {
+	if err = finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch, ger, l1BlockHash); err != nil {
 		return err
 	}
 
-	if err := updateSequencerProgress(tx, nextBlockNum, thisBatch, l1TreeUpdateIndex); err != nil {
+	if err = updateSequencerProgress(tx, nextBlockNum, thisBatch, l1TreeUpdateIndex); err != nil {
 		return err
 	}
 
@@ -353,7 +348,7 @@ func processInjectedInitialBatch(
 	}
 
 	parentRoot := parentBlock.Root()
-	if err := handleStateForNewBlockStarting(cfg.chainConfig, 1, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, ibs); err != nil {
+	if err = handleStateForNewBlockStarting(cfg.chainConfig, 1, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, ibs); err != nil {
 		return err
 	}
 
@@ -363,16 +358,11 @@ func processInjectedInitialBatch(
 	}
 	txns := types.Transactions{*txn}
 	receipts := types.Receipts{receipt}
-	finalBlock, _, finalReceipts, err := finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, injectedBatchNumber)
-	if err != nil {
+	if err = finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, txns, receipts, injectedBatchNumber, injected.LastGlobalExitRoot, injected.L1ParentHash); err != nil {
 		return err
 	}
 
-	if err := postBlockStateHandling(cfg, ibs, finalBlock, injected.LastGlobalExitRoot, injected.L1ParentHash, parentBlock.Hash(), txns, finalReceipts); err != nil {
-		return err
-	}
-
-	if err := updateSequencerProgress(tx, injectedBatchBlockNumber, injectedBatchNumber, 0); err != nil {
+	if err = updateSequencerProgress(tx, injectedBatchBlockNumber, injectedBatchNumber, 0); err != nil {
 		return err
 	}
 
@@ -382,7 +372,8 @@ func processInjectedInitialBatch(
 func postBlockStateHandling(
 	cfg SequenceBlockCfg,
 	ibs *state.IntraBlockState,
-	block *types.Block,
+	hermezDb *hermez_db.HermezDb,
+	header *types.Header,
 	ger common.Hash,
 	l1BlockHash common.Hash,
 	parentHash common.Hash,
@@ -390,8 +381,8 @@ func postBlockStateHandling(
 	receipts []*types.Receipt,
 ) error {
 	infoTree := blockinfo.NewBlockInfoTree()
-	coinbase := block.Coinbase()
-	if err := infoTree.InitBlockHeader(&parentHash, &coinbase, block.NumberU64(), block.GasLimit(), block.Time(), &ger, &l1BlockHash); err != nil {
+	coinbase := header.Coinbase
+	if err := infoTree.InitBlockHeader(&parentHash, &coinbase, header.Number.Uint64(), header.GasLimit, header.Time, &ger, &l1BlockHash); err != nil {
 		return err
 	}
 	var logIndex int64 = 0
@@ -405,14 +396,16 @@ func postBlockStateHandling(
 		logIndex += int64(len(receipt.Logs))
 	}
 
-	root, err := infoTree.SetBlockGasUsed(block.GasUsed())
+	root, err := infoTree.SetBlockGasUsed(header.GasUsed)
 	if err != nil {
 		return err
 	}
 
 	rootHash := common.BigToHash(root)
-	ibs.PostExecuteStateSet(cfg.chainConfig, block.NumberU64(), &rootHash)
-	return nil
+	ibs.PostExecuteStateSet(cfg.chainConfig, header.Number.Uint64(), &rootHash)
+
+	// store a reference to this block info root against the block number
+	return hermezDb.WriteBlockInfoRoot(header.Number.Uint64(), rootHash)
 }
 
 func handleInjectedBatch(
@@ -431,7 +424,7 @@ func handleInjectedBatch(
 		return nil, nil, errors.New("expected 1 transaction in the injected batch")
 	}
 
-	batchCounters := vm.NewBatchCounterCollector(batchCounterSmtLevel)
+	batchCounters := vm.NewBatchCounterCollector(totalVirtualCounterSmtLevel)
 
 	// process the tx and we can ignore the counters as an overflow at this stage means no network anyway
 	receipt, _, err := attemptAddTransaction(dbTx, cfg, batchCounters, header, parentBlock.Header(), txs[0], ibs)
@@ -449,11 +442,12 @@ func finaliseBlock(
 	parentBlock *types.Block,
 	transactions []types.Transaction,
 	receipts types.Receipts,
-	thisBatch uint64,
-) (*types.Block, []types.Transaction, []*types.Receipt, error) {
+	batch uint64,
+	ger common.Hash,
+	l1BlockHash common.Hash,
+) error {
 
 	stateWriter := state.NewPlainStateWriter(tx, tx, newHeader.Number.Uint64())
-	//stateWriter := state.NewPlainStateWriter(batch, tx, block.NumberU64())
 	chainReader := stagedsync.ChainReader{
 		Cfg: *cfg.chainConfig,
 		Db:  tx,
@@ -462,6 +456,10 @@ func finaliseBlock(
 	var excessDataGas *big.Int
 	if parentBlock != nil {
 		excessDataGas = parentBlock.ExcessDataGas()
+	}
+
+	if err := postBlockStateHandling(cfg, ibs, hermezDb, newHeader, ger, l1BlockHash, newHeader.ParentHash, transactions, receipts); err != nil {
+		return err
 	}
 
 	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecution(
@@ -480,7 +478,7 @@ func finaliseBlock(
 		excessDataGas,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	finalHeader := finalBlock.Header()
@@ -491,33 +489,33 @@ func finaliseBlock(
 	rawdb.WriteHeader(tx, finalHeader)
 	err = rawdb.WriteCanonicalHash(tx, finalHeader.Hash(), newNum.Uint64())
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to write header: %v", err)
+		return fmt.Errorf("failed to write header: %v", err)
 	}
 
 	erigonDB := erigon_db.NewErigonDb(tx)
 	err = erigonDB.WriteBody(newNum, finalHeader.Hash(), finalTransactions)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to write body: %v", err)
+		return fmt.Errorf("failed to write body: %v", err)
 	}
 
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(tx, finalBlock)
 
 	if err = rawdb.WriteReceipts(tx, newNum.Uint64(), finalReceipts); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	// now process the senders to avoid a stage by itself
 	if err := addSenders(cfg, newNum, finalTransactions, tx, finalHeader); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	// now add in the zk batch to block references
-	if err := hermezDb.WriteBlockBatch(newNum.Uint64(), thisBatch); err != nil {
-		return nil, nil, nil, fmt.Errorf("write block batch error: %v", err)
+	if err := hermezDb.WriteBlockBatch(newNum.Uint64(), batch); err != nil {
+		return fmt.Errorf("write block batch error: %v", err)
 	}
 
-	return finalBlock, finalTransactions, finalReceipts, nil
+	return nil
 }
 
 func handleStateForNewBlockStarting(
@@ -595,7 +593,7 @@ func attemptAddTransaction(
 	transaction types.Transaction,
 	ibs *state.IntraBlockState,
 ) (*types.Receipt, bool, error) {
-	txCounters := vm.NewTransactionCounter(transaction)
+	txCounters := vm.NewTransactionCounter(transaction, totalVirtualCounterSmtLevel)
 	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
 	if err != nil {
 		return nil, false, err
@@ -610,7 +608,9 @@ func attemptAddTransaction(
 	// set the counter collector on the config so that we can gather info during the execution
 	cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
 
-	receipt, _, err := core.ApplyTransaction(
+	ibs.Prepare(transaction.Hash(), common.Hash{}, 0)
+
+	receipt, returnData, err := core.ApplyTransaction(
 		cfg.chainConfig,
 		core.GetHashFn(header, getHeader),
 		cfg.engine,
@@ -624,6 +624,11 @@ func attemptAddTransaction(
 		cfg.zkVmConfig.Config,
 		parentHeader.ExcessDataGas,
 		zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED)
+
+	err = txCounters.ProcessTx(ibs, returnData)
+	if err != nil {
+		return nil, false, err
+	}
 
 	// now that we have executed we can check again for an overflow
 	overflow = batchCounters.CheckForOverflow()
