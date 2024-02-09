@@ -262,7 +262,7 @@ func SpawnSequencingStage(
 		default:
 			if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
 				slots := types2.TxsRlp{}
-				_, count, err := cfg.txPool.YieldBest(1, &slots, poolTx, executionAt, transactionGasLimit, yielded)
+				_, count, err := cfg.txPool.YieldBest(1, &slots, poolTx, executionAt, blockGasLimit, yielded)
 				if err != nil {
 					return err
 				}
