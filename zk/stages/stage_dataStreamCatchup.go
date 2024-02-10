@@ -267,6 +267,9 @@ LOOP:
 				}
 				ger = injected.LastGlobalExitRoot
 				l1BlockHash = injected.L1ParentHash
+
+				// block 1 in the stream has a delta timestamp of the block time itself
+				deltaTimestamp = block.Time()
 			} else {
 				// standard behaviour for non-injected or forced batches
 				if l1Index != 0 {
