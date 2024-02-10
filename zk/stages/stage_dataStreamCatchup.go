@@ -308,12 +308,7 @@ LOOP:
 				}
 			}
 
-			blockInfoRoot, err := reader.GetBlockInfoRoot(blockNumber)
-			if err != nil {
-				return err
-			}
-
-			err = srv.AddBlockEnd(block.NumberU64(), blockInfoRoot, blockInfoRoot)
+			err = srv.AddBlockEnd(block.NumberU64(), block.Root(), block.Root())
 			if err != nil {
 				return err
 			}
