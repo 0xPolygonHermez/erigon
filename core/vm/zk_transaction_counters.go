@@ -26,6 +26,8 @@ func NewTransactionCounter(transaction types.Transaction, smtMaxLevel uint32) *T
 		smtLevels:          totalLevel,
 	}
 
+	tc.executionCounters.SetTransaction(transaction)
+
 	return tc
 }
 

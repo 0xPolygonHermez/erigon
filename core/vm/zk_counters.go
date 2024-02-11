@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"math"
 	"math/big"
 	"strconv"
@@ -52,8 +53,10 @@ type CounterManager struct {
 }
 
 type CounterCollector struct {
-	counters  Counters
-	smtLevels int
+	counters    Counters
+	smtLevels   int
+	isCreate    bool
+	transaction types.Transaction
 }
 
 func calculateSmtLevels(smtMaxLevel uint32) int {
@@ -121,6 +124,11 @@ func (cc *CounterCollector) Counters() Counters {
 	return cc.counters
 }
 
+func (cc *CounterCollector) SetTransaction(transaction types.Transaction) {
+	cc.transaction = transaction
+	cc.isCreate = transaction.IsContractDeploy()
+}
+
 func WrapJumpTableWithZkCounters(originalTable *JumpTable, counterCalls *[256]executionFunc) *JumpTable {
 	wrapper := func(original, counter executionFunc) executionFunc {
 		return func(p *uint64, i *EVMInterpreter, s *ScopeContext) ([]byte, error) {
@@ -151,18 +159,52 @@ func WrapJumpTableWithZkCounters(originalTable *JumpTable, counterCalls *[256]ex
 
 func SimpleCounterOperations(cc *CounterCollector) *[256]executionFunc {
 	calls := &[256]executionFunc{
-		ADD:        cc.opAdd,
-		MUL:        cc.opMul,
-		SUB:        cc.opSub,
-		DIV:        cc.opDiv,
-		SDIV:       cc.opSDiv,
-		MOD:        cc.opMod,
-		SMOD:       cc.opSMod,
-		ADDMOD:     cc.opAddMod,
-		MULMOD:     cc.opMulMod,
-		EXP:        cc.opExp,
-		SIGNEXTEND: cc.opSignExtend,
-		BLOCKHASH:  cc.opBlockHash,
+		ADD:            cc.opAdd,
+		MUL:            cc.opMul,
+		SUB:            cc.opSub,
+		DIV:            cc.opDiv,
+		SDIV:           cc.opSDiv,
+		MOD:            cc.opMod,
+		SMOD:           cc.opSMod,
+		ADDMOD:         cc.opAddMod,
+		MULMOD:         cc.opMulMod,
+		EXP:            cc.opExp,
+		SIGNEXTEND:     cc.opSignExtend,
+		BLOCKHASH:      cc.opBlockHash,
+		COINBASE:       cc.opCoinbase,
+		TIMESTAMP:      cc.opTimestamp,
+		NUMBER:         cc.opNumber,
+		DIFFICULTY:     cc.opDifficulty,
+		GASLIMIT:       cc.opGasLimit,
+		CHAINID:        cc.opChainId,
+		CALLDATALOAD:   cc.opCalldataLoad,
+		CALLDATASIZE:   cc.opCalldataSize,
+		CALLDATACOPY:   cc.opCalldataCopy,
+		CODESIZE:       cc.opCodeSize,
+		EXTCODESIZE:    cc.opExtCodeSize,
+		EXTCODECOPY:    cc.opExtCodeCopy,
+		CODECOPY:       cc.opCodeCopy,
+		RETURNDATASIZE: cc.opReturnDataSize,
+		RETURNDATACOPY: cc.opReturnDataCopy,
+		EXTCODEHASH:    cc.opExtCodeHash,
+		LT:             cc.opLT,
+		GT:             cc.opGT,
+		SLT:            cc.opSLT,
+		SGT:            cc.opSGT,
+		EQ:             cc.opEQ,
+		ISZERO:         cc.opIsZero,
+		AND:            cc.opAnd,
+		OR:             cc.opOr,
+		XOR:            cc.opXor,
+		NOT:            cc.opNot,
+		BYTE:           cc.opByte,
+		SHR:            cc.opSHR,
+		SHL:            cc.opSHL,
+		SAR:            cc.opSAR,
+		STOP:           cc.opStop,
+		CREATE:         cc.opCreate,
+		CALL:           cc.opCall,
+		CALLCODE:       cc.opCallCode,
 	}
 	return calls
 }
@@ -200,9 +242,9 @@ func (cc *CounterCollector) divArith() {
 	cc.Deduct(A, 1)
 }
 
-func (cc *CounterCollector) opCode(isCreate bool) {
+func (cc *CounterCollector) opCode() {
 	cc.Deduct(S, 12)
-	if isCreate {
+	if cc.isCreate {
 		cc.mLoadX()
 		cc.SHRarith()
 	}
@@ -631,35 +673,35 @@ func (cc *CounterCollector) abs() {
 }
 
 func (cc *CounterCollector) opAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 10)
 	cc.Deduct(B, 1)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opMul(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 10)
 	cc.mulArith()
 	return nil, nil
 }
 
 func (cc *CounterCollector) opSub(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 10)
 	cc.Deduct(B, 1)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opDiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 15)
 	cc.divArith()
 	return nil, nil
 }
 
 func (cc *CounterCollector) opSDiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 25)
 	cc.Deduct(B, 1)
 	cc.multiCall(cc.abs, 2)
@@ -668,14 +710,14 @@ func (cc *CounterCollector) opSDiv(pc *uint64, interpreter *EVMInterpreter, scop
 }
 
 func (cc *CounterCollector) opMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 20)
 	cc.divArith()
 	return nil, nil
 }
 
 func (cc *CounterCollector) opSMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 20)
 	cc.Deduct(B, 1)
 	cc.multiCall(cc.abs, 2)
@@ -684,7 +726,7 @@ func (cc *CounterCollector) opSMod(pc *uint64, interpreter *EVMInterpreter, scop
 }
 
 func (cc *CounterCollector) opAddMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 30)
 	cc.Deduct(B, 3)
 	cc.Deduct(A, 1)
@@ -692,7 +734,7 @@ func (cc *CounterCollector) opAddMod(pc *uint64, interpreter *EVMInterpreter, sc
 }
 
 func (cc *CounterCollector) opMulMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 10)
 	cc.utilMulMod()
 	return nil, nil
@@ -706,7 +748,7 @@ func (cc *CounterCollector) utilMulMod() {
 }
 
 func (cc *CounterCollector) opExp(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 10)
 	exponent := scope.Stack.Peek()
 	exponentLength := len(exponent.Bytes())
@@ -738,7 +780,7 @@ func (cc *CounterCollector) getLenBits(inputLength int) {
 }
 
 func (cc *CounterCollector) opSignExtend(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
 	cc.Deduct(S, 20)
 	cc.Deduct(B, 6)
 	cc.Deduct(P, 2*cc.smtLevels)
@@ -746,9 +788,379 @@ func (cc *CounterCollector) opSignExtend(pc *uint64, interpreter *EVMInterpreter
 }
 
 func (cc *CounterCollector) opBlockHash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope.Contract.IsCreate)
+	cc.opCode()
+	cc.Deduct(S, 15)
+	cc.Deduct(P, cc.smtLevels)
+	cc.Deduct(K, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCoinbase(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opTimestamp(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opNumber(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opDifficulty(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opGasLimit(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opChainId(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCalldataLoad(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 15)
+	cc.readFromCallDataOffset()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCalldataSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCalldataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	inputLen := len(scope.Contract.Input)
+	cc.opCode()
+	cc.Deduct(S, 100)
+	cc.Deduct(B, 2)
+	cc.saveMem(inputLen)
+	cc.offsetUtil()
+	cc.multiCall(cc.opCalldataCopyLoop, int(math.Floor(float64(inputLen)/32)))
+	cc.readFromCallDataOffset()
+	cc.multiCall(cc.mStoreX, 2)
+	return nil, nil
+}
+
+func (cc *CounterCollector) saveMem(inputSize int) {
+	if inputSize == 0 {
+		cc.Deduct(S, 12)
+		cc.Deduct(B, 1)
+		return
+	}
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 5)
+	cc.mulArith()
+	cc.divArith()
+}
+
+func (cc *CounterCollector) opCalldataCopyLoop() {
+	cc.Deduct(S, 30)
+	cc.readFromCallDataOffset()
+	cc.offsetUtil()
+	cc.Deduct(M, 1)
+}
+
+func (cc *CounterCollector) opCodeSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(P, cc.smtLevels)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opExtCodeSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(P, cc.smtLevels)
+	cc.maskAddress()
+	cc.isColdAddress()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	stack := scope.Stack
+	length := stack.PeekAt(4) // no need to read contract storage as we only care about the byte length
+	cc.opCode()
+	cc.Deduct(S, 60)
+	cc.maskAddress()
+	cc.isColdAddress()
+	cc.Deduct(P, 2*cc.smtLevels+int(math.Ceil(float64(length.Uint64())/56)))
+	cc.Deduct(D, int(math.Ceil(float64(length.Uint64())/56)))
+	cc.multiCall(cc.divArith, 2)
+	cc.saveMem(len(scope.Contract.Input))
+	cc.mulArith()
+	cc.Deduct(M, len(scope.Contract.Input))
+	cc.multiCall(cc.opCodeCopyLoop, len(scope.Contract.Input))
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCodeCopyLoop() {
+	cc.Deduct(S, 30)
+	cc.Deduct(B, 2)
+	cc.Deduct(M, 1)
+	cc.offsetUtil()
+}
+
+func (cc *CounterCollector) opCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	if scope.Contract.IsCreate {
+		_, err := cc.opCalldataCopy(pc, interpreter, scope)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cc.Deduct(S, 40)
+		cc.Deduct(B, 3)
+		cc.saveMem(len(scope.Contract.Input))
+		cc.divArith()
+		cc.mulArith()
+		cc.multiCall(cc.opCodeCopyLoop, len(scope.Contract.Input))
+	}
+	return nil, nil
+}
+
+func (cc *CounterCollector) opReturnDataSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 11)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opReturnDataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	length := scope.Stack.PeekAt(3)
+	cc.opCode()
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 2)
+	cc.saveMem(int(length.Uint64()))
+	cc.divArith()
+	cc.mulArith()
+	cc.multiCall(cc.returnDataCopyLoop, int(length.Uint64()))
+	cc.mLoadX()
+	cc.mStoreX()
+	return nil, nil
+}
+
+func (cc *CounterCollector) returnDataCopyLoop() {
+	cc.Deduct(S, 10)
+	cc.mLoad32()
+	cc.mStore32()
+}
+
+func (cc *CounterCollector) opExtCodeHash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(P, cc.smtLevels)
+	cc.maskAddress()
+	cc.isColdAddress()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opLT(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opGT(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSLT(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSGT(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opEQ(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opIsZero(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opAnd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+	cc.Deduct(P, cc.smtLevels)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opOr(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+	cc.Deduct(P, cc.smtLevels)
+	return nil, nil
+}
+func (cc *CounterCollector) opXor(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+	cc.Deduct(P, cc.smtLevels)
+	return nil, nil
+}
+func (cc *CounterCollector) opNot(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+	cc.Deduct(P, cc.smtLevels)
+	return nil, nil
+}
+func (cc *CounterCollector) opByte(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 15)
+	cc.Deduct(B, 2)
+	cc.SHRarith()
+	return nil, nil
+}
+func (cc *CounterCollector) opSHR(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	cc.shrArithBit()
+	return nil, nil
+}
+
+func (cc *CounterCollector) shrArithBit() {
+	cc.Deduct(S, 30)
+	cc.Deduct(B, 2)
+	cc.divArith()
+}
+
+func (cc *CounterCollector) opSHL(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(B, 1)
+	cc.shlArithBit()
+	return nil, nil
+}
+
+func (cc *CounterCollector) shlArithBit() {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 2)
+	cc.Deduct(A, 2)
+}
+
+func (cc *CounterCollector) opSAR(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 25)
+	cc.Deduct(B, 5)
+	cc.shrArithBit()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
 	cc.Deduct(S, 20)
-	cc.Deduct(B, 6)
-	cc.Deduct(P, 2*cc.smtLevels)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	size := int(scope.Stack.PeekAt(3).Uint64())
+	nonceBytes := hermez_db.Uint64ToBytes(cc.transaction.GetNonce())
+	cc.opCode()
+	cc.Deduct(S, 70)
+	cc.Deduct(B, 3)
+	cc.Deduct(P, 3*cc.smtLevels)
+	cc.saveMem(size)
+	cc.getLenBytes(len(nonceBytes)) // todo: check, always 8?
+	cc.computeGasSendCall()
+	cc.saveCalldataPointer()
+	cc.checkpointBlockInfoTree()
+	cc.checkpointTouched()
+	return nil, nil
+}
+
+func (cc *CounterCollector) computeGasSendCall() {
+	cc.Deduct(S, 25)
+	cc.Deduct(B, 2)
+}
+
+func (cc *CounterCollector) saveCalldataPointer() {
+	cc.Deduct(S, 6)
+}
+
+func (cc *CounterCollector) checkpointBlockInfoTree() {
+	cc.Deduct(S, 4)
+}
+
+func (cc *CounterCollector) checkpointTouched() {
+	cc.Deduct(S, 2)
+}
+
+func (cc *CounterCollector) opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	inSize := int(scope.Stack.PeekAt(5).Uint64())
+	outSize := int(scope.Stack.PeekAt(7).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 80)
+	cc.Deduct(B, 5)
+	cc.maskAddress()
+	cc.saveMem(inSize)
+	cc.saveMem(outSize)
+	cc.isColdAddress()
+	cc.isEmptyAccount()
+	cc.computeGasSendCall()
+	cc.saveCalldataPointer()
+	cc.checkpointBlockInfoTree()
+	cc.checkpointTouched()
+	return nil, nil
+}
+
+func (cc *CounterCollector) isEmptyAccount() {
+	cc.Deduct(S, 30)
+	cc.Deduct(B, 3)
+	cc.Deduct(P, 3*cc.smtLevels)
+}
+
+func (cc *CounterCollector) opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	inSize := int(scope.Stack.PeekAt(5).Uint64())
+	outSize := int(scope.Stack.PeekAt(7).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 80)
+	cc.Deduct(B, 5)
+	cc.maskAddress()
+	cc.saveMem(inSize)
+	cc.saveMem(outSize)
+	cc.isColdAddress()
+	cc.computeGasSendCall()
+	cc.saveCalldataPointer()
+	cc.checkpointBlockInfoTree()
+	cc.checkpointTouched()
 	return nil, nil
 }
