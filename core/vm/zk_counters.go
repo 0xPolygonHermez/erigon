@@ -205,6 +205,101 @@ func SimpleCounterOperations(cc *CounterCollector) *[256]executionFunc {
 		CREATE:         cc.opCreate,
 		CALL:           cc.opCall,
 		CALLCODE:       cc.opCallCode,
+		DELEGATECALL:   cc.opDelegateCall,
+		STATICCALL:     cc.opStaticCall,
+		CREATE2:        cc.opCreate2,
+		RETURN:         cc.opReturn,
+		REVERT:         cc.opRevert,
+		SENDALL:        cc.opSendAll,
+		INVALID:        cc.opInvalid,
+		ADDRESS:        cc.opAddress,
+		SELFBALANCE:    cc.opSelfBalance,
+		ORIGIN:         cc.opOrigin,
+		CALLER:         cc.opCaller,
+		CALLVALUE:      cc.opCallValue,
+		GASPRICE:       cc.opGasPrice,
+		KECCAK256:      cc.opSha3,
+		JUMP:           cc.opJump,
+		JUMPI:          cc.opJumpI,
+		PC:             cc.opPC,
+		JUMPDEST:       cc.opJumpDest,
+		LOG0:           cc.opLog0,
+		LOG1:           cc.opLog1,
+		LOG2:           cc.opLog2,
+		LOG3:           cc.opLog3,
+		LOG4:           cc.opLog4,
+		PUSH0:          cc.opPush0,
+		PUSH1:          cc.opPushGenerator(1),
+		PUSH2:          cc.opPushGenerator(2),
+		PUSH3:          cc.opPushGenerator(3),
+		PUSH4:          cc.opPushGenerator(4),
+		PUSH5:          cc.opPushGenerator(5),
+		PUSH6:          cc.opPushGenerator(6),
+		PUSH7:          cc.opPushGenerator(7),
+		PUSH8:          cc.opPushGenerator(8),
+		PUSH9:          cc.opPushGenerator(9),
+		PUSH10:         cc.opPushGenerator(10),
+		PUSH11:         cc.opPushGenerator(11),
+		PUSH12:         cc.opPushGenerator(12),
+		PUSH13:         cc.opPushGenerator(13),
+		PUSH14:         cc.opPushGenerator(14),
+		PUSH15:         cc.opPushGenerator(15),
+		PUSH16:         cc.opPushGenerator(16),
+		PUSH17:         cc.opPushGenerator(17),
+		PUSH18:         cc.opPushGenerator(18),
+		PUSH19:         cc.opPushGenerator(19),
+		PUSH20:         cc.opPushGenerator(20),
+		PUSH21:         cc.opPushGenerator(21),
+		PUSH22:         cc.opPushGenerator(22),
+		PUSH23:         cc.opPushGenerator(23),
+		PUSH24:         cc.opPushGenerator(24),
+		PUSH25:         cc.opPushGenerator(25),
+		PUSH26:         cc.opPushGenerator(26),
+		PUSH27:         cc.opPushGenerator(27),
+		PUSH28:         cc.opPushGenerator(28),
+		PUSH29:         cc.opPushGenerator(29),
+		PUSH30:         cc.opPushGenerator(30),
+		PUSH31:         cc.opPushGenerator(31),
+		PUSH32:         cc.opPushGenerator(32),
+		DUP1:           cc.opDup,
+		DUP2:           cc.opDup,
+		DUP3:           cc.opDup,
+		DUP4:           cc.opDup,
+		DUP5:           cc.opDup,
+		DUP6:           cc.opDup,
+		DUP7:           cc.opDup,
+		DUP8:           cc.opDup,
+		DUP9:           cc.opDup,
+		DUP10:          cc.opDup,
+		DUP11:          cc.opDup,
+		DUP12:          cc.opDup,
+		DUP13:          cc.opDup,
+		DUP14:          cc.opDup,
+		DUP15:          cc.opDup,
+		DUP16:          cc.opDup,
+		SWAP1:          cc.opSwap,
+		SWAP2:          cc.opSwap,
+		SWAP3:          cc.opSwap,
+		SWAP4:          cc.opSwap,
+		SWAP5:          cc.opSwap,
+		SWAP6:          cc.opSwap,
+		SWAP7:          cc.opSwap,
+		SWAP8:          cc.opSwap,
+		SWAP9:          cc.opSwap,
+		SWAP10:         cc.opSwap,
+		SWAP11:         cc.opSwap,
+		SWAP12:         cc.opSwap,
+		SWAP13:         cc.opSwap,
+		SWAP14:         cc.opSwap,
+		SWAP15:         cc.opSwap,
+		SWAP16:         cc.opSwap,
+		POP:            cc.opPop,
+		MLOAD:          cc.opMLoad,
+		MSTORE:         cc.opMStore,
+		MSTORE8:        cc.opMStore8,
+		MSIZE:          cc.opMSize,
+		SLOAD:          cc.opSLoad,
+		SSTORE:         cc.opSSTore,
 	}
 	return calls
 }
@@ -1162,5 +1257,422 @@ func (cc *CounterCollector) opCallCode(pc *uint64, interpreter *EVMInterpreter, 
 	cc.saveCalldataPointer()
 	cc.checkpointBlockInfoTree()
 	cc.checkpointTouched()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	inSize := int(scope.Stack.PeekAt(4).Uint64())
+	outSize := int(scope.Stack.PeekAt(6).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 80)
+	cc.maskAddress()
+	cc.saveMem(inSize)
+	cc.saveMem(outSize)
+	cc.isColdAddress()
+	cc.computeGasSendCall()
+	cc.saveCalldataPointer()
+	cc.checkpointBlockInfoTree()
+	cc.checkpointTouched()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	inSize := int(scope.Stack.PeekAt(4).Uint64())
+	outSize := int(scope.Stack.PeekAt(6).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 80)
+	cc.maskAddress()
+	cc.saveMem(inSize)
+	cc.saveMem(outSize)
+	cc.isColdAddress()
+	cc.computeGasSendCall()
+	cc.saveCalldataPointer()
+	cc.checkpointBlockInfoTree()
+	cc.checkpointTouched()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	inSize := int(scope.Stack.PeekAt(3).Uint64())
+	nonceBytes := hermez_db.Uint64ToBytes(cc.transaction.GetNonce())
+	cc.opCode()
+	cc.Deduct(S, 80)
+	cc.Deduct(B, 4)
+	cc.Deduct(P, 2*cc.smtLevels)
+	cc.saveMem(inSize) // todo: check
+	cc.divArith()
+	cc.getLenBytes(len(nonceBytes)) // todo: check, always 8?
+	cc.computeGasSendCall()
+	cc.saveCalldataPointer()
+	cc.checkpointBlockInfoTree()
+	cc.checkpointTouched()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opReturn(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	returnSize := int(scope.Stack.PeekAt(2).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 30)
+	cc.Deduct(B, 1)
+	cc.saveMem(returnSize)
+	if cc.isCreate {
+		cc.Deduct(S, 25)
+		cc.Deduct(B, 2)
+		cc.Deduct(P, 2*cc.smtLevels)
+		cc.checkBytecodeStartsEF()
+		cc.hashPoseidonLinearFromMemory(returnSize)
+	} else {
+		cc.multiCall(cc.returnLoop, int(math.Floor(float64(returnSize)/32)))
+		cc.mLoadX()
+		cc.mStoreX()
+	}
+	return nil, nil
+}
+
+func (cc *CounterCollector) returnLoop() {
+	cc.Deduct(S, 12)
+	cc.mLoad32()
+	cc.mStore32()
+}
+
+func (cc *CounterCollector) opRevert(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	size := int(scope.Stack.PeekAt(2).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 40)
+	cc.Deduct(B, 1)
+	cc.revertTouched()
+	cc.revertBlockInfoTree()
+	cc.saveMem(size)
+	cc.multiCall(cc.revertLoop, int(math.Floor(float64(size)/32)))
+	cc.mLoadX()
+	cc.mStoreX()
+	return nil, nil
+}
+
+func (cc *CounterCollector) revertTouched() {
+	cc.Deduct(S, 2)
+}
+
+func (cc *CounterCollector) revertBlockInfoTree() {
+	cc.Deduct(S, 4)
+}
+
+func (cc *CounterCollector) revertLoop() {
+	cc.Deduct(S, 12)
+	cc.mLoad32()
+	cc.mStore32()
+}
+
+func (cc *CounterCollector) opSendAll(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 60)
+	cc.Deduct(B, 2+1)
+	cc.Deduct(P, 4*cc.smtLevels)
+	cc.maskAddress()
+	cc.isEmptyAccount()
+	cc.isColdAddress()
+	cc.addArith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opInvalid(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 50)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opAddress(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 6)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSelfBalance(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(P, cc.smtLevels)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opBalance(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.Deduct(P, cc.smtLevels)
+	cc.maskAddress()
+	cc.isColdAddress()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opOrigin(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCaller(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opCallValue(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opGasPrice(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opGas(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 4)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSha3(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	size := int(scope.Stack.PeekAt(2).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 40)
+	cc.Deduct(K, int(math.Ceil(float64(size)+1)/32))
+	cc.saveMem(size)
+	cc.multiCall(cc.divArith, 2)
+	cc.mulArith()
+	cc.multiCall(cc.sha3Loop, int(math.Floor(float64(size)/32)))
+	cc.mLoadX()
+	cc.SHRarith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) sha3Loop() {
+	cc.Deduct(S, 8)
+	cc.mLoad32()
+}
+
+func (cc *CounterCollector) opJump(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 5)
+	cc.checkJumpDest(cc.isCreate, false) // todo: how to define is deploy vs is create?
+	return nil, nil
+}
+
+func (cc *CounterCollector) checkJumpDest(isCreate bool, isDeploy bool) {
+	cc.Deduct(S, 10)
+	if isCreate {
+		cc.Deduct(B, 1)
+		if isDeploy {
+			cc.mLoadX()
+		}
+	}
+}
+
+func (cc *CounterCollector) opJumpI(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
+	cc.checkJumpDest(cc.isCreate, false) // todo: define is deploy
+	return nil, nil
+}
+
+func (cc *CounterCollector) opPC(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 4)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opJumpDest(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 2)
+	return nil, nil
+}
+
+func (cc *CounterCollector) log(scope *ScopeContext) {
+	size := int(scope.Stack.PeekAt(2).Uint64())
+	cc.opCode()
+	cc.Deduct(S, 30+8*4)
+	cc.saveMem(size)
+	cc.mulArith()
+	cc.divArith()
+	cc.Deduct(P, int(math.Ceil(float64(size)/56)+4))
+	cc.Deduct(D, int(math.Ceil(float64(size)/56)+4))
+	cc.multiCall(cc.logLoop, int(math.Floor(float64(size)+1/32)))
+	cc.mLoadX()
+	cc.SHRarith()
+	cc.fillBlockInfoTreeWithLog()
+	cc.Deduct(B, 1)
+}
+
+func (cc *CounterCollector) logLoop() {
+	cc.Deduct(S, 10)
+	cc.mLoad32()
+}
+
+func (cc *CounterCollector) fillBlockInfoTreeWithLog() {
+	cc.Deduct(S, 11)
+	cc.Deduct(P, MCPL)
+	cc.Deduct(B, 1)
+}
+
+func (cc *CounterCollector) opLog0(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.log(scope)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opLog1(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.log(scope)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opLog2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.log(scope)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opLog3(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.log(scope)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opLog4(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.log(scope)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opPush0(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 4)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opPushGenerator(num int) executionFunc {
+	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+		cc.opPush(num)
+		return nil, nil
+	}
+}
+
+func (cc *CounterCollector) opPush(num int) {
+	cc.opCode()
+	cc.Deduct(S, 4)
+	if cc.isCreate { //todo : or deploy?
+		cc.Deduct(B, 1)
+		if cc.isCreate {
+			cc.Deduct(S, 20)
+			cc.mLoadX()
+			cc.SHRarith()
+		} else {
+			cc.Deduct(S, 10)
+			for i := 0; i < num; i++ {
+				cc.Deduct(S, 10)
+				cc.SHLarith()
+			}
+		}
+	} else {
+		cc.Deduct(S, 10)
+		cc.readPush(num)
+	}
+}
+
+func (cc *CounterCollector) readPush(num int) {
+	cc.Deduct(S, 15)
+	cc.Deduct(B, 1)
+	numBlocks := int(math.Ceil(float64(num) / 4))
+	leftBytes := num % 4
+
+	for i := 0; i <= numBlocks; i++ {
+		cc.Deduct(S, 20)
+		cc.Deduct(B, 1)
+		for j := i - 1; j > 0; j-- {
+			cc.Deduct(S, 8)
+		}
+	}
+
+	for i := 0; i < leftBytes; i++ {
+		cc.Deduct(S, 40)
+		cc.Deduct(B, 4)
+	}
+}
+
+// tooo: seems odd that we don't adjust counters based on dup1 vs dup16 here but copying JS like for like
+func (cc *CounterCollector) opDup(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 6)
+	return nil, nil
+}
+
+// todo: same check here as for opDup
+func (cc *CounterCollector) opSwap(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 7)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opPop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 3)
+	return nil, nil
+}
+
+func (cc *CounterCollector) opMLoad(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 8)
+	cc.saveMem(32)
+	cc.mLoad32()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opMStore(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 22)
+	cc.Deduct(M, 1)
+	cc.saveMem(32)
+	cc.offsetUtil()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opMStore8(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 13)
+	cc.Deduct(M, 1)
+	cc.saveMem(1)
+	cc.offsetUtil()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opMSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 15)
+	cc.divArith()
+	return nil, nil
+}
+
+func (cc *CounterCollector) opSLoad(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 10)
+	cc.Deduct(P, cc.smtLevels)
+	cc.isColdSlot()
+	return nil, nil
+}
+
+func (cc *CounterCollector) isColdSlot() {
+	cc.Deduct(S, 20)
+	cc.Deduct(B, 1)
+	cc.Deduct(P, 2*MCPL)
+}
+
+func (cc *CounterCollector) opSSTore(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	cc.opCode()
+	cc.Deduct(S, 70)
+	cc.Deduct(B, 8)
+	cc.Deduct(P, 3*cc.smtLevels)
+	cc.isColdSlot()
 	return nil, nil
 }
