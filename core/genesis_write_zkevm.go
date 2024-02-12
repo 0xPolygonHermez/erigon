@@ -73,7 +73,7 @@ func HermezCardonaInternalGenesisBlock() *types.Genesis {
 func HermezLocalDevnetGenesisBlock() *types.Genesis {
 	return &types.Genesis{
 		Config:     params.HermezLocalDevnetChainConfig,
-		Timestamp:  1676996964,
+		Timestamp:  1706732232,
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
 		Alloc:      readPrealloc("allocs/hermez-dev.json"),
@@ -91,10 +91,6 @@ func X1TestnetGenesisBlock() *types.Genesis {
 }
 
 func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr libcommon.Address) (*big.Int, error) {
-
-	if root == nil {
-		root = big.NewInt(0)
-	}
 
 	// store the account balance and nonce
 	r, err := s.SetAccountState(addr.String(), a.Balance, new(big.Int).SetUint64(a.Nonce))
@@ -119,6 +115,9 @@ func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr lib
 	// store the account storage
 	if len(sm) > 0 {
 		r, err = s.SetContractStorage(addr.String(), sm, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return r, nil
 }

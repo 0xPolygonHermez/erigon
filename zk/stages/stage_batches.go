@@ -395,7 +395,7 @@ func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx
 // writes header, body, forkId and blockBatch
 func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block) error {
 	bn := new(big.Int).SetUint64(l2Block.L2BlockNumber)
-	var txs []ethTypes.Transaction
+	txs := make([]ethTypes.Transaction, 0, len(l2Block.L2Txs))
 	for _, transaction := range l2Block.L2Txs {
 		ltx, _, err := txtype.DecodeTx(transaction.Encoded, transaction.EffectiveGasPricePercentage, l2Block.ForkId)
 		if err != nil {
@@ -407,13 +407,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 			return fmt.Errorf("write effective gas price percentage error: %v", err)
 		}
 
-		//TODO: temp datastream fix, remove later
-		//works only for Cardona
-		stateRoot := transaction.StateRoot
-		if bn.Uint64() == 59056 {
-			stateRoot = common.HexToHash("0x0c21a98253d5ef5cf77faa5fbbc44e627fd14ec6d410c6e87d40e639e54b41d7")
-		}
-		if err := hermezDb.WriteStateRoot(l2Block.L2BlockNumber, stateRoot); err != nil {
+		if err := hermezDb.WriteStateRoot(l2Block.L2BlockNumber, transaction.StateRoot); err != nil {
 			return fmt.Errorf("write rpc root error: %v", err)
 		}
 	}

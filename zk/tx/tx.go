@@ -8,10 +8,14 @@ import (
 
 	"bytes"
 
+	"regexp"
+	"strings"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -59,7 +63,7 @@ func DecodeTxs(txsData []byte, forkID uint64) ([]types.Transaction, []byte, []ui
 			log.Debug("error num < c0 : %d, %d", num, c0)
 			return []types.Transaction{}, txsData, []uint8{}, ErrInvalidData
 		}
-		length := uint64(num - c0)
+		length := num - c0
 		if length > shortRlp { // If rlp is bigger than length 55
 			// n is the length of the rlp data without the header (1 byte) for example "0xf7"
 			if (pos + 1 + num - f7) > txDataLength {
@@ -111,7 +115,7 @@ func DecodeTxs(txsData []byte, forkID uint64) ([]types.Transaction, []byte, []ui
 
 		if forkID >= forkID5 {
 			efficiencyPercentage := txsData[dataStart+rLength+sLength+vLength : endPos]
-			efficiencyPercentages = append(efficiencyPercentages, uint8(efficiencyPercentage[0]))
+			efficiencyPercentages = append(efficiencyPercentages, efficiencyPercentage[0])
 		}
 
 		pos = endPos
@@ -230,4 +234,175 @@ func rlpFieldsToLegacyTx(fields [][]byte, v, r, s []byte) (tx *types.LegacyTx, e
 		},
 		GasPrice: gasPriceI,
 	}, nil
+}
+
+func ComputeL2TxHash(
+	chainId *big.Int,
+	value, gasPrice *uint256.Int,
+	nonce, txGasLimit uint64,
+	to, from *common.Address,
+	data []byte,
+) (common.Hash, error) {
+
+	txType := "01"
+	if chainId != nil && chainId.Cmp(big.NewInt(0)) == 0 {
+		txType = "00"
+	}
+
+	// add txType, nonce, gasPrice and gasLimit
+	noncePart, err := formatL2TxHashParam(nonce, 8)
+	if err != nil {
+		return common.Hash{}, err
+
+	}
+	gasPricePart, err := formatL2TxHashParam(gasPrice, 32)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	gasLimitPart, err := formatL2TxHashParam(txGasLimit, 8)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	hash := fmt.Sprintf("%s%s%s%s", txType, noncePart, gasPricePart, gasLimitPart)
+
+	// check is deploy
+	if to == nil || to.Hex() == "0x0000000000000000000000000000000000000000" {
+		hash += "01"
+	} else {
+		toPart, err := formatL2TxHashParam(to.Hex(), 20)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		hash += fmt.Sprintf("00%s", toPart)
+	}
+	// add value
+	valuePart, err := formatL2TxHashParam(value, 32)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	hash += valuePart
+
+	// compute data length
+	dataStr := hex.EncodeToHex(data)
+	if len(dataStr) > 1 && dataStr[:2] == "0x" {
+		dataStr = dataStr[2:]
+	}
+
+	//round to ceil
+	dataLength := (len(dataStr) + 1) / 2
+	dataLengthPart, err := formatL2TxHashParam(dataLength, 3)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	hash += dataLengthPart
+
+	if dataLength > 0 {
+		dataPart, err := formatL2TxHashParam(dataStr, dataLength)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		hash += dataPart
+	}
+
+	// add chainID
+	if chainId != nil {
+		chainIDPart, err := formatL2TxHashParam(chainId, 8)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		hash += chainIDPart
+	}
+
+	// add from
+	fromPart, err := formatL2TxHashParam(from.Hex(), 20)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	hash += fromPart
+
+	hashed, err := utils.HashContractBytecode(hash)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return common.HexToHash(hashed), nil
+}
+
+func formatL2TxHashParam(param interface{}, paramLength int) (string, error) {
+	var paramStr string
+
+	switch v := param.(type) {
+	case int:
+		if v == 0 {
+			paramStr = "0"
+		} else {
+			paramStr = strconv.FormatInt(int64(v), 16)
+		}
+	case int64:
+		if v == 0 {
+			paramStr = "0"
+		} else {
+			paramStr = strconv.FormatInt(v, 16)
+		}
+	case uint:
+		if v == 0 {
+			paramStr = "0"
+		} else {
+			paramStr = strconv.FormatUint(uint64(v), 16)
+		}
+	case uint64:
+		if v == 0 {
+			paramStr = "0"
+		} else {
+			paramStr = strconv.FormatUint(v, 16)
+		}
+	case *big.Int:
+		if v.Sign() == 0 {
+			paramStr = "0"
+		} else {
+			paramStr = v.Text(16)
+		}
+	case *uint256.Int:
+		if v == nil {
+			paramStr = "0"
+		} else {
+			paramStr = v.Hex()
+		}
+	case []uint8:
+		paramStr = hex.EncodeToHex(v)
+	case common.Address:
+		paramStr = v.Hex()
+	case string:
+		paramStr = v
+	default:
+		return "", fmt.Errorf("unsupported parameter type")
+	}
+
+	if strings.HasPrefix(paramStr, "0x") {
+		paramStr = paramStr[2:]
+	}
+
+	if len(paramStr)%2 == 1 {
+		paramStr = "0" + paramStr
+	}
+
+	matched, err := regexp.MatchString("^[0-9a-fA-F]+$", paramStr)
+	if err != nil {
+		return "", err
+	}
+	if !matched {
+		return "", fmt.Errorf("invalid hex string")
+	}
+
+	paramStr = padStart(paramStr, paramLength*2, "0")
+
+	return paramStr, nil
+}
+
+func padStart(str string, length int, pad string) string {
+	if len(str) >= length {
+		return str
+	}
+	padding := strings.Repeat(pad, length-len(str))
+	return padding[:length-len(str)] + str
 }

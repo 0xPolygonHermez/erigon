@@ -13,6 +13,7 @@ import (
 )
 
 const EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED = 0
+const EFFECTIVE_GAS_PRICE_PERCENTAGE_MAXIMUM = 255
 
 var EFFECTIVE_GAS_PRICE_MAX_VAL = new(uint256.Int).SetUint64(256)
 
@@ -86,7 +87,7 @@ func (ib *L1InjectedBatch) Marshall() []byte {
 	result = append(result, ib.L1ParentHash[:]...)
 	result = append(result, ib.LastGlobalExitRoot[:]...)
 	result = append(result, ib.Sequencer[:]...)
-	result = append(result, ib.Transaction[:]...)
+	result = append(result, ib.Transaction...)
 	return result
 }
 
