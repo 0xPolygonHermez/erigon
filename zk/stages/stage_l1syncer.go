@@ -264,7 +264,7 @@ func verifyAgainstLocalBlocks(tx kv.RwTx, hermezDb *hermez_db.HermezDb, logPrefi
 	if verifiedBlockNo <= hashedBlockNo {
 		blockToCheck = verifiedBlockNo
 	} else {
-		// in this case we need to find the blocknumber that is highest for the lat batch
+		// in this case we need to find the blocknumber that is highest for the last batch
 		// get the batch of the last hashed block
 		hashedBatch, err := hermezDb.GetBatchNoByL2Block(hashedBlockNo)
 		if err != nil {
