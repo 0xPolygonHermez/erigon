@@ -80,6 +80,14 @@ func SpawnStageDataStreamCatchup(
 
 	// skip genesis if we have no data in the stream yet
 	if currentBatch == 0 {
+		genesis, err := rawdb.ReadBlockByNumber(tx, 0)
+		if err != nil {
+			return err
+		}
+		lastBlock = genesis
+		if err = writeGenesisToStream(genesis, reader, stream, srv); err != nil {
+			return err
+		}
 		currentBatch++
 	}
 
@@ -255,6 +263,56 @@ func writeBlockToStream(
 	}
 
 	err = srv.AddBlockEnd(block.NumberU64(), block.Root(), block.Root())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func writeGenesisToStream(
+	genesis *eritypes.Block,
+	reader *hermez_db.HermezDbReader,
+	stream *datastreamer.StreamServer,
+	srv *server.DataStreamServer,
+) error {
+
+	batch, err := reader.GetBatchNoByL2Block(0)
+	if err != nil {
+		return err
+	}
+
+	ger, _, err := reader.GetBlockGlobalExitRoot(genesis.NumberU64())
+	if err != nil {
+		return err
+	}
+
+	fork, err := reader.GetForkId(batch)
+	if err != nil {
+		return err
+	}
+
+	err = stream.StartAtomicOp()
+	if err != nil {
+		return err
+	}
+
+	err = srv.AddBookmark(server.BlockBookmarkType, genesis.NumberU64())
+	if err != nil {
+		return err
+	}
+
+	err = srv.AddBlockStart(genesis, batch, uint16(fork), ger, 0, 0, common.Hash{})
+	if err != nil {
+		return err
+	}
+
+	err = srv.AddBlockEnd(genesis.NumberU64(), genesis.Hash(), genesis.Root())
+	if err != nil {
+		return err
+	}
+
+	err = stream.CommitAtomicOp()
 	if err != nil {
 		return err
 	}
