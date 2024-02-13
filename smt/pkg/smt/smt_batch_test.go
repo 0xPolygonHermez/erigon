@@ -482,7 +482,7 @@ func compareAllTreesInsertTimesAndFinalHashes(t *testing.T, smtIncremental, smtB
 	}
 
 	for addr, storage := range storageChanges {
-		if _, err := smtIncremental.SetContractStorage(addr.String(), storage); err != nil {
+		if _, err := smtIncremental.SetContractStorage(addr.String(), storage, nil); err != nil {
 			incrementalError = err
 		}
 	}
