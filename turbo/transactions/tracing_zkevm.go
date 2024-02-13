@@ -77,9 +77,9 @@ func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, bloc
 
 	hermezReader := hermez_db.NewHermezDbReader(dbtx)
 
-	//////////////////////////////////////////////
-	// [zkevm] finish set preexecution state
-	/////////////////////////////////////////////
+	///////////////////////////////////////////
+	// [zkevm] finish set preexecution state //
+	///////////////////////////////////////////
 	//[zkevm] get batches between last block and this one
 	// plus this blocks ger
 	lastBatchInserted, err := hermezReader.GetBatchNoByL2Block(BlockContext.BlockNumber - 1)
@@ -104,9 +104,9 @@ func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, bloc
 	}
 
 	statedb.SyncerPreExecuteStateSet(cfg, BlockContext.BlockNumber, BlockContext.Time, nil /* not going to affect trace*/, &blockGer, &l1BlockHash, &gersInBetween)
-	////////////////////////////////////////////
-	// [zkevm] finish set preexecution state
-	////////////////////////////////////////////
+	///////////////////////////////////////////
+	// [zkevm] finish set preexecution state //
+	///////////////////////////////////////////
 	for idx, txn := range block.Transactions() {
 		select {
 		default:
