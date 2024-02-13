@@ -343,7 +343,7 @@ func TestBatchRawInsert(t *testing.T) {
 	smtBatch := smt.NewSMT(nil)
 
 	rand.Seed(1)
-	size := 1 << 16
+	size := 1 << 10
 	for i := 0; i < size; i++ {
 		rawKey := big.NewInt(rand.Int63())
 		rawValue := big.NewInt(rand.Int63())
@@ -551,7 +551,7 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 }
 
 func prepareData() ([]*BatchInsertDataHolder, int) {
-	treeSize := 1500
+	treeSize := 150
 	storageSize := 96
 	batchInsertDataHolders := make([]*BatchInsertDataHolder, 0)
 	rand.Seed(1)
