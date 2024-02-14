@@ -940,7 +940,7 @@ func (cc *CounterCollector) opCalldataSize(pc *uint64, interpreter *EVMInterpret
 }
 
 func (cc *CounterCollector) opCalldataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	inputLen := len(scope.Contract.Input)
+	inputLen := int(scope.Stack.PeekAt(3).Uint64())
 	cc.opCode()
 	cc.Deduct(S, 100)
 	cc.Deduct(B, 2)
@@ -989,18 +989,20 @@ func (cc *CounterCollector) opExtCodeSize(pc *uint64, interpreter *EVMInterprete
 
 func (cc *CounterCollector) opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	stack := scope.Stack
-	length := stack.PeekAt(4) // no need to read contract storage as we only care about the byte length
+	address := stack.PeekAt(1).Bytes20()
+	bytecodeLen := interpreter.evm.IntraBlockState().GetCodeSize(address)
+	length := int(stack.PeekAt(4).Uint64()) // no need to read contract storage as we only care about the byte length
 	cc.opCode()
 	cc.Deduct(S, 60)
 	cc.maskAddress()
 	cc.isColdAddress()
-	cc.Deduct(P, 2*cc.smtLevels+int(math.Ceil(float64(length.Uint64())/56)))
-	cc.Deduct(D, int(math.Ceil(float64(length.Uint64())/56)))
+	cc.Deduct(P, 2*cc.smtLevels+int(math.Ceil(float64(bytecodeLen)/56)))
+	cc.Deduct(D, int(math.Ceil(float64(bytecodeLen)/56)))
 	cc.multiCall(cc.divArith, 2)
-	cc.saveMem(len(scope.Contract.Input))
+	cc.saveMem(length)
 	cc.mulArith()
-	cc.Deduct(M, len(scope.Contract.Input))
-	cc.multiCall(cc.opCodeCopyLoop, len(scope.Contract.Input))
+	cc.Deduct(M, length)
+	cc.multiCall(cc.opCodeCopyLoop, length)
 	cc.Deduct(B, 1)
 	return nil, nil
 }
@@ -1020,12 +1022,13 @@ func (cc *CounterCollector) opCodeCopy(pc *uint64, interpreter *EVMInterpreter, 
 			return nil, err
 		}
 	} else {
+		length := int(scope.Stack.PeekAt(3).Uint64())
 		cc.Deduct(S, 40)
 		cc.Deduct(B, 3)
-		cc.saveMem(len(scope.Contract.Input))
+		cc.saveMem(length)
 		cc.divArith()
 		cc.mulArith()
-		cc.multiCall(cc.opCodeCopyLoop, len(scope.Contract.Input))
+		cc.multiCall(cc.opCodeCopyLoop, length)
 	}
 	return nil, nil
 }
@@ -1038,14 +1041,14 @@ func (cc *CounterCollector) opReturnDataSize(pc *uint64, interpreter *EVMInterpr
 }
 
 func (cc *CounterCollector) opReturnDataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	length := scope.Stack.PeekAt(3)
+	length := int(scope.Stack.PeekAt(3).Uint64())
 	cc.opCode()
 	cc.Deduct(S, 50)
 	cc.Deduct(B, 2)
-	cc.saveMem(int(length.Uint64()))
+	cc.saveMem(length)
 	cc.divArith()
 	cc.mulArith()
-	cc.multiCall(cc.returnDataCopyLoop, int(length.Uint64()))
+	cc.multiCall(cc.returnDataCopyLoop, int(math.Floor(float64(length)/32)))
 	cc.mLoadX()
 	cc.mStoreX()
 	return nil, nil
