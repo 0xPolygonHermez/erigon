@@ -107,13 +107,12 @@ func (tc *TransactionCounter) CalculateRlp() error {
 func (tc *TransactionCounter) ProcessTx(ibs *state.IntraBlockState, returnData []byte) error {
 	byteCodeLength := 0
 	isDeploy := false
-	if tc.transaction.IsContractDeploy() {
+	toAddress := tc.transaction.GetTo()
+	if toAddress == nil {
 		byteCodeLength = len(returnData)
 		isDeploy = true
 	} else {
-		to := tc.transaction.GetTo()
-		contractCode := ibs.GetCode(*to)
-		byteCodeLength = len(contractCode)
+		byteCodeLength = ibs.GetCodeSize(*toAddress)
 	}
 
 	cc := NewCounterCollector(tc.smtLevels)
