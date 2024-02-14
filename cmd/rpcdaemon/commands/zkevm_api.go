@@ -30,11 +30,9 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/trie"
-	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
-	zkUtils "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
 )
 
@@ -508,48 +506,7 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 
 		tds.SetStateReader(reader)
 
-		gers := []*dstypes.GerUpdate{}
-
 		hermezDb := hermez_db.NewHermezDbReader(tx)
-
-		//[zkevm] get batches between last block and this one
-		// plus this blocks ger
-		lastBatchInserted, err := hermezDb.GetBatchNoByL2Block(i - 1)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get batch for block %d: %v", i-1, err)
-		}
-
-		currentBatch, err := hermezDb.GetBatchNoByL2Block(i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get batch for block %d: %v", i, err)
-		}
-
-		gersInBetween, err := hermezDb.GetBatchGlobalExitRoots(lastBatchInserted, currentBatch)
-		if err != nil {
-			return nil, err
-		}
-
-		if gersInBetween != nil {
-			gers = append(gers, gersInBetween...)
-		}
-
-		blockGer, _, err := hermezDb.GetBlockGlobalExitRoot(i)
-		if err != nil {
-			return nil, err
-		}
-
-		blockGerUpdate := dstypes.GerUpdate{
-			GlobalExitRoot: blockGer,
-			Timestamp:      block.Header().Time,
-		}
-		gers = append(gers, &blockGerUpdate)
-
-		for _, ger := range gers {
-			// [zkevm] - add GER if there is one for this batch
-			if err := zkUtils.WriteGlobalExitRoot(tds, trieStateWriter, ger.GlobalExitRoot, ger.Timestamp); err != nil {
-				return nil, err
-			}
-		}
 
 		engine, ok := api.ethApi.engine().(consensus.Engine)
 
@@ -563,7 +520,9 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 
 		chainReader := stagedsync.NewChainReaderImpl(chainConfig, tx, nil)
 
-		_, err = core.ExecuteBlockEphemerally(chainConfig, &vmConfig, getHashFn, engine, block, tds, trieStateWriter, chainReader, nil, nil, hermezDb)
+		prevBlockHash := block.ParentHash()
+
+		_, err = core.ExecuteBlockEphemerallyZk(chainConfig, &vmConfig, getHashFn, engine, &prevBlockHash, block, tds, trieStateWriter, chainReader, nil, nil, hermezDb)
 
 		if err != nil {
 			return nil, err
