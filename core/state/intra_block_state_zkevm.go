@@ -8,7 +8,11 @@ import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/common/dbutils"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
+	"sort"
 )
 
 var (
@@ -206,4 +210,136 @@ func (sdb *IntraBlockState) ScalableGetTimestamp() uint64 {
 
 	sdb.GetState(ADDRESS_SCALABLE_L2, &TIMESTAMP_STORAGE_POS, timestamp)
 	return timestamp.Uint64()
+}
+
+func (sdb *IntraBlockState) ResolveSMTRetainList() (*trie.RetainList, error) {
+	// TODO: somehow accumulate changes across blocks
+	//// Aggregating the current buffer, if any
+	//if sdb.currentBuffer != nil {
+	//	if tds.aggregateBuffer == nil {
+	//		tds.aggregateBuffer = &Buffer{}
+	//		tds.aggregateBuffer.initialise()
+	//	}
+	//	tds.aggregateBuffer.merge(tds.currentBuffer)
+	//}
+	//if tds.aggregateBuffer == nil {
+	//	return nil, nil
+	//}
+	//
+	//tds.tMu.Lock()
+	//defer tds.tMu.Unlock()
+
+	//// Prepare (resolve) storage tries so that actual modifications can proceed without database access
+	//storageTouches := tds.buildStorageReads()
+	//
+	//// Prepare (resolve) accounts trie so that actual modifications can proceed without database access
+	//accountLookup := tds.buildAccountReads()
+
+	keys := make([][]int, 0)
+
+	accountLookup := make(map[libcommon.Hash]libcommon.Address)
+	accountTouches := common.Hashes{}
+	storageTouches := common.StorageKeys{}
+
+	// TODO: we're probably getting too much state here as we have to dump the whole storage
+
+	// state objects is all 'touched' state objects
+	for k, v := range sdb.stateObjects {
+		addrHash, err := common.HashData(k[:])
+		if err != nil {
+			return nil, err
+		}
+		accountLookup[addrHash] = k
+		accountTouches = append(accountTouches, addrHash)
+
+		for sk, _ := range v.originStorage {
+			// TODO: maybe can refactor this when figured out what's going on lower down!
+			var storageKey common.StorageKey
+			copy(storageKey[:], sk[:])
+			storageTouches = append(storageTouches, storageKey)
+		}
+
+		for dsk, _ := range v.dirtyStorage {
+			// TODO: maybe can refactor this when figured out what's going on lower down!
+			var storageKey common.StorageKey
+			copy(storageKey[:], dsk[:])
+			storageTouches = append(storageTouches, storageKey)
+		}
+	}
+
+	sort.Sort(storageTouches)
+	sort.Sort(accountTouches)
+
+	// Add account keys to the retain list
+	for _, address := range accountTouches {
+		addr := accountLookup[address].String()
+
+		nonceKey, err := utils.KeyEthAddrNonce(addr)
+
+		if err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, nonceKey.GetPath())
+
+		balanceKey, err := utils.KeyEthAddrBalance(addr)
+
+		if err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, balanceKey.GetPath())
+
+		codeKey, err := utils.KeyContractCode(addr)
+
+		if err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, codeKey.GetPath())
+
+		codeLengthKey, err := utils.KeyContractLength(addr)
+
+		if err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, codeLengthKey.GetPath())
+	}
+
+	for _, sk := range storageTouches {
+		addrHash, _, keyHash := dbutils.ParseCompositeStorageKey(sk[:])
+
+		ethAddr := accountLookup[addrHash].String()
+		a := utils.ConvertHexToBigInt(ethAddr)
+		addr := utils.ScalarToArrayBig(a)
+
+		key := keyHash.String()
+
+		storageKey, err := utils.KeyContractStorage(addr, key)
+
+		if err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, storageKey.GetPath())
+	}
+
+	rl := trie.NewRetainList(0)
+
+	for _, key := range keys {
+		// Convert key to bytes
+		keyBytes := make([]byte, 0, len(key))
+
+		for _, v := range key {
+			keyBytes = append(keyBytes, byte(v))
+		}
+
+		rl.AddHex(keyBytes)
+	}
+
+	// TODO: consider just returning [][]byte here and concatenating in the caller to solve the line1 TODO
+	//
+
+	return rl, nil
 }

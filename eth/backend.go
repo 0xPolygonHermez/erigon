@@ -102,6 +102,7 @@ import (
 	"github.com/ledgerwatch/erigon/p2p/enode"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rpc"
+	"github.com/ledgerwatch/erigon/rpc/rpccfg"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/turbo/engineapi"
 	"github.com/ledgerwatch/erigon/turbo/services"
@@ -113,6 +114,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/contracts"
 	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	txpool2 "github.com/ledgerwatch/erigon/zk/txpool"
@@ -737,6 +739,23 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				cfg.L1QueryDelay,
 			)
 
+			levCfg := legacy_executor_verifier.Config{
+				GrpcUrls: []string{},
+				Timeout:  time.Second * 5,
+			}
+			executors := legacy_executor_verifier.NewExecutors(levCfg)
+			var iLegacyExecutors []legacy_executor_verifier.ILegacyExecutor
+			for _, e := range executors {
+				iLegacyExecutors = append(iLegacyExecutors, e)
+			}
+			verifier := legacy_executor_verifier.NewLegacyExecutorVerifier(iLegacyExecutors)
+
+			// Get ZKEVMAPI - to use the RPC impl of getting the witness (replace later!)
+			br := snapshotsync.NewBlockReaderWithSnapshots(backend.blockSnapshots, backend.config.TransactionsV3)
+			stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+			api := commands.NewEthAPI(commands.NewBaseApi(nil, stateCache, br, backend.agg, false, rpccfg.DefaultEvmCallTimeout, backend.engine, backend.config.Dirs), backend.chainDB, nil, nil, nil, 5000000, 100_000, cfg.L2RpcUrl)
+			zkevmApi := commands.NewZkEvmAPI(api, backend.chainDB, 0, cfg.L2RpcUrl)
+
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
 				backend.chainDB,
@@ -752,6 +771,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				zkL1Syncer,
 				backend.txPool2,
 				backend.txPool2DB,
+				verifier,
+				zkevmApi,
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder

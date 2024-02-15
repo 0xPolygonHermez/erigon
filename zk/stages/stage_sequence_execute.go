@@ -687,6 +687,8 @@ func attemptAddTransaction(
 	// set the counter collector on the config so that we can gather info during the execution
 	cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
 
+	// TODO: possibly inject zero tracer here!
+
 	ibs.Prepare(transaction.Hash(), common.Hash{}, 0)
 
 	receipt, returnData, err := core.ApplyTransaction(
