@@ -32,7 +32,7 @@ const (
 
 type ErigonDb interface {
 	WriteHeader(batchNo *big.Int, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64) (*ethTypes.Header, error)
-	WriteBody(batchNumber *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
+	WriteBody(batchNo *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
 }
 
 type HermezDb interface {
@@ -40,10 +40,12 @@ type HermezDb interface {
 	WriteForkIdBlockOnce(forkId, blockNum uint64) error
 	WriteBlockBatch(l2BlockNumber uint64, batchNumber uint64) error
 	WriteEffectiveGasPricePercentage(txHash common.Hash, effectiveGasPricePercentage uint8) error
+	DeleteEffectiveGasPricePercentages(txHashes *[]common.Hash) error
+
 	WriteStateRoot(l2BlockNumber uint64, rpcRoot common.Hash) error
 
 	DeleteForkIds(fromBatchNum, toBatchNum uint64) error
-	DeleteBlockBatches(fromBatchNum, toBatchNum uint64) error
+	DeleteBlockBatches(fromBlockNum, toBlockNum uint64) error
 	WriteGlobalExitRoot(ger common.Hash) error
 	GetGlobalExitRoot(ger common.Hash) (bool, error)
 	WriteBlockGlobalExitRoot(l2BlockNo uint64, ger common.Hash, l1BlockHash common.Hash) error
@@ -321,16 +323,149 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		return fmt.Errorf("failed to create hermezDb: %v", err)
 	}
 
-	eriDb.DeleteBodies(fromBlock)
-	eriDb.DeleteHeaders(fromBlock)
-	hermezDb.DeleteForkIds(fromBlock, toBlock)
-	hermezDb.DeleteBlockBatches(fromBlock, toBlock)
-	hermezDb.DeleteBlockGlobalExitRoots(fromBlock, toBlock)
+	//////////////////////////////////
+	// delete batch connected stuff //
+	//////////////////////////////////
+	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
+	if err != nil {
+		return fmt.Errorf("could not retrieve l1 verifications batch no progress")
+	}
+
+	fromBatchPrev, err := hermezDb.GetBatchNoByL2Block(fromBlock - 1)
+	if err != nil {
+		return fmt.Errorf("get batch no by l2 block error: %v", err)
+	}
+	fromBatch, err := hermezDb.GetBatchNoByL2Block(fromBlock)
+	if err != nil {
+		return fmt.Errorf("get batch no by l2 block error: %v", err)
+	}
+	toBatch, err := hermezDb.GetBatchNoByL2Block(toBlock)
+	if err != nil {
+		return fmt.Errorf("get batch no by l2 block error: %v", err)
+	}
+
+	// if previous block has different batch, delete the "fromBlock" one
+	// since it is written first in this block
+	// otherwise don't delete it and start from the next batch
+	if fromBatchPrev == fromBatch {
+		fromBatch++
+	}
+
+	if fromBatch <= toBatch {
+		if err := hermezDb.DeleteForkIds(fromBatch, toBatch); err != nil {
+			return fmt.Errorf("delete fork ids error: %v", err)
+		}
+		if err := hermezDb.DeleteBatchGlobalExitRoots(fromBatch, toBatch); err != nil {
+			return fmt.Errorf("delete batch global exit roots error: %v", err)
+		}
+	}
+
+	if highestVerifiedBatch >= fromBatch {
+		if err := rawdb.DeleteForkchoiceFinalized(tx); err != nil {
+			return fmt.Errorf("delete forkchoice finalized error: %v", err)
+		}
+	}
+	/////////////////////////////////////////
+	// finish delete batch connected stuff //
+	/////////////////////////////////////////
+
+	//get transactions before deleting them so we can delete stuff connected to them
+	transactions, err := eriDb.GetBodyTransactions(fromBlock, toBlock)
+	if err != nil {
+		return fmt.Errorf("get body transactions error: %v", err)
+	}
+	transactionHashes := make([]common.Hash, 0, len(*transactions))
+	for _, tx := range *transactions {
+		transactionHashes = append(transactionHashes, tx.Hash())
+	}
+
+	if err := hermezDb.DeleteEffectiveGasPricePercentages(&transactionHashes); err != nil {
+		return fmt.Errorf("delete effective gas price percentages error: %v", err)
+	}
+	if err := hermezDb.DeleteStateRoots(fromBlock, toBlock); err != nil {
+		return fmt.Errorf("delete state roots error: %v", err)
+	}
+	if err := eriDb.DeleteHeaders(fromBlock); err != nil {
+		return fmt.Errorf("delete headers error: %v", err)
+	}
+	if err := eriDb.DeleteBodies(fromBlock); err != nil {
+		return fmt.Errorf("delete bodies error: %v", err)
+	}
+	if err := hermezDb.DeleteBlockBatches(fromBlock, toBlock); err != nil {
+		return fmt.Errorf("delete block batches error: %v", err)
+	}
+	if err := hermezDb.DeleteForkIdBlock(fromBlock, toBlock); err != nil {
+		return fmt.Errorf("delete fork id block error: %v", err)
+	}
+
+	//////////////////////////////////////////////////////
+	// get gers before deleting them				    //
+	// so we can delete them in the other table as well //
+	//////////////////////////////////////////////////////
+	gers, _, err := hermezDb.GetBlockGlobalExitRoots(fromBlock, toBlock)
+	if err != nil {
+		return fmt.Errorf("get block global exit roots error: %v", err)
+	}
+
+	if err := hermezDb.DeleteGlobalExitRoots(&gers); err != nil {
+		return fmt.Errorf("delete global exit roots error: %v", err)
+	}
+
+	if err := hermezDb.DeleteBlockGlobalExitRoots(fromBlock, toBlock); err != nil {
+		return fmt.Errorf("delete block global exit roots error: %v", err)
+	}
+	///////////////////////////////////////////////////////
 
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", fromBlock)
 
-	if err := stages.SaveStageProgress(tx, stages.Batches, fromBlock); err != nil {
+	stageprogress := uint64(0)
+	if fromBlock > 1 {
+		stageprogress = fromBlock - 1
+	}
+	if err := stages.SaveStageProgress(tx, stages.Batches, stageprogress); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+
+	/////////////////////////////////////////////
+	// store the highest hashable block number //
+	/////////////////////////////////////////////
+	// iterate until a block with lower batch number is found
+	// this is the last block of the previous batch and the highest hashable block for vrifications
+	highestHashableL2BlockNo := uint64(fromBlock)
+	for i := fromBlock; i > 0; i-- {
+		batchNo, err := hermezDb.GetBatchNoByL2Block(i)
+		if err != nil {
+			return fmt.Errorf("get batch no by l2 block error: %v", err)
+		}
+		if batchNo == fromBatch-1 {
+			highestHashableL2BlockNo = uint64(i)
+			break
+		}
+	}
+
+	if err := stages.SaveStageProgress(tx, stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+	/////////////////////////////////////////////////////
+	// finish storing the highest hashable block number//
+	/////////////////////////////////////////////////////
+
+	//////////////////////////////////
+	// store the highest seen forkid//
+	//////////////////////////////////
+	forkId, err := hermezDb.GetForkId(fromBatchPrev)
+	if err != nil {
+		return fmt.Errorf("get fork id error: %v", err)
+	}
+	if err := stages.SaveStageProgress(tx, stages.ForkId, forkId); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+	/////////////////////////////////////////
+	// finish store the highest seen forkid//
+	/////////////////////////////////////////
+
+	if err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, fromBatchPrev); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 

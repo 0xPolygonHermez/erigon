@@ -3,6 +3,7 @@ package rawdb
 import (
 	"encoding/binary"
 	"fmt"
+
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -62,5 +63,38 @@ func TruncateBodies(tx kv.RwTx, blockNum uint64) error {
 	}); err != nil {
 		return fmt.Errorf("TruncateBodies: %w", err)
 	}
+	return nil
+}
+
+func GetBodyTransactions(tx kv.RwTx, fromBlockNum, toBlockNum uint64) (*[]types.Transaction, error) {
+	var transactions []types.Transaction
+	if err := tx.ForEach(kv.BlockBody, hexutility.EncodeTs(fromBlockNum), func(k, v []byte) error {
+		blocNum := binary.BigEndian.Uint64(k[:8])
+		if blocNum < fromBlockNum || blocNum > toBlockNum {
+			return nil
+		}
+
+		var body types.BodyForStorage
+		if err := rlp.DecodeBytes(v, &body); err != nil {
+			return fmt.Errorf("failed to decode body: %w", err)
+		}
+
+		txs, err := CanonicalTransactions(tx, body.BaseTxId, body.TxAmount)
+		if err != nil {
+			return fmt.Errorf("failed to read txs: %w", err)
+		}
+		transactions = append(transactions, txs...)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("TruncateBodies: %w", err)
+	}
+	return &transactions, nil
+}
+
+func DeleteForkchoiceFinalized(db kv.Deleter) error {
+	if err := db.Delete(kv.LastForkchoice, []byte("finalizedBlockHash")); err != nil {
+		return fmt.Errorf("failed to delete LastForkchoice: %w", err)
+	}
+
 	return nil
 }
