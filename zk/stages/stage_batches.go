@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync/atomic"
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -53,13 +54,21 @@ type HermezDb interface {
 	WriteBatchGlobalExitRoot(batchNumber uint64, ger types.GerUpdate) error
 }
 
+type DatastreamClient interface {
+	ReadAllEntriesToChannel(bookmark *types.Bookmark) error
+	GetL2BlockChan() chan types.FullL2Block
+	GetGerUpdatesChan() chan types.GerUpdate
+	GetLastWrittenTimeAtomic() *atomic.Int64
+	GetStreamingAtomic() *atomic.Bool
+}
+
 type BatchesCfg struct {
 	db                  kv.RwDB
 	blockRoutineStarted bool
-	dsClient            *dsclient.StreamClient
+	dsClient            DatastreamClient
 }
 
-func StageBatchesCfg(db kv.RwDB, dsClient *dsclient.StreamClient) BatchesCfg {
+func StageBatchesCfg(db kv.RwDB, dsClient DatastreamClient) BatchesCfg {
 	return BatchesCfg{
 		db:                  db,
 		blockRoutineStarted: false,
@@ -160,13 +169,19 @@ func SpawnStageBatches(
 	startTime := time.Now()
 
 	log.Info(fmt.Sprintf("[%s] Reading blocks from the datastream.", logPrefix))
+
+	l2BlockChan := cfg.dsClient.GetL2BlockChan()
+	gerUpdateChan := cfg.dsClient.GetGerUpdatesChan()
+	lastWrittenTimeAtomic := cfg.dsClient.GetLastWrittenTimeAtomic()
+	streamingAtomic := cfg.dsClient.GetStreamingAtomic()
+
 	for {
 		// get block
 		// if no blocks available should block
 		// if download routine finished, should continue to read from channel until it's empty
 		// if both download routine stopped and channel empty - stop loop
 		select {
-		case l2Block := <-cfg.dsClient.L2BlockChan:
+		case l2Block := <-l2BlockChan:
 			atLeastOneBlockWritten = true
 			// skip if we already have this block
 			if l2Block.L2BlockNumber < lastBlockHeight+1 {
@@ -217,7 +232,7 @@ func SpawnStageBatches(
 			lastBlockHeight = l2Block.L2BlockNumber
 			blocksWritten++
 			progressChan <- blocksWritten
-		case gerUpdate := <-cfg.dsClient.GerUpdatesChan:
+		case gerUpdate := <-gerUpdateChan:
 			if gerUpdate.GlobalExitRoot == emptyHash {
 				log.Warn(fmt.Sprintf("[%s] Skipping GER update with empty root", logPrefix))
 				break
@@ -238,9 +253,9 @@ func SpawnStageBatches(
 				// if no blocks available should and time since last block written is > 500ms
 				// consider that we are at the tip and blocks come in the datastream as they are produced
 				// stop the current iteration of the stage
-				lastWrittenTs := cfg.dsClient.LastWrittenTime.Load()
+				lastWrittenTs := lastWrittenTimeAtomic.Load()
 				timePassedAfterlastBlock := time.Since(time.Unix(0, lastWrittenTs))
-				if cfg.dsClient.Streaming.Load() && timePassedAfterlastBlock.Milliseconds() > 500 {
+				if streamingAtomic.Load() && timePassedAfterlastBlock.Milliseconds() > 500 {
 					log.Info(fmt.Sprintf("[%s] No new blocks in %d miliseconds. Ending the stage.", logPrefix, timePassedAfterlastBlock.Milliseconds()), "lastBlockHeight", lastBlockHeight)
 					writeThreadFinished = true
 				}
