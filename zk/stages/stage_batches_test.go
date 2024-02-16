@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
@@ -79,6 +80,19 @@ func TestUnwindBatches(t *testing.T) {
 	err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 20)
 	require.NoError(t, err)
 
+	// get bucket sizes pre inserts
+	bucketSized := make(map[string]uint64)
+	buckets, err := tx.ListBuckets()
+	require.NoError(t, err)
+	for _, bucket := range buckets {
+		size, err := tx.BucketSize(bucket)
+		require.NoError(t, err)
+		bucketSized[bucket] = size
+	}
+
+	/////////
+	// ACT //
+	/////////
 	err = SpawnStageBatches(s, u, ctx, tx, cfg, true, true)
 	require.NoError(t, err)
 
@@ -89,13 +103,20 @@ func TestUnwindBatches(t *testing.T) {
 	require.NoError(t, err)
 	tx2.Commit()
 
+	////////////////
+	// ASSERTIONS //
+	////////////////
 	// check if there is any data in the tables
 	tx3 := memdb.BeginRw(t, db1)
-	buckets, err := tx3.ListBuckets()
+	buckets, err = tx3.ListBuckets()
 	require.NoError(t, err)
 	for _, bucket := range buckets {
+		//currently not decrementing sequence
+		if bucket == kv.Sequence {
+			continue
+		}
 		size, err := tx3.BucketSize(bucket)
 		require.NoError(t, err)
-		require.Equal(t, uint64(0), size, "butcket %s is not empty", bucket)
+		require.Equal(t, bucketSized[bucket], size, "butcket %s is not empty", bucket)
 	}
 }

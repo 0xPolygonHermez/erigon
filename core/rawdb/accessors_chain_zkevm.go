@@ -32,8 +32,10 @@ func DeleteTransactions(db kv.RwTx, txsCount, baseTxId uint64, blockHash *libcom
 	return nil
 }
 
-func TruncateBodies(tx kv.RwTx, blockNum uint64) error {
-	if err := tx.ForEach(kv.BlockBody, hexutility.EncodeTs(blockNum), func(k, v []byte) error {
+func TruncateBodies(tx kv.RwTx, fromBlockNum uint64) error {
+	if err := tx.ForEach(kv.BlockBody, hexutility.EncodeTs(fromBlockNum), func(k, v []byte) error {
+		blockNum := binary.BigEndian.Uint64(k[:8])
+
 		var body types.BodyForStorage
 		if err := rlp.DecodeBytes(v, &body); err != nil {
 			return fmt.Errorf("failed to decode body: %w", err)
@@ -44,18 +46,12 @@ func TruncateBodies(tx kv.RwTx, blockNum uint64) error {
 			return fmt.Errorf("failed to read txs: %w", err)
 		}
 
-		blockhash := libcommon.BytesToHash(k)
+		blockhash := libcommon.BytesToHash(k[8:])
 		// delete body for storage
 		deleteBody(tx, blockhash, blockNum)
 
-		// TODO: decrement sequence?
-		// decrement txs sequence
-		// if err := tx.DecrementSequence(kv.EthTx, uint64(body.TxAmount)); err != nil {
-		// 	return fmt.Errorf("failed to decrement sequence: %w", err)
-		// }
-
 		// delete transactions
-		if err := DeleteTransactions(tx, uint64(len(txs)), body.BaseTxId, &blockhash); err != nil {
+		if err := DeleteTransactions(tx, uint64(len(txs)), body.BaseTxId+1, nil); err != nil {
 			return fmt.Errorf("failed to delete txs: %w", err)
 		}
 

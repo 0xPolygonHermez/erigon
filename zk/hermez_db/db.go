@@ -456,8 +456,19 @@ func (db *HermezDbReader) GetBatchGlobalExitRoot(batchNum uint64) (*dstypes.GerU
 	return gerUpdate, nil
 }
 
-func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) error {
-	for i := fromBatchNum; i <= toBatchNum; i++ {
+func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum uint64) error {
+	c, err := db.tx.Cursor(GLOBAL_EXIT_ROOTS_BATCHES)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	k, _, err := c.Last()
+	if err != nil {
+		return err
+	}
+
+	for i := fromBatchNum; i <= BytesToUint64(k); i++ {
 		err := db.tx.Delete(GLOBAL_EXIT_ROOTS_BATCHES, Uint64ToBytes(i))
 		if err != nil {
 			return err
@@ -468,8 +479,25 @@ func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) 
 }
 
 func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) error {
-	for i := fromBlockNum; i <= toBlockNum; i++ {
-		err := db.tx.Delete(BLOCK_GLOBAL_EXIT_ROOTS, Uint64ToBytes(i))
+	c, err := db.tx.Cursor(BLOCK_GLOBAL_EXIT_ROOTS)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	var k []byte
+	var keys [][]byte
+	for k, _, err = c.First(); k != nil; k, _, err = c.Next() {
+		if err != nil {
+			break
+		}
+		blockNum := BytesToUint64(k[:8])
+		if blockNum >= fromBlockNum && blockNum <= toBlockNum {
+			keys = append(keys, k)
+		}
+	}
+	for _, key := range keys {
+		err := db.tx.Delete(BLOCK_GLOBAL_EXIT_ROOTS, key)
 		if err != nil {
 			return err
 		}

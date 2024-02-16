@@ -362,7 +362,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// if previous block has different batch, delete the "fromBlock" one
 	// since it is written first in this block
 	// otherwise don't delete it and start from the next batch
-	if fromBatchPrev == fromBatch {
+	if fromBatchPrev == fromBatch && fromBatch != 0 {
 		fromBatch++
 	}
 
@@ -370,7 +370,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		if err := hermezDb.DeleteForkIds(fromBatch, toBatch); err != nil {
 			return fmt.Errorf("delete fork ids error: %v", err)
 		}
-		if err := hermezDb.DeleteBatchGlobalExitRoots(fromBatch, toBatch); err != nil {
+		if err := hermezDb.DeleteBatchGlobalExitRoots(fromBatch); err != nil {
 			return fmt.Errorf("delete batch global exit roots error: %v", err)
 		}
 	}
