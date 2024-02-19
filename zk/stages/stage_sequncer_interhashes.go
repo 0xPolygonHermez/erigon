@@ -12,17 +12,25 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 )
 
 type SequencerInterhashesCfg struct {
 	db          kv.RwDB
 	accumulator *shards.Accumulator
+	verifier    *legacy_executor_verifier.LegacyExecutorVerifier
 }
 
-func StageSequencerInterhashesCfg(db kv.RwDB, accumulator *shards.Accumulator) SequencerInterhashesCfg {
+func StageSequencerInterhashesCfg(
+	db kv.RwDB,
+	accumulator *shards.Accumulator,
+	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
+) SequencerInterhashesCfg {
 	return SequencerInterhashesCfg{
 		db:          db,
 		accumulator: accumulator,
+		verifier:    verifier,
 	}
 }
 
@@ -50,6 +58,7 @@ func SpawnSequencerInterhashesStage(
 		return err
 	}
 
+	hermezDb := hermez_db.NewHermezDb(tx)
 	erigonDb := erigon_db.NewErigonDb(tx)
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb)
@@ -62,6 +71,8 @@ func SpawnSequencerInterhashesStage(
 			return err
 		}
 	} else {
+		// todo [zkevm] we need to be prepared for multi-block batches at some point so this should really be a loop with a from/to
+		// of the previous stage state and the latest block from execution stage
 		newRoot, err = zkIncrementIntermediateHashes(s.LogPrefix(), s, tx, eridb, smt, to, false, nil, ctx.Done())
 		if err != nil {
 			return err
@@ -108,6 +119,13 @@ func SpawnSequencerInterhashesStage(
 
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(tx, latest)
+
+	// we need to inform the verifier that a new batch is ready to be processed at the executor
+	batch, err := hermezDb.GetBatchNoByL2Block(header.Number.Uint64())
+	if err != nil {
+		return err
+	}
+	cfg.verifier.AddRequest(legacy_executor_verifier.VerifierRequest{BatchNumber: batch})
 
 	if err := s.Update(tx, to); err != nil {
 		return err

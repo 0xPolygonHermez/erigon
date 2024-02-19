@@ -7,7 +7,6 @@ import (
 	proto_downloader "github.com/ledgerwatch/erigon-lib/gointerfaces/downloader"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/state"
-	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/commands"
 	"github.com/ledgerwatch/erigon/cmd/sentry/sentry"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core/vm"
@@ -99,7 +98,6 @@ func NewSequencerZkStages(ctx context.Context,
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
 	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
-	api commands.ZkEvmAPI,
 ) []*stagedsync.Stage {
 	dirs := cfg.Dirs
 	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
@@ -112,7 +110,7 @@ func NewSequencerZkStages(ctx context.Context,
 		stagedsync.StageCumulativeIndexCfg(db),
 		zkStages.StageL1SequencerSyncCfg(db, cfg.Zk, l1Syncer),
 		zkStages.StageDataStreamCatchupCfg(datastreamServer, db, cfg.Genesis.Config.ChainID.Uint64()),
-		zkStages.StageSequencerInterhashesCfg(db, notifications.Accumulator),
+		zkStages.StageSequencerInterhashesCfg(db, notifications.Accumulator, verifier),
 		zkStages.StageSequenceBlocksCfg(
 			db,
 			cfg.Prune,
@@ -136,7 +134,7 @@ func NewSequencerZkStages(ctx context.Context,
 		),
 		stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg),
 		zkStages.StageZkInterHashesCfg(db, true, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk),
-		zkStages.StageSequencerExecutorVerifyCfg(db, verifier, api),
+		zkStages.StageSequencerExecutorVerifyCfg(db, verifier),
 		stagedsync.StageHistoryCfg(db, cfg.Prune, dirs.Tmp),
 		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp),
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),

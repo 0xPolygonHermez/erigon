@@ -14,7 +14,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx) (bool, uint64, error) {
 		return false, 0, err
 	}
 
-	hermezDb, err := hermez_db.NewHermezDb(tx)
+	hermezDb := hermez_db.NewHermezDb(tx)
 	if err != nil {
 		return false, 0, err
 	}

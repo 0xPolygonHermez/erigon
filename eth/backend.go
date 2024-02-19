@@ -102,7 +102,6 @@ import (
 	"github.com/ledgerwatch/erigon/p2p/enode"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rpc"
-	"github.com/ledgerwatch/erigon/rpc/rpccfg"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/turbo/engineapi"
 	"github.com/ledgerwatch/erigon/turbo/services"
@@ -749,12 +748,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				iLegacyExecutors = append(iLegacyExecutors, e)
 			}
 			verifier := legacy_executor_verifier.NewLegacyExecutorVerifier(iLegacyExecutors)
-
-			// Get ZKEVMAPI - to use the RPC impl of getting the witness (replace later!)
-			br := snapshotsync.NewBlockReaderWithSnapshots(backend.blockSnapshots, backend.config.TransactionsV3)
-			stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
-			api := commands.NewEthAPI(commands.NewBaseApi(nil, stateCache, br, backend.agg, false, rpccfg.DefaultEvmCallTimeout, backend.engine, backend.config.Dirs), backend.chainDB, nil, nil, nil, 5000000, 100_000, cfg.L2RpcUrl)
-			zkevmApi := commands.NewZkEvmAPI(api, backend.chainDB, 0, cfg.L2RpcUrl)
+			verifier.StartWork()
 
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
@@ -772,7 +766,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.txPool2,
 				backend.txPool2DB,
 				verifier,
-				zkevmApi,
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
