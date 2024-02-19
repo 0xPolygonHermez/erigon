@@ -336,13 +336,13 @@ func Test_EncodeToBatchL2DataAndBack(t *testing.T) {
 	tx := &types.LegacyTx{
 		CommonTx: types.CommonTx{
 			TransactionMisc: types.TransactionMisc{},
-			ChainID:         uint256.NewInt(5),
+			ChainID:         uint256.NewInt(987),
 			Nonce:           2,
 			Gas:             3,
 			To:              &toAddress,
 			Value:           uint256.NewInt(4),
 			Data:            []byte{5},
-			V:               *uint256.NewInt(19),
+			V:               *uint256.NewInt(2009),
 			R:               *uint256.NewInt(7),
 			S:               *uint256.NewInt(8),
 		},

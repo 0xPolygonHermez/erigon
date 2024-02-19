@@ -253,7 +253,7 @@ func TransactionToL2Data(tx types.Transaction, forkId uint16, efficiencyPercenta
 		val = tx.GetValue()
 	}
 	valueBytes := val.Bytes()
-	chainIdBytes := tx.GetChainID().Bytes()
+	chainIdBytes := tx.GetChainID()
 
 	var to []byte
 	if tx.GetTo() != nil {
@@ -267,7 +267,7 @@ func TransactionToL2Data(tx types.Transaction, forkId uint16, efficiencyPercenta
 		to,
 		valueBytes,
 		tx.GetData(),
-		chainIdBytes,
+		chainIdBytes.Bytes(),
 	}
 
 	encoded, err := rlp.EncodeToBytes(toEncode)
