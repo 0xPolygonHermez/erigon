@@ -12,24 +12,20 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
-	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 )
 
 type SequencerInterhashesCfg struct {
 	db          kv.RwDB
 	accumulator *shards.Accumulator
-	verifier    *legacy_executor_verifier.LegacyExecutorVerifier
 }
 
 func StageSequencerInterhashesCfg(
 	db kv.RwDB,
 	accumulator *shards.Accumulator,
-	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
 ) SequencerInterhashesCfg {
 	return SequencerInterhashesCfg{
 		db:          db,
 		accumulator: accumulator,
-		verifier:    verifier,
 	}
 }
 
