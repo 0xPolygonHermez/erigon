@@ -91,6 +91,16 @@ func (v *LegacyExecutorVerifier) handleResponse(response VerifierResponse) {
 }
 
 func (v *LegacyExecutorVerifier) AddRequest(request VerifierRequest) {
+	v.responseMutex.Lock()
+	defer v.responseMutex.Unlock()
+
+	// check we don't already have a response for this to save doubling up work
+	for _, response := range v.responses {
+		if response.BatchNumber == request.BatchNumber {
+			return
+		}
+	}
+
 	v.requestChan <- request
 }
 
@@ -109,7 +119,6 @@ func (v *LegacyExecutorVerifier) RemoveResponse(batchNumber uint64) {
 	for index, response := range v.responses {
 		if response.BatchNumber == batchNumber {
 			v.responses = append(v.responses[:index], v.responses[index+1:]...)
-			break
 		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	"sort"
@@ -45,6 +46,9 @@ func SpawnSequencerExecutorVerifyStage(
 		defer tx.Rollback()
 	}
 
+	hermezDb := hermez_db.NewHermezDb(tx)
+
+	// progress here is at the batch level
 	progress, err := stages.GetStageProgress(tx, stages.SequenceExecutorVerify)
 	if err != nil {
 		return err
@@ -73,13 +77,31 @@ func SpawnSequencerExecutorVerifyStage(
 		}
 
 		// all good so just update the stage progress for now
-		progress = response.BatchNumber
-		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, progress); err != nil {
+		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, response.BatchNumber); err != nil {
 			return err
 		}
 
 		// now let the verifier know we have got this message, so it can release it
 		cfg.verifier.RemoveResponse(response.BatchNumber)
+		progress = response.BatchNumber
+	}
+
+	// progress here is at the block level
+	intersProgress, err := stages.GetStageProgress(tx, stages.IntermediateHashes)
+	if err != nil {
+		return err
+	}
+
+	// we need to get the batch number for the latest block, so we can search for new batches to send for
+	// verification
+	intersBatch, err := hermezDb.GetBatchNoByL2Block(intersProgress)
+	if err != nil {
+		return err
+	}
+
+	// send off the new batches to the verifier to be processed
+	for batch := progress + 1; batch <= intersBatch; batch++ {
+		cfg.verifier.AddRequest(legacy_executor_verifier.VerifierRequest{BatchNumber: batch})
 	}
 
 	if freshTx {

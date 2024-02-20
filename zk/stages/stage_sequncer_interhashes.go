@@ -12,7 +12,6 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 )
 
@@ -58,7 +57,6 @@ func SpawnSequencerInterhashesStage(
 		return err
 	}
 
-	hermezDb := hermez_db.NewHermezDb(tx)
 	erigonDb := erigon_db.NewErigonDb(tx)
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb)
@@ -119,13 +117,6 @@ func SpawnSequencerInterhashesStage(
 
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(tx, latest)
-
-	// we need to inform the verifier that a new batch is ready to be processed at the executor
-	batch, err := hermezDb.GetBatchNoByL2Block(header.Number.Uint64())
-	if err != nil {
-		return err
-	}
-	cfg.verifier.AddRequest(legacy_executor_verifier.VerifierRequest{BatchNumber: batch})
 
 	if err := s.Update(tx, to); err != nil {
 		return err
