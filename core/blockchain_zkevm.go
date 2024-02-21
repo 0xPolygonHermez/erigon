@@ -215,17 +215,17 @@ func ExecuteBlockEphemerallyZk(
 		logIndex += int64(len(receipt.Logs))
 	}
 
-	var l1InfoRoot libcommon.Hash
+	var l2InfoRoot libcommon.Hash
 	if chainConfig.IsForkID7Etrog(blockNum) {
 		// [zkevm] - set the block info tree root
 		root, err := blockInfoTree.SetBlockGasUsed(*usedGas)
 		if err != nil {
 			return nil, err
 		}
-		l1InfoRoot = libcommon.BigToHash(root)
+		l2InfoRoot = libcommon.BigToHash(root)
 	}
 
-	ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), &l1InfoRoot)
+	ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), &l2InfoRoot)
 
 	receiptSha := types.DeriveSha(receipts)
 	// [zkevm] todo
