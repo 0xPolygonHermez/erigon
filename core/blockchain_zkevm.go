@@ -156,13 +156,19 @@ func ExecuteBlockEphemerallyZk(
 			return nil, err
 		}
 
-		receipt, _, err := ApplyTransaction(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, effectiveGasPricePercentage)
+		receipt, execResult, err := ApplyTransaction_zkevm(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, effectiveGasPricePercentage)
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
 				ftracer.Flush(tx)
 			}
 
 			vmConfig.Tracer = nil
+		}
+
+		//TODO: remove this after bug is fixed
+		localReceipt := *receipt
+		if execResult.Err == vm.ErrUnsupportedPrecompile {
+			localReceipt.Status = 1
 		}
 
 		if err != nil {
@@ -200,7 +206,7 @@ func ExecuteBlockEphemerallyZk(
 			_, err = blockInfoTree.SetBlockTx(
 				&l2TxHash,
 				txIndex,
-				receipt,
+				&localReceipt,
 				logIndex,
 				*usedGas,
 				effectiveGasPricePercentage,
