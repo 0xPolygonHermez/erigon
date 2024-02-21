@@ -61,7 +61,7 @@ var PrecompiledContractForkID7Etrog = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{9}): &blake2F_zkevm{enabled: false},
 }
 
-// PrecompiledContractsForkID8 contains the default set of pre-compiled ForkID7 Etrog.
+// PrecompiledContractsForkID8 contains the default set of pre-compiled ForkID8.
 var PrecompiledContractsForkID8 = map[libcommon.Address]PrecompiledContract{
 	libcommon.BytesToAddress([]byte{1}): &ecrecover_zkevm{enabled: true},
 	libcommon.BytesToAddress([]byte{2}): &sha256hash_zkevm{enabled: true},
