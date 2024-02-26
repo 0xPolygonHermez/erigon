@@ -181,6 +181,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.RpcRateLimitsFlag,
 	&utils.DatastreamVersionFlag,
 	&utils.RebuildTreeAfterFlag,
+	&utils.SequencerAddressFlag,
+	&utils.ExecutorUrls,
 	&utils.DataStreamHost,
 	&utils.DataStreamPort,
 }

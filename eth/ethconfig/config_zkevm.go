@@ -19,6 +19,8 @@ type Zk struct {
 	L1FirstBlock                uint64
 	RpcRateLimits               int
 	DatastreamVersion           int
+	SequencerAddress            common.Address
+	ExecutorUrls                []string
 
 	RebuildTreeAfter uint64
 }
