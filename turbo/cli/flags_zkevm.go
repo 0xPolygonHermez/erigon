@@ -45,6 +45,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		RebuildTreeAfter:            ctx.Uint64(utils.RebuildTreeAfterFlag.Name),
 		SequencerAddress:            libcommon.HexToAddress(ctx.String(utils.SequencerAddressFlag.Name)),
 		ExecutorUrls:                strings.Split(ctx.String(utils.ExecutorUrls.Name), ","),
+		ExecutorStrictMode:          ctx.Bool(utils.ExecutorStrictMode.Name),
 	}
 
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.Zk.L2ChainId)
@@ -54,6 +55,13 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	} else {
 		checkFlag(utils.SequencerAddressFlag.Name, cfg.Zk.SequencerAddress)
 		checkFlag(utils.ExecutorUrls.Name, cfg.Zk.ExecutorUrls)
+		checkFlag(utils.ExecutorStrictMode.Name, cfg.Zk.ExecutorStrictMode)
+
+		// if we are running in strict mode, the default, and we have no executor URLs then we panic
+		if cfg.Zk.ExecutorStrictMode && (len(cfg.Zk.ExecutorUrls) == 0 || cfg.Zk.ExecutorUrls[0] == "") {
+			panic("You must set executor urls when running in executor strict mode (zkevm.executor-strict)")
+		}
+
 	}
 	checkFlag(utils.L1ChainIdFlag.Name, cfg.Zk.L1ChainId)
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.Zk.L1RpcUrl)

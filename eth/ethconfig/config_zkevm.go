@@ -21,6 +21,7 @@ type Zk struct {
 	DatastreamVersion           int
 	SequencerAddress            common.Address
 	ExecutorUrls                []string
+	ExecutorStrictMode          bool
 
 	RebuildTreeAfter uint64
 }

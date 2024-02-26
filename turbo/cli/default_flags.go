@@ -183,6 +183,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.RebuildTreeAfterFlag,
 	&utils.SequencerAddressFlag,
 	&utils.ExecutorUrls,
+	&utils.ExecutorStrictMode,
 	&utils.DataStreamHost,
 	&utils.DataStreamPort,
 }

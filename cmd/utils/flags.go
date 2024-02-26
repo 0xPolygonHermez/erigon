@@ -432,6 +432,11 @@ var (
 		Usage: "A comma separated list of grpc addresses that host executors",
 		Value: "",
 	}
+	ExecutorStrictMode = cli.BoolFlag{
+		Name:  "zkevm.executor-strict",
+		Usage: "Defaulted to true to ensure you must set some executor URLs, bypass this restriction by setting to false",
+		Value: true,
+	}
 	RpcRateLimitsFlag = cli.IntFlag{
 		Name:  "zkevm.rpc-ratelimit",
 		Usage: "RPC rate limit in requests per second.",
