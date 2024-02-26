@@ -292,7 +292,7 @@ func (c *StreamClient) readAllFullL2BlocksToChannel() error {
 }
 
 func (c *StreamClient) tryReConnect() {
-	for {
+	for i := 0; i < 5; i++ {
 		c.conn.Close()
 		c.conn = nil
 		if err := c.Start(); err != nil {
