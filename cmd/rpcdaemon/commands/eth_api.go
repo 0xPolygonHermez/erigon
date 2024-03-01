@@ -322,32 +322,36 @@ func (api *BaseAPI) getEffectiveGasPricePercentage(tx kv.Tx, txHash common.Hash)
 // APIImpl is implementation of the EthAPI interface based on remote Db access
 type APIImpl struct {
 	*BaseAPI
-	ethBackend      rpchelper.ApiBackend
-	txPool          txpool.TxpoolClient
-	mining          txpool.MiningClient
-	gasCache        *GasPriceCache
-	db              kv.RoDB
-	GasCap          uint64
-	ReturnDataLimit int
-	ZkRpcUrl        string
+	ethBackend                 rpchelper.ApiBackend
+	txPool                     txpool.TxpoolClient
+	mining                     txpool.MiningClient
+	gasCache                   *GasPriceCache
+	db                         kv.RoDB
+	GasCap                     uint64
+	ReturnDataLimit            int
+	ZkRpcUrl                   string
+	AllowFreeTransactions      bool
+	AllowPreEIP155Transactions bool
 }
 
 // NewEthAPI returns APIImpl instance
-func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, returnDataLimit int, zkRpcUrl string) *APIImpl {
+func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, returnDataLimit int, zkRpcUrl string, allowFreeTransactions, allowPreEIP155Transactions bool) *APIImpl {
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
 
 	return &APIImpl{
-		BaseAPI:         base,
-		db:              db,
-		ethBackend:      eth,
-		txPool:          txPool,
-		mining:          mining,
-		gasCache:        NewGasPriceCache(),
-		GasCap:          gascap,
-		ReturnDataLimit: returnDataLimit,
-		ZkRpcUrl:        zkRpcUrl,
+		BaseAPI:                    base,
+		db:                         db,
+		ethBackend:                 eth,
+		txPool:                     txPool,
+		mining:                     mining,
+		gasCache:                   NewGasPriceCache(),
+		GasCap:                     gascap,
+		ReturnDataLimit:            returnDataLimit,
+		ZkRpcUrl:                   zkRpcUrl,
+		AllowFreeTransactions:      allowFreeTransactions,
+		AllowPreEIP155Transactions: allowPreEIP155Transactions,
 	}
 }
 

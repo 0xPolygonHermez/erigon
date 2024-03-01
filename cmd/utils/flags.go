@@ -457,6 +457,16 @@ var (
 		Usage: "Define the host used for the zkevm data stream",
 		Value: "",
 	}
+	AllowFreeTransactions = cli.UintFlag{
+		Name:  "zkevm.allow-free-transactions",
+		Usage: "Allow the sequencer to proceed transactions with 0 gas",
+		Value: 0,
+	}
+	AllowPreEIP155Transactions = cli.UintFlag{
+		Name:  "zkevm.allow-pre-eip155-transactions",
+		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
+		Value: 0,
+	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",
 		Usage: "Does limit amount of goroutines to process 1 batch request. Means 1 bach request can't overload server. 1 batch still can have unlimited amount of request",
