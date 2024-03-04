@@ -26,8 +26,18 @@ type Payload struct {
 	L1InfoRoot        []byte // 0 for executor, required for the prover
 	TimestampLimit    uint64 // if 0, replace by now + 10 min internally
 	ForcedBlockhashL1 []byte // we need it, 0 in regular batches, hash in forced batches, also used in injected/first batches, 0 by now
-	// Debug
-	ContextId string // batch ID to be shown in the executor traces, for your convenience: "Erigon_candidate_batch_N"
+	ContextId         string // batch ID to be shown in the executor traces, for your convenience: "Erigon_candidate_batch_N"
+}
+
+type RpcPayload struct {
+	Witness         string `json:"witness"`         // SMT partial tree, SCs, (indirectly) old state root
+	DataStream      string `json:"dataStream"`      // txs, old batch num, chain id, fork id, effective gas price, block header, index of L1 info tree (global exit root, min timestamp, ...)
+	Coinbase        string `json:"coinbase"`        // sequencer address
+	OldAccInputHash string `json:"oldAccInputHash"` // 0 for executor, required for the prover
+	// Used by injected/first batches (do not use it for regular batches)
+	L1InfoRoot        string `json:"l1InfoRoot"`        // 0 for executor, required for the prover
+	TimestampLimit    uint64 `json:"timestampLimit"`    // if 0, replace by now + 10 min internally
+	ForcedBlockhashL1 string `json:"forcedBlockhashL1"` // we need it, 0 in regular batches, hash in forced batches, also used in injected/first batches, 0 by now
 }
 
 type Executor struct {
