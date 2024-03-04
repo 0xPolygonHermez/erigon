@@ -52,7 +52,7 @@ type ZkEvmAPI interface {
 	GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, debug *bool) (hexutility.Bytes, error)
 	GetBlockRangeWitness(ctx context.Context, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, debug *bool) (hexutility.Bytes, error)
 	GetBatchWitness(ctx context.Context, batchNumber uint64) (hexutility.Bytes, error)
-	GetAggregatorDetail(ctx context.Context, batchNumber uint64, debug *bool) (*legacy_executor_verifier.RpcPayload, error)
+	GetProverInput(ctx context.Context, batchNumber uint64, debug *bool) (*legacy_executor_verifier.RpcPayload, error)
 }
 
 // APIImpl is implementation of the ZkEvmAPI interface based on remote Db access
@@ -400,7 +400,7 @@ func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64
 	return api.getBlockRangeWitness(ctx, api.db, startBlock, endBlock, false)
 }
 
-func (api *ZkEvmAPIImpl) GetAggregatorDetail(ctx context.Context, batchNumber uint64, debug *bool) (*legacy_executor_verifier.RpcPayload, error) {
+func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64, debug *bool) (*legacy_executor_verifier.RpcPayload, error) {
 	if !sequencer.IsSequencer() {
 		return nil, errors.New("method only supported from a sequencer node")
 	}
@@ -415,11 +415,6 @@ func (api *ZkEvmAPIImpl) GetAggregatorDetail(ctx context.Context, batchNumber ui
 		return nil, err
 	}
 	defer tx.Rollback()
-
-	chainConfig, err := api.ethApi.chainConfig(tx)
-	if err != nil {
-		return nil, err
-	}
 
 	hDb := hermez_db.NewHermezDbReader(tx)
 
@@ -436,11 +431,6 @@ func (api *ZkEvmAPIImpl) GetAggregatorDetail(ctx context.Context, batchNumber ui
 	start := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blockNumbers[0]))
 	end := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blockNumbers[len(blockNumbers)-1]))
 
-	streamBytes, err := getStreamBytes(tx, batchNumber, blockNumbers, lastBlock, hDb, chainConfig.ChainID.Uint64())
-	if err != nil {
-
-	}
-
 	rangeWitness, err := api.getBlockRangeWitness(ctx, api.db, start, end, useDebug)
 	if err != nil {
 		return nil, err
@@ -455,10 +445,8 @@ func (api *ZkEvmAPIImpl) GetAggregatorDetail(ctx context.Context, batchNumber ui
 
 	return &legacy_executor_verifier.RpcPayload{
 		Witness:           hex.EncodeToHex(rangeWitness),
-		DataStream:        hex.EncodeToHex(streamBytes),
 		Coinbase:          api.config.SequencerAddress.String(),
 		OldAccInputHash:   oldAccInputHash.String(),
-		L1InfoRoot:        "", // todo [zkevm] this might be needed in the future - would need to track l1 events
 		TimestampLimit:    timestampLimit,
 		ForcedBlockhashL1: "",
 	}, nil
