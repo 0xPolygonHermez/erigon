@@ -33,6 +33,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	ethFilters "github.com/ledgerwatch/erigon/eth/filters"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/rpc"
@@ -335,7 +336,7 @@ type APIImpl struct {
 }
 
 // NewEthAPI returns APIImpl instance
-func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, returnDataLimit int, zkRpcUrl string, allowFreeTransactions, allowPreEIP155Transactions bool) *APIImpl {
+func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, returnDataLimit int, zkConfig *ethconfig.Zk) *APIImpl {
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
@@ -349,9 +350,9 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		gasCache:                   NewGasPriceCache(),
 		GasCap:                     gascap,
 		ReturnDataLimit:            returnDataLimit,
-		ZkRpcUrl:                   zkRpcUrl,
-		AllowFreeTransactions:      allowFreeTransactions,
-		AllowPreEIP155Transactions: allowPreEIP155Transactions,
+		ZkRpcUrl:                   "",
+		AllowFreeTransactions:      zkConfig.AllowFreeTransactions,
+		AllowPreEIP155Transactions: zkConfig.AllowPreEIP155Transactions,
 	}
 }
 
