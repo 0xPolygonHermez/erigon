@@ -1,4 +1,4 @@
-datadir: "/path/to/datadirs/hermez-cardona"
+datadir: /path/to/datadirs/hermez-cardona
 chain: hermez-cardona
 http: true
 private.api.addr: localhost:9092

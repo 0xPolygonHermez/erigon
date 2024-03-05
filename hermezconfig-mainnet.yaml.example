@@ -1,4 +1,4 @@
-datadir: "/path/to/datadirs/hermez-mainnet"
+datadir: /path/to/datadirs/hermez-mainnet
 chain: hermez-mainnet
 http: true
 private.api.addr: localhost:9091
