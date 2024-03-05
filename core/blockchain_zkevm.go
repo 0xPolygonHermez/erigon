@@ -125,6 +125,17 @@ func ExecuteBlockEphemerallyZk(
 	if chainConfig.IsForkID7Etrog(blockNum) {
 		coinbase := block.Coinbase()
 
+		// this is a case when we have injected batches
+		// we have to save the l1block hash and in this case we have to add
+		// the ger in that l1 bloc k into the block info tree
+		// even though it is previously added to the state
+		if l1BlockHash != (libcommon.Hash{}) && blockGer == (libcommon.Hash{}) {
+			blockGer, err = roHermezDb.GetGerForL1BlockHash(l1BlockHash)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		if err := blockInfoTree.InitBlockHeader(
 			prevBlockHash,
 			&coinbase,

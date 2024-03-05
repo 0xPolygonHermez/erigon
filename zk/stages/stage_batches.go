@@ -60,7 +60,8 @@ type HermezDb interface {
 	WriteL1BlockHash(l1BlockHash common.Hash) error
 	CheckL1BlockHashWritten(l1BlockHash common.Hash) (bool, error)
 	DeleteL1BlockHashes(l1BlockHashes *[]common.Hash) error
-
+	WriteGerForL1BlockHash(l1BlockHash, ger common.Hash) error
+	DeleteL1BlockHashGers(l1BlockHashes *[]common.Hash) error
 	WriteBatchGlobalExitRoot(batchNumber uint64, ger types.GerUpdate) error
 }
 
@@ -443,10 +444,13 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		return fmt.Errorf("delete l1 block hashes error: %v", err)
 	}
 
+	if err := hermezDb.DeleteL1BlockHashGers(&l1BlockHashes); err != nil {
+		return fmt.Errorf("delete l1 block hash gers error: %v", err)
+	}
+
 	if err := hermezDb.DeleteBlockL1BlockHashes(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("delete block l1 block hashes error: %v", err)
 	}
-
 	///////////////////////////////////////////////////////
 
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
@@ -627,6 +631,12 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block)
 
 			if err := hermezDb.WriteL1BlockHash(l2Block.L1BlockHash); err != nil {
 				return fmt.Errorf("write global exit root error: %v", err)
+			}
+
+			if l2Block.GlobalExitRoot != emptyHash {
+				if err := hermezDb.WriteGerForL1BlockHash(l2Block.L1BlockHash, l2Block.GlobalExitRoot); err != nil {
+					return fmt.Errorf("write ger for l1 block hash error: %v", err)
+				}
 			}
 		}
 	}

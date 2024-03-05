@@ -28,6 +28,7 @@ type ReadOnlyHermezDb interface {
 	GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error)
 	GetBlockGlobalExitRoot(l2BlockNo uint64) (libcommon.Hash, error)
 	GetBlockL1BlockHash(l2BlockNo uint64) (libcommon.Hash, error)
+	GetGerForL1BlockHash(l1BlockHash libcommon.Hash) (libcommon.Hash, error)
 }
 
 func (sdb *IntraBlockState) GetTxCount() (uint64, error) {

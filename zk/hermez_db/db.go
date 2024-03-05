@@ -27,6 +27,7 @@ const L1_INJECTED_BATCHES = "l1_injected_batches"                  // index incr
 const BLOCK_INFO_ROOTS = "block_info_roots"                        // block number -> block info root hash
 const L1_BLOCK_HASHES = "l1_block_hashes"                          // l1 block hash -> true
 const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"              // block number -> l1 block hash
+const L1_BLOCK_HASH_GER = "l1_block_hash_ger"                      // l1 block hash -> GER
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -68,6 +69,7 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		BLOCK_INFO_ROOTS,
 		L1_BLOCK_HASHES,
 		BLOCK_L1_BLOCK_HASHES,
+		L1_BLOCK_HASH_GER,
 	}
 	for _, t := range tables {
 		if err := tx.CreateBucket(t); err != nil {
@@ -351,6 +353,30 @@ func (db *HermezDbReader) CheckGlobalExitRootWritten(ger common.Hash) (bool, err
 func (db *HermezDb) DeleteGlobalExitRoots(gers *[]common.Hash) error {
 	for _, ger := range *gers {
 		err := db.tx.Delete(GLOBAL_EXIT_ROOTS, ger.Bytes())
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (db *HermezDb) WriteGerForL1BlockHash(l1BlockHash common.Hash, ger common.Hash) error {
+	return db.tx.Put(L1_BLOCK_HASH_GER, l1BlockHash.Bytes(), ger.Bytes())
+}
+
+func (db *HermezDbReader) GetGerForL1BlockHash(l1BlockHash common.Hash) (common.Hash, error) {
+	bytes, err := db.tx.GetOne(L1_BLOCK_HASH_GER, l1BlockHash.Bytes())
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return common.BytesToHash(bytes), nil
+}
+
+func (db *HermezDb) DeleteL1BlockHashGers(l1BlockHashes *[]common.Hash) error {
+	for _, l1BlockHash := range *l1BlockHashes {
+		err := db.tx.Delete(L1_BLOCK_HASH_GER, l1BlockHash.Bytes())
 		if err != nil {
 			return err
 		}
