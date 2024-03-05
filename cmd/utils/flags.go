@@ -457,15 +457,15 @@ var (
 		Usage: "Define the host used for the zkevm data stream",
 		Value: "",
 	}
-	AllowFreeTransactions = cli.UintFlag{
+	AllowFreeTransactions = cli.BoolFlag{
 		Name:  "zkevm.allow-free-transactions",
-		Usage: "Allow the sequencer to proceed transactions with 0 gas",
-		Value: 0,
+		Usage: "Allow the sequencer to proceed transactions with 0 gas price",
+		Value: false,
 	}
-	AllowPreEIP155Transactions = cli.UintFlag{
+	AllowPreEIP155Transactions = cli.BoolFlag{
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
-		Value: 0,
+		Value: false,
 	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",
