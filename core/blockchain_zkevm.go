@@ -110,10 +110,15 @@ func ExecuteBlockEphemerallyZk(
 		return nil, err
 	}
 
-	blockGer, l1BlockHash, err := roHermezDb.GetBlockGlobalExitRoot(blockNum)
+	blockGer, err := roHermezDb.GetBlockGlobalExitRoot(blockNum)
 	if err != nil {
 		return nil, err
 	}
+	l1BlockHash, err := roHermezDb.GetBlockL1BlockHash(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
 	blockTime := block.Time()
 	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, blockTime, prevBlockHash, &blockGer, &l1BlockHash, &gersInBetween)
 	blockInfoTree := blockinfo.NewBlockInfoTree()
