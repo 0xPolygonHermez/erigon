@@ -8,21 +8,22 @@ import (
 
 	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/cli/httpcfg"
 	"github.com/ledgerwatch/erigon/consensus"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/services"
+	"github.com/ledgerwatch/erigon/zk/syncer"
 )
 
 // APIList describes the list of available RPC apis
 func APIList(db kv.RoDB, borDb kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient,
 	filters *rpchelper.Filters, stateCache kvcache.Cache,
 	blockReader services.FullBlockReader, agg *libstate.AggregatorV3, cfg httpcfg.HttpCfg, engine consensus.EngineReader,
-	l2RpcUrl string,
-	allowFreeTransactions, allowPreEIP155Transactions bool,
+	zkConfig *ethconfig.Zk, l1Syncer *syncer.L1Syncer,
 ) (list []rpc.API) {
 	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs)
-	base.SetL2RpcUrl(l2RpcUrl)
-	ethImpl := NewEthAPI(base, db, eth, txPool, mining, cfg.Gascap, cfg.ReturnDataLimit, "", allowFreeTransactions, allowPreEIP155Transactions)
+	base.SetL2RpcUrl(zkConfig.L2RpcUrl)
+	ethImpl := NewEthAPI(base, db, eth, txPool, mining, cfg.Gascap, cfg.ReturnDataLimit, "", zkConfig.AllowFreeTransactions, zkConfig.AllowPreEIP155Transactions)
 	erigonImpl := NewErigonAPI(base, db, eth)
 	txpoolImpl := NewTxPoolAPI(base, db, txPool)
 	netImpl := NewNetAPIImpl(eth)
@@ -35,7 +36,7 @@ func APIList(db kv.RoDB, borDb kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 	borImpl := NewBorAPI(base, db, borDb) // bor (consensus) specific
 	otsImpl := NewOtterscanAPI(base, db)
 	gqlImpl := NewGraphQLAPI(base, db)
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, cfg.ReturnDataLimit, l2RpcUrl)
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, cfg.ReturnDataLimit, zkConfig, l1Syncer)
 
 	if cfg.GraphQLEnabled {
 		list = append(list, rpc.API{
@@ -149,11 +150,11 @@ func AuthAPIList(db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClien
 	filters *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader,
 	agg *libstate.AggregatorV3,
 	cfg httpcfg.HttpCfg, engine consensus.EngineReader,
-	allowFreeTransactions, allowPreEIP155Transactions bool,
+	zkConfig *ethconfig.Zk,
 ) (list []rpc.API) {
 	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs)
 
-	ethImpl := NewEthAPI(base, db, eth, txPool, mining, cfg.Gascap, cfg.ReturnDataLimit, "", allowFreeTransactions, allowPreEIP155Transactions)
+	ethImpl := NewEthAPI(base, db, eth, txPool, mining, cfg.Gascap, cfg.ReturnDataLimit, "", zkConfig.AllowFreeTransactions, zkConfig.AllowPreEIP155Transactions)
 	engineImpl := NewEngineAPI(base, db, eth, cfg.InternalCL)
 
 	list = append(list, rpc.API{
