@@ -357,11 +357,11 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	}
 	fromBatch, err := hermezDb.GetBatchNoByL2Block(fromBlock)
 	if err != nil {
-		return fmt.Errorf("get batch no by l2 block error: %v", err)
+		return fmt.Errorf("get fromBatch no by l2 block error: %v", err)
 	}
 	toBatch, err := hermezDb.GetBatchNoByL2Block(toBlock)
 	if err != nil {
-		return fmt.Errorf("get batch no by l2 block error: %v", err)
+		return fmt.Errorf("get toBatch no by l2 block error: %v", err)
 	}
 
 	// if previous block has different batch, delete the "fromBlock" one
@@ -375,7 +375,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		if err := hermezDb.DeleteForkIds(fromBatch, toBatch); err != nil {
 			return fmt.Errorf("delete fork ids error: %v", err)
 		}
-		if err := hermezDb.DeleteBatchGlobalExitRoots(fromBatch, toBatch); err != nil {
+		if err := hermezDb.DeleteBatchGlobalExitRoots(fromBatch); err != nil {
 			return fmt.Errorf("delete batch global exit roots error: %v", err)
 		}
 	}

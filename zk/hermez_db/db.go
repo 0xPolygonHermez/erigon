@@ -533,8 +533,22 @@ func (db *HermezDbReader) GetBatchGlobalExitRoot(batchNum uint64) (*dstypes.GerU
 	return gerUpdate, nil
 }
 
-func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) error {
-	return db.deleteFromBucketWithUintKeysRange(GLOBAL_EXIT_ROOTS_BATCHES, fromBatchNum, toBatchNum)
+func (db *HermezDb) DeleteBatchGlobalExitRoots(fromBatchNum uint64) error {
+	c, err := db.tx.Cursor(GLOBAL_EXIT_ROOTS_BATCHES)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	k, _, err := c.Last()
+	if err != nil {
+		return err
+	}
+	if k == nil {
+		return nil
+	}
+	lastBatchNum := BytesToUint64(k)
+	return db.deleteFromBucketWithUintKeysRange(GLOBAL_EXIT_ROOTS_BATCHES, fromBatchNum, lastBatchNum)
 }
 
 func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) error {
