@@ -173,6 +173,9 @@ func ExecuteBlockEphemerallyZk(
 		}
 
 		receipt, execResult, err := ApplyTransaction_zkevm(chainConfig, blockHashFunc, engine, nil, gp, ibs, noop, header, tx, usedGas, *vmConfig, excessDataGas, effectiveGasPricePercentage)
+		if err != nil {
+			return nil, err
+		}
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
 				ftracer.Flush(tx)
@@ -185,6 +188,21 @@ func ExecuteBlockEphemerallyZk(
 		localReceipt := *receipt
 		if execResult.Err == vm.ErrUnsupportedPrecompile {
 			localReceipt.Status = 1
+		}
+
+		// receipt root holds the intermediate stateroot after the tx
+		intermediateState, err := roHermezDb.GetIntermediateTxStateRoot(blockNum, tx.Hash())
+		if err != nil {
+			return nil, err
+		}
+
+		// the stateroot in the transactions that comes from the datastream
+		// is the one after smart contract writes so it can't be used
+		// but since pre forkid7 blocks have 1 tx only, we can use the block root
+		if chainConfig.IsForkID7Etrog(blockNum) {
+			receipt.PostState = intermediateState.Bytes()
+		} else {
+			receipt.PostState = header.Root.Bytes()
 		}
 
 		if err != nil {
