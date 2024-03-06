@@ -1,26 +1,24 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
+	"log"
+	"math/big"
 	"os"
-	"strconv"
 	"strings"
 
 	"io"
-	"net/url"
 
-	"github.com/iden3/go-iden3-crypto/keccak256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/ethclient"
 	"gopkg.in/yaml.v2"
 )
 
 type HTTPResponse struct {
 	Result string `json:"result"`
+	Error  string `json:"error"`
 }
 
 type RequestData struct {
@@ -48,198 +46,90 @@ func main() {
 	}
 	defer jsonFile.Close()
 
-	data := make(map[string]AccountDump)
+	accountDump := make(map[string]AccountDump)
 	byteValue, err := io.ReadAll(jsonFile)
 	if err != nil {
 		fmt.Println("Error reading JSON data:", err)
 		return
 	}
 
-	err = json.Unmarshal(byteValue, &data)
+	err = json.Unmarshal(byteValue, &accountDump)
 	if err != nil {
-		fmt.Println("Error parsing JSON data:", err)
+		fmt.Println("Error parsing JSON accountDump:", err)
 		return
 	}
 
-	for accountHash, storageMap := range data {
-		compareBalance(rpcConfig, accountHash, storageMap.Balance)
-		compareNonce(rpcConfig, accountHash, storageMap.Nonce)
-		compareCodeHash(rpcConfig, accountHash, storageMap.Codehash.Hex())
+	client, err := ethclient.Dial(rpcConfig.Url)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	blockNumber := big.NewInt(rpcConfig.Block)
+
+	for accountHash, storageMap := range accountDump {
+		compareBalance(client, blockNumber, accountHash, storageMap.Balance)
+		compareNonce(client, blockNumber, accountHash, storageMap.Nonce)
+		compareCodeHash(client, blockNumber, accountHash, storageMap.Codehash.Hex())
 		for key, value := range storageMap.Storage {
-			compareValuesString(rpcConfig, accountHash, key, value)
+			compareValuesString(client, blockNumber, accountHash, key, value)
 		}
 	}
 
 	fmt.Println("Check finished.")
 }
 
-func compareValuesString(cfg RpcConfig, accountHash, key, value string) {
-	payloadbytecode := RequestData{
-		Method:  "eth_getStorageAt",
-		Params:  []string{accountHash, key, cfg.Block},
-		ID:      1,
-		Jsonrpc: "2.0",
-	}
-
-	jsonPayload, err := json.Marshal(payloadbytecode)
+func compareValuesString(client *ethclient.Client, blockNumber *big.Int, accountHash, key, localValue string) {
+	rpcValueBytes, err := client.StorageAt(context.Background(), libcommon.HexToAddress(accountHash), libcommon.HexToHash(key), blockNumber)
 	if err != nil {
-		fmt.Println("Error preparing request:", err)
-		return
+		log.Fatal(err)
 	}
 
-	safeUrl, err := url.Parse(cfg.Url)
+	rpcValue := libcommon.BytesToHash(rpcValueBytes).Hex()
+
+	if !strings.HasSuffix(rpcValue, localValue) {
+		fmt.Printf("Mismatch detected for %s and key %s. Local: %s, Rpc: %s\n", accountHash, key, localValue, rpcValue)
+	}
+}
+
+func compareBalance(client *ethclient.Client, blockNumber *big.Int, accountHash, value string) {
+	balance, err := client.BalanceAt(context.Background(), libcommon.HexToAddress(accountHash), blockNumber)
 	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return
+		log.Fatal(err)
 	}
-	resp, err := http.Post(safeUrl.String(), "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	var httpResp HTTPResponse
-	json.Unmarshal(body, &httpResp)
-
-	remoteValueDecode := httpResp.Result
-
-	localValueStr := strings.TrimPrefix(value, "0x")
-	localValueStr = fmt.Sprintf("%064s", localValueStr)
-	remoteValueStr := strings.TrimPrefix(remoteValueDecode, "0x")
 
 	// fmt.Println("Checking", accountHash)
-	if !strings.EqualFold(localValueStr, remoteValueStr) {
-		fmt.Printf("Mismatch detected for %s and key %s. Local: %s, Remote: %s\n", accountHash, key, localValueStr, remoteValueStr)
+	if !strings.EqualFold(value, balance.Hex()) {
+		fmt.Printf("Balance ismatch detected for %s. Local: %s, Remote: %s\n", accountHash, value, balance.Hex())
 	}
 }
 
-func compareBalance(cfg RpcConfig, accountHash, value string) {
-	payloadbytecode := RequestData{
-		Method:  "eth_getBalance",
-		Params:  []string{accountHash, cfg.Block},
-		ID:      1,
-		Jsonrpc: "2.0",
-	}
-
-	jsonPayload, err := json.Marshal(payloadbytecode)
+func compareNonce(client *ethclient.Client, blockNumber *big.Int, accountHash string, value uint64) {
+	nonce, err := client.NonceAt(context.Background(), libcommon.HexToAddress(accountHash), blockNumber)
 	if err != nil {
-		fmt.Println("Error preparing request:", err)
-		return
+		log.Fatal(err)
 	}
 
-	safeUrl, err := url.Parse(cfg.Url)
-	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return
-	}
-	resp, err := http.Post(safeUrl.String(), "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	var httpResp HTTPResponse
-	json.Unmarshal(body, &httpResp)
-
-	remoteValueDecode := httpResp.Result
-
-	// fmt.Println("Checking", accountHash)
-	if !strings.EqualFold(value, remoteValueDecode) {
-		fmt.Printf("Balance ismatch detected for %s. Local: %s, Remote: %s\n", accountHash, value, remoteValueDecode)
+	if value != nonce {
+		fmt.Printf("Nonce ismatch detected for %s. Local: %d, Remote: %d\n", accountHash, value, nonce)
 	}
 }
 
-func compareNonce(cfg RpcConfig, accountHash string, value uint64) {
-	payloadbytecode := RequestData{
-		Method:  "eth_getTransactionCount",
-		Params:  []string{accountHash, cfg.Block},
-		ID:      1,
-		Jsonrpc: "2.0",
-	}
-
-	jsonPayload, err := json.Marshal(payloadbytecode)
+func compareCodeHash(client *ethclient.Client, blockNumber *big.Int, accountHash, value string) {
+	rpcCodeBytes, err := client.CodeAt(context.Background(), libcommon.HexToAddress(accountHash), blockNumber)
 	if err != nil {
-		fmt.Println("Error preparing request:", err)
-		return
+		log.Fatal(err)
 	}
 
-	safeUrl, err := url.Parse(cfg.Url)
-	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return
-	}
-	resp, err := http.Post(safeUrl.String(), "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	var httpResp HTTPResponse
-	json.Unmarshal(body, &httpResp)
-
-	remoteValueDecode := httpResp.Result
-	decimal_num, err := strconv.ParseUint(remoteValueDecode[2:], 16, 64)
-	if err != nil {
-		fmt.Println("Error parsing remote nonce:", err)
-		return
-	}
-	if value != decimal_num {
-		fmt.Printf("Nonce ismatch detected for %s. Local: %d, Remote: %d\n", accountHash, value, decimal_num)
-	}
-}
-
-func compareCodeHash(cfg RpcConfig, accountHash, value string) {
-	payloadbytecode := RequestData{
-		Method:  "eth_getCode",
-		Params:  []string{accountHash, cfg.Block},
-		ID:      1,
-		Jsonrpc: "2.0",
-	}
-
-	jsonPayload, err := json.Marshal(payloadbytecode)
-	if err != nil {
-		fmt.Println("Error preparing request:", err)
-		return
-	}
-
-	safeUrl, err := url.Parse(cfg.Url)
-	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return
-	}
-	resp, err := http.Post(safeUrl.String(), "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	var httpResp HTTPResponse
-	json.Unmarshal(body, &httpResp)
-
-	remoteValueDecode := httpResp.Result
-	commonHash := libcommon.HexToHash(remoteValueDecode).Bytes()
-	value2 := common.Bytes2Hex(keccak256.Hash(commonHash))
-	if value != value2 {
-		fmt.Printf("Codehash mismatch detected for %s. Local: %s, Remote: %s\n", accountHash, value, value2)
+	rpcCodeHash := libcommon.BytesToHash(rpcCodeBytes).Hex()
+	if value != rpcCodeHash {
+		fmt.Printf("Codehash mismatch detected for %s. Local: %s, Remote: %s\n", accountHash, value, rpcCodeHash)
 	}
 }
 
 type RpcConfig struct {
 	Url          string `yaml:"url"`
 	DumpFileName string `yaml:"dumpFileName"`
-	Block        string `yaml:"block"`
+	Block        int64  `yaml:"block"`
 }
 
 func getConf() (RpcConfig, error) {
