@@ -8,15 +8,14 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"os"
 
 	"github.com/ledgerwatch/erigon/ethclient"
+	"github.com/ledgerwatch/erigon/zk/debug_tools"
 	"github.com/ledgerwatch/log/v3"
-	"gopkg.in/yaml.v2"
 )
 
 func main() {
-	rpcConfig, err := getConf()
+	rpcConfig, err := debug_tools.GetConf()
 	if err != nil {
 		log.Error("RPGCOnfig", "err", err)
 		return
@@ -179,26 +178,6 @@ func compareTraces(localTrace, remoteTrace *HttpResult) bool {
 	}
 
 	return traceMatches
-}
-
-func getConf() (RpcConfig, error) {
-	yamlFile, err := os.ReadFile("debugToolsConfig.yaml")
-	if err != nil {
-		return RpcConfig{}, err
-	}
-
-	c := RpcConfig{}
-	err = yaml.Unmarshal(yamlFile, &c)
-	if err != nil {
-		return RpcConfig{}, err
-	}
-
-	return c, nil
-}
-
-type RpcConfig struct {
-	Url   string `yaml:"url"`
-	Block int64  `yaml:"block"`
 }
 
 type HTTPResponse struct {

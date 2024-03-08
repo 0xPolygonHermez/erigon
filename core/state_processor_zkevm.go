@@ -109,6 +109,7 @@ func applyTransaction_zkevm(config *chain.Config, engine consensus.EngineReader,
 			BlockNumber:       header.Number,
 			TransactionIndex:  uint(ibs.TxIndex()),
 		}
+	}
 
 	return receipt, result, err
 }

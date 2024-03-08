@@ -13,7 +13,7 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/ethclient"
-	"gopkg.in/yaml.v2"
+	"github.com/ledgerwatch/erigon/zk/debug_tools"
 )
 
 type HTTPResponse struct {
@@ -36,7 +36,7 @@ type AccountDump struct {
 }
 
 func main() {
-	rpcConfig, err := getConf()
+	rpcConfig, err := debug_tools.GetConf()
 	if err != nil {
 		panic(fmt.Sprintf("error RPGCOnfig: %s", err))
 	}
@@ -124,25 +124,4 @@ func compareCodeHash(client *ethclient.Client, blockNumber *big.Int, accountHash
 	if value != rpcCodeHash {
 		fmt.Printf("Codehash mismatch detected for %s. Local: %s, Remote: %s\n", accountHash, value, rpcCodeHash)
 	}
-}
-
-type RpcConfig struct {
-	Url          string `yaml:"url"`
-	DumpFileName string `yaml:"dumpFileName"`
-	Block        int64  `yaml:"block"`
-}
-
-func getConf() (RpcConfig, error) {
-	yamlFile, err := os.ReadFile("debugToolsConfig.yaml")
-	if err != nil {
-		return RpcConfig{}, err
-	}
-
-	c := RpcConfig{}
-	err = yaml.Unmarshal(yamlFile, &c)
-	if err != nil {
-		return RpcConfig{}, err
-	}
-
-	return c, nil
 }
