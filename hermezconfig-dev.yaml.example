@@ -25,4 +25,4 @@ zkevm.executor-strict: true
 zkevm.executor-urls: 51.210.116.237:50071
 
 externalcl: true
-http.api: [eth,debug,net,trace,web3,erigon,txpool,zkevm]
+http.api: [eth, debug, net, trace, web3, erigon, txpool, zkevm]

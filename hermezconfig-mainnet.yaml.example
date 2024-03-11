@@ -20,4 +20,4 @@ zkevm.rpc-ratelimit: 250
 zkevm.datastream-version: 2
 
 externalcl: true
-http.api: [eth,debug,net,trace,web3,erigon,zkevm]
+http.api: [eth, debug, net, trace, web3, erigon, zkevm]
