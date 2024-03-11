@@ -569,7 +569,8 @@ func getGasLimit(forkId uint16) uint64 {
 	case 8:
 		return forkId8BlockGasLimit
 	case 7:
-		return forkId7BlockGasLimit
+		return forkId8BlockGasLimit
+		// return ForkId7BlockGasLimit
 	default:
 		return preForkId7BlockGasLimit
 	}

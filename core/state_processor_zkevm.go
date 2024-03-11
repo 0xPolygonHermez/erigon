@@ -100,7 +100,7 @@ func applyTransaction_zkevm(config *chain.Config, engine consensus.EngineReader,
 		// by the tx.
 		receipt = &types.Receipt{
 			Type:              tx.Type(),
-			CumulativeGasUsed: result.UsedGas,
+			CumulativeGasUsed: *usedGas,
 			TxHash:            tx.Hash(),
 			GasUsed:           result.UsedGas,
 			Status:            status,
