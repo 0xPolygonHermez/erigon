@@ -202,13 +202,16 @@ func ExecuteBlockEphemerallyZk(
 			return nil, err
 		}
 
-		// the stateroot in the transactions that comes from the datastream
-		// is the one after smart contract writes so it can't be used
-		// but since pre forkid7 blocks have 1 tx only, we can use the block root
-		if chainConfig.IsForkID7Etrog(blockNum) {
-			receipt.PostState = intermediateState.Bytes()
-		} else {
-			receipt.PostState = header.Root.Bytes()
+		// forkid8 tje poststate is empty
+		if !chainConfig.IsForkID8(blockNum) {
+			// the stateroot in the transactions that comes from the datastream
+			// is the one after smart contract writes so it can't be used
+			// but since pre forkid7 blocks have 1 tx only, we can use the block root
+			if chainConfig.IsForkID7Etrog(blockNum) {
+				receipt.PostState = intermediateState.Bytes()
+			} else {
+				receipt.PostState = header.Root.Bytes()
+			}
 		}
 
 		//[hack] log0 pre forkid8 are not included in the rpc logs
