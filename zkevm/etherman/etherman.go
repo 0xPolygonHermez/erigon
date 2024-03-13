@@ -165,6 +165,9 @@ func NewClient(cfg Config) (*Client, error) {
 	case params.SepoliaChainConfig.ChainID.Uint64():
 		l1Conf = params.SepoliaChainConfig
 		l2Conf = params.ChainConfigByChainName(zkchainconfig.GetChainName(cfg.L2ChainID))
+	case params.HermezLocalDevnetChainConfig.ChainID.Uint64():
+		l1Conf = params.HermezLocalDevnetChainConfig
+		l2Conf = params.ChainConfigByChainName(zkchainconfig.GetChainName(cfg.L2ChainID))
 	default:
 		panic(fmt.Sprintf("L1 chain ID %d not supported", cfg.L1ChainID))
 	}
