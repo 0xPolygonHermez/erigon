@@ -39,7 +39,7 @@ import (
 )
 
 func (api *BaseAPI) getReceipts(ctx context.Context, tx kv.Tx, chainConfig *chain.Config, block *types.Block, senders []common.Address) (types.Receipts, error) {
-	if cached := rawdb.ReadReceipts(tx, block, senders); cached != nil {
+	if cached := rawdb.ReadReceipts_zkEvm(tx, block, senders); cached != nil {
 		return cached, nil
 	}
 	engine := api.engine()
@@ -749,6 +749,7 @@ func marshalReceipt(receipt *types.Receipt, txn types.Transaction, chainConfig *
 	}
 
 	fields := map[string]interface{}{
+		"root":              common.BytesToHash(receipt.PostState),
 		"blockHash":         receipt.BlockHash,
 		"blockNumber":       hexutil.Uint64(receipt.BlockNumber.Uint64()),
 		"transactionHash":   txnHash,

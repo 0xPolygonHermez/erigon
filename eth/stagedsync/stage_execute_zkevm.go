@@ -131,7 +131,8 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	if err != nil {
 		return err
 	}
-	prevBlockHash := header.Root
+	prevBlockRoot := header.Root
+	prevBlockHash := prevheaderHash
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
 		stageProgress = blockNum
@@ -146,15 +147,12 @@ Loop:
 			return err
 		}
 
-		//TODO: SHOULD RETURN ERR?
 		if block == nil {
-			log.Error(fmt.Sprintf("[%s] Empty block", logPrefix), "blocknum", blockNum)
-			continue
+			return fmt.Errorf("[%s] Empty block blocknum: %d", logPrefix, blockNum)
 		}
 
 		if header == nil {
-			log.Error(fmt.Sprintf("[%s] Empty header", logPrefix), "blocknum", blockNum)
-			continue
+			return fmt.Errorf("[%s] Empty header blocknum: %d", logPrefix, blockNum)
 		}
 
 		lastLogTx += uint64(block.Transactions().Len())
@@ -163,10 +161,11 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		if err = updateZkEVMBlockCfg(&cfg, hermezDb, logPrefix); err != nil {
+		if err := updateZkEVMBlockCfg(&cfg, hermezDb, logPrefix); err != nil {
 			return err
 		}
-		if err = executeBlockZk(block, &prevBlockHash, header, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
+		header.ParentHash = prevBlockHash
+		if err := executeBlockZk(block, &prevBlockRoot, header, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", logPrefix), "block", blockNum, "hash", block.Hash().String(), "err", err)
 				if cfg.hd != nil {
@@ -180,6 +179,7 @@ Loop:
 			break Loop
 		}
 
+		prevBlockHash = header.Hash()
 		shouldUpdateProgress := batch.BatchSize() >= int(cfg.batchSize)
 		if shouldUpdateProgress {
 			log.Info("Committed State", "gas reached", currentStateGas, "gasTarget", gasState)
@@ -209,7 +209,7 @@ Loop:
 		gasUsed := header.GasUsed
 		gas = gas + gasUsed
 		currentStateGas = currentStateGas + gasUsed
-		prevBlockHash = header.Root
+		prevBlockRoot = header.Root
 
 		//commit values post execute
 		if err := postExecuteCommitValues(cfg, tx, eridb, batch, preExecuteHeaderHash, block, header, senders); err != nil {
@@ -229,6 +229,13 @@ Loop:
 	if err = s.Update(batch, stageProgress); err != nil {
 		return err
 	}
+
+	// we need to artificially update the headers stage here as well to ensure that notifications
+	// can fire at the end of the stage loop and inform RPC subscriptions of new blocks for example
+	if err = stages.SaveStageProgress(tx, stages.Headers, stageProgress); err != nil {
+		return err
+	}
+
 	if err = batch.Commit(); err != nil {
 		return fmt.Errorf("batch commit: %w", err)
 	}
@@ -303,7 +310,9 @@ func postExecuteCommitValues(
 	*/
 	headerHash := header.Hash()
 	blockNum := block.NumberU64()
-	rawdb.WriteHeader(tx, header)
+	if err := rawdb.WriteHeader_zkEvm(tx, header); err != nil {
+		return fmt.Errorf("failed to write header: %v", err)
+	}
 
 	if err := rawdb.WriteCanonicalHash(tx, headerHash, blockNum); err != nil {
 		return fmt.Errorf("failed to write header: %v", err)
@@ -329,14 +338,16 @@ func postExecuteCommitValues(
 	}
 
 	// write the new block lookup entries
-	rawdb.WriteTxLookupEntries(tx, block)
+	if err := rawdb.WriteTxLookupEntries_zkEvm(tx, block); err != nil {
+		return fmt.Errorf("failed to write tx lookup entries: %v", err)
+	}
 
 	return nil
 }
 
 func executeBlockZk(
 	block *types.Block,
-	prevBlockHash *common.Hash,
+	prevBlockRoot *common.Hash,
 	header *types.Header,
 	tx kv.RwTx,
 	batch ethdb.Database,
@@ -371,34 +382,23 @@ func executeBlockZk(
 	vmConfig.Debug = true
 	vmConfig.Tracer = callTracer
 
-	var receipts types.Receipts
-	var stateSyncReceipt *types.Receipt
-	var execRs *core.EphemeralExecResult
 	getHashFn := core.GetHashFn(block.Header(), getHeader)
-
-	execRs, err = core.ExecuteBlockEphemerallyZk(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, prevBlockHash, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx, roHermezDb)
-
+	execRs, err := core.ExecuteBlockEphemerallyZk(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, prevBlockRoot, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx, roHermezDb)
 	if err != nil {
 		return err
 	}
-	receipts = execRs.Receipts
-	stateSyncReceipt = execRs.StateSyncReceipt
-
-	// [zkevm] - add in the state root to the receipts.  As we only have one tx per block
-	// for now just add the header root to the receipt
-	for _, r := range receipts {
-		r.PostState = header.Root.Bytes()
-	}
+	receipts := execRs.Receipts
 
 	header.GasUsed = uint64(execRs.GasUsed)
 	header.ReceiptHash = types.DeriveSha(receipts)
 	header.Bloom = execRs.Bloom
 
 	if writeReceipts {
-		if err = rawdb.AppendReceipts(tx, blockNum, receipts); err != nil {
+		if err := rawdb.AppendReceipts(tx, blockNum, receipts); err != nil {
 			return err
 		}
 
+		stateSyncReceipt := execRs.StateSyncReceipt
 		if stateSyncReceipt != nil && stateSyncReceipt.Status == types.ReceiptStatusSuccessful {
 			if err := rawdb.WriteBorReceipt(tx, block.Hash(), block.NumberU64(), stateSyncReceipt); err != nil {
 				return err
@@ -539,7 +539,7 @@ func updateZkEVMBlockCfg(cfg *ExecuteBlockCfg, hermezDb *hermez_db.HermezDb, log
 	if err := update(chain.ForkID7Etrog, &cfg.chainConfig.ForkID7EtrogBlock); err != nil {
 		return err
 	}
-	if err := update(chain.ForkID8, &cfg.chainConfig.ForkID8Block); err != nil {
+	if err := update(chain.ForkID88Elderberry, &cfg.chainConfig.ForkID88ElderberryBlock); err != nil {
 		return err
 	}
 	return nil
