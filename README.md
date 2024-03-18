@@ -4,6 +4,13 @@ cdk-erigon is a fork of Erigon, currently in Alpha, optimized for syncing with t
 
 ***
 
+## Chain/Fork Support
+Current status of cdk-erigon's support for running various chains and fork ids:
+
+- zkEVM Cardona testnet — beta support
+- zkEVM mainnet — alpha support
+- CDK Chains - experimental support (forkid.8 and above)
+
 ## Prereqs
 In order to use the optimal vectorized poseidon hashing for the Sparse Merkle Tree, on x86 the following packages are required (for Apple silicone it will fall back to the iden3 library and as such these dependencies are not required in that case.
 
@@ -25,7 +32,6 @@ In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag
 - `zkevm_batchNumber`
 - `zkevm_batchNumberByBlockNumber`
 - `zkevm_consolidatedBlockNumber`
-- `zkevm_getBatchByNumber`
 - `zkevm_isBlockConsolidated`
 - `zkevm_verifiedBatchNumber`
 - `zkevm_isBlockVirtualized`
@@ -33,9 +39,14 @@ In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag
 - `zkevm_getFullBlockByHash`
 - `zkevm_getFullBlockByNumber`
 
+### Supported (remote)
+- `zkevm_getBatchByNumber`
+
 ### Not yet supported
 - `zkevm_getNativeBlockHashesInRange`
 
+### Deprecated
+- `zkevm_getBroadcastURI` - it was removed by zkEvm
 ***
 
 ## Limitations/Warnings
@@ -74,7 +85,7 @@ NB: `--externalcl` flag is removed in upstream erigon so beware of re-using comm
 
 - Block Explorers:
   - Mainnet: [PolygonScan Mainnet](https://zkevm.polygonscan.com/)
-  - Cardona: [PolygonScan Cardona](https://cardona-zkevm.polygonscan.com/)
+  - Cardona: [PolygonScan Cardona](https://cardona-zkevm.polygonscan.com/) 
 
 ***
 
