@@ -577,7 +577,7 @@ func finaliseBlock(
 		cfg.chainConfig,
 		ibs,
 		receipts,
-		[]*types.Withdrawal{}, // no withdrawals
+		nil, // no withdrawals
 		chainReader,
 		true,
 		excessDataGas,
