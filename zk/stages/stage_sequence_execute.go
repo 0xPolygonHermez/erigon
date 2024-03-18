@@ -194,10 +194,10 @@ func SpawnSequencingStage(
 	if executionAt == 0 {
 		// capture the initial sequencer fork id for the first batch
 		forkId = cfg.zk.SequencerInitialForkId
+		if err := hermezDb.WriteForkId(1, forkId); err != nil {
+			return err
+		}
 		for fId := uint64(chain.ForkID5Dragonfruit); fId <= forkId; fId++ {
-			if err := hermezDb.WriteForkId(1, fId); err != nil {
-				return err
-			}
 			if err := hermezDb.WriteForkIdBlockOnce(fId, 1); err != nil {
 				return err
 			}
