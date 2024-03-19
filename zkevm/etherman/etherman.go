@@ -169,6 +169,12 @@ func NewClient(cfg Config) (*Client, error) {
 		l1Conf = params.ChainConfigByChainName(zkchainconfig.GetChainName(cfg.L1ChainID))
 		l2Conf = params.ChainConfigByChainName(zkchainconfig.GetChainName(cfg.L2ChainID))
 	}
+	if l1Conf == nil {
+		panic(fmt.Sprintf("Config not found for L1 chain ID %d", cfg.L1ChainID))
+	}
+	if l2Conf == nil {
+		panic(fmt.Sprintf("Config not found for L2 chain ID %d", cfg.L2ChainID))
+	}
 
 	return &Client{
 		EthClient:             ethClient,
