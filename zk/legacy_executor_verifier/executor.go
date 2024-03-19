@@ -101,6 +101,13 @@ func (e *Executor) Verify(p *Payload, erigonStateRoot *common.Hash) (bool, error
 		TimestampLimit:    p.TimestampLimit,
 		ForcedBlockhashL1: p.ForcedBlockhashL1,
 		ContextId:         p.ContextId,
+		TraceConfig: &executor.TraceConfigV2{
+			DisableStorage:            0,
+			DisableStack:              0,
+			EnableMemory:              0,
+			EnableReturnData:          0,
+			TxHashToGenerateFullTrace: nil,
+		},
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to process stateless batch: %w", err)
@@ -125,7 +132,7 @@ func responseCheck(resp *executor.ProcessBatchResponseV2, erigonStateRoot *commo
 		return false, fmt.Errorf("nil response")
 	}
 	if resp.Error != executor.ExecutorError_EXECUTOR_ERROR_UNSPECIFIED &&
-	    resp.Error != executor.ExecutorError_EXECUTOR_ERROR_NO_ERROR {
+		resp.Error != executor.ExecutorError_EXECUTOR_ERROR_NO_ERROR {
 		return false, fmt.Errorf("error in response: %s", resp.Error)
 	}
 
