@@ -72,7 +72,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.Zk.L1RpcUrl)
 	checkFlag(utils.L1PolygonRollupManagerFlag.Name, cfg.Zk.L1PolygonRollupManager.Hex())
 	checkFlag(utils.L1RollupFlag.Name, cfg.Zk.L1Rollup.Hex())
-	checkFlag(utils.L1RollupIdFlag.Name, cfg.Zk.L1RollupId)
 	checkFlag(utils.L1TopicVerificationFlag.Name, cfg.Zk.L1TopicVerification.Hex())
 	checkFlag(utils.L1TopicSequenceFlag.Name, cfg.Zk.L1TopicSequence.Hex())
 	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.Zk.L1MaticContractAddress.Hex())
