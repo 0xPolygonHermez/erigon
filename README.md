@@ -65,12 +65,33 @@ Depending on the RPC provider you are using, you may wish to alter `zkevm.rpc-ra
 
 ## Running zKEVM Erigon
 - Build using  `make cdk-erigon`
-- Set up your config file (copy an example and edit as required)
+- Set up your config file (copy one of the examples found in the repository root directory, and edit as required)
 - run `./build/bin/cdk-erigon --config="./hermezconfig-{network}.yaml"` (complete the name of your config file as required)
 
 NB: `--externalcl` flag is removed in upstream erigon so beware of re-using commands/config
 
+### Config
+The examples are comprehensive but there are some key fields which will need setting e.g. `datadir`, and others you may wish to change
+to increase performance, e.g. `zkevm.l1-rpc-url` as the provided RPCs may have restrictive rate limits.
+
+For a full explanation of the config options, see below:
+- `datadir`: Path to your node's data directory.
+- `chain`: Specifies the L2 network to connect with, e.g., hermez-mainnet.
+- `http`: Enables HTTP RPC server (set to true).
+- `private.api.addr`: Address for the private API, typically localhost:9091, change this to run multiple instances on the same machine
+- `zkevm.l2-chain-id`: Chain ID for the L2 network, e.g., 1101.
+- `zkevm.l2-sequencer-rpc-url`: URL for the L2 sequencer RPC.
+- `zkevm.l2-datastreamer-url`: URL for the L2 data streamer.
+- `zkevm.l1-chain-id`: Chain ID for the L1 network.
+- `zkevm.l1-rpc-url`: L1 Ethereum RPC URL.
+- `zkevm.l1-polygon-rollup-manager`, `zkevm.l1-rollup`, `zkevm.l1-matic-contract-address`: Addresses and topics for smart contracts and event listening.
+- `zkevm.rpc-ratelimit`: Rate limit for RPC calls.
+- `zkevm.datastream-version:` Version of the data stream protocol.
+- `externalcl`: External consensus layer flag.
+- `http.api`: List of enabled HTTP API modules.
+
 ***
+
 
 ## Networks
 
