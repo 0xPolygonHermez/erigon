@@ -194,6 +194,10 @@ func (srv *DataStreamServer) CreateStreamEntries(
 		}
 	}
 
+	if srv.mode == ExecutorOperationMode {
+		deltaTimestamp = block.Time()
+	}
+
 	blockStart := srv.CreateBlockStartEntry(block, batchNumber, uint16(fork), ger, uint32(deltaTimestamp), uint32(l1Index), l1BlockHash)
 	entries = append(entries, blockStart)
 
