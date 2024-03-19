@@ -2,6 +2,7 @@ package hermez_db
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -29,6 +30,9 @@ const L1_BLOCK_HASHES = "l1_block_hashes"                              // l1 blo
 const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                  // block number -> l1 block hash
 const L1_BLOCK_HASH_GER = "l1_block_hash_ger"                          // l1 block hash -> GER
 const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots" // l2blockno -> stateRoot
+const BATCH_WITNESS = "batch_witness"                                  // batch witness -> witness
+
+const chunkSize = 100000 // 100KB
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -72,6 +76,7 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		BLOCK_L1_BLOCK_HASHES,
 		L1_BLOCK_HASH_GER,
 		INTERMEDIATE_TX_STATEROOTS,
+		BATCH_WITNESS,
 	}
 	for _, t := range tables {
 		if err := tx.CreateBucket(t); err != nil {
@@ -156,6 +161,26 @@ func (db *HermezDbReader) GetHighestBlockInBatch(batchNo uint64) (uint64, error)
 	}
 
 	return max, nil
+}
+
+func (db *HermezDbReader) GetLowestBlockInBatch(batchNo uint64) (uint64, error) {
+	blocks, err := db.GetL2BlockNosByBatch(batchNo)
+	if err != nil {
+		return 0, err
+	}
+
+	min := uint64(0)
+	if len(blocks) > 0 {
+		min = blocks[0]
+	}
+
+	for _, block := range blocks {
+		if block < min {
+			min = block
+		}
+	}
+
+	return min, nil
 }
 
 func (db *HermezDbReader) GetHighestVerifiedBlockNo() (uint64, error) {
@@ -848,4 +873,168 @@ func (db *HermezDbReader) GetBlockInfoRoot(blockNumber uint64) (common.Hash, err
 	}
 	res := common.BytesToHash(data)
 	return res, nil
+}
+
+func (db *HermezDbReader) GetWitnessByBatchNo(batchNo uint64) ([]byte, error) {
+	w, err := ReadChunks(db.tx, BATCH_WITNESS, Uint64ToBytes(batchNo))
+	if err != nil {
+		return nil, err
+	}
+
+	return w, nil
+}
+
+func (db *HermezDbReader) GetLatestStoredWitnessBatchNo() (uint64, error) {
+	cursor, err := db.tx.Cursor(BATCH_WITNESS)
+	if err != nil {
+		return 0, err
+	}
+
+	k, _, err := cursor.Last()
+	if err != nil {
+		return 0, err
+	}
+
+	return BytesToUint64(k), nil
+}
+
+func (db *HermezDbReader) GetOldestStoredWitnessBatch() (uint64, error) {
+	cursor, err := db.tx.Cursor(BATCH_WITNESS)
+	if err != nil {
+		return 0, err
+	}
+
+	key, _, err := cursor.First()
+	if err != nil {
+		return 0, err
+	}
+
+	return BytesToUint64(key), nil
+}
+
+func (db *HermezDb) WriteWitnessByBatchNo(batchNo uint64, w []byte) error {
+	return WriteChunks(db.tx, BATCH_WITNESS, Uint64ToBytes(batchNo), w)
+}
+
+func (db *HermezDb) DeleteWitnessByBatchNo(batchNo uint64) error {
+	highestBlock, err := db.GetHighestBlockInBatch(batchNo)
+	if err != nil {
+		return err
+	}
+	// If highest block is 0, it implies that batch i is not present
+	if highestBlock == 0 {
+		return nil
+	}
+
+	return DeleteChunks(db.tx, BATCH_WITNESS, Uint64ToBytes(batchNo))
+}
+
+func (db *HermezDb) DeleteWitnessByBatchRange(fromBatch uint64, toBatch uint64) error {
+	cursor, err := db.tx.Cursor(BATCH_WITNESS)
+	if err != nil {
+		return err
+	}
+
+	fromBatchByte := append(Uint64ToBytes(fromBatch), []byte("_chunk_0")...)
+	cursor.Seek(fromBatchByte)
+	for {
+		k, _, err := cursor.Current()
+		if err != nil {
+			return err
+		}
+
+		batchNo := BytesToUint64(k)
+		if batchNo > toBatch {
+			break
+		}
+
+		err = db.DeleteWitnessByBatchNo(batchNo)
+		if err != nil {
+			return err
+		}
+
+		cursor.Next()
+	}
+
+	return nil
+}
+
+func (db *HermezDb) DeleteWitnessTillBatchNo(toBatch uint64) error {
+	cursor, err := db.tx.Cursor(BATCH_WITNESS)
+	if err != nil {
+		return err
+	}
+
+	k, _, err := cursor.First()
+	if err != nil {
+		return err
+	}
+
+	fromBatch := BytesToUint64(k)
+	return db.DeleteWitnessByBatchRange(fromBatch, toBatch)
+}
+
+func WriteChunks(tx kv.RwTx, tableName string, key []byte, valueBytes []byte) error {
+	// Split the valueBytes into chunks and write each chunk
+	for i := 0; i < len(valueBytes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(valueBytes) {
+			end = len(valueBytes)
+		}
+		chunk := valueBytes[i:end]
+		chunkKey := append(key, []byte("_chunk_"+strconv.Itoa(i/chunkSize))...)
+
+		// Write each chunk to the KV store
+		if err := tx.Put(tableName, chunkKey, chunk); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ReadChunks(tx kv.Tx, tableName string, key []byte) ([]byte, error) {
+	// Initialize a buffer to store the concatenated chunks
+	var result []byte
+
+	// Retrieve and concatenate each chunk
+	for i := 0; ; i++ {
+		chunkKey := append(key, []byte("_chunk_"+strconv.Itoa(i))...)
+		chunk, err := tx.GetOne(tableName, chunkKey)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if this is the last chunk
+		if len(chunk) == 0 {
+			break
+		}
+
+		// Append the chunk to the result
+		result = append(result, chunk...)
+	}
+
+	return result, nil
+}
+
+func DeleteChunks(tx kv.RwTx, tableName string, key []byte) error {
+	for i := 0; ; i++ {
+		chunkKey := append(key, []byte("_chunk_"+strconv.Itoa(i))...)
+		chunk, err := tx.GetOne(tableName, chunkKey)
+		if err != nil {
+			return err
+		}
+
+		err = tx.Delete(tableName, chunkKey)
+		if err != nil {
+			return err
+		}
+
+		// Check if this is the last chunk
+		if len(chunk) == 0 {
+			break
+		}
+	}
+
+	return nil
 }

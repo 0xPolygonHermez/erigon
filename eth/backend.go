@@ -117,7 +117,6 @@ import (
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	txpool2 "github.com/ledgerwatch/erigon/zk/txpool"
-	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
 )
 
@@ -741,7 +740,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				cfg.L1QueryDelay,
 			)
 
-			witnessGenerator := witness.NewGenerator(
+			witnessGenerator := zkStages.NewWitnessGenerator(
 				config.Dirs,
 				config.HistoryV3,
 				backend.agg,

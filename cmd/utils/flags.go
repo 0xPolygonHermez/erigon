@@ -472,6 +472,16 @@ var (
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
 		Value: false,
 	}
+	WitnessStageFlag = cli.BoolFlag{
+		Name:  "zkevm.witness-stage",
+		Usage: "Enable/Diable witness stage",
+		Value: true,
+	}
+	StoreNblocksWitness = cli.Uint64Flag{
+		Name:  "zkevm.store-n-blocks-witness",
+		Usage: "Stores last N blocks witness in db",
+		Value: 1000,
+	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",
 		Usage: "Does limit amount of goroutines to process 1 batch request. Means 1 bach request can't overload server. 1 batch still can have unlimited amount of request",
@@ -1256,6 +1266,7 @@ func SetNodeConfig(ctx *cli.Context, cfg *nodecfg.Config) {
 	setDataDir(ctx, cfg)
 	setNodeUserIdent(ctx, cfg)
 	SetP2PConfig(ctx, &cfg.P2P, cfg.NodeName(), cfg.Dirs.DataDir)
+	setWitnessStageConfig(ctx, cfg)
 
 	cfg.SentryLogPeerInfo = ctx.IsSet(SentryLogPeerInfoFlag.Name)
 }
@@ -1289,6 +1300,11 @@ func setDataDir(ctx *cli.Context, cfg *nodecfg.Config) {
 	if !isPowerOfTwo(szLimit) || szLimit < 256 {
 		panic(fmt.Errorf("invalid --db.size.limit: %s=%d, see: %s", ctx.String(DbSizeLimitFlag.Name), sz, DbSizeLimitFlag.Usage))
 	}
+}
+
+func setWitnessStageConfig(ctx *cli.Context, cfg *nodecfg.Config) {
+	cfg.WitnessStage = ctx.Bool(WitnessStageFlag.GetValue())
+	cfg.StoreNblocksWitness = ctx.Uint64(StoreNblocksWitness.GetValue())
 }
 
 func isPowerOfTwo(n uint64) bool {

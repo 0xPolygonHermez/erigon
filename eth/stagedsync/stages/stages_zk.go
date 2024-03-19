@@ -21,6 +21,7 @@ var (
 	L1Syncer                    SyncStage = "L1Syncer"
 	L1VerificationsBatchNo      SyncStage = "L1VerificationsBatchNo"
 	Batches                     SyncStage = "Batches"
+	Witness                     SyncStage = "Witness"
 	HighestHashableL2BlockNo    SyncStage = "HighestHashableL2BlockNo"
 	HighestSeenBatchNumber      SyncStage = "HighestSeenBatchNumber"
 	VerificationsStateRootCheck SyncStage = "VerificationStateRootCheck"

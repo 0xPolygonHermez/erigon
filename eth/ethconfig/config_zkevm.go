@@ -27,6 +27,9 @@ type Zk struct {
 	AllowPreEIP155Transactions  bool
 
 	RebuildTreeAfter uint64
+
+	WitnessStage        bool
+	StoreNblocksWitness uint64
 }
 
 var DefaultZkConfig = &Zk{}

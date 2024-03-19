@@ -17,6 +17,7 @@ func SequencerZkStages(
 	dataStreamCatchupCfg DataStreamCatchupCfg,
 	sequencerInterhashesCfg SequencerInterhashesCfg,
 	exec SequenceBlockCfg,
+	witnessCfg WitnessCfg,
 	hashState stagedsync.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
 	sequencerExecutorVerifyCfg SequencerExecutorVerifyCfg,
@@ -92,6 +93,19 @@ func SequencerZkStages(
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
 				return PruneSequenceExecutionStage(p, tx, exec, ctx, firstCycle)
+			},
+		},
+		{
+			ID:          stages2.Witness,
+			Description: "Generates and stores witness of batches",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
+				return SpawnWitnessStage(s, u, tx, ctx, witnessCfg, firstCycle, quiet)
+			},
+			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
+				return UnwindWitnessStage(u, s, tx, ctx, witnessCfg, firstCycle)
+			},
+			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
+				return PruneWitnessStage(p, tx, witnessCfg, ctx, firstCycle)
 			},
 		},
 		{
@@ -246,6 +260,7 @@ func DefaultZkStages(
 	blockHashCfg stagedsync.BlockHashesCfg,
 	senders stagedsync.SendersCfg,
 	exec stagedsync.ExecuteBlockCfg,
+	witnessCfg WitnessCfg,
 	hashState stagedsync.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
 	history stagedsync.HistoryCfg,
@@ -326,7 +341,21 @@ func DefaultZkStages(
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
 				return stagedsync.PruneExecutionStageZk(p, tx, exec, ctx, firstCycle)
 			},
-		}, {
+		},
+		{
+			ID:          stages2.Witness,
+			Description: "Generates and stores witness of batches",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
+				return SpawnWitnessStage(s, u, tx, ctx, witnessCfg, firstCycle, quiet)
+			},
+			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
+				return UnwindWitnessStage(u, s, tx, ctx, witnessCfg, firstCycle)
+			},
+			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
+				return PruneWitnessStage(p, tx, witnessCfg, ctx, firstCycle)
+			},
+		},
+		{
 			ID:          stages2.CumulativeIndex,
 			Description: "Write Cumulative Index",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
@@ -476,6 +505,7 @@ var AllStagesZk = []stages2.SyncStage{
 	stages2.BlockHashes,
 	stages2.Senders,
 	stages2.Execution,
+	stages2.Witness,
 	stages2.HashState,
 	stages2.IntermediateHashes,
 	stages2.LogIndex,
@@ -487,6 +517,7 @@ var AllStagesZk = []stages2.SyncStage{
 var ZkSequencerUnwindOrder = stages.UnwindOrder{
 	stages2.IntermediateHashes, // need to unwind SMT before we remove history
 	stages2.Execution,
+	stages2.Witness,
 	stages2.HashState,
 	stages2.CallTraces,
 	stages2.AccountHistoryIndex,
@@ -502,6 +533,7 @@ var ZkUnwindOrder = stages.UnwindOrder{
 	stages2.BlockHashes,
 	stages2.IntermediateHashes, // need to unwind SMT before we remove history
 	stages2.Execution,
+	stages2.Witness,
 	stages2.HashState,
 	stages2.Senders,
 	stages2.CallTraces,

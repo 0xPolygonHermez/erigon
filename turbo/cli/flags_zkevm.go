@@ -50,6 +50,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorStrictMode:          ctx.Bool(utils.ExecutorStrictMode.Name),
 		AllowFreeTransactions:       ctx.Bool(utils.AllowFreeTransactions.Name),
 		AllowPreEIP155Transactions:  ctx.Bool(utils.AllowPreEIP155Transactions.Name),
+		WitnessStage:                ctx.Bool(utils.WitnessStageFlag.Name),
+		StoreNblocksWitness:         ctx.Uint64(utils.StoreNblocksWitness.Name),
 	}
 
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.Zk.L2ChainId)

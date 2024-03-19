@@ -170,6 +170,10 @@ type Config struct {
 	HealthCheck bool
 
 	Http httpcfg.HttpCfg
+
+	// WitnesssStage
+	WitnessStage        bool
+	StoreNblocksWitness uint64
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into
