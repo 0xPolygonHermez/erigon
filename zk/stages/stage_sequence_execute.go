@@ -263,11 +263,6 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(cfg.chainConfig, nextBlockNum, newBlockTimestamp, &parentRoot, l1TreeUpdate, ibs); err != nil {
-		return err
-	}
-
 	// start waiting for a new transaction to arrive
 	ticker := time.NewTicker(10 * time.Second)
 	log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
@@ -329,6 +324,11 @@ LOOP:
 	if l1TreeUpdate != nil {
 		l1BlockHash = l1TreeUpdate.ParentHash
 		ger = l1TreeUpdate.GER
+	}
+
+	parentRoot := parentBlock.Root()
+	if err = handleStateForNewBlockStarting(cfg.chainConfig, nextBlockNum, newBlockTimestamp, &parentRoot, l1TreeUpdate, ibs); err != nil {
+		return err
 	}
 
 	if err = finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch, ger, l1BlockHash, forkId); err != nil {
