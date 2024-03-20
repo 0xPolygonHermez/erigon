@@ -3,6 +3,12 @@
 cdk-erigon is a fork of Erigon, currently in Alpha, optimized for syncing with the Polygon Hermez zkEVM network.
 
 ***
+## Release Roadmap
+- **v0.9.x**: Support for Cardona testnet
+- **v1.x.x**: Support for Mainnet
+- **v3.x.x**: Erigon 3 based (snapshot support)
+
+***
 
 ## Chain/Fork Support
 Current status of cdk-erigon's support for running various chains and fork ids:
