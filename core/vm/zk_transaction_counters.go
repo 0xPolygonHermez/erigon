@@ -2,9 +2,11 @@ package vm
 
 import (
 	"fmt"
+	"math"
+
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"math"
 	"github.com/ledgerwatch/erigon/zk/tx"
 )
 
@@ -92,6 +94,7 @@ func (tc *TransactionCounter) CalculateRlp() error {
 	collector.SHLarith()
 
 	v, r, s := tc.transaction.RawSignatureValues()
+	v = tc.GetDecodedV(v)
 	err = collector.ecRecover(v, r, s, false)
 	if err != nil {
 		return err
@@ -139,6 +142,21 @@ func (tc *TransactionCounter) ExecutionCounters() *CounterCollector {
 	return tc.executionCounters
 }
 
-func (tx *TransactionCounter) ProcessingCounters() *CounterCollector {
-	return tx.processingCounters
+func (tc *TransactionCounter) ProcessingCounters() *CounterCollector {
+	return tc.processingCounters
+}
+
+func (tc *TransactionCounter) GetDecodedV(v *uint256.Int) *uint256.Int {
+	result := v.Clone()
+
+	if tc.transaction.Protected() {
+		chainId := tc.transaction.GetChainID()
+		chainId.Mul(chainId, uint256.NewInt(2))
+		result.Sub(result, chainId)
+		result.Sub(result, uint256.NewInt(35))
+		result.Add(result, uint256.NewInt(27))
+	}
+
+	return result
+
 }
