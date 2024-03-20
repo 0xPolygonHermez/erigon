@@ -15,7 +15,7 @@ version: '2.2'
 
 services:
   erigon:
-    image: cdk-erigon:${TAG:-latest}
+    image: hermeznetwork/cdk-erigon:${TAG:-latest}
     build:
       args:
         UID: ${DOCKER_UID:-1000}
