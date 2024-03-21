@@ -141,13 +141,13 @@ func SpawnStageDataStreamCatchup(
 	if err = stream.StartAtomicOp(); err != nil {
 		return err
 	}
-
+	totalToWrite := finalBlockNumber - previousProgress
 	for currentBlockNumber := previousProgress + 1; currentBlockNumber <= finalBlockNumber; currentBlockNumber++ {
 		select {
 		case <-logTicker.C:
 			log.Info(fmt.Sprintf("[%s]: progress", logPrefix),
-				"batch", currentBlockNumber,
-				"target", finalBlockNumber, "%", math.Round(float64(currentBlockNumber)/float64(finalBlockNumber)*100))
+				"block", currentBlockNumber,
+				"target", finalBlockNumber, "%", math.Round(float64(currentBlockNumber-previousProgress)/float64(totalToWrite)*100))
 		default:
 		}
 
@@ -199,9 +199,7 @@ func SpawnStageDataStreamCatchup(
 		}
 	}
 
-	log.Info(fmt.Sprintf("[%s]: stage complete", logPrefix),
-		"block", previousProgress-1,
-		"target", finalBlockNumber, "%", math.Round(float64(previousProgress-1)/float64(finalBlockNumber)*100))
+	log.Info(fmt.Sprintf("[%s]: stage complete", logPrefix), "block", finalBlockNumber)
 
 	return err
 }
