@@ -1,9 +1,10 @@
 package vm
 
 import (
-	"github.com/ledgerwatch/erigon/zk/tx"
 	"math"
 	"strconv"
+
+	"github.com/ledgerwatch/erigon/zk/tx"
 )
 
 type BatchCounterCollector struct {
@@ -74,6 +75,7 @@ func (bcc *BatchCounterCollector) processBatchLevelData() error {
 
 	bcc.l2DataCollector.Deduct(S, 100)
 	bcc.l2DataCollector.Deduct(P, bcc.smtLevels)
+	bcc.l2DataCollector.Deduct(B, 2)
 	bcc.l2DataCollector.divArith()
 	bcc.l2DataCollector.Deduct(K, l2Deduction)
 	bcc.l2DataCollector.failAssert()
