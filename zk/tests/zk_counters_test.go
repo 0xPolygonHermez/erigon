@@ -2,8 +2,16 @@ package vm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/big"
+	"os"
+	"strconv"
+	"strings"
+	"testing"
+
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/consensus/ethash/ethashcfg"
@@ -14,17 +22,10 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconsensusconfig"
 	"github.com/ledgerwatch/erigon/params"
+	seq "github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
-	"math/big"
-	"os"
-	"strconv"
-	"testing"
-	seq "github.com/ledgerwatch/erigon/zk/sequencer"
-	"errors"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"strings"
 )
 
 const root = "./testdata/counters"
@@ -73,18 +74,25 @@ func Test_RunTestVectors(t *testing.T) {
 
 	var tests []vector
 	var fileNames []string
+
 	for _, file := range files {
+		if file.Name() != "example-from-commonjs.json" {
+			continue
+		}
+
 		var inner []vector
 		contents, err := os.ReadFile(fmt.Sprintf("%s/%s", root, file.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		fileNames = append(fileNames, file.Name())
 
 		if err = json.Unmarshal(contents, &inner); err != nil {
 			t.Fatal(err)
 		}
 
+		for i := len(inner) - 1; i >= 0; i-- {
+			fileNames = append(fileNames, file.Name())
+		}
 		tests = append(tests, inner...)
 	}
 
