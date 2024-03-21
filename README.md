@@ -3,6 +3,12 @@
 cdk-erigon is a fork of Erigon, currently in Alpha, optimized for syncing with the Polygon Hermez zkEVM network.
 
 ***
+## Release Roadmap
+- **v0.9.x**: Support for Cardona testnet
+- **v1.x.x**: Support for Mainnet
+- **v3.x.x**: Erigon 3 based (snapshot support)
+
+***
 
 ## Chain/Fork Support
 Current status of cdk-erigon's support for running various chains and fork ids:
@@ -12,13 +18,15 @@ Current status of cdk-erigon's support for running various chains and fork ids:
 - CDK Chains - experimental support (forkid.8 and above)
 
 ## Prereqs
-In order to use the optimal vectorized poseidon hashing for the Sparse Merkle Tree, on x86 the following packages are required (for Apple silicone it will fall back to the iden3 library and as such these dependencies are not required in that case.
+In order to use the optimal vectorized poseidon hashing for the Sparse Merkle Tree, on x86 the following packages are required (for Apple silicon it will fall back to the iden3 library and as such these dependencies are not required in that case.
 
 Please install: 
 - Linux: `libgtest-dev` `libomp-dev` `libgmp-dev`
 - MacOS: `brew install libomp` `brew install gmp`
 
 Using the Makefile command: `make build-libs` will install these for the relevant architecture.
+
+Due to dependency requirements Go 1.19 is required to build.
 
 ## sequencer (WIP)
 
@@ -76,9 +84,24 @@ The image comes with 3 preinstalled default configs which you may wish to edit a
 A datadir must be mounted to the container to persist the chain data between runs.
 
 Example commands:
-- Mainnet `docker run -p 8545:8545 -v  /datadirs:/datadirs hermeznetwork/cdk-erigon  --config="./mainnet.yaml" --datadir='/datadirs/mainnet'`
-- Cardona `docker run -p 8545:8545 -v  /datadirs:/datadirs hermeznetwork/cdk-erigon  --config="./cardona.yaml" --datadir='/datadirs/cardona'`
-- Cardona Internal `docker run -p 8545:8545 -v  /datadirs:/datadirs hermeznetwork/cdk-erigon  --config="./cardona-internal.yaml" --datadir='/datadirs/cardona-internal'`
+- Mainnet 
+```
+docker run -d -p 8545:8545 -v ./cdk-erigon-data/:/home/erigon/.local/share/erigon hermeznetwork/cdk-erigon  --config="./mainnet.yaml" --zkevm.l1-rpc-url=https://rpc.eth.gateway.fm
+```
+- Cardona
+```
+docker run -d -p 8545:8545 -v ./cdk-erigon-data/:/home/erigon/.local/share/erigon hermeznetwork/cdk-erigon  --config="./cardona.yaml" --zkevm.l1-rpc-url=https://rpc.sepolia.org
+```
+docker-compose example:
+
+- Mainnet:
+```
+NETWORK=mainnet L1_RPC_URL=https://rpc.eth.gateway.fm docker-compose -f docker-compose-example.yml up -d
+```
+- Cardona:
+```
+NETWORK=cardona-internal L1_RPC_URL=https://rpc.sepolia.org docker-compose -f docker-compose-example.yml up -d
+```
 
 ### Config
 The examples are comprehensive but there are some key fields which will need setting e.g. `datadir`, and others you may wish to change
