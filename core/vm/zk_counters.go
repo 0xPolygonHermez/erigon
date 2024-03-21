@@ -2,12 +2,12 @@ package vm
 
 import (
 	"fmt"
+	"math"
+	"math/big"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"math"
-	"math/big"
-	"strconv"
 )
 
 var totalSteps = math.Pow(2, 23)
@@ -94,10 +94,18 @@ type CounterCollector struct {
 	transaction types.Transaction
 }
 
-func calculateSmtLevels(smtMaxLevel uint32) int {
-	binaryLength := len(strconv.FormatInt(int64(math.Pow(2, float64(smtMaxLevel))+50_000), 2))
-	if binaryLength < 32 {
-		binaryLength = 32
+func calculateSmtLevels(smtMaxLevel int, minValue int) int {
+	binary := big.NewInt(0)
+	base := big.NewInt(2)
+	power := big.NewInt(int64(smtMaxLevel))
+	offset := big.NewInt(50000)
+
+	binary.Exp(base, power, nil)
+	binary.Add(binary, offset)
+	binaryLength := len(fmt.Sprintf("%b", binary))
+
+	if binaryLength < minValue {
+		binaryLength = minValue
 	}
 	return binaryLength
 }
@@ -515,9 +523,9 @@ func (cc *CounterCollector) mulArith() {
 	cc.Deduct(A, 1)
 }
 
-func (cc *CounterCollector) fillBlockInfoTreeWithTxReceipt(smtLevels int) {
+func (cc *CounterCollector) fillBlockInfoTreeWithTxReceipt() {
 	cc.Deduct(S, 20)
-	cc.Deduct(P, 3*smtLevels)
+	cc.Deduct(P, 3*MCPL)
 }
 
 func (cc *CounterCollector) processContractCall(smtLevels int, bytecodeLength int, isDeploy bool, isCreate bool, isCreate2 bool) {

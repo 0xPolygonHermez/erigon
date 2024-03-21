@@ -71,7 +71,7 @@
       "binary": 728,
       "memAlign": 0,
       "keccaks": 41,
-      "padding": 31,
+      "padding": 13,
       "poseidon": 1263,
       "sha256": 0
     }

@@ -2,7 +2,6 @@ package vm
 
 import (
 	"math"
-	"strconv"
 
 	"github.com/ledgerwatch/erigon/zk/tx"
 )
@@ -10,20 +9,23 @@ import (
 type BatchCounterCollector struct {
 	// every new transaction added to the batch affects these counters, so they need their own entry as this will
 	// be overwritten time and again as transactions are added
-	l2DataCollector *CounterCollector
-	transactions    []*TransactionCounter
-	smtLevels       int
-	blockCount      int
-	forkId          uint16
+	l2DataCollector         *CounterCollector
+	transactions            []*TransactionCounter
+	smtLevels               int
+	smtLevelsForTransaction int
+	blockCount              int
+	forkId                  uint16
 }
 
-func NewBatchCounterCollector(smtMaxLevel uint32, forkId uint16) *BatchCounterCollector {
-	binaryLength := len(strconv.FormatInt(int64(math.Pow(2, float64(smtMaxLevel))+50_000), 2))
+func NewBatchCounterCollector(smtMaxLevel int, forkId uint16) *BatchCounterCollector {
+	smtLevels := calculateSmtLevels(smtMaxLevel, 0)
+	smtLevelsForTransaction := calculateSmtLevels(smtMaxLevel, 32)
 	return &BatchCounterCollector{
-		transactions: []*TransactionCounter{},
-		smtLevels:    binaryLength,
-		blockCount:   0,
-		forkId:       forkId,
+		transactions:            []*TransactionCounter{},
+		smtLevels:               smtLevels,
+		smtLevelsForTransaction: smtLevelsForTransaction,
+		blockCount:              0,
+		forkId:                  forkId,
 	}
 }
 
@@ -111,9 +113,9 @@ func (bcc *BatchCounterCollector) CombineCollectors() (Counters, error) {
 
 	// these counter collectors can be re-used for each new block in the batch as they don't rely on inputs
 	// from the block or transactions themselves
-	changeL2BlockCounter := NewCounterCollector(bcc.smtLevels)
+	changeL2BlockCounter := NewCounterCollector(bcc.smtLevelsForTransaction)
 	changeL2BlockCounter.processChangeL2Block()
-	changeBlockCounters := NewCounterCollector(bcc.smtLevels)
+	changeBlockCounters := NewCounterCollector(bcc.smtLevelsForTransaction)
 	changeBlockCounters.decodeChangeL2BlockTx()
 
 	// handling changeL2Block counters for each block in the batch - simulating a call to decodeChangeL2BlockTx from the js

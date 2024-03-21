@@ -18,8 +18,8 @@ type TransactionCounter struct {
 	smtLevels          int
 }
 
-func NewTransactionCounter(transaction types.Transaction, smtMaxLevel uint32) *TransactionCounter {
-	totalLevel := calculateSmtLevels(smtMaxLevel)
+func NewTransactionCounter(transaction types.Transaction, smtMaxLevel int) *TransactionCounter {
+	totalLevel := calculateSmtLevels(smtMaxLevel, 32)
 	tc := &TransactionCounter{
 		transaction:        transaction,
 		rlpCounters:        NewCounterCollector(totalLevel),
@@ -133,7 +133,7 @@ func (tc *TransactionCounter) ProcessTx(ibs *state.IntraBlockState, returnData [
 	cc.subArith()
 	cc.divArith()
 	cc.multiCall(cc.mulArith, 4)
-	cc.fillBlockInfoTreeWithTxReceipt(tc.smtLevels)
+	cc.fillBlockInfoTreeWithTxReceipt()
 
 	// we always send false for isCreate and isCreate2 here as the original JS does the same
 	cc.processContractCall(tc.smtLevels, byteCodeLength, isDeploy, false, false)

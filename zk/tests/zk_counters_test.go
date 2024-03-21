@@ -167,7 +167,8 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	smtDepth := sparseTree.GetDepth()
+	// GetDepth return 1 base depths while zkCounter expect 0 based depths
+	smtDepth := sparseTree.GetDepth() - 1
 
 	genesisRoot := genesisBlock.Root()
 	expectedGenesisRoot := common.HexToHash(test.ExpectedOldRoot)
@@ -219,7 +220,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 	stateReader := state.NewPlainStateReader(tx)
 	ibs := state.New(stateReader)
 
-	batchCollector := vm.NewBatchCounterCollector(uint32(smtDepth), uint16(test.ForkId))
+	batchCollector := vm.NewBatchCounterCollector(smtDepth, uint16(test.ForkId))
 
 	blockStarted := false
 	for _, transaction := range decodedTransactions {
@@ -233,8 +234,12 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 			}
 			blockStarted = true
 		}
-		txCounters := vm.NewTransactionCounter(transaction, uint32(smtDepth))
+		txCounters := vm.NewTransactionCounter(transaction, smtDepth)
 		overflow, err := batchCollector.AddNewTransactionCounters(txCounters)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		gasPool := new(core.GasPool).AddGas(transactionGasLimit)
 
 		vmCfg.CounterCollector = txCounters.ExecutionCounters()

@@ -624,6 +624,10 @@ func (s *SMT) CheckOrphanedNodes(ctx context.Context) int {
 	return len(orphanedNodes)
 }
 
+/*
+0 depth means empty tree
+depth is 1 based => if there is a single node that is the root then the returned depth will be 1
+*/
 func (s *SMT) GetDepth() int {
 	rootNodeKey, _ := s.getLastRoot()
 	return s.getDepth(rootNodeKey, 1)
