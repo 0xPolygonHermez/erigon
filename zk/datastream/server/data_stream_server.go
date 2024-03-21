@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
@@ -26,6 +27,7 @@ var entryTypeMappings = map[types.EntryType]datastreamer.EntryType{
 	types.EntryTypeStartL2Block: datastreamer.EntryType(1),
 	types.EntryTypeL2Tx:         datastreamer.EntryType(2),
 	types.EntryTypeEndL2Block:   datastreamer.EntryType(3),
+	types.EntryTypeGerUpdate:    datastreamer.EntryType(4),
 	types.EntryTypeBookmark:     datastreamer.EntryType(176),
 }
 
@@ -112,11 +114,6 @@ func (srv *DataStreamServer) CreateTransactionEntry(
 
 	encoded := writer.Bytes()
 
-	// we only want to append the effective price when not running in an executor context
-	if fork >= 5 && srv.mode != ExecutorOperationMode {
-		encoded = append(encoded, effectiveGasPricePercentage)
-	}
-
 	length := len(encoded)
 
 	return &types.L2Transaction{
@@ -133,9 +130,10 @@ func (srv *DataStreamServer) CreateAndCommitEntriesToStream(
 	reader *hermez_db.HermezDbReader,
 	lastBlock *eritypes.Block,
 	batchNumber uint64,
+	gerUpdates *[]types.GerUpdate,
 	bigEndian bool,
 ) error {
-	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber)
+	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber, gerUpdates)
 	if err != nil {
 		return err
 	}
@@ -147,7 +145,10 @@ func (srv *DataStreamServer) CreateStreamEntries(
 	reader *hermez_db.HermezDbReader,
 	lastBlock *eritypes.Block,
 	batchNumber uint64,
+	gerUpdates *[]types.GerUpdate,
 ) ([]DataStreamEntry, error) {
+	blockNum := block.NumberU64()
+
 	fork, err := reader.GetForkId(batchNumber)
 	if err != nil {
 		return nil, err
@@ -155,46 +156,28 @@ func (srv *DataStreamServer) CreateStreamEntries(
 
 	var entries []DataStreamEntry
 
+	//gerUpdates are before the the bookmark for this block and are gottne by previous ones bookmark
+	if gerUpdates != nil {
+		for _, gerUpdate := range *gerUpdates {
+			entries = append(entries, &gerUpdate)
+		}
+	}
+
 	bookmark := srv.CreateBookmarkEntry(BlockBookmarkType, block.NumberU64())
 	entries = append(entries, bookmark)
 
 	deltaTimestamp := block.Time() - lastBlock.Time()
 
-	var ger libcommon.Hash
-	var l1BlockHash libcommon.Hash
-
-	l1Index, err := reader.GetBlockL1InfoTreeIndex(block.NumberU64())
+	ger, err := reader.GetBlockGlobalExitRoot(blockNum)
+	if err != nil {
+		return nil, err
+	}
+	l1BlockHash, err := reader.GetBlockL1BlockHash(blockNum)
 	if err != nil {
 		return nil, err
 	}
 
-	if block.NumberU64() == 1 {
-		// injected batch at the start of the network
-		injected, err := reader.GetL1InjectedBatch(0)
-		if err != nil {
-			return nil, err
-		}
-		ger = injected.LastGlobalExitRoot
-		l1BlockHash = injected.L1ParentHash
-
-		// block 1 in the stream has a delta timestamp of the block time itself
-		deltaTimestamp = block.Time()
-	} else {
-		// standard behaviour for non-injected or forced batches
-		if l1Index != 0 {
-			// read the index info itself
-			l1Info, err := reader.GetL1InfoTreeUpdate(l1Index)
-			if err != nil {
-				return nil, err
-			}
-			if l1Info != nil {
-				ger = l1Info.GER
-				l1BlockHash = l1Info.ParentHash
-			}
-		}
-	}
-
-	blockStart := srv.CreateBlockStartEntry(block, batchNumber, uint16(fork), ger, uint32(deltaTimestamp), uint32(l1Index), l1BlockHash)
+	blockStart := srv.CreateBlockStartEntry(block, batchNumber, uint16(fork), ger, uint32(deltaTimestamp), uint32(0), l1BlockHash)
 	entries = append(entries, blockStart)
 
 	for _, tx := range block.Transactions() {
@@ -225,8 +208,9 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytes(
 	lastBlock *eritypes.Block,
 	batchNumber uint64,
 	bigEndian bool,
+	gerUpdates *[]types.GerUpdate,
 ) ([]byte, error) {
-	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber)
+	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber, gerUpdates)
 	if err != nil {
 		return nil, err
 	}

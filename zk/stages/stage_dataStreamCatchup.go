@@ -71,7 +71,7 @@ func SpawnStageDataStreamCatchup(
 	srv := server.NewDataStreamServer(stream, cfg.chainId, server.StandardOperationMode)
 	reader := hermez_db.NewHermezDbReader(tx)
 
-	var executorProgress uint64
+	var finalBlockNumber, highestVerifiedBatch uint64
 
 	switch cfg.nodeType {
 	case NodeTypeSequencer:
@@ -81,26 +81,51 @@ func SpawnStageDataStreamCatchup(
 		if err != nil {
 			return err
 		}
-		executorProgress = executorVerifyProgress
+		highestVerifiedBatch = executorVerifyProgress
 	case NodeTypeSynchronizer:
-		stageExecProgress, err := stages.GetStageProgress(tx, stages.Execution)
+		// synchronizer gets the highest verified batch number in l1 syncer stage
+		highestVerifiedBatchSyncer, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 		if err != nil {
 			return err
 		}
-		executorProgress = stageExecProgress
+		highestVerifiedBatch = highestVerifiedBatchSyncer
 	default:
 		return fmt.Errorf("unknown node type: %d", cfg.nodeType)
 	}
 
-	currentBatch, err := stages.GetStageProgress(tx, stages.DataStream)
+	highestVerifiedBlock, err := reader.GetHighestBlockInBatch(highestVerifiedBatch)
 	if err != nil {
 		return err
 	}
 
+	// we might have not executed to that batch yet, so we need to check the highest executed block
+	// and get it's batch
+	highestExecutedBlock, err := stages.GetStageProgress(tx, stages.Execution)
+	if err != nil {
+		return err
+	}
+
+	finalBlockNumber = highestVerifiedBlock
+	if highestExecutedBlock < finalBlockNumber {
+		finalBlockNumber = highestExecutedBlock
+	}
+
+	previousProgress, err := stages.GetStageProgress(tx, stages.DataStream)
+	if err != nil {
+		return err
+	}
+
+	log.Info(fmt.Sprintf("[%s] Getting progress", logPrefix),
+		"highestVerifiedBlock", highestVerifiedBlock,
+		"highestExecutedBlock", highestExecutedBlock,
+		"adding up to blockNum", finalBlockNumber,
+		"previousProgress", previousProgress,
+	)
+
 	var lastBlock *eritypes.Block
 
 	// skip genesis if we have no data in the stream yet
-	if currentBatch == 0 {
+	if previousProgress == 0 {
 		genesis, err := rawdb.ReadBlockByNumber(tx, 0)
 		if err != nil {
 			return err
@@ -109,12 +134,6 @@ func SpawnStageDataStreamCatchup(
 		if err = writeGenesisToStream(genesis, reader, stream, srv); err != nil {
 			return err
 		}
-		currentBatch++
-	}
-
-	batchToBlocks, err := preLoadBatchesToBlocks(tx)
-	if err != nil {
-		return err
 	}
 
 	logTicker := time.NewTicker(10 * time.Second)
@@ -123,50 +142,53 @@ func SpawnStageDataStreamCatchup(
 		return err
 	}
 
-	for ; currentBatch <= executorProgress; currentBatch++ {
+	for currentBlockNumber := previousProgress + 1; currentBlockNumber <= finalBlockNumber; currentBlockNumber++ {
 		select {
 		case <-logTicker.C:
 			log.Info(fmt.Sprintf("[%s]: progress", logPrefix),
-				"batch", currentBatch,
-				"target", executorProgress, "%", math.Round(float64(currentBatch)/float64(executorProgress)*100))
+				"batch", currentBlockNumber,
+				"target", finalBlockNumber, "%", math.Round(float64(currentBlockNumber)/float64(finalBlockNumber)*100))
 		default:
 		}
 
-		// get the blocks for this batch
-		blockNumbers, ok := batchToBlocks[currentBatch]
-
-		// if there are no blocks to process just continue - previously this would check for a GER update in
-		// the pre-etrog world but this isn't possible now because of the l1 info tree indexes, so we just
-		// skip on
-		if !ok || len(blockNumbers) == 0 {
-			log.Info(fmt.Sprintf("[%s] found a batch with no blocks during data stream catchup", logPrefix), "batch", currentBatch)
-			currentBatch++
-			continue
-		}
-
-		for _, blockNumber := range blockNumbers {
-			if lastBlock == nil {
-				lastBlock, err = rawdb.ReadBlockByNumber(tx, blockNumber-1)
-				if err != nil {
-					return err
-				}
-			}
-			block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
+		if lastBlock == nil {
+			lastBlock, err = rawdb.ReadBlockByNumber(tx, currentBlockNumber-1)
 			if err != nil {
 				return err
 			}
-			if err = srv.CreateAndCommitEntriesToStream(block, reader, lastBlock, currentBatch, true); err != nil {
-				return err
-			}
-			lastBlock = block
 		}
+
+		block, err := rawdb.ReadBlockByNumber(tx, currentBlockNumber)
+		if err != nil {
+			return err
+		}
+
+		batchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber)
+		if err != nil {
+			return err
+		}
+
+		prevBatchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber - 1)
+		if err != nil {
+			return err
+		}
+
+		gersInBetween, err := reader.GetBatchGlobalExitRoots(prevBatchNum, batchNum)
+		if err != nil {
+			return err
+		}
+
+		if err = srv.CreateAndCommitEntriesToStream(block, reader, lastBlock, batchNum, gersInBetween, true); err != nil {
+			return err
+		}
+		lastBlock = block
 	}
 
 	if err = stream.CommitAtomicOp(); err != nil {
 		return err
 	}
 
-	if err = stages.SaveStageProgress(tx, stages.DataStream, currentBatch); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.DataStream, finalBlockNumber); err != nil {
 		return err
 	}
 
@@ -178,8 +200,8 @@ func SpawnStageDataStreamCatchup(
 	}
 
 	log.Info(fmt.Sprintf("[%s]: stage complete", logPrefix),
-		"batch", currentBatch-1,
-		"target", executorProgress, "%", math.Round(float64(currentBatch-1)/float64(executorProgress)*100))
+		"block", previousProgress-1,
+		"target", finalBlockNumber, "%", math.Round(float64(previousProgress-1)/float64(finalBlockNumber)*100))
 
 	return err
 }
