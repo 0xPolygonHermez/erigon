@@ -261,3 +261,9 @@ func AddLeadingZeroToHexValueForByteCompletion(value *string) {
 		*value = fmt.Sprintf("0%s", *value)
 	}
 }
+
+func Remove0xPrefixIfExists(value *string) {
+	if has0xPrefix(*value) {
+		*value = (*value)[2:]
+	}
+}

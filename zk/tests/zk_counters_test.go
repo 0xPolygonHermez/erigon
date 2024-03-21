@@ -28,7 +28,7 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 )
 
-const root = "./testdata/counters"
+const root = "./testdata/from-zkevm-commonjs"
 const transactionGasLimit = 30000000
 
 var (
@@ -60,6 +60,7 @@ type vector struct {
 	ForkId           uint64 `json:"forkID"`
 	ExpectedOldRoot  string `json:"expectedOldRoot"`
 	ExpectedNewRoot  string `json:"expectedNewRoot"`
+	SmtDepths        []int  `json:"smtDepths"`
 }
 
 func Test_RunTestVectors(t *testing.T) {
@@ -76,7 +77,7 @@ func Test_RunTestVectors(t *testing.T) {
 	var fileNames []string
 
 	for _, file := range files {
-		// if file.Name() != "example-from-commonjs.json" {
+		// if file.Name() != "state-transition-processor.json" {
 		// 	continue
 		// }
 
@@ -90,6 +91,7 @@ func Test_RunTestVectors(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// inner = inner[1:2]
 		for i := len(inner) - 1; i >= 0; i-- {
 			fileNames = append(fileNames, file.Name())
 		}
@@ -169,6 +171,9 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 	}
 	// GetDepth return 1 base depths while zkCounter expect 0 based depths
 	smtDepth := sparseTree.GetDepth() - 1
+	for len(test.SmtDepths) < len(decodedTransactions) {
+		test.SmtDepths = append(test.SmtDepths, smtDepth)
+	}
 
 	genesisRoot := genesisBlock.Root()
 	expectedGenesisRoot := common.HexToHash(test.ExpectedOldRoot)
@@ -220,10 +225,10 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 	stateReader := state.NewPlainStateReader(tx)
 	ibs := state.New(stateReader)
 
-	batchCollector := vm.NewBatchCounterCollector(smtDepth, uint16(test.ForkId))
+	batchCollector := vm.NewBatchCounterCollector(test.SmtDepths[0], uint16(test.ForkId))
 
 	blockStarted := false
-	for _, transaction := range decodedTransactions {
+	for i, transaction := range decodedTransactions {
 		if !blockStarted {
 			overflow, err := batchCollector.StartNewBlock()
 			if err != nil {
@@ -234,7 +239,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 			}
 			blockStarted = true
 		}
-		txCounters := vm.NewTransactionCounter(transaction, smtDepth)
+		txCounters := vm.NewTransactionCounter(transaction, test.SmtDepths[i])
 		overflow, err := batchCollector.AddNewTransactionCounters(txCounters)
 		if err != nil {
 			t.Fatal(err)
