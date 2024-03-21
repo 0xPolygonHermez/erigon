@@ -3,7 +3,6 @@ package stages
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
@@ -147,7 +146,7 @@ func SpawnStageDataStreamCatchup(
 		case <-logTicker.C:
 			log.Info(fmt.Sprintf("[%s]: progress", logPrefix),
 				"block", currentBlockNumber,
-				"target", finalBlockNumber, "%", math.Round(float64(currentBlockNumber-previousProgress)/float64(totalToWrite)*100))
+				"target", finalBlockNumber, "%", float64(currentBlockNumber-previousProgress)/float64(totalToWrite)*100)
 		default:
 		}
 
