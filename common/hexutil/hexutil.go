@@ -255,3 +255,9 @@ func DecompressNibbles(in []byte, out *[]byte) {
 	}
 	*out = tmp
 }
+
+func AddLeadingZeroToHexValueForByteCompletion(value *string) {
+	if (len(*value) & 1) == 1 {
+		*value = fmt.Sprintf("0%s", *value)
+	}
+}

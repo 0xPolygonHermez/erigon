@@ -76,9 +76,9 @@ func Test_RunTestVectors(t *testing.T) {
 	var fileNames []string
 
 	for _, file := range files {
-		if file.Name() != "example-from-commonjs.json" {
-			continue
-		}
+		// if file.Name() != "example-from-commonjs.json" {
+		// 	continue
+		// }
 
 		var inner []vector
 		contents, err := os.ReadFile(fmt.Sprintf("%s/%s", root, file.Name()))

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"bytes"
+	"github.com/ledgerwatch/erigon/zk/tx"
 )
 
 type TransactionCounter struct {
@@ -34,22 +34,23 @@ func NewTransactionCounter(transaction types.Transaction, smtMaxLevel uint32) *T
 }
 
 func (tc *TransactionCounter) CalculateRlp() error {
-	var rlpBytes []byte
-	buffer := bytes.NewBuffer(rlpBytes)
-	err := tc.transaction.EncodeRLP(buffer)
+	raw, err := tx.TransactionToL2Data(tc.transaction, 8, tx.MaxEffectivePercentage)
+	if err != nil {
+		return err
+	}
 
 	gasLimitHex := fmt.Sprintf("%x", tc.transaction.GetGas())
-	addLeadingZeroToHexValue(&gasLimitHex)
+	hexutil.AddLeadingZeroToHexValueForByteCompletion(&gasLimitHex)
 	gasPriceHex := fmt.Sprintf("%x", tc.transaction.GetPrice().Uint64())
-	addLeadingZeroToHexValue(&gasPriceHex)
+	hexutil.AddLeadingZeroToHexValueForByteCompletion(&gasPriceHex)
 	valueHex := fmt.Sprintf("%x", tc.transaction.GetValue().Uint64())
-	addLeadingZeroToHexValue(&valueHex)
+	hexutil.AddLeadingZeroToHexValueForByteCompletion(&valueHex)
 	chainIdHex := fmt.Sprintf("%x", tc.transaction.GetChainID().Uint64())
-	addLeadingZeroToHexValue(&chainIdHex)
+	hexutil.AddLeadingZeroToHexValueForByteCompletion(&chainIdHex)
 	nonceHex := fmt.Sprintf("%x", tc.transaction.GetNonce())
-	addLeadingZeroToHexValue(&nonceHex)
+	hexutil.AddLeadingZeroToHexValueForByteCompletion(&nonceHex)
 
-	txRlpLength := len(buffer.Bytes())
+	txRlpLength := len(raw)
 	txDataLen := len(tc.transaction.GetData())
 	gasLimitLength := len(gasLimitHex) / 2
 	gasPriceLength := len(gasPriceHex) / 2
@@ -98,7 +99,7 @@ func (tc *TransactionCounter) CalculateRlp() error {
 	collector.SHLarith()
 
 	v, r, s := tc.transaction.RawSignatureValues()
-	v = tc.GetDecodedV(v)
+	v = tx.GetDecodedV(tc.transaction, v)
 	err = collector.ecRecover(v, r, s, false)
 	if err != nil {
 		return err
@@ -148,25 +149,4 @@ func (tc *TransactionCounter) ExecutionCounters() *CounterCollector {
 
 func (tc *TransactionCounter) ProcessingCounters() *CounterCollector {
 	return tc.processingCounters
-}
-
-func (tc *TransactionCounter) GetDecodedV(v *uint256.Int) *uint256.Int {
-	result := v.Clone()
-
-	if tc.transaction.Protected() {
-		chainId := tc.transaction.GetChainID()
-		chainId.Mul(chainId, uint256.NewInt(2))
-		result.Sub(result, chainId)
-		result.Sub(result, uint256.NewInt(35))
-		result.Add(result, uint256.NewInt(27))
-	}
-
-	return result
-
-}
-
-func addLeadingZeroToHexValue(value *string) {
-	if (len(*value) & 1) == 1 {
-		*value = fmt.Sprintf("0%s", *value)
-	}
 }
