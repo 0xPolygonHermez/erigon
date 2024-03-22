@@ -82,7 +82,7 @@ func (bcc *BatchCounterCollector) processBatchLevelData() error {
 	bcc.l2DataCollector.Deduct(K, l2Deduction)
 	bcc.l2DataCollector.failAssert()
 	bcc.l2DataCollector.consolidateBlock()
-	bcc.l2DataCollector.finishBatchProcessing(bcc.smtLevels)
+	bcc.l2DataCollector.finishBatchProcessing()
 
 	return nil
 }

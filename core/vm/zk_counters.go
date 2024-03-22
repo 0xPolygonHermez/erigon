@@ -483,10 +483,10 @@ func (cc *CounterCollector) consolidateBlock() {
 	cc.Deduct(P, 2*MCPL)
 }
 
-func (cc *CounterCollector) finishBatchProcessing(smtLevels int) {
+func (cc *CounterCollector) finishBatchProcessing() {
 	cc.Deduct(S, 200)
 	cc.Deduct(K, 2)
-	cc.Deduct(P, smtLevels)
+	cc.Deduct(P, cc.smtLevels)
 	cc.Deduct(B, 1)
 }
 
@@ -579,8 +579,8 @@ func (cc *CounterCollector) checkBytecodeStartsEF() {
 func (cc *CounterCollector) hashPoseidonLinearFromMemory(memSize int) {
 	cc.Deduct(S, 50)
 	cc.Deduct(B, 1+1)
-	cc.Deduct(P, int(float64(memSize+1))/56)
-	cc.Deduct(D, int(float64(memSize+1))/56)
+	cc.Deduct(P, int(math.Ceil(float64(memSize+1)/56)))
+	cc.Deduct(D, int(math.Ceil(float64(memSize+1)/56)))
 	cc.divArith()
 	cc.multiCall(cc.hashPoseidonLinearFromMemoryLoop, int(math.Floor(float64(memSize)/32)))
 	cc.mLoadX()
@@ -795,8 +795,8 @@ func (cc *CounterCollector) identityLoop() {
 }
 
 func (cc *CounterCollector) identityReturnLoop() {
-	cc.Deduct(S, 8)
-	cc.readFromCallDataOffset()
+	cc.Deduct(S, 12)
+	cc.mLoad32()
 	cc.mStore32()
 }
 
@@ -1054,7 +1054,7 @@ func (cc *CounterCollector) opCodeCopyLoop() {
 
 func (cc *CounterCollector) opCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	cc.opCode(scope)
-	if scope.Contract.IsCreate {
+	if scope.Contract.IsCreate || cc.isDeploy {
 		_, err := cc.opCalldataCopy(pc, interpreter, scope)
 		if err != nil {
 			return nil, err
@@ -1524,9 +1524,10 @@ func (cc *CounterCollector) opJump(pc *uint64, interpreter *EVMInterpreter, scop
 
 func (cc *CounterCollector) checkJumpDest(scope *ScopeContext) {
 	cc.Deduct(S, 10)
+	cc.Deduct(B, 1)
 	if scope.Contract.IsCreate {
-		cc.Deduct(B, 1)
 		if cc.isDeploy {
+			cc.Deduct(B, 1)
 			cc.mLoadX()
 		}
 	}
@@ -1555,7 +1556,8 @@ func (cc *CounterCollector) opJumpDest(pc *uint64, interpreter *EVMInterpreter, 
 func (cc *CounterCollector) log(scope *ScopeContext) {
 	size := int(scope.Stack.PeekAt(2).Uint64())
 	cc.opCode(scope)
-	cc.Deduct(S, 30+8*4)
+	// cc.Deduct(S, 30+8*4)
+	cc.Deduct(S, 34+7*4)
 	cc.saveMem(size)
 	cc.mulArith()
 	cc.divArith()
@@ -1580,31 +1582,31 @@ func (cc *CounterCollector) fillBlockInfoTreeWithLog() {
 }
 
 func (cc *CounterCollector) opLog0(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope)
+	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog1(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope)
+	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope)
+	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog3(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope)
+	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog4(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope)
+	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
@@ -1624,9 +1626,9 @@ func (cc *CounterCollector) opPushGenerator(num int) executionFunc {
 
 func (cc *CounterCollector) opPush(num int, scope *ScopeContext) {
 	cc.opCode(scope)
-	cc.Deduct(S, 4)
+	cc.Deduct(S, 2)
 	if scope.Contract.IsCreate || cc.isDeploy {
-		cc.Deduct(B, 1)
+		// cc.Deduct(B, 1)
 		if scope.Contract.IsCreate {
 			cc.Deduct(S, 20)
 			cc.mLoadX()
@@ -1645,22 +1647,36 @@ func (cc *CounterCollector) opPush(num int, scope *ScopeContext) {
 }
 
 func (cc *CounterCollector) readPush(num int) {
-	cc.Deduct(S, 15)
-	cc.Deduct(B, 1)
-	numBlocks := int(math.Ceil(float64(num) / 4))
-	leftBytes := num % 4
+	// cc.Deduct(S, 15)
+	// cc.Deduct(B, 1)
+	// numBlocks := int(math.Ceil(float64(num) / 4))
+	// leftBytes := num % 4
 
-	for i := 0; i <= numBlocks; i++ {
-		cc.Deduct(S, 20)
-		cc.Deduct(B, 1)
-		for j := i - 1; j > 0; j-- {
-			cc.Deduct(S, 8)
-		}
-	}
+	// for i := 0; i <= numBlocks; i++ {
+	// 	cc.Deduct(S, 20)
+	// 	cc.Deduct(B, 1)
+	// 	for j := i - 1; j > 0; j-- {
+	// 		cc.Deduct(S, 8)
+	// 	}
+	// }
 
-	for i := 0; i < leftBytes; i++ {
-		cc.Deduct(S, 40)
-		cc.Deduct(B, 4)
+	// for i := 0; i < leftBytes; i++ {
+	// 	cc.Deduct(S, 40)
+	// 	cc.Deduct(B, 4)
+	// }
+	switch num {
+	case 1:
+		cc.Deduct(S, 2)
+	case 2:
+		cc.Deduct(S, 4)
+	case 3:
+		cc.Deduct(S, 5)
+	case 4:
+		cc.Deduct(S, 6)
+	case 32:
+		cc.Deduct(S, 45)
+	default:
+		cc.Deduct(S, 6+num*2) // approx value, is a bit less
 	}
 }
 

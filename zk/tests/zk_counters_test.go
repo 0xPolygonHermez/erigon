@@ -39,11 +39,12 @@ type vector struct {
 	BatchL2Data        string `json:"batchL2Data"`
 	BatchL2DataDecoded []byte
 	Genesis            []struct {
-		Address  string `json:"address"`
-		Nonce    string `json:"nonce"`
-		Balance  string `json:"balance"`
-		PvtKey   string `json:"pvtKey"`
-		ByteCode string `json:"bytecode"`
+		Address  string                      `json:"address"`
+		Nonce    string                      `json:"nonce"`
+		Balance  string                      `json:"balance"`
+		PvtKey   string                      `json:"pvtKey"`
+		ByteCode string                      `json:"bytecode"`
+		Storage  map[common.Hash]common.Hash `json:"storage,omitempty"`
 	} `json:"genesis"`
 	VirtualCounters struct {
 		Steps    int `json:"steps"`
@@ -90,8 +91,8 @@ func Test_RunTestVectors(t *testing.T) {
 		if err = json.Unmarshal(contents, &inner); err != nil {
 			t.Fatal(err)
 		}
-
-		// inner = inner[1:2]
+		// inner = inner[0:11]
+		// inner = inner[12:13]
 		for i := len(inner) - 1; i >= 0; i-- {
 			fileNames = append(fileNames, file.Name())
 		}
@@ -154,6 +155,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 			Nonce:      nonce,
 			PrivateKey: key,
 			Code:       code,
+			Storage:    g.Storage,
 		}
 		genesisAccounts[addr] = acc
 	}
@@ -299,7 +301,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 		errors = append(errors, fmt.Sprintf("D=%v:%v", combined[vm.D].Used(), vc.Padding))
 	}
 	if vc.Sha256 != combined[vm.SHA].Used() {
-		errors = append(errors, fmt.Sprintf("SHA=%v:%v", combined[vm.S].Used(), vc.Sha256))
+		errors = append(errors, fmt.Sprintf("SHA=%v:%v", combined[vm.SHA].Used(), vc.Sha256))
 	}
 	if vc.MemAlign != combined[vm.M].Used() {
 		errors = append(errors, fmt.Sprintf("M=%v:%v", combined[vm.M].Used(), vc.MemAlign))
