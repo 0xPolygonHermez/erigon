@@ -229,6 +229,11 @@ func SpawnStageBatches(
 				if err != nil {
 					return fmt.Errorf("failed to get genesis header: %v", err)
 				}
+
+				if previousHash == emptyHash {
+					log.Warn(fmt.Sprintf("[%s] BLOCK HAS EMPTY PARENT HASH!!!", logPrefix))
+				}
+
 				l2Block.ParentHash = previousHash
 			}
 

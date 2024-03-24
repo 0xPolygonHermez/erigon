@@ -131,6 +131,27 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	if err != nil {
 		return err
 	}
+	if prevheaderHash == (common.Hash{0}) || header == nil {
+		log.Warn(fmt.Sprintf("[%s] Empty header blocknum: %d", logPrefix, stageProgress))
+	}
+	if header == nil || header.Root == (common.Hash{0}) {
+		log.Warn(fmt.Sprintf("[%s] Empty header, blocknum: %d (prevheader hash: %s) (block number: %d)", logPrefix, stageProgress, prevheaderHash.String(), s.BlockNumber))
+		header, err := cfg.blockReader.HeaderByNumber(ctx, tx, stageProgress)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Header looked up by NUMBER: %+v\n", header)
+		// print header hash for stageProgress-1
+		prevheaderHash, err = rawdb.ReadCanonicalHash(tx, stageProgress-1)
+		if err != nil {
+			return err
+		}
+		header, err = cfg.blockReader.Header(ctx, tx, prevheaderHash, stageProgress-1)
+		if err != nil {
+			return err
+		}
+		log.Warn(fmt.Sprintf("[%s] Empty header, blocknum: %d (prevheader hash: %s)", logPrefix, stageProgress-1, prevheaderHash.String()))
+	}
 	prevBlockRoot := header.Root
 	prevBlockHash := prevheaderHash
 Loop:
