@@ -125,21 +125,6 @@ func (srv *DataStreamServer) CreateTransactionEntry(
 	}, nil
 }
 
-func (srv *DataStreamServer) CreateAndCommitEntriesToStream(
-	block *eritypes.Block,
-	reader *hermez_db.HermezDbReader,
-	lastBlock *eritypes.Block,
-	batchNumber uint64,
-	gerUpdates *[]types.GerUpdate,
-	bigEndian bool,
-) error {
-	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber, gerUpdates)
-	if err != nil {
-		return err
-	}
-	return srv.CommitEntriesToStream(entries, bigEndian)
-}
-
 func (srv *DataStreamServer) CreateStreamEntries(
 	block *eritypes.Block,
 	reader *hermez_db.HermezDbReader,

@@ -46,12 +46,12 @@ func SpawnStageDataStreamCatchup(
 ) error {
 
 	logPrefix := s.LogPrefix()
-	log.Info(fmt.Sprintf("[%s]: Starting...", logPrefix))
+	log.Info(fmt.Sprintf("[%s] Starting...", logPrefix))
 	stream := cfg.stream
 
 	if stream == nil {
 		// skip the stage if there is no streamer provided
-		log.Info(fmt.Sprintf("[%s]: no streamer provided, skipping stage", logPrefix))
+		log.Info(fmt.Sprintf("[%s] no streamer provided, skipping stage", logPrefix))
 		return nil
 	}
 
@@ -141,6 +141,9 @@ func SpawnStageDataStreamCatchup(
 		return err
 	}
 	totalToWrite := finalBlockNumber - previousProgress
+	entries := []server.DataStreamEntry{}
+	bulkInsertBlockCount := uint64(1000000)
+
 	for currentBlockNumber := previousProgress + 1; currentBlockNumber <= finalBlockNumber; currentBlockNumber++ {
 		select {
 		case <-logTicker.C:
@@ -177,10 +180,30 @@ func SpawnStageDataStreamCatchup(
 			return err
 		}
 
-		if err = srv.CreateAndCommitEntriesToStream(block, reader, lastBlock, batchNum, gersInBetween, true); err != nil {
+		blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, gersInBetween)
+		if err != nil {
 			return err
 		}
+		if blockEntries != nil {
+			entries = append(entries, blockEntries...)
+		}
+
+		if (currentBlockNumber-previousProgress)%bulkInsertBlockCount == 0 {
+			log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
+			if err = srv.CommitEntriesToStream(entries, true); err != nil {
+				return err
+			}
+			if err = stages.SaveStageProgress(tx, stages.DataStream, currentBlockNumber); err != nil {
+				return err
+			}
+			entries = []server.DataStreamEntry{}
+		}
+
 		lastBlock = block
+	}
+
+	if err = srv.CommitEntriesToStream(entries, true); err != nil {
+		return err
 	}
 
 	if err = stream.CommitAtomicOp(); err != nil {
@@ -198,7 +221,7 @@ func SpawnStageDataStreamCatchup(
 		}
 	}
 
-	log.Info(fmt.Sprintf("[%s]: stage complete", logPrefix), "block", finalBlockNumber)
+	log.Info(fmt.Sprintf("[%s] stage complete", logPrefix), "block", finalBlockNumber)
 
 	return err
 }
