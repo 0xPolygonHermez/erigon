@@ -34,14 +34,15 @@ type VerifierRequest struct {
 type VerifierResponse struct {
 	BatchNumber uint64
 	Valid       bool
+	Witness     []byte
 }
 
 type ILegacyExecutor interface {
-	Verify(*Payload, *common.Hash) (bool, error)
+	Verify(*Payload, *VerifierRequest) (bool, error)
 }
 
 type WitnessGenerator interface {
-	GenerateWitness(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug bool) ([]byte, error)
+	GenerateWitness(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
 }
 
 type LegacyExecutorVerifier struct {
@@ -173,7 +174,7 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 		return err
 	}
 
-	witness, err := v.witnessGenerator.GenerateWitness(tx, innerCtx, blocks[0], blocks[len(blocks)-1], false)
+	witness, err := v.witnessGenerator.GenerateWitness(tx, innerCtx, blocks[0], blocks[len(blocks)-1], false, v.cfg.WitnessFull)
 	if err != nil {
 		return err
 	}
@@ -206,12 +207,15 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 		ContextId:         strconv.Itoa(int(request.BatchNumber)),
 	}
 
-	// todo [zkevm] do something with the result but for now just move on in a happy state, we also need to handle errors
-	_, _ = execer.Verify(payload, &request.StateRoot)
+	ok, err := execer.Verify(payload, request)
+	if err != nil {
+		return err
+	}
 
 	response := &VerifierResponse{
 		BatchNumber: request.BatchNumber,
-		Valid:       true,
+		Valid:       ok,
+		Witness:     witness,
 	}
 	v.responseChan <- response
 

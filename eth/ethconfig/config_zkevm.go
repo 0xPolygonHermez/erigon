@@ -1,11 +1,16 @@
 package ethconfig
 
-import "github.com/ledgerwatch/erigon-lib/common"
+import (
+	"time"
+
+	"github.com/ledgerwatch/erigon-lib/common"
+)
 
 type Zk struct {
 	L2ChainId                   uint64
 	L2RpcUrl                    string
 	L2DataStreamerUrl           string
+	L2DataStreamerTimeout       time.Duration
 	L1ChainId                   uint64
 	L1RpcUrl                    string
 	L1PolygonRollupManager      common.Address
@@ -28,6 +33,7 @@ type Zk struct {
 	AllowPreEIP155Transactions  bool
 
 	RebuildTreeAfter uint64
+	WitnessFull      bool
 }
 
 var DefaultZkConfig = &Zk{}
