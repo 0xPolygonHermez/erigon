@@ -53,8 +53,9 @@ func NewDataStreamServer(stream *datastreamer.StreamServer, chainId uint64, mode
 func (srv *DataStreamServer) CommitEntriesToStream(entries []DataStreamEntry, bigEndian bool) error {
 	for _, entry := range entries {
 		entryType := entry.EntryType()
+		bytes := entry.Bytes(bigEndian)
 		if entryType == types.EntryTypeBookmark {
-			_, err := srv.stream.AddStreamBookmark(entry.Bytes(bigEndian))
+			_, err := srv.stream.AddStreamBookmark(bytes)
 			if err != nil {
 				return err
 			}
@@ -63,7 +64,7 @@ func (srv *DataStreamServer) CommitEntriesToStream(entries []DataStreamEntry, bi
 			if !ok {
 				return fmt.Errorf("unsupported stream entry type: %v", entryType)
 			}
-			_, err := srv.stream.AddStreamEntry(mapped, entry.Bytes(bigEndian))
+			_, err := srv.stream.AddStreamEntry(mapped, bytes)
 			if err != nil {
 				return err
 			}
@@ -131,7 +132,7 @@ func (srv *DataStreamServer) CreateStreamEntries(
 	lastBlock *eritypes.Block,
 	batchNumber uint64,
 	gerUpdates *[]types.GerUpdate,
-) ([]DataStreamEntry, error) {
+) (*[]DataStreamEntry, error) {
 	blockNum := block.NumberU64()
 
 	fork, err := reader.GetForkId(batchNumber)
@@ -139,17 +140,28 @@ func (srv *DataStreamServer) CreateStreamEntries(
 		return nil, err
 	}
 
-	var entries []DataStreamEntry
+	// block start + block end + bookmark
+	entryCount := 3
+	if gerUpdates != nil {
+		entryCount += len(*gerUpdates)
+	}
+
+	entryCount += len(block.Transactions())
+
+	entries := make([]DataStreamEntry, entryCount)
+	index := 0
 
 	//gerUpdates are before the the bookmark for this block and are gottne by previous ones bookmark
 	if gerUpdates != nil {
 		for _, gerUpdate := range *gerUpdates {
-			entries = append(entries, &gerUpdate)
+			entries[index] = &gerUpdate
+			index++
 		}
 	}
 
 	bookmark := srv.CreateBookmarkEntry(BlockBookmarkType, block.NumberU64())
-	entries = append(entries, bookmark)
+	entries[index] = bookmark
+	index++
 
 	deltaTimestamp := block.Time() - lastBlock.Time()
 
@@ -163,7 +175,8 @@ func (srv *DataStreamServer) CreateStreamEntries(
 	}
 
 	blockStart := srv.CreateBlockStartEntry(block, batchNumber, uint16(fork), ger, uint32(deltaTimestamp), uint32(0), l1BlockHash)
-	entries = append(entries, blockStart)
+	entries[index] = blockStart
+	index++
 
 	for _, tx := range block.Transactions() {
 		effectiveGasPricePercentage, err := reader.GetEffectiveGasPricePercentage(tx.Hash())
@@ -178,13 +191,14 @@ func (srv *DataStreamServer) CreateStreamEntries(
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, transaction)
+		entries[index] = transaction
+		index++
 	}
 
 	blockEnd := srv.CreateBlockEndEntry(block.NumberU64(), block.Root(), block.Root())
-	entries = append(entries, blockEnd)
+	entries[index] = blockEnd
 
-	return entries, nil
+	return &entries, nil
 }
 
 func (srv *DataStreamServer) CreateAndBuildStreamEntryBytes(
@@ -201,7 +215,7 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytes(
 	}
 
 	var result []byte
-	for _, entry := range entries {
+	for _, entry := range *entries {
 		b := encodeEntryToBytes(entry, bigEndian)
 		result = append(result, b...)
 	}

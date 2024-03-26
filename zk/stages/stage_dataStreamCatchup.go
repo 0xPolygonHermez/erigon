@@ -141,9 +141,10 @@ func SpawnStageDataStreamCatchup(
 		return err
 	}
 	totalToWrite := finalBlockNumber - previousProgress
-	entries := []server.DataStreamEntry{}
-	bulkInsertBlockCount := uint64(1000000)
 
+	insertEntryCount := 1000000
+	entries := make([]server.DataStreamEntry, insertEntryCount)
+	index := 0
 	for currentBlockNumber := previousProgress + 1; currentBlockNumber <= finalBlockNumber; currentBlockNumber++ {
 		select {
 		case <-logTicker.C:
@@ -184,25 +185,29 @@ func SpawnStageDataStreamCatchup(
 		if err != nil {
 			return err
 		}
-		if blockEntries != nil {
-			entries = append(entries, blockEntries...)
+
+		for _, entry := range *blockEntries {
+			entries[index] = entry
+			index++
 		}
 
-		if (currentBlockNumber-previousProgress)%bulkInsertBlockCount == 0 {
+		// basically commit onece 80% of the entries array is filled
+		if index+1 >= insertEntryCount*4/5 {
 			log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
-			if err = srv.CommitEntriesToStream(entries, true); err != nil {
+			if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
 				return err
 			}
 			if err = stages.SaveStageProgress(tx, stages.DataStream, currentBlockNumber); err != nil {
 				return err
 			}
-			entries = []server.DataStreamEntry{}
+			entries = make([]server.DataStreamEntry, insertEntryCount)
+			index = 0
 		}
 
 		lastBlock = block
 	}
 
-	if err = srv.CommitEntriesToStream(entries, true); err != nil {
+	if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
 		return err
 	}
 
@@ -224,31 +229,6 @@ func SpawnStageDataStreamCatchup(
 	log.Info(fmt.Sprintf("[%s] stage complete", logPrefix), "block", finalBlockNumber)
 
 	return err
-}
-
-func preLoadBatchesToBlocks(tx kv.RwTx) (map[uint64][]uint64, error) {
-	// hold the mapping of block batches to block numbers - this is an expensive call so just
-	// do it once
-	// todo: can we not use memory here, could be a problem with a larger chain?
-	batchToBlocks := make(map[uint64][]uint64)
-	c, err := tx.Cursor(hermez_db.BLOCKBATCHES)
-	if err != nil {
-		return nil, err
-	}
-	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
-		if err != nil {
-			return nil, err
-		}
-		block := hermez_db.BytesToUint64(k)
-		batch := hermez_db.BytesToUint64(v)
-		_, ok := batchToBlocks[batch]
-		if !ok {
-			batchToBlocks[batch] = []uint64{block}
-		} else {
-			batchToBlocks[batch] = append(batchToBlocks[batch], block)
-		}
-	}
-	return batchToBlocks, nil
 }
 
 func writeGenesisToStream(
