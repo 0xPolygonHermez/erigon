@@ -197,6 +197,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 
 	for addr := range t.tx.Traces {
 		trace := t.tx.Traces[addr]
+		hasLiveAccount := t.env.IntraBlockState().HasLiveAccount(addr)
 		newBalance := t.env.IntraBlockState().GetBalance(addr)
 		newNonce := uint256.NewInt(t.env.IntraBlockState().GetNonce(addr))
 		codeHash := t.env.IntraBlockState().GetCodeHash(addr)
@@ -215,7 +216,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.Nonce = nil
 		}
 
-		if len(trace.StorageReadMap) > 0 {
+		if len(trace.StorageReadMap) > 0 && hasLiveAccount {
 			trace.StorageRead = make([]libcommon.Hash, 0, len(trace.StorageReadMap))
 			for k := range trace.StorageReadMap {
 				trace.StorageRead = append(trace.StorageRead, k)
@@ -224,7 +225,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.StorageRead = nil
 		}
 
-		if len(trace.StorageWritten) == 0 {
+		if len(trace.StorageWritten) == 0 || !hasLiveAccount {
 			trace.StorageWritten = nil
 		} else {
 			// A slot write could be reverted if the transaction is reverted. We will need to read the value from the statedb again to get the correct value.
