@@ -703,6 +703,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
+	executionProgress, err := stages.GetStageProgress(tx, stages.Execution)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -725,22 +730,33 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			}
 		}
 
-		cfg := backend.config.Zk
-
 		// entering ZK territory!
-		if sequencer.IsSequencer() {
+		cfg := backend.config.Zk
+		backend.etherMan = newEtherMan(cfg)
+
+		isSequencer := sequencer.IsSequencer()
+		var l1Topics [][]libcommon.Hash
+		if isSequencer {
+			l1Topics = [][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic, contracts.InitialSequenceBatchesTopic}}
+		} else {
+			l1Topics = [][]libcommon.Hash{{
+				contracts.SequencedBatchTopicPreEtrog,
+				contracts.SequencedBatchTopicEtrog,
+				contracts.VerificationTopicPreEtrog,
+				contracts.VerificationTopicEtrog,
+			}}
+		}
+
+		backend.l1Syncer = syncer.NewL1Syncer(
+			backend.etherMan.EthClient,
+			[]libcommon.Address{cfg.L1Rollup, cfg.L1PolygonRollupManager},
+			l1Topics,
+			cfg.L1BlockRange,
+			cfg.L1QueryDelay,
+		)
+
+		if isSequencer {
 			// if we are sequencing transactions, we do the sequencing loop...
-
-			backend.etherMan = newEtherMan(cfg)
-			l1Topics := [][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic, contracts.InitialSequenceBatchesTopic}}
-			backend.l1Syncer = syncer.NewL1Syncer(
-				backend.etherMan.EthClient,
-				[]libcommon.Address{cfg.L1Rollup, cfg.L1PolygonRollupManager},
-				l1Topics,
-				cfg.L1BlockRange,
-				cfg.L1QueryDelay,
-			)
-
 			witnessGenerator := witness.NewGenerator(
 				config.Dirs,
 				config.HistoryV3,
@@ -772,6 +788,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			)
 
 			verifier.StartWork()
+
+			// we need to make sure the pool is always aware of the latest block for when
+			// we switch context from being an RPC node to a sequencer
+			backend.txPool2.ForceUpdateLatestBlock(executionProgress)
 
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
@@ -807,17 +827,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 			datastreamClient := initDataStreamClient(cfg)
 
-			l1Topics := [][]libcommon.Hash{{contracts.SequencedBatchTopic, contracts.VerificationTopic}}
-
-			etherMan := newEtherMan(cfg)
-			zkL1Syncer := syncer.NewL1Syncer(
-				etherMan.EthClient,
-				[]libcommon.Address{cfg.L1PolygonRollupManager},
-				l1Topics,
-				cfg.L1BlockRange,
-				cfg.L1QueryDelay,
-			)
-
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
 				backend.chainDB,
@@ -829,7 +838,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.agg,
 				backend.forkValidator,
 				backend.engine,
-				zkL1Syncer,
+				backend.l1Syncer,
 				datastreamClient,
 				backend.dataStream,
 			)
@@ -871,7 +880,7 @@ func initDataStreamClient(cfg *ethconfig.Zk) *client.StreamClient {
 	// Create client
 	log.Info("Starting datastream client...")
 	// retry connection
-	datastreamClient := client.NewClient(cfg.L2DataStreamerUrl, cfg.DatastreamVersion)
+	datastreamClient := client.NewClient(cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout)
 
 	for i := 0; i < 30; i++ {
 		// Start client (connect to the server)

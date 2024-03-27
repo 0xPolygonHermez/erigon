@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	"sort"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type SequencerExecutorVerifyCfg struct {
@@ -55,6 +56,35 @@ func SpawnSequencerExecutorVerifyStage(
 		return err
 	}
 
+	// progress here is at the block level
+	intersProgress, err := stages.GetStageProgress(tx, stages.IntermediateHashes)
+	if err != nil {
+		return err
+	}
+
+	// we need to get the batch number for the latest block, so we can search for new batches to send for
+	// verification
+	intersBatch, err := hermezDb.GetBatchNoByL2Block(intersProgress)
+	if err != nil {
+		return err
+	}
+
+	// we could be running in a state with no executors so we need instant response that we are in an
+	// ok state to save lag in the data stream !!Dragons: there will be no witnesses stored running in
+	// this mode of operation
+	canVerify := cfg.verifier.HasExecutors()
+	if !canVerify {
+		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, intersBatch); err != nil {
+			return err
+		}
+		if freshTx {
+			if err = tx.Commit(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	// get the latest responses from the verifier then sort them, so we can make sure we're handling verifications
 	// in order
 	responses := cfg.verifier.GetAllResponses()
@@ -75,6 +105,8 @@ func SpawnSequencerExecutorVerifyStage(
 		if !response.Valid {
 			// now we need to rollback and handle the error
 			// todo [zkevm]!
+
+			// todo: remove any witnesses for batches higher than the one failing (including the failing one)
 		}
 
 		// all good so just update the stage progress for now
@@ -82,22 +114,15 @@ func SpawnSequencerExecutorVerifyStage(
 			return err
 		}
 
+		// store the witness
+		errWitness := hermezDb.WriteWitness(response.BatchNumber, response.Witness)
+		if errWitness != nil {
+			log.Warn("Failed to write witness", "batch", response.BatchNumber, "err", errWitness)
+		}
+
 		// now let the verifier know we have got this message, so it can release it
 		cfg.verifier.RemoveResponse(response.BatchNumber)
 		progress = response.BatchNumber
-	}
-
-	// progress here is at the block level
-	intersProgress, err := stages.GetStageProgress(tx, stages.IntermediateHashes)
-	if err != nil {
-		return err
-	}
-
-	// we need to get the batch number for the latest block, so we can search for new batches to send for
-	// verification
-	intersBatch, err := hermezDb.GetBatchNoByL2Block(intersProgress)
-	if err != nil {
-		return err
 	}
 
 	// send off the new batches to the verifier to be processed

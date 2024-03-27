@@ -33,6 +33,7 @@ type IL1Syncer interface {
 	GetLogsChan() chan ethTypes.Log
 	GetProgressMessageChan() chan string
 
+	GetBlock(number uint64) (*ethTypes.Block, error)
 	Run(lastCheckedBlock uint64)
 }
 
@@ -110,17 +111,14 @@ Loop:
 	for {
 		select {
 		case l := <-logsChan:
-			info := convertResultToBatchInfo(&l)
-			if l.Topics[0] == contracts.SequencedBatchTopic {
-				err = hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot)
-				if err != nil {
+			info, batchLogType := parseLogType(cfg.zkCfg.L1RollupId, &l)
+			switch batchLogType {
+			case logSequence:
+				if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
 					return fmt.Errorf("failed to write batch info, %w", err)
 				}
 				newSequencesCount++
-			} else if l.Topics[0] == contracts.VerificationTopic {
-				stateRootData := l.Data[:32]
-				stateRoot := common.BytesToHash(stateRootData)
-				info.StateRoot = stateRoot
+			case logVerify:
 				if info.BatchNo > highestVerification.BatchNo {
 					highestVerification = info
 				}
@@ -128,7 +126,9 @@ Loop:
 					return fmt.Errorf("failed to write verification for block %d, %w", info.L1BlockNo, err)
 				}
 				newVerificationsCount++
-			} else {
+			case logIncompatible:
+				continue
+			default:
 				log.Warn("L1 Syncer unknown topic", "topic", l.Topics[0])
 			}
 		case progressMessage := <-progressMessageChan:
@@ -176,15 +176,55 @@ Loop:
 	return nil
 }
 
-func convertResultToBatchInfo(log *ethTypes.Log) types.L1BatchInfo {
-	batchNumber := new(big.Int).SetBytes(log.Topics[1].Bytes())
-	l1TxHash := common.BytesToHash(log.TxHash.Bytes())
-	blockNumber := log.BlockNumber
-	return types.L1BatchInfo{
-		BatchNo:   batchNumber.Uint64(),
-		L1BlockNo: blockNumber,
-		L1TxHash:  l1TxHash,
+type BatchLogType byte
+
+var (
+	logUnknown  BatchLogType = 0
+	logSequence BatchLogType = 1
+	logVerify   BatchLogType = 2
+
+	logIncompatible BatchLogType = 100
+)
+
+func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1BatchInfo, batchLogType BatchLogType) {
+	bigRollupId := new(big.Int).SetUint64(l1RollupId)
+	isRollupIdMatching := log.Topics[1] == common.BigToHash(bigRollupId)
+
+	var batchNum uint64
+	var stateRoot, l1InfoRoot common.Hash
+
+	switch log.Topics[0] {
+	case contracts.SequencedBatchTopicPreEtrog:
+		batchLogType = logSequence
+		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
+	case contracts.SequencedBatchTopicEtrog:
+		batchLogType = logSequence
+		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
+		l1InfoRoot = common.BytesToHash(log.Data[:32])
+	case contracts.VerificationTopicPreEtrog:
+		batchLogType = logVerify
+		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
+		stateRoot = common.BytesToHash(log.Data[:32])
+	case contracts.VerificationTopicEtrog:
+		if isRollupIdMatching {
+			batchLogType = logVerify
+			batchNum = common.BytesToHash(log.Data[:32]).Big().Uint64()
+			stateRoot = common.BytesToHash(log.Data[32:64])
+		} else {
+			batchLogType = logIncompatible
+		}
+	default:
+		batchLogType = logUnknown
+		batchNum = 0
 	}
+
+	return types.L1BatchInfo{
+		BatchNo:    batchNum,
+		L1BlockNo:  log.BlockNumber,
+		L1TxHash:   common.BytesToHash(log.TxHash.Bytes()),
+		StateRoot:  stateRoot,
+		L1InfoRoot: l1InfoRoot,
+	}, batchLogType
 }
 
 func UnwindL1SyncerStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
@@ -335,11 +375,4 @@ func blockComparison(tx kv.RwTx, hermezDb *hermez_db.HermezDb, blockNo uint64, l
 	}
 
 	return nil
-}
-
-func min(a, b uint64) uint64 {
-	if a < b {
-		return a
-	}
-	return b
 }

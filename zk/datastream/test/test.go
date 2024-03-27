@@ -16,7 +16,7 @@ const dataStreamUrl = "datastream.cardona.zkevm-rpc.com:6900"
 // This code downloads headers and blocks from a datastream server.
 func main() {
 	// Create client
-	c := client.NewClient(dataStreamUrl, 0)
+	c := client.NewClient(dataStreamUrl, 0, 0)
 
 	// Start client (connect to the server)
 	defer c.Stop()
@@ -25,7 +25,7 @@ func main() {
 	}
 
 	// create bookmark
-	bookmark := types.NewL2BlockBookmark(1378348)
+	bookmark := types.NewL2BlockBookmark(0)
 
 	// Read all entries from server
 	blocksRead, _, _, entriesReadAmount, err := c.ReadEntries(bookmark, 1)

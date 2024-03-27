@@ -227,7 +227,6 @@ func SpawnSequencingStage(
 		Number:     new(big.Int).SetUint64(nextBlockNum),
 		GasLimit:   getGasLimit(uint16(forkId)),
 		Time:       newBlockTimestamp,
-		BaseFee:    big.NewInt(0),
 	}
 
 	stateReader := state.NewPlainStateReader(tx)
@@ -260,11 +259,6 @@ func SpawnSequencingStage(
 		return err
 	}
 	if err = hermezDb.WriteBlockL1InfoTreeIndex(nextBlockNum, l1TreeUpdateIndex); err != nil {
-		return err
-	}
-
-	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(cfg.chainConfig, nextBlockNum, newBlockTimestamp, &parentRoot, l1TreeUpdate, ibs); err != nil {
 		return err
 	}
 
@@ -332,6 +326,11 @@ LOOP:
 	if l1TreeUpdate != nil {
 		l1BlockHash = l1TreeUpdate.ParentHash
 		ger = l1TreeUpdate.GER
+	}
+
+	parentRoot := parentBlock.Root()
+	if err = handleStateForNewBlockStarting(cfg.chainConfig, nextBlockNum, newBlockTimestamp, &parentRoot, l1TreeUpdate, ibs, hermezDb); err != nil {
+		return err
 	}
 
 	if err = finaliseBlock(cfg, tx, hermezDb, ibs, stateReader, header, parentBlock, addedTransactions, addedReceipts, thisBatch, ger, l1BlockHash, forkId); err != nil {
@@ -420,7 +419,7 @@ func processInjectedInitialBatch(
 	header.Time = injected.Timestamp
 
 	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(cfg.chainConfig, 1, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, ibs); err != nil {
+	if err = handleStateForNewBlockStarting(cfg.chainConfig, 1, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, ibs, hermezDb); err != nil {
 		return err
 	}
 
@@ -580,7 +579,7 @@ func finaliseBlock(
 		cfg.chainConfig,
 		ibs,
 		receipts,
-		[]*types.Withdrawal{}, // no withdrawals
+		nil, // no withdrawals
 		chainReader,
 		true,
 		excessDataGas,
@@ -638,6 +637,7 @@ func handleStateForNewBlockStarting(
 	stateRoot *common.Hash,
 	l1info *zktypes.L1InfoTreeUpdate,
 	ibs *state.IntraBlockState,
+	hermezDb *hermez_db.HermezDb,
 ) error {
 	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
 
@@ -648,6 +648,14 @@ func handleStateForNewBlockStarting(
 		if l1BlockHash == (common.Hash{}) {
 			// not in the contract so let's write it!
 			ibs.WriteGerManagerL1BlockHash(l1info.GER, l1info.ParentHash)
+
+			// store it so we can retrieve for the data stream
+			if err := hermezDb.WriteBlockGlobalExitRoot(blockNumber, l1info.GER); err != nil {
+				return err
+			}
+			if err := hermezDb.WriteBlockL1BlockHash(blockNumber, l1info.ParentHash); err != nil {
+				return err
+			}
 		}
 	}
 

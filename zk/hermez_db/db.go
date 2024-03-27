@@ -29,6 +29,7 @@ const L1_BLOCK_HASHES = "l1_block_hashes"                              // l1 blo
 const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                  // block number -> l1 block hash
 const L1_BLOCK_HASH_GER = "l1_block_hash_ger"                          // l1 block hash -> GER
 const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots" // l2blockno -> stateRoot
+const BATCH_WITNESSES = "hermez_batch_witnesses"                       // batch number -> witness
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -72,6 +73,7 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		BLOCK_L1_BLOCK_HASHES,
 		L1_BLOCK_HASH_GER,
 		INTERMEDIATE_TX_STATEROOTS,
+		BATCH_WITNESSES,
 	}
 	for _, t := range tables {
 		if err := tx.CreateBucket(t); err != nil {
@@ -492,14 +494,14 @@ func (db *HermezDb) WriteBatchGlobalExitRoot(batchNumber uint64, ger dstypes.Ger
 	return db.tx.Put(GLOBAL_EXIT_ROOTS_BATCHES, Uint64ToBytes(batchNumber), ger.EncodeToBytes())
 }
 
-func (db *HermezDbReader) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) ([]*dstypes.GerUpdate, error) {
+func (db *HermezDbReader) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint64) (*[]dstypes.GerUpdate, error) {
 	c, err := db.tx.Cursor(GLOBAL_EXIT_ROOTS_BATCHES)
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
 
-	var gers []*dstypes.GerUpdate
+	var gers []dstypes.GerUpdate
 	var k, v []byte
 
 	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
@@ -512,11 +514,11 @@ func (db *HermezDbReader) GetBatchGlobalExitRoots(fromBatchNum, toBatchNum uint6
 			if err != nil {
 				return nil, err
 			}
-			gers = append(gers, gerUpdate)
+			gers = append(gers, *gerUpdate)
 		}
 	}
 
-	return gers, err
+	return &gers, err
 }
 
 func (db *HermezDbReader) GetBatchGlobalExitRoot(batchNum uint64) (*dstypes.GerUpdate, error) {
@@ -559,6 +561,10 @@ func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) 
 
 func (db *HermezDb) DeleteBlockL1BlockHashes(fromBlockNum, toBlockNum uint64) error {
 	return db.deleteFromBucketWithUintKeysRange(BLOCK_L1_BLOCK_HASHES, fromBlockNum, toBlockNum)
+}
+
+func (db *HermezDb) DeleteBlockL1InfoTreeIndexes(fromBlockNum, toBlockNum uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(BLOCK_L1_INFO_TREE_INDEX, fromBlockNum, toBlockNum)
 }
 
 // from and to are inclusive
@@ -848,4 +854,16 @@ func (db *HermezDbReader) GetBlockInfoRoot(blockNumber uint64) (common.Hash, err
 	}
 	res := common.BytesToHash(data)
 	return res, nil
+}
+
+func (db *HermezDb) WriteWitness(batchNumber uint64, witness []byte) error {
+	return db.tx.Put(BATCH_WITNESSES, Uint64ToBytes(batchNumber), witness)
+}
+
+func (db *HermezDbReader) GetWitness(batchNumber uint64) ([]byte, error) {
+	v, err := db.tx.GetOne(BATCH_WITNESSES, Uint64ToBytes(batchNumber))
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
 }

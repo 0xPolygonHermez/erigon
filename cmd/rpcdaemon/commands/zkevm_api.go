@@ -242,6 +242,9 @@ func (api *ZkEvmAPIImpl) GetFullBlockByNumber(ctx context.Context, number rpc.Bl
 	if err != nil {
 		return types.Block{}, err
 	}
+	if baseBlock == nil {
+		return types.Block{}, errors.New("could not find block")
+	}
 
 	return api.populateBlockDetail(tx, ctx, baseBlock, fullTx)
 }
@@ -369,24 +372,30 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 		api.ethApi._engine,
 	)
 
-	return generator.GenerateWitness(tx, ctx, blockNr, endBlockNr, debug)
+	return generator.GenerateWitness(tx, ctx, blockNr, endBlockNr, debug, api.config.WitnessFull)
 }
 
 func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64) (hexutility.Bytes, error) {
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
-		tx.Rollback()
 		return nil, err
+	}
+	defer tx.Rollback()
+
+	hermezDb := hermez_db.NewHermezDbReader(tx)
+	witnessCached, err := hermezDb.GetWitness(batchNumber)
+	if err != nil {
+		return nil, err
+	}
+	if witnessCached != nil {
+		return witnessCached, nil
 	}
 
 	blocks, err := getAllBlocksInBatchNumber(tx, batchNumber)
 
 	if err != nil {
-		tx.Rollback()
 		return nil, err
 	}
-
-	tx.Rollback()
 
 	if len(blocks) == 0 {
 		return nil, errors.New("batch not found")
@@ -459,12 +468,19 @@ func getStreamBytes(
 ) ([]byte, error) {
 	streamServer := server.NewDataStreamServer(nil, chainId, server.ExecutorOperationMode)
 	var streamBytes []byte
+	reader := hermez_db.NewHermezDbReader(tx)
 	for _, blockNumber := range blockNumbers {
 		block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
 		if err != nil {
 			return nil, err
 		}
-		sBytes, err := streamServer.CreateAndBuildStreamEntryBytes(block, hDb, lastBlock, batchNumber, true)
+
+		gersInBetween, err := reader.GetBatchGlobalExitRoots(blockNumber-1, blockNumber)
+		if err != nil {
+			return nil, err
+		}
+
+		sBytes, err := streamServer.CreateAndBuildStreamEntryBytes(block, hDb, lastBlock, batchNumber, true, gersInBetween)
 		if err != nil {
 			return nil, err
 		}
@@ -649,6 +665,7 @@ func convertBlockToRpcBlock(
 
 	if full {
 		for idx, tx := range orig.Transactions() {
+			gasPrice := tx.GetPrice()
 			v, r, s := tx.RawSignatureValues()
 			var sender common.Address
 			if len(senders) > idx {
@@ -660,12 +677,12 @@ func convertBlockToRpcBlock(
 			}
 			var receipt *types.Receipt
 			if len(receipts) > idx {
-				receipt = convertReceipt(receipts[idx], sender, tx.GetTo(), tx.GetPrice(), effectiveGasPricePercentage)
+				receipt = convertReceipt(receipts[idx], sender, tx.GetTo(), gasPrice, effectiveGasPricePercentage)
 			}
 
 			tran := types.Transaction{
 				Nonce:       types.ArgUint64(tx.GetNonce()),
-				GasPrice:    types.ArgBig(*tx.GetPrice().ToBig()),
+				GasPrice:    types.ArgBig(*gasPrice.ToBig()),
 				Gas:         types.ArgUint64(tx.GetGas()),
 				To:          tx.GetTo(),
 				Value:       types.ArgBig(*tx.GetValue().ToBig()),
@@ -716,13 +733,12 @@ func convertReceipt(
 
 	var effectiveGasPrice *types.ArgBig
 	if gasPrice != nil {
-		gas := core.CalculateEffectiveGas(gasPrice, effectiveGasPricePercentage)
+		gas := core.CalculateEffectiveGas(gasPrice.Clone(), effectiveGasPricePercentage)
 		asBig := types.ArgBig(*gas.ToBig())
 		effectiveGasPrice = &asBig
 	}
 
 	return &types.Receipt{
-		Root:              common.BytesToHash(r.PostState),
 		CumulativeGasUsed: types.ArgUint64(r.CumulativeGasUsed),
 		LogsBloom:         eritypes.CreateBloom(eritypes.Receipts{r}),
 		Logs:              logs,

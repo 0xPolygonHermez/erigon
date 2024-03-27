@@ -167,10 +167,12 @@ var DefaultFlags = []cli.Flag{
 	&utils.L2ChainIdFlag,
 	&utils.L2RpcUrlFlag,
 	&utils.L2DataStreamerUrlFlag,
+	&utils.L2DataStreamerTimeout,
 	&utils.L1ChainIdFlag,
 	&utils.L1RpcUrlFlag,
 	&utils.L1PolygonRollupManagerFlag,
 	&utils.L1RollupFlag,
+	&utils.L1RollupIdFlag,
 	&utils.L1TopicVerificationFlag,
 	&utils.L1TopicSequenceFlag,
 	&utils.L1BlockRangeFlag,
@@ -189,4 +191,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.AllowPreEIP155Transactions,
 	&utils.DataStreamHost,
 	&utils.DataStreamPort,
+	&utils.WitnessFullFlag,
 }

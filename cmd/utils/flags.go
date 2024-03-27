@@ -361,6 +361,11 @@ var (
 		Usage: "L2 datastreamer endpoint",
 		Value: "",
 	}
+	L2DataStreamerTimeout = cli.StringFlag{
+		Name:  "zkevm.l2-datastreamer-timeout",
+		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
+		Value: "0s",
+	}
 	L1ChainIdFlag = cli.Uint64Flag{
 		Name:  "zkevm.l1-chain-id",
 		Usage: "Ethereum L1 chain ID",
@@ -380,6 +385,11 @@ var (
 		Name:  "zkevm.l1-rollup",
 		Usage: "Ethereum L1 Rollup Address",
 		Value: "",
+	}
+	L1RollupIdFlag = cli.Uint64Flag{
+		Name:  "zkevm.l1-rollup-id",
+		Usage: "Ethereum L1 Rollup ID",
+		Value: 1,
 	}
 	L1TopicVerificationFlag = cli.StringFlag{
 		Name:  "zkevm.l1-topic-verification",
@@ -471,6 +481,11 @@ var (
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
 		Value: false,
+	}
+	WitnessFullFlag = cli.BoolFlag{
+		Name:  "zkevm.witness-full",
+		Usage: "Enable/Diable witness full",
+		Value: true,
 	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",

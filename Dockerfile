@@ -48,6 +48,12 @@ ARG GID=1000
 RUN adduser -D -u $UID -g $GID erigon
 USER erigon
 RUN mkdir -p ~/.local/share/erigon
+WORKDIR /home/erigon
+
+## add pre-defined run configs
+ADD hermezconfig-mainnet.yaml.example mainnet.yaml
+ADD hermezconfig-cardona.yaml.example cardona.yaml
+ADD hermezconfig-bali.yaml.example bali.yaml
 
 # copy compiled artifacts from builder
 ## first do the mdbx ones - since these wont change as often

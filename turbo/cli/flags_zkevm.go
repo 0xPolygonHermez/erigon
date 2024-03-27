@@ -5,6 +5,8 @@ import (
 
 	"strings"
 
+	"time"
+
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -26,14 +28,22 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 	}
 
+	l2DataStreamTimeoutVal := ctx.String(utils.L2DataStreamerTimeout.Name)
+	l2DataStreamTimeout, err := time.ParseDuration(l2DataStreamTimeoutVal)
+	if err != nil {
+		panic(fmt.Sprintf("could not parse l2 datastreamer timeout value %s", l2DataStreamTimeoutVal))
+	}
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                   ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                    ctx.String(utils.L2RpcUrlFlag.Name),
 		L2DataStreamerUrl:           ctx.String(utils.L2DataStreamerUrlFlag.Name),
+		L2DataStreamerTimeout:       l2DataStreamTimeout,
 		L1ChainId:                   ctx.Uint64(utils.L1ChainIdFlag.Name),
 		L1RpcUrl:                    ctx.String(utils.L1RpcUrlFlag.Name),
 		L1PolygonRollupManager:      libcommon.HexToAddress(ctx.String(utils.L1PolygonRollupManagerFlag.Name)),
 		L1Rollup:                    libcommon.HexToAddress(ctx.String(utils.L1RollupFlag.Name)),
+		L1RollupId:                  ctx.Uint64(utils.L1RollupIdFlag.Name),
 		L1TopicVerification:         libcommon.HexToHash(ctx.String(utils.L1TopicVerificationFlag.Name)),
 		L1TopicSequence:             libcommon.HexToHash(ctx.String(utils.L1TopicSequenceFlag.Name)),
 		L1BlockRange:                ctx.Uint64(utils.L1BlockRangeFlag.Name),
@@ -50,12 +60,14 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorStrictMode:          ctx.Bool(utils.ExecutorStrictMode.Name),
 		AllowFreeTransactions:       ctx.Bool(utils.AllowFreeTransactions.Name),
 		AllowPreEIP155Transactions:  ctx.Bool(utils.AllowPreEIP155Transactions.Name),
+		WitnessFull:                 ctx.Bool(utils.WitnessFullFlag.Name),
 	}
 
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.Zk.L2ChainId)
 	if !sequencer.IsSequencer() {
 		checkFlag(utils.L2RpcUrlFlag.Name, cfg.Zk.L2RpcUrl)
 		checkFlag(utils.L2DataStreamerUrlFlag.Name, cfg.Zk.L2DataStreamerUrl)
+		checkFlag(utils.L2DataStreamerTimeout.Name, cfg.Zk.L2DataStreamerTimeout)
 	} else {
 		checkFlag(utils.SequencerInitialForkId.Name, cfg.Zk.SequencerInitialForkId)
 		checkFlag(utils.SequencerAddressFlag.Name, cfg.Zk.SequencerAddress)
@@ -66,7 +78,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		if cfg.Zk.ExecutorStrictMode && (len(cfg.Zk.ExecutorUrls) == 0 || cfg.Zk.ExecutorUrls[0] == "") {
 			panic("You must set executor urls when running in executor strict mode (zkevm.executor-strict)")
 		}
-
 	}
 	checkFlag(utils.L1ChainIdFlag.Name, cfg.Zk.L1ChainId)
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.Zk.L1RpcUrl)

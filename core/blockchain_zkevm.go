@@ -126,7 +126,7 @@ func ExecuteBlockEphemerallyZk(
 	}
 
 	blockTime := block.Time()
-	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, blockTime, prevBlockHash, &blockGer, &l1BlockHash, &gersInBetween)
+	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, blockTime, prevBlockHash, &blockGer, &l1BlockHash, gersInBetween)
 	blockInfoTree := blockinfo.NewBlockInfoTree()
 	if chainConfig.IsForkID7Etrog(blockNum) {
 		coinbase := block.Coinbase()
@@ -248,7 +248,7 @@ func ExecuteBlockEphemerallyZk(
 		txSender, _ := tx.GetSender()
 		if chainConfig.IsForkID7Etrog(blockNum) {
 			l2TxHash, err := txTypes.ComputeL2TxHash(
-				tx.GetChainID().ToBig(),
+				chainConfig.ChainID,
 				tx.GetValue(),
 				tx.GetPrice(),
 				tx.GetNonce(),
