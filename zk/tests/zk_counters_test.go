@@ -30,7 +30,7 @@ import (
 	"github.com/status-im/keycard-go/hexutils"
 )
 
-const root = "./zk/tests/testdata"
+const root = "./testdata"
 const transactionGasLimit = 30000000
 
 var (
