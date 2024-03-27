@@ -739,7 +739,6 @@ func convertReceipt(
 	}
 
 	return &types.Receipt{
-		Root:              common.BytesToHash(r.PostState),
 		CumulativeGasUsed: types.ArgUint64(r.CumulativeGasUsed),
 		LogsBloom:         eritypes.CreateBloom(eritypes.Receipts{r}),
 		Logs:              logs,
