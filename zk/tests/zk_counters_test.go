@@ -14,6 +14,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/consensus/ethash/ethashcfg"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -26,9 +27,10 @@ import (
 	"github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/status-im/keycard-go/hexutils"
 )
 
-const root = "./testdata/from-zkevm-commonjs"
+const root = "./zk/tests/testdata"
 const transactionGasLimit = 30000000
 
 var (
@@ -62,6 +64,15 @@ type vector struct {
 	ExpectedOldRoot  string `json:"expectedOldRoot"`
 	ExpectedNewRoot  string `json:"expectedNewRoot"`
 	SmtDepths        []int  `json:"smtDepths"`
+	Txs              [2]struct {
+		Type           int    `json:"type"`
+		DeltaTimestamp string `json:"deltaTimestamp"`
+		L1Info         *struct {
+			GlobalExitRoot string `json:"globalExitRoot"`
+			BlockHash      string `json:"blockHash"`
+			Timestamp      string `json:"timestamp"`
+		} `json:"l1Info"`
+	} `json:"txs"`
 }
 
 func Test_RunTestVectors(t *testing.T) {
@@ -78,10 +89,6 @@ func Test_RunTestVectors(t *testing.T) {
 	var fileNames []string
 
 	for _, file := range files {
-		// if file.Name() != "state-transition-processor.json" {
-		// 	continue
-		// }
-
 		var inner []vector
 		contents, err := os.ReadFile(fmt.Sprintf("%s/%s", root, file.Name()))
 		if err != nil {
@@ -91,8 +98,6 @@ func Test_RunTestVectors(t *testing.T) {
 		if err = json.Unmarshal(contents, &inner); err != nil {
 			t.Fatal(err)
 		}
-		// inner = inner[0:11]
-		// inner = inner[12:13]
 		for i := len(inner) - 1; i >= 0; i-- {
 			fileNames = append(fileNames, file.Name())
 		}
@@ -112,7 +117,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 		t.Fatal(err)
 	}
 
-	decodedTransactions, _, _, err := tx.DecodeTxs(test.BatchL2DataDecoded, 7)
+	decodedTransactions, _, _, err := tx.DecodeTxs(test.BatchL2DataDecoded, test.ForkId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,6 +181,9 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 	for len(test.SmtDepths) < len(decodedTransactions) {
 		test.SmtDepths = append(test.SmtDepths, smtDepth)
 	}
+	if len(test.SmtDepths) == 0 {
+		test.SmtDepths = append(test.SmtDepths, smtDepth)
+	}
 
 	genesisRoot := genesisBlock.Root()
 	expectedGenesisRoot := common.HexToHash(test.ExpectedOldRoot)
@@ -226,6 +234,34 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 
 	stateReader := state.NewPlainStateReader(tx)
 	ibs := state.New(stateReader)
+
+	if test.Txs[0].Type == 11 {
+		parentRoot := common.Hash{}
+		deltaTimestamp, _ := strconv.ParseUint(test.Txs[0].DeltaTimestamp, 10, 64)
+		ibs.PreExecuteStateSet(chainConfig, 1, deltaTimestamp, &parentRoot)
+
+		// handle writing to the ger manager contract
+		if test.Txs[0].L1Info != nil {
+			timestamp, _ := strconv.ParseUint(test.Txs[0].L1Info.Timestamp, 10, 64)
+			ger := string(test.Txs[0].L1Info.GlobalExitRoot)
+			blockHash := string(test.Txs[0].L1Info.BlockHash)
+
+			hexutil.Remove0xPrefixIfExists(&ger)
+			hexutil.Remove0xPrefixIfExists(&blockHash)
+
+			l1info := &zktypes.L1InfoTreeUpdate{
+				GER:        common.BytesToHash(hexutils.HexToBytes(ger)),
+				ParentHash: common.BytesToHash(hexutils.HexToBytes(blockHash)),
+				Timestamp:  timestamp,
+			}
+			// first check if this ger has already been written
+			l1BlockHash := ibs.ReadGerManagerL1BlockHash(l1info.GER)
+			if l1BlockHash == (common.Hash{}) {
+				// not in the contract so let's write it!
+				ibs.WriteGerManagerL1BlockHash(l1info.GER, l1info.ParentHash)
+			}
+		}
+	}
 
 	batchCollector := vm.NewBatchCounterCollector(test.SmtDepths[0], uint16(test.ForkId))
 

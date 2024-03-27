@@ -94,6 +94,10 @@ type CounterCollector struct {
 	transaction types.Transaction
 }
 
+// func (cc *CounterCollector) String() string {
+// 	return fmt.Sprintf("used counters: %s", cc.counters.UsedAsString())
+// }
+
 func calculateSmtLevels(smtMaxLevel int, minValue int) int {
 	binary := big.NewInt(0)
 	base := big.NewInt(2)
@@ -179,6 +183,9 @@ func (cc *CounterCollector) SetTransaction(transaction types.Transaction) {
 func WrapJumpTableWithZkCounters(originalTable *JumpTable, counterCalls *[256]executionFunc) *JumpTable {
 	wrapper := func(original, counter executionFunc) executionFunc {
 		return func(p *uint64, i *EVMInterpreter, s *ScopeContext) ([]byte, error) {
+			// out := cc.String()
+			// flag := strings.Contains(out, "S: 300422")
+			// fmt.Println("Before: " + strconv.FormatBool(flag) + "->" + out)
 			b, err := counter(p, i, s)
 			if err != nil {
 				return b, err
@@ -258,6 +265,7 @@ func SimpleCounterOperations(cc *CounterCollector) *[256]executionFunc {
 		RETURN:         cc.opReturn,
 		REVERT:         cc.opRevert,
 		SENDALL:        cc.opSendAll,
+		SELFDESTRUCT:   cc.opSendAll,
 		INVALID:        cc.opInvalid,
 		ADDRESS:        cc.opAddress,
 		SELFBALANCE:    cc.opSelfBalance,
@@ -265,6 +273,7 @@ func SimpleCounterOperations(cc *CounterCollector) *[256]executionFunc {
 		CALLER:         cc.opCaller,
 		CALLVALUE:      cc.opCallValue,
 		GASPRICE:       cc.opGasPrice,
+		GAS:            cc.opGas,
 		KECCAK256:      cc.opSha3,
 		JUMP:           cc.opJump,
 		JUMPI:          cc.opJumpI,
@@ -386,7 +395,7 @@ func (cc *CounterCollector) divArith() {
 
 func (cc *CounterCollector) opCode(scope *ScopeContext) {
 	cc.Deduct(S, 12)
-	if scope.Contract.IsCreate {
+	if scope.Contract.IsCreate || cc.isDeploy {
 		cc.mLoadX()
 		cc.SHRarith()
 	}
@@ -883,8 +892,15 @@ func (cc *CounterCollector) utilMulMod() {
 func (cc *CounterCollector) opExp(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	cc.opCode(scope)
 	cc.Deduct(S, 10)
-	exponent := scope.Stack.Peek()
-	exponentLength := len(exponent.Bytes())
+
+	var exponentLength int
+	exponent := scope.Stack.PeekAt(2)
+	if exponent.IsZero() {
+		exponentLength = 1
+	} else {
+		exponentLength = len(exponent.Bytes())
+	}
+
 	cc.getLenBytes(exponentLength)
 	cc.expAd(exponentLength * 8)
 	return nil, nil
@@ -979,14 +995,16 @@ func (cc *CounterCollector) opCalldataSize(pc *uint64, interpreter *EVMInterpret
 
 func (cc *CounterCollector) opCalldataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	inputLen := int(scope.Stack.PeekAt(3).Uint64())
-	cc.opCode(scope)
-	cc.Deduct(S, 100)
-	cc.Deduct(B, 2)
-	cc.saveMem(inputLen)
-	cc.offsetUtil()
-	cc.multiCall(cc.opCalldataCopyLoop, int(math.Floor(float64(inputLen)/32)))
-	cc.readFromCallDataOffset()
-	cc.multiCall(cc.mStoreX, 2)
+	if inputLen != 0 {
+		cc.opCode(scope)
+		cc.Deduct(S, 100)
+		cc.Deduct(B, 2)
+		cc.saveMem(inputLen)
+		cc.offsetUtil()
+		cc.multiCall(cc.opCalldataCopyLoop, int(math.Floor(float64(inputLen)/32)))
+		cc.readFromCallDataOffset()
+		cc.multiCall(cc.mStoreX, 2)
+	}
 	return nil, nil
 }
 
@@ -1030,18 +1048,20 @@ func (cc *CounterCollector) opExtCodeCopy(pc *uint64, interpreter *EVMInterprete
 	address := stack.PeekAt(1).Bytes20()
 	bytecodeLen := interpreter.evm.IntraBlockState().GetCodeSize(address)
 	length := int(stack.PeekAt(4).Uint64()) // no need to read contract storage as we only care about the byte length
-	cc.opCode(scope)
-	cc.Deduct(S, 60)
-	cc.maskAddress()
-	cc.isColdAddress()
-	cc.Deduct(P, 2*cc.smtLevels+int(math.Ceil(float64(bytecodeLen)/56)))
-	cc.Deduct(D, int(math.Ceil(float64(bytecodeLen)/56)))
-	cc.multiCall(cc.divArith, 2)
-	cc.saveMem(length)
-	cc.mulArith()
-	cc.Deduct(M, length)
-	cc.multiCall(cc.opCodeCopyLoop, length)
-	cc.Deduct(B, 1)
+	if length != 0 {
+		cc.opCode(scope)
+		cc.Deduct(S, 60)
+		cc.maskAddress()
+		cc.isColdAddress()
+		cc.Deduct(P, 2*cc.smtLevels+int(math.Ceil(float64(bytecodeLen)/56)))
+		cc.Deduct(D, int(math.Ceil(float64(bytecodeLen)/56)))
+		cc.multiCall(cc.divArith, 2)
+		cc.saveMem(length)
+		cc.mulArith()
+		cc.Deduct(M, length)
+		cc.multiCall(cc.opCodeCopyLoop, length)
+		cc.Deduct(B, 1)
+	}
 	return nil, nil
 }
 
@@ -1053,20 +1073,22 @@ func (cc *CounterCollector) opCodeCopyLoop() {
 }
 
 func (cc *CounterCollector) opCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	cc.opCode(scope)
-	if scope.Contract.IsCreate || cc.isDeploy {
-		_, err := cc.opCalldataCopy(pc, interpreter, scope)
-		if err != nil {
-			return nil, err
+	length := int(scope.Stack.PeekAt(3).Uint64())
+	if length != 0 {
+		cc.opCode(scope)
+		if scope.Contract.IsCreate || cc.isDeploy {
+			_, err := cc.opCalldataCopy(pc, interpreter, scope)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			cc.Deduct(S, 40)
+			cc.Deduct(B, 3)
+			cc.saveMem(length)
+			cc.divArith()
+			cc.mulArith()
+			cc.multiCall(cc.opCodeCopyLoop, length)
 		}
-	} else {
-		length := int(scope.Stack.PeekAt(3).Uint64())
-		cc.Deduct(S, 40)
-		cc.Deduct(B, 3)
-		cc.saveMem(length)
-		cc.divArith()
-		cc.mulArith()
-		cc.multiCall(cc.opCodeCopyLoop, length)
 	}
 	return nil, nil
 }
@@ -1080,15 +1102,17 @@ func (cc *CounterCollector) opReturnDataSize(pc *uint64, interpreter *EVMInterpr
 
 func (cc *CounterCollector) opReturnDataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	length := int(scope.Stack.PeekAt(3).Uint64())
-	cc.opCode(scope)
-	cc.Deduct(S, 50)
-	cc.Deduct(B, 2)
-	cc.saveMem(length)
-	cc.divArith()
-	cc.mulArith()
-	cc.multiCall(cc.returnDataCopyLoop, int(math.Floor(float64(length)/32)))
-	cc.mLoadX()
-	cc.mStoreX()
+	if length != 0 {
+		cc.opCode(scope)
+		cc.Deduct(S, 50)
+		cc.Deduct(B, 2)
+		cc.saveMem(length)
+		cc.divArith()
+		cc.mulArith()
+		cc.multiCall(cc.returnDataCopyLoop, int(math.Floor(float64(length)/32)))
+		cc.mLoadX()
+		cc.mStoreX()
+	}
 	return nil, nil
 }
 
@@ -1265,8 +1289,11 @@ func (cc *CounterCollector) checkpointTouched() {
 }
 
 func (cc *CounterCollector) opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	addr := scope.Stack.PeekAt(2)
+	toAddrBytecodeLength := interpreter.evm.IntraBlockState().GetCodeSize(addr.Bytes20())
 	inSize := int(scope.Stack.PeekAt(5).Uint64())
 	outSize := int(scope.Stack.PeekAt(7).Uint64())
+
 	cc.opCode(scope)
 	cc.Deduct(S, 80)
 	cc.Deduct(B, 5)
@@ -1280,7 +1307,7 @@ func (cc *CounterCollector) opCall(pc *uint64, interpreter *EVMInterpreter, scop
 	cc.checkpointBlockInfoTree()
 	cc.checkpointTouched()
 
-	cc.processContractCall(cc.smtLevels, inSize, false, false, false)
+	cc.processContractCall(cc.smtLevels, toAddrBytecodeLength, false, false, false)
 
 	return nil, nil
 }
@@ -1292,8 +1319,11 @@ func (cc *CounterCollector) isEmptyAccount() {
 }
 
 func (cc *CounterCollector) opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	addr := scope.Stack.PeekAt(2)
+	toAddrBytecodeLength := interpreter.evm.IntraBlockState().GetCodeSize(addr.Bytes20())
 	inSize := int(scope.Stack.PeekAt(5).Uint64())
 	outSize := int(scope.Stack.PeekAt(7).Uint64())
+
 	cc.opCode(scope)
 	cc.Deduct(S, 80)
 	cc.Deduct(B, 5)
@@ -1306,14 +1336,17 @@ func (cc *CounterCollector) opCallCode(pc *uint64, interpreter *EVMInterpreter, 
 	cc.checkpointBlockInfoTree()
 	cc.checkpointTouched()
 
-	cc.processContractCall(cc.smtLevels, inSize, false, false, false)
+	cc.processContractCall(cc.smtLevels, toAddrBytecodeLength, false, false, false)
 
 	return nil, nil
 }
 
 func (cc *CounterCollector) opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	addr := scope.Stack.PeekAt(2)
+	toAddrBytecodeLength := interpreter.evm.IntraBlockState().GetCodeSize(addr.Bytes20())
 	inSize := int(scope.Stack.PeekAt(4).Uint64())
 	outSize := int(scope.Stack.PeekAt(6).Uint64())
+
 	cc.opCode(scope)
 	cc.Deduct(S, 80)
 	cc.maskAddress()
@@ -1325,14 +1358,17 @@ func (cc *CounterCollector) opDelegateCall(pc *uint64, interpreter *EVMInterpret
 	cc.checkpointBlockInfoTree()
 	cc.checkpointTouched()
 
-	cc.processContractCall(cc.smtLevels, inSize, false, false, false)
+	cc.processContractCall(cc.smtLevels, toAddrBytecodeLength, false, false, false)
 
 	return nil, nil
 }
 
 func (cc *CounterCollector) opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	addr := scope.Stack.PeekAt(2)
+	toAddrBytecodeLength := interpreter.evm.IntraBlockState().GetCodeSize(addr.Bytes20())
 	inSize := int(scope.Stack.PeekAt(4).Uint64())
 	outSize := int(scope.Stack.PeekAt(6).Uint64())
+
 	cc.opCode(scope)
 	cc.Deduct(S, 80)
 	cc.maskAddress()
@@ -1344,7 +1380,7 @@ func (cc *CounterCollector) opStaticCall(pc *uint64, interpreter *EVMInterpreter
 	cc.checkpointBlockInfoTree()
 	cc.checkpointTouched()
 
-	cc.processContractCall(cc.smtLevels, inSize, false, false, false)
+	cc.processContractCall(cc.smtLevels, toAddrBytecodeLength, false, false, false)
 
 	return nil, nil
 }
@@ -1500,7 +1536,7 @@ func (cc *CounterCollector) opSha3(pc *uint64, interpreter *EVMInterpreter, scop
 	size := int(scope.Stack.PeekAt(2).Uint64())
 	cc.opCode(scope)
 	cc.Deduct(S, 40)
-	cc.Deduct(K, int(math.Ceil(float64(size)+1)/32))
+	cc.Deduct(K, int(math.Ceil(float64(size+1)/32)))
 	cc.saveMem(size)
 	cc.multiCall(cc.divArith, 2)
 	cc.mulArith()
@@ -1563,7 +1599,8 @@ func (cc *CounterCollector) log(scope *ScopeContext) {
 	cc.divArith()
 	cc.Deduct(P, int(math.Ceil(float64(size)/56)+4))
 	cc.Deduct(D, int(math.Ceil(float64(size)/56)+4))
-	cc.multiCall(cc.logLoop, int(math.Floor(float64(size)+1/32)))
+	// cc.multiCall(cc.logLoop, int(math.Floor(float64(size+1)/32))) // THIS ONE MUST BE THE CORRECT ONE BUT IT IS NOT THE SAME AS IN THE COMMONJS
+	cc.multiCall(cc.logLoop, int(math.Floor(float64(size)+float64(1)/32))) // THIS ONE DOES NOT LOOK CORRECT BUT IT IS THE SAME AS IN THE COMMONJS
 	cc.mLoadX()
 	cc.SHRarith()
 	cc.fillBlockInfoTreeWithLog()
@@ -1637,7 +1674,7 @@ func (cc *CounterCollector) opPush(num int, scope *ScopeContext) {
 			cc.Deduct(S, 10)
 			for i := 0; i < num; i++ {
 				cc.Deduct(S, 10)
-				cc.SHLarith()
+				// cc.SHLarith()
 			}
 		}
 	} else {

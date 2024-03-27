@@ -19,10 +19,10 @@ package vm
 import (
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/common/u256"
-	"github.com/ledgerwatch/erigon/params"
-	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/common/u256"
+	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
+	"github.com/ledgerwatch/erigon/params"
 )
 
 // [zkevm] contains the list of zkevm precompiles
@@ -124,7 +124,7 @@ func (evm *EVM) createZkEvm(caller ContractRef, codeAndHash *codeAndHash, gas ui
 	contract.SetCodeOptionalHash(&address, codeAndHash)
 
 	// zkevm: ensure we set the IsCreate flag here so that zk virtual counters get the correct context
-	contract.IsCreate = true
+	// contract.IsCreate = true
 
 	if evm.config.NoRecursion && depth > 0 {
 		return nil, address, gas, nil
