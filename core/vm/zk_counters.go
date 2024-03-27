@@ -94,10 +94,6 @@ type CounterCollector struct {
 	transaction types.Transaction
 }
 
-// func (cc *CounterCollector) String() string {
-// 	return fmt.Sprintf("used counters: %s", cc.counters.UsedAsString())
-// }
-
 func calculateSmtLevels(smtMaxLevel int, minValue int) int {
 	binary := big.NewInt(0)
 	base := big.NewInt(2)
@@ -183,9 +179,6 @@ func (cc *CounterCollector) SetTransaction(transaction types.Transaction) {
 func WrapJumpTableWithZkCounters(originalTable *JumpTable, counterCalls *[256]executionFunc) *JumpTable {
 	wrapper := func(original, counter executionFunc) executionFunc {
 		return func(p *uint64, i *EVMInterpreter, s *ScopeContext) ([]byte, error) {
-			// out := cc.String()
-			// flag := strings.Contains(out, "S: 300422")
-			// fmt.Println("Before: " + strconv.FormatBool(flag) + "->" + out)
 			b, err := counter(p, i, s)
 			if err != nil {
 				return b, err
@@ -1592,7 +1585,6 @@ func (cc *CounterCollector) opJumpDest(pc *uint64, interpreter *EVMInterpreter, 
 func (cc *CounterCollector) log(scope *ScopeContext) {
 	size := int(scope.Stack.PeekAt(2).Uint64())
 	cc.opCode(scope)
-	// cc.Deduct(S, 30+8*4)
 	cc.Deduct(S, 34+7*4)
 	cc.saveMem(size)
 	cc.mulArith()
@@ -1619,31 +1611,26 @@ func (cc *CounterCollector) fillBlockInfoTreeWithLog() {
 }
 
 func (cc *CounterCollector) opLog0(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog1(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog3(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
 
 func (cc *CounterCollector) opLog4(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	// cc.opCode(scope)
 	cc.log(scope)
 	return nil, nil
 }
@@ -1665,7 +1652,6 @@ func (cc *CounterCollector) opPush(num int, scope *ScopeContext) {
 	cc.opCode(scope)
 	cc.Deduct(S, 2)
 	if scope.Contract.IsCreate || cc.isDeploy {
-		// cc.Deduct(B, 1)
 		if scope.Contract.IsCreate {
 			cc.Deduct(S, 20)
 			cc.mLoadX()
@@ -1674,7 +1660,6 @@ func (cc *CounterCollector) opPush(num int, scope *ScopeContext) {
 			cc.Deduct(S, 10)
 			for i := 0; i < num; i++ {
 				cc.Deduct(S, 10)
-				// cc.SHLarith()
 			}
 		}
 	} else {
@@ -1684,23 +1669,6 @@ func (cc *CounterCollector) opPush(num int, scope *ScopeContext) {
 }
 
 func (cc *CounterCollector) readPush(num int) {
-	// cc.Deduct(S, 15)
-	// cc.Deduct(B, 1)
-	// numBlocks := int(math.Ceil(float64(num) / 4))
-	// leftBytes := num % 4
-
-	// for i := 0; i <= numBlocks; i++ {
-	// 	cc.Deduct(S, 20)
-	// 	cc.Deduct(B, 1)
-	// 	for j := i - 1; j > 0; j-- {
-	// 		cc.Deduct(S, 8)
-	// 	}
-	// }
-
-	// for i := 0; i < leftBytes; i++ {
-	// 	cc.Deduct(S, 40)
-	// 	cc.Deduct(B, 4)
-	// }
 	switch num {
 	case 1:
 		cc.Deduct(S, 2)

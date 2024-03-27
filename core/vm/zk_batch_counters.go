@@ -71,8 +71,6 @@ func (bcc *BatchCounterCollector) processBatchLevelData() error {
 	// reset the batch processing counters ready to calc the new values
 	bcc.l2DataCollector = NewCounterCollector(bcc.smtLevels)
 
-	// batchL2DataSize := (totalEncodedTxLength - len(bcc.transactions)*2) / 2
-
 	l2Deduction := int(math.Ceil(float64(totalEncodedTxLength+1) / 136))
 
 	bcc.l2DataCollector.Deduct(S, 100)
