@@ -257,7 +257,7 @@ Copy of TransactionToL2Data with modifications:
 - remove leading zeroes in individual byte arrays
 - add two empty bytes at the end
 
-Tne encoding is based on zkemv-commonjs/src/process-utils as of 21.04.2024
+Tne encoding is based on zkemv-commonjs/src/process-utils as of eb1ed1a1c05e2666cd32e3900beff5121bdeb4db
 */
 func TransactionToL2Data(tx types.Transaction, forkId uint16, efficiencyPercentage uint8) ([]byte, error) {
 	nonceBytes := hermez_db.Uint64ToBytes(tx.GetNonce())
