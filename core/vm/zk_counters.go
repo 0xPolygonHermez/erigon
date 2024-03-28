@@ -1591,8 +1591,7 @@ func (cc *CounterCollector) log(scope *ScopeContext) {
 	cc.divArith()
 	cc.Deduct(P, int(math.Ceil(float64(size)/56)+4))
 	cc.Deduct(D, int(math.Ceil(float64(size)/56)+4))
-	// cc.multiCall(cc.logLoop, int(math.Floor(float64(size+1)/32))) // THIS ONE MUST BE THE CORRECT ONE BUT IT IS NOT THE SAME AS IN THE COMMONJS
-	cc.multiCall(cc.logLoop, int(math.Floor(float64(size)+float64(1)/32))) // THIS ONE DOES NOT LOOK CORRECT BUT IT IS THE SAME AS IN THE COMMONJS
+	cc.multiCall(cc.logLoop, int(math.Floor(float64(size+1)/32)))
 	cc.mLoadX()
 	cc.SHRarith()
 	cc.fillBlockInfoTreeWithLog()
