@@ -28,6 +28,7 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/paths"
 	"github.com/ledgerwatch/erigon/params/networkname"
+	"os"
 )
 
 //go:embed chainspecs
@@ -200,6 +201,29 @@ type ConsensusSnapshotConfig struct {
 
 const cliquePath = "clique"
 
+func DynamicChainConfig(ch string) *chain.Config {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+
+	basePath := path.Join(homeDir, "dynamic-configs")
+	filename := path.Join(basePath, ch+"-chainspec.json")
+
+	f, err := os.Open(filename)
+	if err != nil {
+		panic(fmt.Sprintf("could not open chainspec for %s: %v", filename, err))
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	spec := &chain.Config{}
+	err = decoder.Decode(&spec)
+	if err != nil {
+		panic(fmt.Sprintf("could not parse chainspec for %s: %v", filename, err))
+	}
+	return spec
+}
+
 func NewSnapshotConfig(checkpointInterval uint64, inmemorySnapshots int, inmemorySignatures int, inmemory bool, dbPath string) *ConsensusSnapshotConfig {
 	if len(dbPath) == 0 {
 		dbPath = paths.DefaultDataDir()
@@ -251,7 +275,7 @@ func ChainConfigByChainName(chain string) *chain.Config {
 	case networkname.X1TestnetChainName:
 		return X1TestnetChainConfig
 	default:
-		return nil
+		return DynamicChainConfig(chain)
 	}
 }
 
@@ -329,7 +353,6 @@ func ChainConfigByGenesisHash(genesisHash libcommon.Hash) *chain.Config {
 	case genesisHash == HermezCardonaInternalGenesisHash:
 		return HermezBaliChainConfig
 	default:
-		panic(fmt.Sprintf("Unknown genesis hash: %s", genesisHash.Hex()))
 		return nil
 	}
 }
