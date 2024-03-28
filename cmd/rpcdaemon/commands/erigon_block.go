@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"sort"
 
 	"github.com/holiman/uint256"
@@ -176,9 +177,11 @@ func buildBlockResponse(db kv.Tx, blockNum uint64, fullTx bool) (map[string]inte
 	if err != nil {
 		return nil, err
 	}
+	tdField := hexutil.Big(*big.NewInt(0))
 	if td != nil {
-		additionalFields["totalDifficulty"] = (*hexutil.Big)(td)
+		tdField = hexutil.Big(*td)
 	}
+	additionalFields["totalDifficulty"] = tdField
 
 	response, err := ethapi.RPCMarshalBlockEx(block, true, fullTx, nil, common.Hash{}, additionalFields)
 

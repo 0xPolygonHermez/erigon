@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/log/v3"
@@ -38,7 +39,11 @@ func (api *APIImpl) GetUncleByBlockNumberAndIndex(ctx context.Context, number rp
 	if err != nil {
 		return nil, err
 	}
-	additionalFields["totalDifficulty"] = (*hexutil.Big)(td)
+	tdField := hexutil.Big(*big.NewInt(0))
+	if td != nil {
+		tdField = hexutil.Big(*td)
+	}
+	additionalFields["totalDifficulty"] = tdField
 
 	uncles := block.Uncles()
 	if index >= hexutil.Uint(len(uncles)) {
@@ -70,7 +75,11 @@ func (api *APIImpl) GetUncleByBlockHashAndIndex(ctx context.Context, hash common
 	if err != nil {
 		return nil, err
 	}
-	additionalFields["totalDifficulty"] = (*hexutil.Big)(td)
+	tdField := hexutil.Big(*big.NewInt(0))
+	if td != nil {
+		tdField = hexutil.Big(*td)
+	}
+	additionalFields["totalDifficulty"] = tdField
 
 	uncles := block.Uncles()
 	if index >= hexutil.Uint(len(uncles)) {
