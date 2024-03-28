@@ -15,6 +15,14 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 )
 
+func getTdField(td *big.Int) hexutil.Big {
+	tdField := hexutil.Big(*big.NewInt(0))
+	if td != nil {
+		tdField = hexutil.Big(*td)
+	}
+	return tdField
+}
+
 // GetUncleByBlockNumberAndIndex implements eth_getUncleByBlockNumberAndIndex. Returns information about an uncle given a block's number and the index of the uncle.
 func (api *APIImpl) GetUncleByBlockNumberAndIndex(ctx context.Context, number rpc.BlockNumber, index hexutil.Uint) (map[string]interface{}, error) {
 	tx, err := api.db.BeginRo(ctx)
@@ -39,11 +47,7 @@ func (api *APIImpl) GetUncleByBlockNumberAndIndex(ctx context.Context, number rp
 	if err != nil {
 		return nil, err
 	}
-	tdField := hexutil.Big(*big.NewInt(0))
-	if td != nil {
-		tdField = hexutil.Big(*td)
-	}
-	additionalFields["totalDifficulty"] = tdField
+	additionalFields["totalDifficulty"] = getTdField(td)
 
 	uncles := block.Uncles()
 	if index >= hexutil.Uint(len(uncles)) {
@@ -75,11 +79,7 @@ func (api *APIImpl) GetUncleByBlockHashAndIndex(ctx context.Context, hash common
 	if err != nil {
 		return nil, err
 	}
-	tdField := hexutil.Big(*big.NewInt(0))
-	if td != nil {
-		tdField = hexutil.Big(*td)
-	}
-	additionalFields["totalDifficulty"] = tdField
+	additionalFields["totalDifficulty"] = getTdField(td)
 
 	uncles := block.Uncles()
 	if index >= hexutil.Uint(len(uncles)) {
