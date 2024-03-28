@@ -172,7 +172,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 		},
 	}
 
-	genesisBlock, _, sparseTree, err := core.WriteGenesisState(genesis, tx, fmt.Sprintf("./temp-%v", idx))
+	genesisBlock, _, sparseTree, err := core.WriteGenesisState(genesis, tx, fmt.Sprintf("%s/temp-%v", os.TempDir(), idx))
 	if err != nil {
 		t.Fatal(err)
 	}
