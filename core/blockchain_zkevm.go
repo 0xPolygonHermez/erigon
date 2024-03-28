@@ -244,8 +244,8 @@ func ExecuteBlockEphemerallyZk(
 			}
 		}
 
-		txSender, _ := tx.GetSender()
 		if chainConfig.IsForkID7Etrog(blockNum) {
+			txSender, _ := tx.GetSender()
 			l2TxHash, err := txTypes.ComputeL2TxHash(
 				tx.GetChainID().ToBig(),
 				tx.GetValue(),
