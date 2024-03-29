@@ -176,8 +176,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// GetDepth return 1 base depths while zkCounter expect 0 based depths
-	smtDepth := sparseTree.GetDepth() - 1
+	smtDepth := sparseTree.GetDepth()
 	for len(test.SmtDepths) < len(decodedTransactions) {
 		test.SmtDepths = append(test.SmtDepths, smtDepth)
 	}
