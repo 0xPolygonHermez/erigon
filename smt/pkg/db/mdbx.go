@@ -25,7 +25,7 @@ type SmtDbTx interface {
 }
 
 const TableSmt = "HermezSmt"
-const TableStats = "HermezSmtLastRoot"
+const TableStats = "HermezSmtStats"
 const TableAccountValues = "HermezSmtAccountValues"
 const TableMetadata = "HermezSmtMetadata"
 const TableHashKey = "HermezSmtHashKey"
