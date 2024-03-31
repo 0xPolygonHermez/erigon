@@ -40,9 +40,11 @@ var refactorTableLastRoot = Migration{
 		}
 
 		// set the last root to the new table
-		err = tx.Put(smtdb.TableStats, lastRootKey, lastRootAsBytes)
-		if err != nil {
-			return err
+		if lastRootAsBytes != nil && len(lastRootAsBytes) > 0 {
+			err = tx.Put(smtdb.TableStats, lastRootKey, lastRootAsBytes)
+			if err != nil {
+				return err
+			}
 		}
 
 		// delete old bucket
