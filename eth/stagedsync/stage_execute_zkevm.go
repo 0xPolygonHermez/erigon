@@ -131,6 +131,11 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	if err != nil {
 		return err
 	}
+
+	if err := UpdateZkEVMBlockCfg(cfg.chainConfig, hermezDb, logPrefix); err != nil {
+		return err
+	}
+
 	prevBlockRoot := header.Root
 	prevBlockHash := prevheaderHash
 Loop:
@@ -161,9 +166,7 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		if err := UpdateZkEVMBlockCfg(cfg.chainConfig, hermezDb, logPrefix); err != nil {
-			return err
-		}
+
 		header.ParentHash = prevBlockHash
 		if err := executeBlockZk(block, &prevBlockRoot, header, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
 			if !errors.Is(err, context.Canceled) {
