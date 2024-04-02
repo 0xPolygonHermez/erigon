@@ -1,4 +1,4 @@
-package smt
+package smt_test
 
 import (
 	"bytes"
@@ -13,11 +13,12 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 )
 
-func prepareSMT(t *testing.T) (*SMT, *trie.RetainList) {
+func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
 	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
 	balance := uint256.NewInt(1000000000)
 	sKey := libcommon.HexToHash("0x5")
@@ -57,7 +58,7 @@ func prepareSMT(t *testing.T) (*SMT, *trie.RetainList) {
 
 	memdb := db.NewMemDb()
 
-	smtTrie := NewSMT(memdb)
+	smtTrie := smt.NewSMT(memdb)
 
 	smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(1).ToBig())
 	smtTrie.SetContractBytecode(contract.String(), hex.EncodeToString(code))
@@ -102,12 +103,28 @@ func findNode(t *testing.T, w *trie.Witness, addr libcommon.Address, storageKey 
 
 func TestSMTWitnessRetainList(t *testing.T) {
 	smtTrie, rl := prepareSMT(t)
+	// smtTrie.DumpTree()
+	// rl.Dump()
 
 	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
 	sKey := libcommon.HexToHash("0x5")
 	sVal := uint256.NewInt(0xdeadbeef)
 
-	witness, err := BuildWitness(smtTrie, rl, context.Background())
+	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
+	// for _, operator := range witness.Operators {
+	// 	switch op := operator.(type) {
+	// 	case *trie.OperatorSMTLeafValue:
+	// 		fmt.Println("OperatorSMTLeafValue")
+	// 		if op != nil {
+	// 		}
+	// 	case *trie.OperatorCode:
+	// 		fmt.Println("OperatorCode")
+	// 	case *trie.OperatorBranch:
+	// 		fmt.Println("OperatorBranch")
+	// 	case *trie.OperatorHash:
+	// 		fmt.Println("OperatorHash")
+	// 	}
+	// }
 
 	if err != nil {
 		t.Errorf("error building witness: %v", err)
@@ -137,7 +154,7 @@ func TestSMTWitnessRetainListEmptyVal(t *testing.T) {
 	// Set nonce to 0
 	smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(0).ToBig())
 
-	witness, err := BuildWitness(smtTrie, rl, context.Background())
+	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
 
 	if err != nil {
 		t.Errorf("error building witness: %v", err)
