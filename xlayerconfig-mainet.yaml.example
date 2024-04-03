@@ -21,3 +21,5 @@ zkevm.:datastream-version 2
 
 externalcl: true
 http.api: [eth, debug, net, trace, web3, erigon, zkevm]
+http.addr: 0.0.0.0
+http.port: 8545
