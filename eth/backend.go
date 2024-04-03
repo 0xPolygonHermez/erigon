@@ -1021,6 +1021,9 @@ func (s *Ethereum) PreStart() error {
 				break
 			}
 		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
 	}
 
 	return nil
