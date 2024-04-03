@@ -442,6 +442,16 @@ var (
 		Usage: "The sequencer address to use if running as a sequencer",
 		Value: "",
 	}
+	SequencerBlockSealTime = cli.StringFlag{
+		Name:  "zkevm.sequencer-block-seal-time",
+		Usage: "Block seal time. Defaults to 250ms",
+		Value: "250ms",
+	}
+	SequencerBatchSealTime = cli.StringFlag{
+		Name:  "zkevm.sequencer-batch-seal-time",
+		Usage: "Batch seal time. Defaults to 250ms",
+		Value: "250ms",
+	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",

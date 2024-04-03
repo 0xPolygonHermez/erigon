@@ -27,6 +27,8 @@ type Zk struct {
 	DatastreamVersion           int
 	SequencerInitialForkId      uint64
 	SequencerAddress            common.Address
+	SequencerBlockSealTime      time.Duration
+	SequencerBatchSealTime      time.Duration
 	ExecutorUrls                []string
 	ExecutorStrictMode          bool
 	AllowFreeTransactions       bool
