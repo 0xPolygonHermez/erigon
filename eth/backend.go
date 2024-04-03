@@ -125,6 +125,10 @@ import (
 // Deprecated: use ethconfig.Config instead.
 type Config = ethconfig.Config
 
+type PreStartTasks struct {
+	WarmUpDataStream bool
+}
+
 // Ethereum implements the Ethereum full node service.
 type Ethereum struct {
 	config *ethconfig.Config
@@ -191,6 +195,9 @@ type Ethereum struct {
 	dataStream *datastreamer.StreamServer
 	l1Syncer   *syncer.L1Syncer
 	etherMan   *etherman.Client
+	nodeType   byte
+
+	preStartTasks *PreStartTasks
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
@@ -310,6 +317,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			Events:      shards.NewEvents(),
 			Accumulator: shards.NewAccumulator(),
 		},
+		preStartTasks: &PreStartTasks{},
 	}
 	blockReader, allSnapshots, agg, err := backend.setUpBlockReader(ctx, config.Dirs, config.Snapshot, config.Downloader, backend.notifications.Events, config.TransactionsV3)
 	if err != nil {
@@ -734,6 +742,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				if err := stages.SaveStageProgress(tx, stages.DataStream, 0); err != nil {
 					return nil, err
 				}
+				backend.preStartTasks.WarmUpDataStream = true
 			}
 		}
 
@@ -743,8 +752,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 		isSequencer := sequencer.IsSequencer()
 		var l1Topics [][]libcommon.Hash
+		var l1Contracts []libcommon.Address
 		if isSequencer {
 			l1Topics = [][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic, contracts.InitialSequenceBatchesTopic}}
+			l1Contracts = []libcommon.Address{cfg.AddressGerManager, cfg.AddressZkevm}
 		} else {
 			l1Topics = [][]libcommon.Hash{{
 				contracts.SequencedBatchTopicPreEtrog,
@@ -752,17 +763,20 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				contracts.VerificationTopicPreEtrog,
 				contracts.VerificationTopicEtrog,
 			}}
+			l1Contracts = []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin}
 		}
 
 		backend.l1Syncer = syncer.NewL1Syncer(
 			backend.etherMan.EthClient,
-			[]libcommon.Address{cfg.L1Rollup, cfg.L1PolygonRollupManager},
+			l1Contracts,
 			l1Topics,
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
 		)
 
 		if isSequencer {
+			backend.nodeType = zkStages.NodeTypeSequencer
+
 			// if we are sequencing transactions, we do the sequencing loop...
 			witnessGenerator := witness.NewGenerator(
 				config.Dirs,
@@ -832,6 +846,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 			*/
 
+			backend.nodeType = zkStages.NodeTypeSynchronizer
+
 			datastreamClient := initDataStreamClient(cfg)
 
 			backend.syncStages = stages2.NewDefaultZkStages(
@@ -853,6 +869,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			backend.syncUnwindOrder = zkStages.ZkUnwindOrder
 		}
 		// TODO: SEQ: prune order
+
 	} else {
 		backend.syncStages = stages2.NewDefaultStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine)
 		backend.syncUnwindOrder = stagedsync.DefaultUnwindOrder
@@ -872,9 +889,9 @@ func newEtherMan(cfg *ethconfig.Zk) *etherman.Client {
 		URL:                       cfg.L1RpcUrl,
 		L1ChainID:                 cfg.L1ChainId,
 		L2ChainID:                 cfg.L2ChainId,
-		PoEAddr:                   cfg.L1PolygonRollupManager,
+		PoEAddr:                   cfg.AddressRollup,
 		MaticAddr:                 cfg.L1MaticContractAddress,
-		GlobalExitRootManagerAddr: cfg.L1GERManagerContractAddress,
+		GlobalExitRootManagerAddr: cfg.AddressGerManager,
 	}
 
 	em, err := etherman.NewClient(ethmanConf)
@@ -976,6 +993,42 @@ func (backend *Ethereum) Init(stack *node.Node, config *ethconfig.Config) error 
 
 	// Register the backend on the node
 	stack.RegisterLifecycle(backend)
+	return nil
+}
+
+func (s *Ethereum) PreStart() error {
+	if s.preStartTasks.WarmUpDataStream {
+		log.Info("[PreStart] warming up data stream")
+		tx, err := s.chainDB.BeginRw(context.Background())
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		// we don't know when the server has actually started as it doesn't expose a signal that is has spun up
+		// so here we loop and take a brief pause waiting for it to be ready
+		attempts := 0
+		for {
+			_, err = zkStages.CatchupDatastream("stream-catchup", tx, s.dataStream, s.nodeType, s.chainConfig.ChainID.Uint64())
+			if err != nil {
+				if errors.Is(err, datastreamer.ErrAtomicOpNotAllowed) {
+					attempts++
+					if attempts == 10 {
+						return err
+					}
+					time.Sleep(500 * time.Millisecond)
+					continue
+				}
+				return err
+			} else {
+				break
+			}
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
