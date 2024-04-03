@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
@@ -181,7 +181,7 @@ func SpawnStageDataStreamCatchup(
 			return err
 		}
 
-		blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, gersInBetween)
+		blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, prevBatchNum, gersInBetween)
 		if err != nil {
 			return err
 		}
@@ -258,11 +258,12 @@ func writeGenesisToStream(
 		return err
 	}
 
+	batchBookmark := srv.CreateBookmarkEntry(server.BatchBookmarkType, genesis.NumberU64())
 	bookmark := srv.CreateBookmarkEntry(server.BlockBookmarkType, genesis.NumberU64())
 	blockStart := srv.CreateBlockStartEntry(genesis, batch, uint16(fork), ger, 0, 0, common.Hash{})
 	blockEnd := srv.CreateBlockEndEntry(genesis.NumberU64(), genesis.Hash(), genesis.Root())
 
-	if err = srv.CommitEntriesToStream([]server.DataStreamEntry{bookmark, blockStart, blockEnd}, true); err != nil {
+	if err = srv.CommitEntriesToStream([]server.DataStreamEntry{batchBookmark, bookmark, blockStart, blockEnd}, true); err != nil {
 		return err
 	}
 

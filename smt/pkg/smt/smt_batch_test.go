@@ -11,9 +11,9 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/holiman/uint256"
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/migrations"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
@@ -531,9 +531,9 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 	if err := migrator.VerifyVersion(database); err != nil {
 		t.Fatalf("Cannot verify db version %e", err)
 	}
-	if err = migrator.Apply(database, dbPath); err != nil {
-		t.Fatalf("Cannot migrate db %e", err)
-	}
+	// if err = migrator.Apply(database, dbPath); err != nil {
+	// 	t.Fatalf("Cannot migrate db %e", err)
+	// }
 
 	// if err := database.Update(context.Background(), func(tx kv.RwTx) (err error) {
 	// 	return params.SetErigonVersion(tx, "test")

@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
-	erigonchain "github.com/ledgerwatch/erigon-lib/chain"
+	erigonchain "github.com/gateway-fm/cdk-erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
@@ -40,25 +40,25 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/datadir"
-	"github.com/ledgerwatch/erigon-lib/common/dir"
-	"github.com/ledgerwatch/erigon-lib/direct"
-	downloader3 "github.com/ledgerwatch/erigon-lib/downloader"
-	"github.com/ledgerwatch/erigon-lib/downloader/downloadercfg"
-	"github.com/ledgerwatch/erigon-lib/downloader/downloadergrpc"
-	proto_downloader "github.com/ledgerwatch/erigon-lib/gointerfaces/downloader"
-	"github.com/ledgerwatch/erigon-lib/gointerfaces/grpcutil"
-	"github.com/ledgerwatch/erigon-lib/gointerfaces/remote"
-	proto_sentry "github.com/ledgerwatch/erigon-lib/gointerfaces/sentry"
-	txpool_proto "github.com/ledgerwatch/erigon-lib/gointerfaces/txpool"
-	prototypes "github.com/ledgerwatch/erigon-lib/gointerfaces/types"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/kvcache"
-	"github.com/ledgerwatch/erigon-lib/kv/kvcfg"
-	"github.com/ledgerwatch/erigon-lib/kv/remotedbserver"
-	libstate "github.com/ledgerwatch/erigon-lib/state"
-	types2 "github.com/ledgerwatch/erigon-lib/types"
+	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/common/datadir"
+	"github.com/gateway-fm/cdk-erigon-lib/common/dir"
+	"github.com/gateway-fm/cdk-erigon-lib/direct"
+	downloader3 "github.com/gateway-fm/cdk-erigon-lib/downloader"
+	"github.com/gateway-fm/cdk-erigon-lib/downloader/downloadercfg"
+	"github.com/gateway-fm/cdk-erigon-lib/downloader/downloadergrpc"
+	proto_downloader "github.com/gateway-fm/cdk-erigon-lib/gointerfaces/downloader"
+	"github.com/gateway-fm/cdk-erigon-lib/gointerfaces/grpcutil"
+	"github.com/gateway-fm/cdk-erigon-lib/gointerfaces/remote"
+	proto_sentry "github.com/gateway-fm/cdk-erigon-lib/gointerfaces/sentry"
+	txpool_proto "github.com/gateway-fm/cdk-erigon-lib/gointerfaces/txpool"
+	prototypes "github.com/gateway-fm/cdk-erigon-lib/gointerfaces/types"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/kvcache"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/kvcfg"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/remotedbserver"
+	libstate "github.com/gateway-fm/cdk-erigon-lib/state"
+	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
 	"github.com/ledgerwatch/erigon/zk/txpool/txpooluitl"
 
 	"github.com/ledgerwatch/erigon/chain"
@@ -708,10 +708,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
 	if backend.config.Zk != nil {
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init
 		// alongside the http server
@@ -727,6 +723,17 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			backend.dataStream, err = datastreamer.NewServer(uint16(httpCfg.DataStreamPort), uint8(2), 1, datastreamer.StreamType(1), file, logConfig)
 			if err != nil {
 				return nil, err
+			}
+
+			// recovery here now, if the stream got into a bad state we want to be able to delete the file and have
+			// the stream re-populated from scratch.  So we check the stream for the latest header and if it is
+			// 0 we can just set the datastream progress to 0 also which will force a re-population of the stream
+			latestHeader := backend.dataStream.GetHeader()
+			if latestHeader.TotalEntries == 0 {
+				log.Info("[dataStream] setting the stream progress to 0")
+				if err := stages.SaveStageProgress(tx, stages.DataStream, 0); err != nil {
+					return nil, err
+				}
 			}
 		}
 
@@ -850,6 +857,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		backend.syncStages = stages2.NewDefaultStages(backend.sentryCtx, backend.chainDB, stack.Config().P2P, config, backend.sentriesClient, backend.notifications, backend.downloaderClient, allSnapshots, backend.agg, backend.forkValidator, backend.engine)
 		backend.syncUnwindOrder = stagedsync.DefaultUnwindOrder
 		backend.syncPruneOrder = stagedsync.DefaultPruneOrder
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return backend, nil

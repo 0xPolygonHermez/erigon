@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"syscall"
 
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	datadir2 "github.com/ledgerwatch/erigon-lib/common/datadir"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	kv2 "github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
+	datadir2 "github.com/gateway-fm/cdk-erigon-lib/common/datadir"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	kv2 "github.com/gateway-fm/cdk-erigon-lib/kv/mdbx"
 	chain2 "github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/log/v3"
@@ -89,7 +89,7 @@ func StateRoot(genesis *types.Genesis, logger log.Logger, blockNum uint64, datad
 	if rwTx, err = db.BeginRw(ctx); err != nil {
 		return err
 	}
-	_, genesisIbs, err4 := core.GenesisToBlock(genesis, "")
+	_, genesisIbs, _, err4 := core.GenesisToBlock(genesis, "")
 	if err4 != nil {
 		return err4
 	}

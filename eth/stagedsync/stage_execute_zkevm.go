@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/cmp"
-	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/common/cmp"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/core"
@@ -131,6 +131,11 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	if err != nil {
 		return err
 	}
+
+	if err := UpdateZkEVMBlockCfg(cfg.chainConfig, hermezDb, logPrefix); err != nil {
+		return err
+	}
+
 	prevBlockRoot := header.Root
 	prevBlockHash := prevheaderHash
 Loop:
@@ -161,9 +166,7 @@ Loop:
 		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-		if err := UpdateZkEVMBlockCfg(cfg.chainConfig, hermezDb, logPrefix); err != nil {
-			return err
-		}
+
 		header.ParentHash = prevBlockHash
 		if err := executeBlockZk(block, &prevBlockRoot, header, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb); err != nil {
 			if !errors.Is(err, context.Canceled) {
@@ -184,10 +187,10 @@ Loop:
 		if shouldUpdateProgress {
 			log.Info("Committed State", "gas reached", currentStateGas, "gasTarget", gasState)
 			currentStateGas = 0
-			if err = batch.Commit(); err != nil {
+			if err = s.Update(batch, stageProgress); err != nil {
 				return err
 			}
-			if err = s.Update(tx, stageProgress); err != nil {
+			if err = batch.Commit(); err != nil {
 				return err
 			}
 			if !useExternalTx {
@@ -223,10 +226,6 @@ Loop:
 			gas = 0
 			tx.CollectMetrics()
 			Metrics[stages.Execution].Set(blockNum)
-		}
-		//[hack] if we sync to the tip we get wrong block hashes sometimes
-		if stageProgress%3000000 == 0 {
-			break
 		}
 	}
 
@@ -516,7 +515,11 @@ func PruneExecutionStageZk(s *PruneState, tx kv.RwTx, cfg ExecuteBlockCfg, ctx c
 	return nil
 }
 
-func UpdateZkEVMBlockCfg(cfg *chain.Config, hermezDb *hermez_db.HermezDb, logPrefix string) error {
+type ForkReader interface {
+	GetForkIdBlock(forkId uint64) (uint64, error)
+}
+
+func UpdateZkEVMBlockCfg(cfg *chain.Config, hermezDb ForkReader, logPrefix string) error {
 	update := func(forkId uint64, forkBlock **big.Int) error {
 		if *forkBlock != nil && *forkBlock != big.NewInt(0) {
 			return nil
