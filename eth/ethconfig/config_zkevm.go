@@ -31,6 +31,7 @@ type Zk struct {
 	SequencerBatchSealTime                 time.Duration
 	SequencerNonEmptyBatchSealTime         time.Duration
 	ExecutorUrls                           []string
+	ExecutorRecordToDisk                   bool
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
 	ExecutorMaxConcurrentRequests          int

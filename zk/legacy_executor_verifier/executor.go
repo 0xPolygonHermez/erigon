@@ -6,18 +6,23 @@ import (
 	"fmt"
 	"time"
 
+	"encoding/json"
+	"os"
+	"path/filepath"
+
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/log/v3"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Config struct {
 	GrpcUrls              []string
 	Timeout               time.Duration
 	MaxConcurrentRequests int
+	DumpToDisk            bool
 }
 
 type Payload struct {
@@ -48,17 +53,21 @@ type Executor struct {
 	connCancel context.CancelFunc
 	client     executor.ExecutorServiceClient
 	semaphore  chan struct{}
+	dumpToDisk bool
 }
 
 func NewExecutors(cfg Config) []*Executor {
 	executors := make([]*Executor, len(cfg.GrpcUrls))
 	for i, grpcUrl := range cfg.GrpcUrls {
-		executors[i] = NewExecutor(grpcUrl, cfg.Timeout, cfg.MaxConcurrentRequests)
+		executors[i], err = NewExecutor(grpcUrl, cfg.Timeout, cfg.DumpToDisk, cfg.MaxConcurrentRequests)
+		if err != nil {
+			log.Warn("Failed to create executor", "error", err)
+		}
 	}
 	return executors
 }
 
-func NewExecutor(grpcUrl string, timeout time.Duration, maxConcurrentRequests int) *Executor {
+func NewExecutor(grpcUrl string, timeout time.Duration, dumpToDisk bool, maxConcurrentRequests int) (*Executor, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -77,6 +86,7 @@ func NewExecutor(grpcUrl string, timeout time.Duration, maxConcurrentRequests in
 		connCancel: cancel,
 		client:     client,
 		semaphore:  make(chan struct{}, maxConcurrentRequests),
+		dumpToDisk: dumpToDisk,
 	}
 
 	return e
@@ -212,6 +222,12 @@ func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot com
 
 	counterUndershootCheck(counters, request.Counters, request.BatchNumber)
 
+	if e.dumpToDisk {
+		if err := dumpRequestResponse(request, p, resp, false); err != nil {
+			log.Error("Failed to dump request and response", "error", err)
+		}
+	}
+
 	log.Debug("Received response from executor", "grpcUrl", e.grpcUrl, "response", resp)
 
 	return responseCheck(resp, request)
@@ -254,4 +270,51 @@ func counterUndershootCheck(respCounters, counters map[string]int, batchNo uint6
 			log.Warn("Counter undershoot", "counter", k, "erigon", counters[k], "legacy", legacy, "batch", batchNo)
 		}
 	}
+}
+
+func dumpRequestResponse(request *VerifierRequest, payload *Payload, resp *executor.ProcessBatchResponseV2, witnessFull bool) error {
+	dumpDir := "verifier_dumps"
+
+	if err := os.MkdirAll(dumpDir, 0755); err != nil {
+		return fmt.Errorf("failed to create dump directory: %w", err)
+	}
+
+	witnessPortion := "p"
+	if witnessFull {
+		witnessPortion = "f"
+	}
+
+	fileName := fmt.Sprintf("%d-batch_%d-witness_%s", time.Now().UnixMilli(), request.BatchNumber, witnessPortion)
+	payloadFileName := filepath.Join(dumpDir, fileName+"-payload.json")
+	requestFileName := filepath.Join(dumpDir, fileName+"-request.json")
+	responseFileName := filepath.Join(dumpDir, fileName+"-response.json")
+
+	pData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to serialize payload: %w", err)
+	}
+
+	rData, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to serialize request: %w", err)
+	}
+
+	responseData, err := json.MarshalIndent(resp, "", " ")
+	if err != nil {
+		return fmt.Errorf("failed to serialize response: %w", err)
+	}
+
+	if err := os.WriteFile(payloadFileName, pData, 0644); err != nil {
+		return fmt.Errorf("failed to write payload to file: %w", err)
+	}
+
+	if err := os.WriteFile(requestFileName, rData, 0644); err != nil {
+		return fmt.Errorf("failed to write request to file: %w", err)
+	}
+
+	if err := os.WriteFile(responseFileName, responseData, 0644); err != nil {
+		return fmt.Errorf("failed to write response to file: %w", err)
+	}
+
+	return nil
 }

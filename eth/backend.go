@@ -811,6 +811,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 					GrpcUrls:              cfg.ExecutorUrls,
 					Timeout:               cfg.ExecutorRequestTimeout,
 					MaxConcurrentRequests: cfg.ExecutorMaxConcurrentRequests,
+					DumpToDisk:            cfg.ExecutorRecordToDisk,
 				}
 				executors := legacy_executor_verifier.NewExecutors(levCfg)
 				for _, e := range executors {

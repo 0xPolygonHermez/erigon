@@ -46,6 +46,8 @@ import (
 	"os"
 	"path"
 
+	"time"
+
 	"github.com/ledgerwatch/erigon/cl/clparams"
 	"github.com/ledgerwatch/erigon/cmd/downloader/downloadernat"
 	"github.com/ledgerwatch/erigon/common/paths"
@@ -60,7 +62,6 @@ import (
 	"github.com/ledgerwatch/erigon/p2p/netutil"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/params/networkname"
-	"time"
 )
 
 // These are all the command line flags we support.
@@ -481,6 +482,11 @@ var (
 		Name:  "zkevm.executor-max-concurrent-requests",
 		Usage: "The maximum number of concurrent requests to the executor",
 		Value: 1,
+	}
+	ExecutorRecordToDisk = cli.BoolFlag{
+		Name:  "zkevm.executor-record-to-disk",
+		Usage: "Record the executor requests/responses to disk",
+		Value: false,
 	}
 	RpcRateLimitsFlag = cli.IntFlag{
 		Name:  "zkevm.rpc-ratelimit",
