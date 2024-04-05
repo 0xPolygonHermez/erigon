@@ -38,7 +38,7 @@ type VerifierResponse struct {
 }
 
 type ILegacyExecutor interface {
-	Verify(*Payload, *VerifierRequest) (bool, error)
+	Verify(*Payload, *VerifierRequest, common.Hash) (bool, error)
 }
 
 type WitnessGenerator interface {
@@ -185,7 +185,7 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 
 	log.Debug("witness generated", "data", hex.EncodeToString(witness))
 
-	oldAccInputHash, err := v.l1Syncer.GetOldAccInputHash(innerCtx, &v.cfg.L1PolygonRollupManager, ROLLUP_ID, request.BatchNumber)
+	oldAccInputHash, err := v.l1Syncer.GetOldAccInputHash(innerCtx, &v.cfg.AddressRollup, ROLLUP_ID, request.BatchNumber)
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 	payload := &Payload{
 		Witness:           witness,
 		DataStream:        streamBytes,
-		Coinbase:          v.cfg.SequencerAddress.String(),
+		Coinbase:          v.cfg.AddressSequencer.String(),
 		OldAccInputHash:   oldAccInputHash.Bytes(),
 		L1InfoRoot:        nil,
 		TimestampLimit:    timestampLimit,
@@ -211,7 +211,9 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 		ContextId:         strconv.Itoa(int(request.BatchNumber)),
 	}
 
-	ok, err := execer.Verify(payload, request)
+	previousBlock, _ := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
+
+	ok, err := execer.Verify(payload, request, previousBlock.Root())
 	if err != nil {
 		return err
 	}

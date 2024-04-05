@@ -66,9 +66,6 @@ const (
 )
 
 var (
-	// todo: seq: this should be read in from somewhere rather than hard coded!
-	constMiner = common.HexToAddress("0xfa3b44587990f97ba8b6ba7e230a5f0e95d14b3d")
-
 	noop            = state.NewNoopWriter()
 	blockDifficulty = new(big.Int).SetUint64(0)
 )
@@ -224,6 +221,8 @@ func SpawnSequencingStage(
 	batchCounters := vm.NewBatchCounterCollector(smt.GetDepth(), uint16(forkId))
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, thisBatch))
 
+	overflow := false
+
 LOOP_BLOCKS:
 	for {
 		select {
@@ -284,15 +283,13 @@ LOOP_BLOCKS:
 					cfg.txPool.UnlockFlusher()
 
 					for _, transaction := range transactions {
-						snap := ibs.Snapshot()
-						receipt, overflow, err := attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)
+]						var receipt *types.Receipt
+						receipt, overflow, err = attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)						
 						if err != nil {
-							ibs.RevertToSnapshot(snap)
 							return err
 						}
 						if overflow {
-							ibs.RevertToSnapshot(snap)
-							log.Debug(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "tx-hash", transaction.Hash())
+							log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash())
 							break LOOP_TRANSACTIONS
 						}
 
@@ -337,6 +334,27 @@ LOOP_BLOCKS:
 
 			//TODO: If there are no transactions just delete all block related data in the db and do not increment the bn variable
 			bn++
+		}
+	}
+
+
+	// todo: can we handle this scenario without needing to re-process the transactions?  We're doing this currently because the IBS can't be reverted once a tx has been
+	// finalised within it - it causes a panic
+	if overflow {
+		// we know now that we have a list of good transactions, so we need to get a fresh intra block state and re-run the known good ones
+		// before continuing on
+		batchCounters.ClearTransactionCounters()
+		ibs = state.New(stateReader)
+		for idx, transaction := range addedTransactions {
+			receipt, innerOverflow, err := attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)
+			if err != nil {
+				return err
+			}
+			if innerOverflow {
+				// kill the node at this stage to prevent a batch being created that can't be proven
+				panic("overflowed twice during execution")
+			}
+			addedReceipts[idx] = receipt
 		}
 	}
 
@@ -396,7 +414,7 @@ func prepareHeader(tx kv.RwTx, bn, forkId uint64) (*types.Header, *types.Block, 
 
 	return &types.Header{
 		ParentHash: parentBlock.Hash(),
-		Coinbase:   constMiner,
+		Coinbase:   cfg.zk.AddressSequencer,
 		Difficulty: blockDifficulty,
 		Number:     new(big.Int).SetUint64(nextBlockNum),
 		GasLimit:   getGasLimit(uint16(forkId)),
@@ -645,7 +663,7 @@ func finaliseBlock(
 	}
 
 	finalHeader := finalBlock.Header()
-	finalHeader.Coinbase = constMiner
+	finalHeader.Coinbase = cfg.zk.AddressSequencer
 	finalHeader.GasLimit = getGasLimit(uint16(forkId))
 	finalHeader.ReceiptHash = types.DeriveSha(receipts)
 	newNum := finalBlock.Number()
@@ -795,7 +813,7 @@ func attemptAddTransaction(
 		cfg.chainConfig,
 		core.GetHashFn(header, getHeader),
 		cfg.engine,
-		&constMiner,
+		&cfg.zk.AddressSequencer,
 		gasPool,
 		ibs,
 		noop,
