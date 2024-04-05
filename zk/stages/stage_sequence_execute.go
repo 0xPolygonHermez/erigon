@@ -350,7 +350,7 @@ LOOP_BLOCKS:
 			}
 
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, bn+1, len(addedTransactions)))
-
+			addedTransactions = []types.Transaction{}
 			//TODO: If there are no transactions just delete all block related data in the db and do not increment the bn variable
 			bn++
 		}
