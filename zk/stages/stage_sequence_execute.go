@@ -198,7 +198,7 @@ func SpawnSequencingStage(
 
 	// injected batch
 	if executionAt == 0 {
-		header, parentBlock, err := prepareHeader(tx, executionAt, forkId)
+		header, parentBlock, err := prepareHeader(tx, executionAt, forkId, cfg.zk.AddressSequencer)
 		if err != nil {
 			return err
 		}
@@ -223,6 +223,10 @@ func SpawnSequencingStage(
 
 	overflow := false
 
+	var addedTransactions []types.Transaction
+	var addedReceipts []*types.Receipt
+	yielded := mapset.NewSet[[32]byte]()
+	lastTxTime := time.Now()
 LOOP_BLOCKS:
 	for {
 		select {
@@ -230,7 +234,7 @@ LOOP_BLOCKS:
 			break LOOP_BLOCKS
 		default:
 			log.Info(fmt.Sprintf("[%s] Starting block %d...", logPrefix, bn+1))
-			header, parentBlock, err := prepareHeader(tx, bn, forkId)
+			header, parentBlock, err := prepareHeader(tx, bn, forkId, cfg.zk.AddressSequencer)
 			if err != nil {
 				return err
 			}
@@ -253,11 +257,6 @@ LOOP_BLOCKS:
 			log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 
 			blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
-
-			var addedTransactions []types.Transaction
-			var addedReceipts []*types.Receipt
-			yielded := mapset.NewSet[[32]byte]()
-			lastTxTime := time.Now()
 
 			// start to wait for transactions to come in from the pool and attempt to add them to the current batch.  Once we detect a counter
 			// overflow we revert the IBS back to the previous snapshot and don't add the transaction/receipt to the collection that will
@@ -283,8 +282,8 @@ LOOP_BLOCKS:
 					cfg.txPool.UnlockFlusher()
 
 					for _, transaction := range transactions {
-]						var receipt *types.Receipt
-						receipt, overflow, err = attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)						
+						var receipt *types.Receipt
+						receipt, overflow, err = attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)
 						if err != nil {
 							return err
 						}
@@ -307,6 +306,26 @@ LOOP_BLOCKS:
 						log.Info(fmt.Sprintf("[%s] No new transactions, closing block at %v transactions", logPrefix, len(addedTransactions)))
 						break LOOP_TRANSACTIONS
 					}
+				}
+			}
+
+			// todo: can we handle this scenario without needing to re-process the transactions?  We're doing this currently because the IBS can't be reverted once a tx has been
+			// finalised within it - it causes a panic
+			if overflow {
+				// we know now that we have a list of good transactions, so we need to get a fresh intra block state and re-run the known good ones
+				// before continuing on
+				batchCounters.ClearTransactionCounters()
+				ibs = state.New(stateReader)
+				for idx, transaction := range addedTransactions {
+					receipt, innerOverflow, err := attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)
+					if err != nil {
+						return err
+					}
+					if innerOverflow {
+						// kill the node at this stage to prevent a batch being created that can't be proven
+						panic("overflowed twice during execution")
+					}
+					addedReceipts[idx] = receipt
 				}
 			}
 
@@ -334,27 +353,6 @@ LOOP_BLOCKS:
 
 			//TODO: If there are no transactions just delete all block related data in the db and do not increment the bn variable
 			bn++
-		}
-	}
-
-
-	// todo: can we handle this scenario without needing to re-process the transactions?  We're doing this currently because the IBS can't be reverted once a tx has been
-	// finalised within it - it causes a panic
-	if overflow {
-		// we know now that we have a list of good transactions, so we need to get a fresh intra block state and re-run the known good ones
-		// before continuing on
-		batchCounters.ClearTransactionCounters()
-		ibs = state.New(stateReader)
-		for idx, transaction := range addedTransactions {
-			receipt, innerOverflow, err := attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)
-			if err != nil {
-				return err
-			}
-			if innerOverflow {
-				// kill the node at this stage to prevent a batch being created that can't be proven
-				panic("overflowed twice during execution")
-			}
-			addedReceipts[idx] = receipt
 		}
 	}
 
@@ -403,7 +401,7 @@ func prepareForkId(cfg SequenceBlockCfg, lastBatch, executionAt uint64, hermezDb
 	return forkId, nil
 }
 
-func prepareHeader(tx kv.RwTx, bn, forkId uint64) (*types.Header, *types.Block, error) {
+func prepareHeader(tx kv.RwTx, bn, forkId uint64, coinbase common.Address) (*types.Header, *types.Block, error) {
 	parentBlock, err := rawdb.ReadBlockByNumber(tx, bn)
 	if err != nil {
 		return nil, nil, err
@@ -414,7 +412,7 @@ func prepareHeader(tx kv.RwTx, bn, forkId uint64) (*types.Header, *types.Block, 
 
 	return &types.Header{
 		ParentHash: parentBlock.Hash(),
-		Coinbase:   cfg.zk.AddressSequencer,
+		Coinbase:   coinbase,
 		Difficulty: blockDifficulty,
 		Number:     new(big.Int).SetUint64(nextBlockNum),
 		GasLimit:   getGasLimit(uint16(forkId)),
