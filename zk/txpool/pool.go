@@ -1864,6 +1864,9 @@ func (b *BySenderAndNonce) nonce(senderID uint64) (nonce uint64, ok bool) {
 	s.Tx.Nonce = math.MaxUint64
 
 	b.tree.DescendLessOrEqual(s, func(mt *metaTx) bool {
+		if mt.currentSubPool != PendingSubPool {
+			return true
+		}
 		if mt.Tx.SenderID == senderID {
 			nonce = mt.Tx.Nonce
 			ok = true
