@@ -8,7 +8,6 @@ import (
 	"github.com/ledgerwatch/erigon/rpc"
 	"strings"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
-	"github.com/ledgerwatch/erigon/cmd/devnet/models"
 )
 
 func (api *APIImpl) sendGetTransactionCountToSequencer(rpcUrl string, address libcommon.Address, blockNrOrHash *rpc.BlockNumberOrHash) (*hexutil.Uint64, error) {
@@ -16,15 +15,8 @@ func (api *APIImpl) sendGetTransactionCountToSequencer(rpcUrl string, address li
 	var blockNrOrHashValue interface{}
 	if blockNrOrHash != nil {
 		if blockNrOrHash.BlockNumber != nil {
-			num := *blockNrOrHash.BlockNumber
-			switch num {
-			case -1:
-				blockNrOrHashValue = models.Latest
-			case -2:
-				blockNrOrHashValue = models.Pending
-			default:
-				blockNrOrHashValue = fmt.Sprintf("0x%x", *blockNrOrHash.BlockNumber)
-			}
+			bn := *blockNrOrHash.BlockNumber
+			blockNrOrHashValue = bn.MarshallJson()
 		} else if blockNrOrHash.BlockHash != nil {
 			blockNrOrHashValue = "0x" + hex.EncodeToString(blockNrOrHash.BlockHash.Bytes())
 		}
