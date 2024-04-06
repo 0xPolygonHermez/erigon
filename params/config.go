@@ -28,6 +28,7 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/paths"
 	"github.com/ledgerwatch/erigon/params/networkname"
+	"os"
 )
 
 //go:embed chainspecs
@@ -67,8 +68,7 @@ var (
 	HermezCardonaInternalGenesisHash   = libcommon.HexToHash("0x7311011ce6ab98ef0a15e44fe29f7680909588322534d1736361daa678543038")
 	XLayerTestnetGenesisHash           = libcommon.HexToHash("0x0ffb92e130f1acaabd8b12aa1bb409b46561ef7568cb8aa7eb8d102a6ab76566")
 	XLayerMainnetGenesisHash           = libcommon.HexToHash("0x11f32f605beb94a1acb783cb3b6da6d7975461ce3addf441e7ad60c2ec95e88f")
-	HermezEtrogGenesisHash             = libcommon.HexToHash("0xccfed260e3ef666b058dcd577551de8e00c743c47774a39ca7dbcd9214ba370a")
-)
+	HermezEtrogGenesisHash             = libcommon.HexToHash("0x5e14aefe391fafa040ee0a0fff6afbc1c230853b9684afb9363f3af081db0192")
 
 var (
 	GnosisGenesisStateRoot = libcommon.HexToHash("0x40cf4430ecaa733787d1a65154a3b9efb560c95d9e324a23b97f0609b539133b")
@@ -203,6 +203,29 @@ type ConsensusSnapshotConfig struct {
 
 const cliquePath = "clique"
 
+func DynamicChainConfig(ch string) *chain.Config {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+
+	basePath := path.Join(homeDir, "dynamic-configs")
+	filename := path.Join(basePath, ch+"-chainspec.json")
+
+	f, err := os.Open(filename)
+	if err != nil {
+		panic(fmt.Sprintf("could not open chainspec for %s: %v", filename, err))
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	spec := &chain.Config{}
+	err = decoder.Decode(&spec)
+	if err != nil {
+		panic(fmt.Sprintf("could not parse chainspec for %s: %v", filename, err))
+	}
+	return spec
+}
+
 func NewSnapshotConfig(checkpointInterval uint64, inmemorySnapshots int, inmemorySignatures int, inmemory bool, dbPath string) *ConsensusSnapshotConfig {
 	if len(dbPath) == 0 {
 		dbPath = paths.DefaultDataDir()
@@ -256,7 +279,7 @@ func ChainConfigByChainName(chain string) *chain.Config {
 	case networkname.XLayerMainnetChainName:
 		return XLayerMainnetChainConfig
 	default:
-		return nil
+		return DynamicChainConfig(chain)
 	}
 }
 
@@ -338,7 +361,6 @@ func ChainConfigByGenesisHash(genesisHash libcommon.Hash) *chain.Config {
 	case genesisHash == XLayerMainnetGenesisHash:
 		return XLayerMainnetChainConfig
 	default:
-		panic(fmt.Sprintf("Unknown genesis hash: %s", genesisHash.Hex()))
 		return nil
 	}
 }
