@@ -135,7 +135,7 @@ func DeriveEffectiveGasPrice(cfg SequenceBlockCfg, tx types.Transaction) uint8 {
 	}
 
 	data := tx.GetData()
-	if data == nil || len(data) == 0 {
+	if len(data) != 0 {
 		return cfg.zk.EffectiveGasPriceForContractInvocation
 	}
 
