@@ -518,9 +518,9 @@ func postBlockStateHandling(
 			return err
 		}
 
-		// todo: how to set the effective gas percentage as a the sequencer
 		// TODO: calculate l2 tx hash
-		_, err = infoTree.SetBlockTx(&l2TxHash, i, receipt, logIndex, receipt.CumulativeGasUsed, zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_MAXIMUM)
+		effectiveGasPrice := DeriveEffectiveGasPrice(cfg, t)
+		_, err = infoTree.SetBlockTx(&l2TxHash, i, receipt, logIndex, receipt.CumulativeGasUsed, effectiveGasPrice)
 		if err != nil {
 			return err
 		}
@@ -766,6 +766,7 @@ func attemptAddTransaction(
 
 	ibs.Prepare(transaction.Hash(), common.Hash{}, 0)
 
+	effectiveGasPrice := DeriveEffectiveGasPrice(cfg, transaction)
 	receipt, execResult, err := core.ApplyTransaction_zkevm(
 		cfg.chainConfig,
 		core.GetHashFn(header, getHeader),
@@ -779,7 +780,7 @@ func attemptAddTransaction(
 		&header.GasUsed,
 		*cfg.zkVmConfig,
 		parentHeader.ExcessDataGas,
-		zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_MAXIMUM)
+		effectiveGasPrice)
 
 	if err != nil {
 		return nil, false, err
@@ -787,7 +788,7 @@ func attemptAddTransaction(
 
 	// we need to keep hold of the effective percentage used
 	// todo [zkevm] for now we're hard coding to the max value but we need to calc this properly
-	if err = hermezDb.WriteEffectiveGasPricePercentage(transaction.Hash(), zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_MAXIMUM); err != nil {
+	if err = hermezDb.WriteEffectiveGasPricePercentage(transaction.Hash(), effectiveGasPrice); err != nil {
 		return nil, false, err
 	}
 

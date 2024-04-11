@@ -42,6 +42,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/urfave/cli/v2"
 
+	"encoding/json"
+	"os"
+	"path"
+
 	"github.com/ledgerwatch/erigon/cl/clparams"
 	"github.com/ledgerwatch/erigon/cmd/downloader/downloadernat"
 	"github.com/ledgerwatch/erigon/common/paths"
@@ -56,9 +60,6 @@ import (
 	"github.com/ledgerwatch/erigon/p2p/netutil"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/params/networkname"
-	"os"
-	"encoding/json"
-	"path"
 )
 
 // These are all the command line flags we support.
@@ -479,6 +480,21 @@ var (
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
 		Value: false,
+	}
+	EffectiveGasPriceForTransfer = cli.Float64Flag{
+		Name:  "zkevm.effective-gas-price-transfer",
+		Usage: "Set the effective gas price in percentage for transfers",
+		Value: 1,
+	}
+	EffectiveGasPriceForContractInvocation = cli.Float64Flag{
+		Name:  "zkevm.effective-gas-price-contract-invocation",
+		Usage: "Set the effective gas price in percentage for contract invocation",
+		Value: 1,
+	}
+	EffectiveGasPriceForContractDeployment = cli.Float64Flag{
+		Name:  "zkevm.effective-gas-price-contract-deployment",
+		Usage: "Set the effective gas price in percentage for contract deployment",
+		Value: 1,
 	}
 	WitnessFullFlag = cli.BoolFlag{
 		Name:  "zkevm.witness-full",
