@@ -316,6 +316,10 @@ LOOP_BLOCKS:
 				// before continuing on
 				batchCounters.ClearTransactionCounters()
 				ibs = state.New(stateReader)
+
+				// it was incremented before, so needs resetting here
+				header.GasUsed = 0
+
 				for idx, transaction := range addedTransactions {
 					receipt, innerOverflow, err := attemptAddTransaction(tx, cfg, batchCounters, header, parentBlock.Header(), transaction, ibs, hermezDb, smt)
 					if err != nil {
@@ -361,6 +365,10 @@ LOOP_BLOCKS:
 		return err
 	}
 	log.Info("counters consumed", "counts", counters.UsedAsString())
+	err = hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap())
+	if err != nil {
+		return err
+	}
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
 
