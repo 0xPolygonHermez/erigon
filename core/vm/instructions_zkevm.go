@@ -3,10 +3,8 @@ package vm
 import (
 	"math/big"
 
-	"github.com/iden3/go-iden3-crypto/keccak256"
-
-	"github.com/holiman/uint256"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
@@ -63,25 +61,13 @@ func opExtCodeHash_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCo
 
 func opBlockhash_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	num := scope.Stack.Peek()
-	_, overflow := num.Uint64WithOverflow()
+	num64, overflow := num.Uint64WithOverflow()
 	if overflow {
 		num.Clear()
 		return nil, nil
 	}
 
-	ibs := interpreter.evm.IntraBlockState()
-	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-
-	d1 := common.LeftPadBytes(num.Bytes(), 32)
-	d2 := common.LeftPadBytes(uint256.NewInt(1).Bytes(), 32)
-	mapKey := keccak256.Hash(d1, d2)
-	mkh := libcommon.BytesToHash(mapKey)
-
-	// set mapping of keccak256(txnum,1) -> smt root
-	blockHash := uint256.NewInt(0)
-	ibs.GetState(saddr, &mkh, blockHash)
-
-	num.SetBytes(blockHash.Bytes())
+	num.SetBytes(interpreter.evm.Context().GetHash(num64).Bytes())
 
 	return nil, nil
 }
