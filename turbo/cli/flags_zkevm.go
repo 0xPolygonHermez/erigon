@@ -76,6 +76,9 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		EffectiveGasPriceForTransfer:           uint8(math.Round(effectiveGasPriceForTransferVal * 255.0)),
 		EffectiveGasPriceForContractInvocation: uint8(math.Round(effectiveGasPriceForContractInvocationVal * 255.0)),
 		EffectiveGasPriceForContractDeployment: uint8(math.Round(effectiveGasPriceForContractDeploymentVal * 255.0)),
+		DefaultGasPrice:                        ctx.Uint64(utils.DefaultGasPrice.Name),
+		MaxGasPrice:                            ctx.Uint64(utils.MaxGasPrice.Name),
+		GasPriceFactor:                         ctx.Float64(utils.GasPriceFactor.Name),
 		WitnessFull:                            ctx.Bool(utils.WitnessFullFlag.Name),
 		DebugLimit:                             ctx.Uint64(utils.DebugLimit.Name),
 		DebugStep:                              ctx.Uint64(utils.DebugStep.Name),
@@ -112,4 +115,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.RebuildTreeAfterFlag.Name, cfg.Zk.RebuildTreeAfter)
 	checkFlag(utils.L1BlockRangeFlag.Name, cfg.Zk.L1BlockRange)
 	checkFlag(utils.L1QueryDelayFlag.Name, cfg.Zk.L1QueryDelay)
+	checkFlag(utils.DefaultGasPrice.Name, cfg.Zk.DefaultGasPrice)
+	checkFlag(utils.MaxGasPrice.Name, cfg.Zk.MaxGasPrice)
+	checkFlag(utils.GasPriceFactor.Name, cfg.Zk.GasPriceFactor)
 }

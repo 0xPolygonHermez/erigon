@@ -42,6 +42,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/urfave/cli/v2"
 
+	"encoding/json"
+	"os"
+	"path"
+
 	"github.com/ledgerwatch/erigon/cl/clparams"
 	"github.com/ledgerwatch/erigon/cmd/downloader/downloadernat"
 	"github.com/ledgerwatch/erigon/common/paths"
@@ -56,9 +60,6 @@ import (
 	"github.com/ledgerwatch/erigon/p2p/netutil"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/params/networkname"
-	"os"
-	"encoding/json"
-	"path"
 )
 
 // These are all the command line flags we support.
@@ -493,6 +494,21 @@ var (
 	EffectiveGasPriceForContractDeployment = cli.Float64Flag{
 		Name:  "zkevm.effective-gas-price-contract-deployment",
 		Usage: "Set the effective gas price in percentage for contract deployment",
+		Value: 1,
+	}
+	DefaultGasPrice = cli.Uint64Flag{
+		Name:  "zkevm.default-gas-price",
+		Usage: "Set the default/min gas price",
+		Value: 1,
+	}
+	MaxGasPrice = cli.Uint64Flag{
+		Name:  "zkevm.max-gas-price",
+		Usage: "Set the max gas price",
+		Value: 999999999999999,
+	}
+	GasPriceFactor = cli.Float64Flag{
+		Name:  "zkevm.gas-price-factor",
+		Usage: "Apply factor to L1 gas price to calculate l2 gasPrice",
 		Value: 1,
 	}
 	WitnessFullFlag = cli.BoolFlag{
