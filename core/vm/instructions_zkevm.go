@@ -67,20 +67,18 @@ func opBlockhash_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCont
 		return nil, nil
 	}
 
-	num.SetBytes(interpreter.evm.Context().GetHash(num64).Bytes())
+	ibs := interpreter.evm.IntraBlockState()
+	hash := ibs.GetBlockStateRoot(num64)
+
+	num.SetFromBig(hash.Big())
 
 	return nil, nil
 }
 
 func opNumber_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	ibs := interpreter.evm.IntraBlockState()
-	saddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-	sl0 := libcommon.HexToHash("0x0")
-
-	txNum := uint256.NewInt(0)
-	ibs.GetState(saddr, &sl0, txNum)
-
-	scope.Stack.Push(txNum)
+	num := ibs.GetBlockNumber()
+	scope.Stack.Push(num)
 	return nil, nil
 }
 
