@@ -115,7 +115,4 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.RebuildTreeAfterFlag.Name, cfg.Zk.RebuildTreeAfter)
 	checkFlag(utils.L1BlockRangeFlag.Name, cfg.Zk.L1BlockRange)
 	checkFlag(utils.L1QueryDelayFlag.Name, cfg.Zk.L1QueryDelay)
-	checkFlag(utils.DefaultGasPrice.Name, cfg.Zk.DefaultGasPrice)
-	checkFlag(utils.MaxGasPrice.Name, cfg.Zk.MaxGasPrice)
-	checkFlag(utils.GasPriceFactor.Name, cfg.Zk.GasPriceFactor)
 }

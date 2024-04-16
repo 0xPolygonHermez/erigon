@@ -499,12 +499,12 @@ var (
 	DefaultGasPrice = cli.Uint64Flag{
 		Name:  "zkevm.default-gas-price",
 		Usage: "Set the default/min gas price",
-		Value: 1,
+		Value: 0,
 	}
 	MaxGasPrice = cli.Uint64Flag{
 		Name:  "zkevm.max-gas-price",
 		Usage: "Set the max gas price",
-		Value: 999999999999999,
+		Value: 0,
 	}
 	GasPriceFactor = cli.Float64Flag{
 		Name:  "zkevm.gas-price-factor",

@@ -345,6 +345,7 @@ type APIImpl struct {
 	DefaultGasPrice            uint64
 	MaxGasPrice                uint64
 	GasPriceFactor             float64
+	L1GasPrice                 L1GasPrice
 }
 
 // NewEthAPI returns APIImpl instance
@@ -369,6 +370,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		DefaultGasPrice:            zkConfig.DefaultGasPrice,
 		MaxGasPrice:                zkConfig.MaxGasPrice,
 		GasPriceFactor:             zkConfig.GasPriceFactor,
+		L1GasPrice:                 L1GasPrice{},
 	}
 }
 

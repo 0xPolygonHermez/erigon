@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"time"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
@@ -13,15 +14,27 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
+type L1GasPrice struct {
+	timestamp time.Time
+	gasPrice  *big.Int
+}
+
 func (api *APIImpl) GasPrice(ctx context.Context) (*hexutil.Big, error) {
-	l1GasPrice, err := api.l1GasPrice()
-	if err != nil {
-		return nil, err
+	// if gas price timestamp is older than 3 seconds, update it
+	if time.Since(api.L1GasPrice.timestamp) > 3*time.Second || api.L1GasPrice.gasPrice == nil {
+		l1GasPrice, err := api.l1GasPrice()
+		if err != nil {
+			return nil, err
+		}
+		api.L1GasPrice = L1GasPrice{
+			timestamp: time.Now(),
+			gasPrice:  l1GasPrice,
+		}
 	}
 
 	// Apply factor to calculate l2 gasPrice
 	factor := big.NewFloat(0).SetFloat64(api.GasPriceFactor)
-	res := new(big.Float).Mul(factor, big.NewFloat(0).SetInt(l1GasPrice))
+	res := new(big.Float).Mul(factor, big.NewFloat(0).SetInt(api.L1GasPrice.gasPrice))
 
 	// Store l2 gasPrice calculated
 	result := new(big.Int)
