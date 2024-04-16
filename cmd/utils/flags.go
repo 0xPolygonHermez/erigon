@@ -370,6 +370,11 @@ var (
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
 		Value: "0s",
 	}
+	L1SyncStartBlock = cli.Uint64Flag{
+		Name:  "zkevm.l1-sync-start-block",
+		Usage: "Designed for recovery of the network from the L1 batch data, slower mode of operation than the datastream.  If set the datastream will not be used",
+		Value: 0,
+	}
 	L1ChainIdFlag = cli.Uint64Flag{
 		Name:  "zkevm.l1-chain-id",
 		Usage: "Ethereum L1 chain ID",

@@ -168,6 +168,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.L2RpcUrlFlag,
 	&utils.L2DataStreamerUrlFlag,
 	&utils.L2DataStreamerTimeout,
+	&utils.L1SyncStartBlock,
 	&utils.L1ChainIdFlag,
 	&utils.L1RpcUrlFlag,
 	&utils.AddressSequencerFlag,

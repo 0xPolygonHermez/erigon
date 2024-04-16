@@ -53,6 +53,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),
 		L2DataStreamerUrl:                      ctx.String(utils.L2DataStreamerUrlFlag.Name),
 		L2DataStreamerTimeout:                  l2DataStreamTimeout,
+		L1SyncStartBlock:                       ctx.Uint64(utils.L1SyncStartBlock.Name),
 		L1ChainId:                              ctx.Uint64(utils.L1ChainIdFlag.Name),
 		L1RpcUrl:                               ctx.String(utils.L1RpcUrlFlag.Name),
 		AddressSequencer:                       libcommon.HexToAddress(ctx.String(utils.AddressSequencerFlag.Name)),
