@@ -43,6 +43,8 @@ type Zk struct {
 	DebugLimit     uint64
 	DebugStep      uint64
 	DebugStepAfter uint64
+
+	PoolManagerUrl string
 }
 
 var DefaultZkConfig = &Zk{}

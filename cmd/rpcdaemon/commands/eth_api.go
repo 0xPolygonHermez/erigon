@@ -339,6 +339,7 @@ type APIImpl struct {
 	GasCap                     uint64
 	ReturnDataLimit            int
 	ZkRpcUrl                   string
+	PoolManagerUrl             string
 	AllowFreeTransactions      bool
 	AllowPreEIP155Transactions bool
 	L1RpcUrl                   string
@@ -364,6 +365,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		GasCap:                     gascap,
 		ReturnDataLimit:            returnDataLimit,
 		ZkRpcUrl:                   zkConfig.L2RpcUrl,
+		PoolManagerUrl:             zkConfig.PoolManagerUrl,
 		AllowFreeTransactions:      zkConfig.AllowFreeTransactions,
 		AllowPreEIP155Transactions: zkConfig.AllowPreEIP155Transactions,
 		L1RpcUrl:                   zkConfig.L1RpcUrl,

@@ -516,6 +516,11 @@ var (
 		Usage: "Enable/Diable witness full",
 		Value: true,
 	}
+	PoolManagerUrl = cli.StringFlag{
+		Name:  "zkevm.pool-manager-url",
+		Usage: "The URL of the pool manager. If set, eth_sendRawTransaction will be redirected there.",
+		Value: "",
+	}
 	DebugLimit = cli.UintFlag{
 		Name:  "debug.limit",
 		Usage: "Limit the number of blocks to sync",
