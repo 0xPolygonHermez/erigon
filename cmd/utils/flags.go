@@ -531,6 +531,11 @@ var (
 		Usage: "The URL of the pool manager. If set, eth_sendRawTransaction will be redirected there.",
 		Value: "",
 	}
+	SupportZeroGas = cli.BoolFlag{
+		Name:  "zkevm.support-zero-gas",
+		Usage: "Support gasless transactions",
+		Value: false,
+	}
 	DebugLimit = cli.UintFlag{
 		Name:  "debug.limit",
 		Usage: "Limit the number of blocks to sync",

@@ -29,7 +29,7 @@ func APIList(db kv.RoDB, borDb kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 		rpcUrl = zkConfig.L2RpcUrl
 	}
 
-	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs)
+	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs, zkConfig.SupportZeroGas)
 	base.SetL2RpcUrl(zkConfig.L2RpcUrl)
 	ethImpl := NewEthAPI(base, db, eth, txPool, mining, cfg.Gascap, cfg.ReturnDataLimit, zkConfig)
 	erigonImpl := NewErigonAPI(base, db, eth)
@@ -160,7 +160,7 @@ func AuthAPIList(db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClien
 	cfg httpcfg.HttpCfg, engine consensus.EngineReader,
 	zkConfig *ethconfig.Zk,
 ) (list []rpc.API) {
-	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs)
+	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs, zkConfig.SupportZeroGas)
 
 	ethImpl := NewEthAPI(base, db, eth, txPool, mining, cfg.Gascap, cfg.ReturnDataLimit, zkConfig)
 	engineImpl := NewEngineAPI(base, db, eth, cfg.InternalCL)
