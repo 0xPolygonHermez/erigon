@@ -70,7 +70,7 @@ type HermezDb interface {
 }
 
 type DatastreamClient interface {
-	ReadAllEntriesToChannel(bookmark *types.Bookmark, tx kv.RwTx) error
+	ReadAllEntriesToChannel(bookmark *types.Bookmark) error
 	GetL2BlockChan() chan types.FullL2Block
 	GetErrChan() chan error
 	GetGerUpdatesChan() chan types.GerUpdate
@@ -153,7 +153,7 @@ func SpawnStageBatches(
 			// if no error, break, else continue trying to get them
 			// Create bookmark
 			bookmark := types.NewL2BlockBookmark(batchesProgress)
-			cfg.dsClient.ReadAllEntriesToChannel(bookmark, tx)
+			cfg.dsClient.ReadAllEntriesToChannel(bookmark)
 		}()
 	}
 
@@ -200,7 +200,7 @@ LOOP:
 		// if both download routine stopped and channel empty - stop loop
 		select {
 		case l2Block := <-l2BlockChan:
-			if l2Block.L2BlockNumber >= 229000 {
+			if cfg.zkCfg.SyncLimit > 0 && l2Block.L2BlockNumber >= cfg.zkCfg.SyncLimit {
 				break LOOP
 			}
 

@@ -521,6 +521,11 @@ var (
 		Usage: "Enable/Diable witness full",
 		Value: true,
 	}
+	SyncLimit = cli.UintFlag{
+		Name:  "zkevm.sync-limit",
+		Usage: "Limit the number of blocks to sync, this will halt batches and execution to this number but keep the node active",
+		Value: 0,
+	}
 	PoolManagerUrl = cli.StringFlag{
 		Name:  "zkevm.pool-manager-url",
 		Usage: "The URL of the pool manager. If set, eth_sendRawTransaction will be redirected there.",

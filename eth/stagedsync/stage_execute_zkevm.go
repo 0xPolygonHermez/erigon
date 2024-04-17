@@ -154,7 +154,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	}
 Loop:
 	for blockNum := stageProgress + 1; blockNum <= to; blockNum++ {
-		if blockNum >= 229000 {
+		if cfg.zk.SyncLimit > 0 && blockNum > cfg.zk.SyncLimit {
 			break
 		}
 		stageProgress = blockNum

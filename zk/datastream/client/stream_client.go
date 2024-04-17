@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/gateway-fm/cdk-erigon-lib/kv"
 )
 
 type StreamType uint64
@@ -202,7 +201,7 @@ func (c *StreamClient) ReadEntries(bookmark *types.Bookmark, l2BlocksAmount int)
 
 // reads entries to the end of the stream
 // at end will wait for new entries to arrive
-func (c *StreamClient) ReadAllEntriesToChannel(bookmark *types.Bookmark, _ kv.RwTx) error {
+func (c *StreamClient) ReadAllEntriesToChannel(bookmark *types.Bookmark) error {
 	// if connection is lost, try to reconnect
 	// this occurs when all 5 attempts failed on previous run
 	if c.conn == nil {

@@ -289,8 +289,9 @@ LOOP:
 		default:
 			var transactions []types.Transaction
 			var effectiveGases []uint8
+			workRemaining := true
 			if l1Recovery {
-				transactions, effectiveGases, err = getNextL1BatchTransactions(thisBatch, forkId, hermezDb)
+				transactions, effectiveGases, workRemaining, err = getNextL1BatchTransactions(thisBatch, forkId, hermezDb)
 			} else {
 				cfg.txPool.LockFlusher()
 				transactions, err = getNextPoolTransactions(cfg, executionAt, forkId, yielded)
@@ -331,7 +332,7 @@ LOOP:
 			if l1Recovery {
 				// just go into the normal loop waiting for new transactions to signal that the recovery
 				// has finished as far as it can go
-				if len(transactions) == 0 {
+				if len(transactions) == 0 && !workRemaining {
 					continue
 				}
 
@@ -457,21 +458,34 @@ LOOP:
 	return transactions, err
 }
 
-func getNextL1BatchTransactions(batchNumber uint64, forkId uint64, hermezDb *hermez_db.HermezDb) ([]types.Transaction, []uint8, error) {
+func getNextL1BatchTransactions(batchNumber uint64, forkId uint64, hermezDb *hermez_db.HermezDb) ([]types.Transaction, []uint8, bool, error) {
 	// we expect that the batch we're going to load in next should be in the db already because of the l1 block sync
 	// stage, if it is not there we need to panic as we're in a bad state
 	batchL2Data, err := hermezDb.GetL1BatchData(batchNumber)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, true, err
 	}
 	if len(batchL2Data) == 0 {
 		// end of the line for batch recovery so return empty
-		return []types.Transaction{}, []uint8{}, nil
+		return []types.Transaction{}, []uint8{}, true, nil
 	}
 
 	transactions, _, effectiveGases, err := tx.DecodeTxs(batchL2Data, forkId)
 
-	return transactions, effectiveGases, err
+	isWorkRemaining := true
+	if len(transactions) == 0 {
+		// we need to check if this batch should simply be empty or not so we need to check against the
+		// highest known batch number to see if we have work to do still
+		highestKnown, err := hermezDb.GetLastL1BatchData()
+		if err != nil {
+			return nil, nil, true, err
+		}
+		if batchNumber >= highestKnown {
+			isWorkRemaining = false
+		}
+	}
+
+	return transactions, effectiveGases, isWorkRemaining, err
 }
 
 const (

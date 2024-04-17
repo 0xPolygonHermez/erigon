@@ -81,6 +81,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		MaxGasPrice:                            ctx.Uint64(utils.MaxGasPrice.Name),
 		GasPriceFactor:                         ctx.Float64(utils.GasPriceFactor.Name),
 		WitnessFull:                            ctx.Bool(utils.WitnessFullFlag.Name),
+		SyncLimit:                              ctx.Uint64(utils.SyncLimit.Name),
 		DebugLimit:                             ctx.Uint64(utils.DebugLimit.Name),
 		DebugStep:                              ctx.Uint64(utils.DebugStep.Name),
 		DebugStepAfter:                         ctx.Uint64(utils.DebugStepAfter.Name),
