@@ -33,11 +33,13 @@ const (
 	ForkID6IncaBerry   ForkId = 6
 	ForkID7Etrog       ForkId = 7
 	ForkID88Elderberry ForkId = 8
+	ForkID9Feijoa      ForkId = 9
 )
 
 // this needs to always be in descending order
 // add new forkIds at the beginning of the array
 var ForkIdsOrdered = []ForkId{
+	ForkID9Feijoa,
 	ForkID88Elderberry,
 	ForkID7Etrog,
 	ForkID6IncaBerry,
