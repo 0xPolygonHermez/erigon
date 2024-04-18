@@ -7,7 +7,7 @@ import (
 )
 
 func CalcBaseFeeZk(config *chain.Config, parent *types.Header) *big.Int {
-	if config.SupportZeroGas {
+	if config.SupportGasless {
 		return big.NewInt(0)
 	}
 

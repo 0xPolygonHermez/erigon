@@ -750,7 +750,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		cfg := backend.config.Zk
 
 		// update the chain config with the zero gas from the flags
-		backend.chainConfig.SupportZeroGas = cfg.SupportZeroGas
+		backend.chainConfig.SupportGasless = cfg.Gasless
 
 		backend.etherMan = newEtherMan(cfg, chainConfig.ChainName)
 

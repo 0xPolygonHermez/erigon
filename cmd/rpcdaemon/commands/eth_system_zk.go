@@ -20,7 +20,7 @@ type L1GasPrice struct {
 }
 
 func (api *APIImpl) GasPrice(ctx context.Context) (*hexutil.Big, error) {
-	if api.BaseAPI.zeroGas {
+	if api.BaseAPI.gasless {
 		var price hexutil.Big
 		return &price, nil
 	}

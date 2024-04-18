@@ -531,8 +531,8 @@ var (
 		Usage: "The URL of the pool manager. If set, eth_sendRawTransaction will be redirected there.",
 		Value: "",
 	}
-	SupportZeroGas = cli.BoolFlag{
-		Name:  "zkevm.support-zero-gas",
+	SupportGasless = cli.BoolFlag{
+		Name:  "zkevm.gasless",
 		Usage: "Support gasless transactions",
 		Value: false,
 	}
