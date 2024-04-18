@@ -66,7 +66,7 @@ type ForkReader interface {
 func UpdateZkEVMBlockCfg(cfg *chain.Config, hermezDb ForkReader, logPrefix string) error {
 	var higherForkIdBlockNum uint64
 	for _, forkId := range chain.ForkIdsOrdered {
-		blockNum, err := hermezDb.GetForkIdBlock(forkId)
+		blockNum, err := hermezDb.GetForkIdBlock(uint64(forkId))
 		if err != nil {
 			log.Error(fmt.Sprintf("[%s] Error getting fork id %v from db: %v", logPrefix, forkId, err))
 			return err
