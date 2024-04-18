@@ -104,6 +104,7 @@ type Config struct {
 	ForkID6IncaBerryBlock   *big.Int `json:"forkID6IncaBerryBlock,omitempty"`
 	ForkID7EtrogBlock       *big.Int `json:"forkID7EtrogBlock,omitempty"`
 	ForkID88ElderberryBlock *big.Int `json:"forkID88ElderberryBlock,omitempty"`
+	ForkID9FeijoaBlock      *big.Int `json:"forkID9FeijoaBlock,omitempty"`
 
 	SupportGasless bool `json:"supportGasless,omitempty"`
 }
@@ -147,6 +148,8 @@ func (c *Config) SetForkIdBlock(forkIdNumber ForkId, blockNum uint64) error {
 		c.ForkID7EtrogBlock = new(big.Int).SetUint64(blockNum)
 	case ForkID88Elderberry:
 		c.ForkID88ElderberryBlock = new(big.Int).SetUint64(blockNum)
+	case ForkID9Feijoa:
+		c.ForkID9FeijoaBlock = new(big.Int).SetUint64(blockNum)
 	default:
 		return fmt.Errorf("unknown fork id number %d", forkIdNumber)
 	}
