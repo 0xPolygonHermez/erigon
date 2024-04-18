@@ -35,7 +35,7 @@ func TestNewFilters(t *testing.T) {
 	ctx, conn := rpcdaemontest.CreateTestGrpcConn(t, stages.Mock(t))
 	mining := txpool.NewMiningClient(conn)
 	ff := rpchelper.New(ctx, nil, nil, mining, func() {})
-	api := NewEthAPI(NewBaseApi(ff, stateCache, br, agg, false, rpccfg.DefaultEvmCallTimeout, m.Engine, m.Dirs, false), m.DB, nil, nil, nil, 5000000, 100_000, ethconfig.DefaultZkConfig)
+	api := NewEthAPI(NewBaseApi(ff, stateCache, br, agg, false, rpccfg.DefaultEvmCallTimeout, m.Engine, m.Dirs), m.DB, nil, nil, nil, 5000000, 100_000, ethconfig.DefaultZkConfig)
 
 	ptf, err := api.NewPendingTransactionFilter(ctx)
 	assert.Nil(err)
