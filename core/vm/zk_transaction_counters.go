@@ -29,7 +29,7 @@ func NewTransactionCounter(transaction types.Transaction, smtMaxLevel int, shoul
 			rlpCounters:        NewUnlimitedCounterCollector(),
 			executionCounters:  NewUnlimitedCounterCollector(),
 			processingCounters: NewUnlimitedCounterCollector(),
-			smtLevels:          256, // max depth of the tree anyways
+			smtLevels:          1, // max depth of the tree anyways
 		}
 	} else {
 		tc = &TransactionCounter{
