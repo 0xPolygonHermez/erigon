@@ -296,31 +296,33 @@ func (c *Config) CheckCompatible(newcfg *Config, height uint64) *chain.ConfigCom
 	return lasterr
 }
 
+//////////////// not used currently due to dynamic fork
 // type forkBlockNumber struct {
 // 	name        string
 // 	blockNumber *big.Int
 // 	optional    bool // if true, the fork may be nil and next fork is still allowed
 // }
 
-// func (c *Config) forkBlockNumbers() []forkBlockNumber {
-// 	return []forkBlockNumber{
-// 		{name: "homesteadBlock", blockNumber: c.HomesteadBlock},
-// 		{name: "daoForkBlock", blockNumber: c.DAOForkBlock, optional: true},
-// 		{name: "eip150Block", blockNumber: c.TangerineWhistleBlock},
-// 		{name: "eip155Block", blockNumber: c.SpuriousDragonBlock},
-// 		{name: "byzantiumBlock", blockNumber: c.ByzantiumBlock},
-// 		{name: "constantinopleBlock", blockNumber: c.ConstantinopleBlock},
-// 		{name: "petersburgBlock", blockNumber: c.PetersburgBlock},
-// 		{name: "istanbulBlock", blockNumber: c.IstanbulBlock},
-// 		{name: "muirGlacierBlock", blockNumber: c.MuirGlacierBlock, optional: true},
-// 		{name: "berlinBlock", blockNumber: c.BerlinBlock},
-// 		{name: "londonBlock", blockNumber: c.LondonBlock},
-// 		{name: "arrowGlacierBlock", blockNumber: c.ArrowGlacierBlock, optional: true},
-// 		{name: "grayGlacierBlock", blockNumber: c.GrayGlacierBlock, optional: true},
-// 		{name: "mergeNetsplitBlock", blockNumber: c.MergeNetsplitBlock, optional: true},
-// 	}
-// }
-
+//	func (c *Config) forkBlockNumbers() []forkBlockNumber {
+//		return []forkBlockNumber{
+//			{name: "homesteadBlock", blockNumber: c.HomesteadBlock},
+//			{name: "daoForkBlock", blockNumber: c.DAOForkBlock, optional: true},
+//			{name: "eip150Block", blockNumber: c.TangerineWhistleBlock},
+//			{name: "eip155Block", blockNumber: c.SpuriousDragonBlock},
+//			{name: "byzantiumBlock", blockNumber: c.ByzantiumBlock},
+//			{name: "constantinopleBlock", blockNumber: c.ConstantinopleBlock},
+//			{name: "petersburgBlock", blockNumber: c.PetersburgBlock},
+//			{name: "istanbulBlock", blockNumber: c.IstanbulBlock},
+//			{name: "muirGlacierBlock", blockNumber: c.MuirGlacierBlock, optional: true},
+//			{name: "berlinBlock", blockNumber: c.BerlinBlock},
+//			{name: "londonBlock", blockNumber: c.LondonBlock},
+//			{name: "arrowGlacierBlock", blockNumber: c.ArrowGlacierBlock, optional: true},
+//			{name: "grayGlacierBlock", blockNumber: c.GrayGlacierBlock, optional: true},
+//			{name: "mergeNetsplitBlock", blockNumber: c.MergeNetsplitBlock, optional: true},
+//		}
+//	}
+//
+// ////////////////////////
 // CheckConfigForkOrder checks that we don't "skip" any forks
 func (c *Config) CheckConfigForkOrder() error {
 	if c != nil && c.ChainID != nil && c.ChainID.Uint64() == 77 {
@@ -333,6 +335,8 @@ func (c *Config) CheckConfigForkOrder() error {
 
 	// [dynamic fork]
 	return nil
+
+	//////////////// not used currently due to dynamic fork
 
 	// var lastFork forkBlockNumber
 
@@ -356,6 +360,8 @@ func (c *Config) CheckConfigForkOrder() error {
 	// 	}
 	// }
 	// return nil
+	//////////////////////////
+
 }
 
 func (c *Config) checkCompatible(newcfg *Config, head uint64) *chain.ConfigCompatError {
