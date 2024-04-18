@@ -149,7 +149,7 @@ func (c *Config) SetForkIdBlock(forkIdNumber ForkId, blockNum uint64) error {
 	case ForkID8Elderberry:
 		c.ForkID88ElderberryBlock = new(big.Int).SetUint64(blockNum)
 	case ForkID9Elderberry2:
-		c.ForkID9FeijoaBlock = new(big.Int).SetUint64(blockNum)
+		c.ForkID9Elderberry2Block = new(big.Int).SetUint64(blockNum)
 	default:
 		return fmt.Errorf("unknown fork id number %d", forkIdNumber)
 	}
