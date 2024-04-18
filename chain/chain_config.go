@@ -32,15 +32,15 @@ const (
 	ForkID5Dragonfruit ForkId = 5
 	ForkID6IncaBerry   ForkId = 6
 	ForkID7Etrog       ForkId = 7
-	ForkID88Elderberry ForkId = 8
-	ForkID9Feijoa      ForkId = 9
+	ForkID8Elderberry  ForkId = 8
+	ForkID9Elderberry2 ForkId = 9
 )
 
 // this needs to always be in descending order
 // add new forkIds at the beginning of the array
 var ForkIdsOrdered = []ForkId{
-	ForkID9Feijoa,
-	ForkID88Elderberry,
+	ForkID9Elderberry2,
+	ForkID8Elderberry,
 	ForkID7Etrog,
 	ForkID6IncaBerry,
 	ForkID5Dragonfruit,
@@ -146,9 +146,9 @@ func (c *Config) SetForkIdBlock(forkIdNumber ForkId, blockNum uint64) error {
 		c.ForkID6IncaBerryBlock = new(big.Int).SetUint64(blockNum)
 	case ForkID7Etrog:
 		c.ForkID7EtrogBlock = new(big.Int).SetUint64(blockNum)
-	case ForkID88Elderberry:
+	case ForkID8Elderberry:
 		c.ForkID88ElderberryBlock = new(big.Int).SetUint64(blockNum)
-	case ForkID9Feijoa:
+	case ForkID9Elderberry2:
 		c.ForkID9FeijoaBlock = new(big.Int).SetUint64(blockNum)
 	default:
 		return fmt.Errorf("unknown fork id number %d", forkIdNumber)
