@@ -51,7 +51,10 @@ func NewTxGasLogger(logInterval time.Duration, logBlock, total, gasLimit uint64,
 func (g *TxGasLogger) Start() {
 	go func() {
 		for range g.logEvery.C {
-			g.logBlock, g.logTx, g.logTime = logProgress(g.logPrefix, g.total, g.initialBlock, g.logBlock, g.logTime, g.currentBlockNum, g.logTx, g.lastLogTx, g.gas, float64(g.currentStateGas)/float64(g.gasLimit), *g.batch)
+			g.logProgress()
+			g.logTx = g.lastLogTx
+			g.logBlock = g.currentBlockNum
+			g.logTime = time.Now()
 			g.gas = 0
 			g.tx.CollectMetrics()
 			g.metric.Set(g.logBlock)
@@ -71,29 +74,27 @@ func (g *TxGasLogger) AddBlock(blockTxCount, gas, currentStateGas, currentBlockN
 	g.currentBlockNum = currentBlockNum
 }
 
-func logProgress(logPrefix string, total, initialBlock, prevBlock uint64, prevTime time.Time, currentBlock uint64, prevTx, currentTx uint64, gas uint64, gasState float64, batch ethdb.DbWithPendingMutations) (uint64, uint64, time.Time) {
-	currentTime := time.Now()
-	interval := currentTime.Sub(prevTime)
-	speed := float64(currentBlock-prevBlock) / (float64(interval) / float64(time.Second))
-	speedTx := float64(currentTx-prevTx) / (float64(interval) / float64(time.Second))
-	speedMgas := float64(gas) / 1_000_000 / (float64(interval) / float64(time.Second))
-	percent := float64(currentBlock-initialBlock) / float64(total) * 100
+func (g *TxGasLogger) logProgress() {
+	interval := time.Since(g.logTime)
+	speed := float64(g.currentBlockNum-g.logBlock) / (float64(interval) / float64(time.Second))
+	speedTx := float64(g.lastLogTx-g.logTx) / (float64(interval) / float64(time.Second))
+	speedMgas := float64(g.gas) / 1_000_000 / (float64(interval) / float64(time.Second))
+	percent := float64(g.currentBlockNum-g.initialBlock) / float64(g.total) * 100
+	gasState := float64(g.currentStateGas) / float64(g.gasLimit) * 100
 
 	var m runtime.MemStats
 	dbg.ReadMemStats(&m)
 	var logpairs = []interface{}{
-		"number", currentBlock,
+		"number", g.currentBlockNum,
 		"%", percent,
 		"blk/s", fmt.Sprintf("%.1f", speed),
 		"tx/s", fmt.Sprintf("%.1f", speedTx),
 		"Mgas/s", fmt.Sprintf("%.1f", speedMgas),
-		"gasState", fmt.Sprintf("%.2f", gasState),
+		"gasState%", fmt.Sprintf("%.2f", gasState),
 	}
-	if batch != nil {
-		logpairs = append(logpairs, "batch", common.ByteCount(uint64(batch.BatchSize())))
+	if g.batch != nil {
+		logpairs = append(logpairs, "batch", common.ByteCount(uint64((*g.batch).BatchSize())))
 	}
 	logpairs = append(logpairs, "alloc", common.ByteCount(m.Alloc), "sys", common.ByteCount(m.Sys))
-	log.Info(fmt.Sprintf("[%s] Executed blocks", logPrefix), logpairs...)
-
-	return currentBlock, currentTx, currentTime
+	log.Info(fmt.Sprintf("[%s] Executed blocks", g.logPrefix), logpairs...)
 }
