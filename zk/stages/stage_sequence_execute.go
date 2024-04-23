@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -67,7 +67,7 @@ func SpawnSequencingStage(
 
 	// injected batch
 	if executionAt == 0 {
-		header, parentBlock, err := prepareHeader(tx, executionAt, forkId, cfg.zk.AddressSequencer)
+		header, parentBlock, err := prepareHeader(tx, executionAt, math.MaxUint64, forkId, cfg.zk.AddressSequencer)
 		if err != nil {
 			return err
 		}
@@ -81,12 +81,30 @@ func SpawnSequencingStage(
 		var addedReceipts []*types.Receipt
 		var clonedBatchCounters *vm.BatchCounterCollector
 
-		thisBatch := lastBatch + 1
+		var decodedBlock zktx.DecodedBatchL2Data
+		var deltaTimestamp uint64 = math.MaxUint64
+		var blockTransactions []types.Transaction
+		var effectiveGases []uint8
+
 		batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
+		thisBatch := lastBatch + 1
 		batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
 		runLoopBlocks := true
 		lastStartedBn := executionAt - 1
 		yielded := mapset.NewSet[[32]byte]()
+		coinbase := cfg.zk.AddressSequencer
+		l1Recovery := cfg.zk.L1SyncStartBlock > 0
+		workRemaining := true
+
+		if l1Recovery {
+			decodedBlock, coinbase, workRemaining, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
+			if err != nil {
+				return err
+			}
+			deltaTimestamp = uint64(decodedBlock.DeltaTimestamp)
+			blockTransactions = decodedBlock.Transactions
+			effectiveGases = decodedBlock.EffectiveGasPricePercentages
+		}
 
 		log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, thisBatch))
 
@@ -104,8 +122,13 @@ func SpawnSequencingStage(
 				batchCounters = clonedBatchCounters
 			}
 
-			header, parentBlock, err := prepareHeader(tx, bn, forkId, cfg.zk.AddressSequencer)
+			header, parentBlock, err := prepareHeader(tx, bn, deltaTimestamp, forkId, coinbase)
 			thisBlockNumber := header.Number.Uint64()
+			if err != nil {
+				return err
+			}
+
+			infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, includeGerInBlockInfoRoot, err := prepareL1AndInfoTreeRelatedStuff(sdb, &decodedBlock, l1Recovery)
 			if err != nil {
 				return err
 			}
@@ -114,21 +137,8 @@ func SpawnSequencingStage(
 
 			ibs := state.New(sdb.stateReader)
 
-			// calculate and store the l1 info tree index used for this block
-			l1TreeUpdateIndex, l1TreeUpdate, err := calculateNextL1TreeUpdateToUse(tx, sdb.hermezDb)
-			if err != nil {
-				return err
-			}
-
-			l1BlockHash := common.Hash{}
-			ger := common.Hash{}
-			if l1TreeUpdate != nil {
-				l1BlockHash = l1TreeUpdate.ParentHash
-				ger = l1TreeUpdate.GER
-			}
-
 			parentRoot := parentBlock.Root()
-			if err = handleStateForNewBlockStarting(cfg.chainConfig, sdb.hermezDb, ibs, thisBlockNumber, header.Time, &parentRoot, l1TreeUpdate); err != nil {
+			if err = handleStateForNewBlockStarting(cfg.chainConfig, sdb.hermezDb, ibs, thisBlockNumber, header.Time, &parentRoot, l1TreeUpdate, !includeGerInBlockInfoRoot); err != nil {
 				return err
 			}
 
@@ -136,7 +146,6 @@ func SpawnSequencingStage(
 				// start waiting for a new transaction to arrive
 				log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 
-				l1Recovery := cfg.zk.L1SyncStartBlock > 0
 				logTicker := time.NewTicker(10 * time.Second)
 				blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
 				overflow := false
@@ -155,30 +164,21 @@ func SpawnSequencingStage(
 						runLoopBlocks = false
 						break LOOP_TRANSACTIONS
 					default:
-						var transactions []types.Transaction
-						var effectiveGases []uint8
-						workRemaining := true
-
-						if l1Recovery {
-							transactions, effectiveGases, workRemaining, err = getNextL1BatchTransactions(thisBatch, forkId, sdb.hermezDb)
-							if err != nil {
-								return err
-							}
-						} else {
+						if !l1Recovery {
 							cfg.txPool.LockFlusher()
-							transactions, err = getNextPoolTransactions(cfg, executionAt, forkId, yielded)
+							blockTransactions, err = getNextPoolTransactions(cfg, executionAt, forkId, yielded)
 							if err != nil {
 								return err
 							}
 							cfg.txPool.UnlockFlusher()
 						}
 
-						for _, t := range transactions {
+						for _, t := range blockTransactions {
 							txHash := t.Hash().String()
 							_ = txHash
 						}
 
-						for i, transaction := range transactions {
+						for i, transaction := range blockTransactions {
 							var receipt *types.Receipt
 							var effectiveGas uint8
 
@@ -188,7 +188,7 @@ func SpawnSequencingStage(
 								effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
 							}
 
-							receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas)
+							receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas, l1Recovery)
 							if err != nil {
 								return err
 							}
@@ -199,7 +199,7 @@ func SpawnSequencingStage(
 								}
 
 								// remove from yielded so they can be processed again
-								txSize := len(transactions)
+								txSize := len(blockTransactions)
 								for ; i < txSize; i++ {
 									yielded.Remove(transaction.Hash())
 								}
@@ -214,7 +214,7 @@ func SpawnSequencingStage(
 						if l1Recovery {
 							// just go into the normal loop waiting for new transactions to signal that the recovery
 							// has finished as far as it can go
-							if len(transactions) == 0 && !workRemaining {
+							if len(blockTransactions) == 0 && !workRemaining {
 								continue
 							}
 
@@ -232,7 +232,7 @@ func SpawnSequencingStage(
 			} else {
 				for idx, transaction := range addedTransactions {
 					effectiveGas := DeriveEffectiveGasPrice(cfg, transaction)
-					receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas)
+					receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas, false)
 					if err != nil {
 						return err
 					}
@@ -249,7 +249,7 @@ func SpawnSequencingStage(
 				return err
 			}
 
-			if err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, l1TreeUpdateIndex); err != nil {
+			if err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, infoTreeIndexProgress); err != nil {
 				return err
 			}
 

@@ -9,7 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/zk/tx"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 )
 
@@ -44,7 +44,7 @@ func processInjectedInitialBatch(
 	header.Time = injected.Timestamp
 
 	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(cfg.chainConfig, sdb.hermezDb, ibs, injectedBatchBlockNumber, injected.Timestamp, &parentRoot, fakeL1TreeUpdate); err != nil {
+	if err = handleStateForNewBlockStarting(cfg.chainConfig, sdb.hermezDb, ibs, injectedBatchBlockNumber, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, false); err != nil {
 		return err
 	}
 
@@ -67,22 +67,25 @@ func handleInjectedBatch(
 	parentBlock *types.Block,
 	forkId uint64,
 ) (*types.Transaction, *types.Receipt, error) {
-	txs, _, _, err := tx.DecodeTxs(injected.Transaction, 5)
+	decodedBlocks, err := zktx.DecodeBatchL2Blocks(injected.Transaction, 5)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(txs) == 0 || len(txs) > 1 {
+	if len(decodedBlocks) == 0 || len(decodedBlocks) > 1 {
+		return nil, nil, errors.New("expected 1 block for the injected batch")
+	}
+	if len(decodedBlocks[0].Transactions) == 0 {
 		return nil, nil, errors.New("expected 1 transaction in the injected batch")
 	}
 
 	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
 
 	// process the tx and we can ignore the counters as an overflow at this stage means no network anyway
-	effectiveGas := DeriveEffectiveGasPrice(cfg, txs[0])
-	receipt, _, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), txs[0], effectiveGas)
+	effectiveGas := DeriveEffectiveGasPrice(cfg, decodedBlocks[0].Transactions[0])
+	receipt, _, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), decodedBlocks[0].Transactions[0], effectiveGas, false)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &txs[0], receipt, nil
+	return &decodedBlocks[0].Transactions[0], receipt, nil
 }

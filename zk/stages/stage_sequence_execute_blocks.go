@@ -18,7 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zk/tx"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/secp256k1"
 )
@@ -31,8 +31,13 @@ func handleStateForNewBlockStarting(
 	timestamp uint64,
 	stateRoot *common.Hash,
 	l1info *zktypes.L1InfoTreeUpdate,
+	forceSkipGerManagerWrite bool,
 ) error {
 	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
+
+	if forceSkipGerManagerWrite {
+		return nil
+	}
 
 	// handle writing to the ger manager contract
 	if l1info != nil {
@@ -190,7 +195,7 @@ func postBlockStateHandling(
 			}
 		}
 
-		l2TxHash, err := tx.ComputeL2TxHash(
+		l2TxHash, err := zktx.ComputeL2TxHash(
 			t.GetChainID().ToBig(),
 			t.GetValue(),
 			t.GetPrice(),

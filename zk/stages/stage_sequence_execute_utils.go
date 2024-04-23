@@ -15,6 +15,7 @@ import (
 	"errors"
 
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -29,6 +30,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 )
@@ -172,14 +174,19 @@ func prepareForkId(cfg SequenceBlockCfg, lastBatch, executionAt uint64, hermezDb
 	return forkId, nil
 }
 
-func prepareHeader(tx kv.RwTx, previousBlockNumber, forkId uint64, coinbase common.Address) (*types.Header, *types.Block, error) {
+func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forkId uint64, coinbase common.Address) (*types.Header, *types.Block, error) {
 	parentBlock, err := rawdb.ReadBlockByNumber(tx, previousBlockNumber)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	useTimestampOffsetFromParentBlock := deltaTimestamp != math.MaxUint64
+
 	nextBlockNum := previousBlockNumber + 1
 	newBlockTimestamp := uint64(time.Now().Unix())
+	if useTimestampOffsetFromParentBlock {
+		newBlockTimestamp = parentBlock.Time() + deltaTimestamp
+	}
 
 	return &types.Header{
 		ParentHash: parentBlock.Hash(),
@@ -191,18 +198,57 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, forkId uint64, coinbase comm
 	}, parentBlock, nil
 }
 
+func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, decodedBlock *zktx.DecodedBatchL2Data, l1Recovery bool) (uint64, *zktypes.L1InfoTreeUpdate, uint64, common.Hash, common.Hash, bool, error) {
+	var l1TreeUpdateIndex uint64
+	var l1TreeUpdate *zktypes.L1InfoTreeUpdate
+	var err error
+
+	// if we are in a recovery state and recognise that a l1 info tree index has been reused
+	// then we need to not include the GER and L1 block hash into the block info root calculation, so
+	// we keep track of this here
+	includeGerInBlockInfoRoot := true
+
+	l1BlockHash := common.Hash{}
+	ger := common.Hash{}
+
+	infoTreeIndexProgress, err := stages.GetStageProgress(sdb.tx, stages.HighestUsedL1InfoIndex)
+	if err != nil {
+		return infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, includeGerInBlockInfoRoot, err
+	}
+
+	if l1Recovery {
+		l1TreeUpdateIndex = uint64(decodedBlock.L1InfoTreeIndex)
+		l1TreeUpdate, err = sdb.hermezDb.GetL1InfoTreeUpdate(l1TreeUpdateIndex)
+		if err != nil {
+			return infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, includeGerInBlockInfoRoot, err
+		}
+		if infoTreeIndexProgress >= l1TreeUpdateIndex {
+			includeGerInBlockInfoRoot = false
+		}
+	} else {
+		l1TreeUpdateIndex, l1TreeUpdate, err = calculateNextL1TreeUpdateToUse(infoTreeIndexProgress, sdb.hermezDb)
+		if err != nil {
+			return infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, includeGerInBlockInfoRoot, err
+		}
+		if l1TreeUpdateIndex > 0 {
+			infoTreeIndexProgress = l1TreeUpdateIndex
+		}
+	}
+
+	if l1TreeUpdate != nil && includeGerInBlockInfoRoot {
+		l1BlockHash = l1TreeUpdate.ParentHash
+		ger = l1TreeUpdate.GER
+	}
+
+	return infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, includeGerInBlockInfoRoot, nil
+}
+
 // will be called at the start of every new block created within a batch to figure out if there is a new GER
 // we can use or not.  In the special case that this is the first block we just return 0 as we need to use the
 // 0 index first before we can use 1+
-func calculateNextL1TreeUpdateToUse(tx kv.RwTx, hermezDb *hermez_db.HermezDb) (uint64, *zktypes.L1InfoTreeUpdate, error) {
+func calculateNextL1TreeUpdateToUse(lastInfoIndex uint64, hermezDb *hermez_db.HermezDb) (uint64, *zktypes.L1InfoTreeUpdate, error) {
 	// always default to 0 and only update this if the next available index has reached finality
 	var nextL1Index uint64 = 0
-
-	// check which was the last used index
-	lastInfoIndex, err := stages.GetStageProgress(tx, stages.HighestUsedL1InfoIndex)
-	if err != nil {
-		return 0, nil, err
-	}
 
 	// check if the next index is there and if it has reached finality or not
 	l1Info, err := hermezDb.GetL1InfoTreeUpdate(lastInfoIndex + 1)
@@ -254,7 +300,7 @@ func doFinishBlockAndUpdateState(
 	l1BlockHash common.Hash,
 	transactions []types.Transaction,
 	receipts types.Receipts,
-	l1TreeUpdateIndex uint64,
+	l1InfoIndex uint64,
 ) error {
 	thisBlockNumber := header.Number.Uint64()
 
@@ -262,7 +308,7 @@ func doFinishBlockAndUpdateState(
 		return err
 	}
 
-	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1TreeUpdateIndex); err != nil {
+	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1InfoIndex); err != nil {
 		return err
 	}
 

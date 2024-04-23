@@ -108,7 +108,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	logger.Start()
 	defer logger.Stop()
 
-	var stageProgress uint64
+	stageProgress := s.BlockNumber
 	var stoppedErr error
 Loop:
 	for blockNum := s.BlockNumber + 1; blockNum <= to; blockNum++ {
@@ -271,7 +271,7 @@ func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64
 		to = cfg.zk.DebugLimit
 	}
 
-	total := to - stageProgress + 1
+	total := to - stageProgress
 
 	return to, total, nil
 }
@@ -408,7 +408,7 @@ func executeBlockZk(
 	vmConfig.Tracer = callTracer
 
 	getHashFn := core.GetHashFn(block.Header(), getHeader)
-	execRs, err := core.ExecuteBlockEphemerallyZk(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, prevBlockRoot, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, tx, roHermezDb)
+	execRs, err := core.ExecuteBlockEphemerallyZk(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, roHermezDb)
 	if err != nil {
 		return nil, err
 	}
