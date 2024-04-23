@@ -106,8 +106,8 @@ func (tc *TransactionCounter) CalculateRlp() error {
 	collector.getLenBytes(nonceLength)
 
 	collector.divArith()
-	collector.multiCall(collector.addHashTx, 9+int(math.Floor(float64(txDataLen)/32)))
-	collector.multiCall(collector.addL2HashTx, 8+int(math.Floor(float64(txDataLen)/32)))
+	collector.multiCall(collector.addHashTx, 9+(txDataLen>>5)) //txDataLen>>5 equals to int(math.Floor(float64(txDataLen)/32))
+	collector.multiCall(collector.addL2HashTx, 8+(txDataLen>>5))
 	collector.multiCall(collector.addBatchHashByteByByte, txDataLen)
 	collector.SHLarith()
 

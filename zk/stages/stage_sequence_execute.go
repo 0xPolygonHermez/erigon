@@ -168,6 +168,9 @@ func SpawnSequencingStage(
 							}
 							if overflow {
 								log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash())
+								if len(addedTransactions) == 0 {
+									return fmt.Errorf("single transaction %s overflow counters", transaction.Hash())
+								}
 
 								// remove from yielded so they can be processed again
 								txSize := len(transactions)

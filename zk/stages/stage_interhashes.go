@@ -8,6 +8,7 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/state"
+	"github.com/holiman/uint256"
 	state2 "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
@@ -223,7 +224,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	}
 	expectedRootHash := syncHeadHeader.Root
 
-	root, err := unwindZkSMT(s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, false, &expectedRootHash, quit)
+	root, err := unwindZkSMT(s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, true, &expectedRootHash, quit)
 	if err != nil {
 		return err
 	}
@@ -489,13 +490,20 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, 
 	// walk backwards through the blocks, applying state changes, and deletes
 	// PlainState contains data AT the block
 	// History tables contain data BEFORE the block - so need a +1 offset
-	accDeletes := make([]libcommon.Address, 0)
+	accChanges := make(map[libcommon.Address]*accounts.Account)
+	codeChanges := make(map[libcommon.Address]string)
+	storageChanges := make(map[libcommon.Address]map[string]string)
+
+	addDeletedAcc := func(addr libcommon.Address) {
+		deletedAcc := new(accounts.Account)
+		deletedAcc.Balance = *uint256.NewInt(0)
+		deletedAcc.Nonce = 0
+		accChanges[addr] = deletedAcc
+	}
 
 	for i := from; i >= to+1; i-- {
+		psr := state2.NewPlainState(db, i, systemcontracts.SystemContractCodeLookup["Hermez"])
 
-		accChanges := make(map[libcommon.Address]*accounts.Account)
-		codeChanges := make(map[libcommon.Address]string)
-		storageChanges := make(map[libcommon.Address]map[string]string)
 		dupSortKey := dbutils.EncodeBlockNumber(i)
 
 		// collect changes to accounts and code
@@ -505,13 +513,12 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, 
 			// if the account was created in this changeset we should delete it
 			if len(v[length.Addr:]) == 0 {
 				codeChanges[addr] = ""
-				accDeletes = append(accDeletes, addr)
+				addDeletedAcc(addr)
 				continue
 			}
 
-			// decode the old acc from the changeset
-			oldAcc := new(accounts.Account)
-			if err := oldAcc.DecodeForStorage(v[length.Addr:]); err != nil {
+			oldAcc, err := psr.ReadAccountData(addr)
+			if err != nil {
 				return trie.EmptyRoot, err
 			}
 
@@ -523,10 +530,10 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, 
 
 			if oldAcc.Incarnation > 0 {
 				if len(v) == 0 { // self-destructed
-					accDeletes = append(accDeletes, addr)
+					addDeletedAcc(addr)
 				} else {
 					if currAcc.Incarnation > oldAcc.Incarnation {
-						accDeletes = append(accDeletes, addr)
+						addDeletedAcc(addr)
 					}
 				}
 			}
@@ -541,10 +548,11 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, 
 				}
 
 				ach := hexutils.BytesToHex(cc)
+				hexcc := ""
 				if len(ach) > 0 {
-					hexcc := fmt.Sprintf("0x%s", ach)
-					codeChanges[addr] = hexcc
+					hexcc = fmt.Sprintf("0x%s", ach)
 				}
+				codeChanges[addr] = hexcc
 			}
 		}
 
@@ -576,31 +584,11 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, 
 			return trie.EmptyRoot, err
 		}
 
-		// update the tree
-		for addr, acc := range accChanges {
-			if err := dbSmt.SetAccountStorage(addr, acc); err != nil {
-				return trie.EmptyRoot, err
-			}
-		}
-		for addr, code := range codeChanges {
-			if err := dbSmt.SetContractBytecode(addr.String(), code); err != nil {
-				return trie.EmptyRoot, err
-			}
-		}
-
-		for addr, storage := range storageChanges {
-			if _, err := dbSmt.SetContractStorage(addr.String(), storage, nil); err != nil {
-				return trie.EmptyRoot, err
-			}
-		}
-
 		progressChan <- total - i
 	}
 
-	for _, k := range accDeletes {
-		if err := dbSmt.SetAccountStorage(k, nil); err != nil {
-			return trie.EmptyRoot, err
-		}
+	if _, _, err := dbSmt.SetStorage(logPrefix, accChanges, codeChanges, storageChanges); err != nil {
+		return trie.EmptyRoot, err
 	}
 
 	if err := verifyLastHash(dbSmt, expectedRootHash, checkRoot, logPrefix); err != nil {

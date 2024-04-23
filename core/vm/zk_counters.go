@@ -10,7 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
-var totalSteps = math.Pow(2, 23)
+var totalSteps = 1 << 23
 
 const (
 	MCPL    = 23
@@ -162,44 +162,44 @@ func (cc *CounterCollector) Deduct(key CounterKey, amount int) {
 func defaultCounters() Counters {
 	return Counters{
 		S: {
-			remaining:     int(totalSteps),
+			remaining:     totalSteps,
 			name:          "totalSteps",
-			initialAmount: int(totalSteps),
+			initialAmount: totalSteps,
 		},
 		A: {
-			remaining:     int(math.Floor(totalSteps / 32)),
+			remaining:     totalSteps >> 5,
 			name:          "arith",
-			initialAmount: int(math.Floor(totalSteps / 32)),
+			initialAmount: totalSteps >> 5,
 		},
 		B: {
-			remaining:     int(math.Floor(totalSteps / 16)),
+			remaining:     totalSteps >> 4,
 			name:          "binary",
-			initialAmount: int(math.Floor(totalSteps / 16)),
+			initialAmount: totalSteps >> 4,
 		},
 		M: {
-			remaining:     int(math.Floor(totalSteps / 32)),
+			remaining:     totalSteps >> 5,
 			name:          "memAlign",
-			initialAmount: int(math.Floor(totalSteps / 32)),
+			initialAmount: totalSteps >> 5,
 		},
 		K: {
-			remaining:     int(math.Floor(totalSteps/155286) * 44),
+			remaining:     int(math.Floor(float64(totalSteps)/155286) * 44),
 			name:          "keccaks",
-			initialAmount: int(math.Floor(totalSteps/155286) * 44),
+			initialAmount: int(math.Floor(float64(totalSteps)/155286) * 44),
 		},
 		D: {
-			remaining:     int(math.Floor(totalSteps / 56)),
+			remaining:     int(math.Floor(float64(totalSteps) / 56)),
 			name:          "padding",
-			initialAmount: int(math.Floor(totalSteps / 56)),
+			initialAmount: int(math.Floor(float64(totalSteps) / 56)),
 		},
 		P: {
-			remaining:     int(math.Floor(totalSteps / 30)),
+			remaining:     int(math.Floor(float64(totalSteps) / 30)),
 			name:          "poseidon",
-			initialAmount: int(math.Floor(totalSteps / 30)),
+			initialAmount: int(math.Floor(float64(totalSteps) / 30)),
 		},
 		SHA: {
-			remaining:     int(math.Floor(totalSteps-1)/31488) * 7,
+			remaining:     int(math.Floor(float64(totalSteps-1)/31488)) * 7,
 			name:          "sha256",
-			initialAmount: int(math.Floor(totalSteps-1)/31488) * 7,
+			initialAmount: int(math.Floor(float64(totalSteps-1)/31488)) * 7,
 		},
 	}
 }
