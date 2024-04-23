@@ -21,6 +21,7 @@ import (
 	"sort"
 	"time"
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
+	"errors"
 )
 
 const (
@@ -36,15 +37,17 @@ type VerifierRequest struct {
 }
 
 type VerifierResponse struct {
-	BatchNumber uint64
-	Valid       bool
-	Witness     []byte
+	BatchNumber      uint64
+	Valid            bool
+	Witness          []byte
+	ExecutorResponse *executor.ProcessBatchResponseV2
+	Error            error
 }
 
 var ErrNoExecutorAvailable = fmt.Errorf("no executor available")
 
 type ILegacyExecutor interface {
-	Verify(*Payload, *VerifierRequest, common.Hash) (bool, error)
+	Verify(*Payload, *VerifierRequest, common.Hash) (bool, *executor.ProcessBatchResponseV2, error)
 	CheckOnline() bool
 }
 
@@ -114,7 +117,7 @@ func (v *LegacyExecutorVerifier) StopWork() {
 
 func (v *LegacyExecutorVerifier) StartWork() {
 	go func() {
-		tick := time.NewTicker(1 * time.Second)
+	tick := time.NewTicker(1 * time.Second)
 	LOOP:
 		for {
 			select {
@@ -264,8 +267,15 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 
 	previousBlock, _ := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
 
-	ok, err := execer.Verify(payload, request, previousBlock.Root())
+	ok, executorResponse, err := execer.Verify(payload, request, previousBlock.Root())
 	if err != nil {
+		if errors.Is(err, ErrExecutorStateRootMismatch) {
+			log.Error("[Verifier] State root mismatch detected", "err", err)
+		} else if errors.Is(err, ErrExecutorUnknownError) {
+			log.Error("[Verifier] Unexpected error found from executor", "err", err)
+		} else {
+			return false, err
+		}
 		return false, err
 	}
 
@@ -277,9 +287,11 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 	}
 
 	response := &VerifierResponse{
-		BatchNumber: request.BatchNumber,
-		Valid:       ok,
-		Witness:     witness,
+		BatchNumber:      request.BatchNumber,
+		Valid:            ok,
+		Witness:          witness,
+		ExecutorResponse: executorResponse,
+		Error:            err,
 	}
 	v.handleResponse(response)
 

@@ -412,9 +412,15 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		defer tx.Rollback()
 	}
 
-	fromBlock := u.UnwindPoint
-	toBlock := u.CurrentBlockNumber
-	log.Info(fmt.Sprintf("[%s] Unwinding batches stage from block number", logPrefix), "fromBlock", fromBlock, "toBlock", toBlock)
+	unwindPoint := u.UnwindPoint
+	if sequencer.IsSequencer() {
+		// as a sequencer we know that the unwind will have been called for the highest block in the batch prior
+		// to the one we're unwinding, so we need to handle the unwind a little differently by moving forwards to
+		// the batch we want to get rid of
+		unwindPoint++
+	}
+
+	log.Info(fmt.Sprintf("[%s] Unwinding batches stage from block number", logPrefix), "fromBlock", u.CurrentBlockNumber, "toBlock", unwindPoint)
 	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
 
 	eriDb := erigon_db.NewErigonDb(tx)
@@ -423,37 +429,50 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	//////////////////////////////////
 	// delete batch connected stuff //
 	//////////////////////////////////
+
 	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
 		return fmt.Errorf("could not retrieve l1 verifications batch no progress")
 	}
-
-	fromBatchPrev, err := hermezDb.GetBatchNoByL2Block(fromBlock - 1)
+	fromBatch, err := hermezDb.GetBatchNoByL2Block(unwindPoint)
 	if err != nil {
-		return fmt.Errorf("get batch no by l2 block error: %v", err)
+		return err
 	}
-	fromBatch, err := hermezDb.GetBatchNoByL2Block(fromBlock)
+	toBatch, err := hermezDb.GetBatchNoByL2Block(u.CurrentBlockNumber)
 	if err != nil {
-		return fmt.Errorf("get fromBatch no by l2 block error: %v", err)
-	}
-	toBatch, err := hermezDb.GetBatchNoByL2Block(toBlock)
-	if err != nil {
-		return fmt.Errorf("get toBatch no by l2 block error: %v", err)
+		return err
 	}
 
-	// if previous block has different batch, delete the "fromBlock" one
-	// since it is written first in this block
-	// otherwise don't delete it and start from the next batch
-	if fromBatchPrev == fromBatch && fromBatch != 0 {
-		fromBatch++
-	}
+	var fromBatchPrev uint64
 
-	if fromBatch <= toBatch {
+	if sequencer.IsSequencer() {
+		fromBatchPrev = fromBatch - 1
 		if err := hermezDb.DeleteForkIds(fromBatch, toBatch); err != nil {
 			return fmt.Errorf("delete fork ids error: %v", err)
 		}
 		if err := hermezDb.DeleteBatchGlobalExitRoots(fromBatch); err != nil {
 			return fmt.Errorf("delete batch global exit roots error: %v", err)
+		}
+	} else {
+		fromBatchPrev, err = hermezDb.GetBatchNoByL2Block(unwindPoint - 1)
+		if err != nil {
+			return fmt.Errorf("get batch no by l2 block error: %v", err)
+		}
+
+		// if previous block has different batch, delete the "fromBlock" one
+		// since it is written first in this block
+		// otherwise don't delete it and start from the next batch
+		if fromBatchPrev == fromBatch && fromBatch != 0 {
+			fromBatch++
+		}
+
+		if fromBatch <= toBatch {
+			if err := hermezDb.DeleteForkIds(fromBatch, toBatch); err != nil {
+				return fmt.Errorf("delete fork ids error: %v", err)
+			}
+			if err := hermezDb.DeleteBatchGlobalExitRoots(fromBatch); err != nil {
+				return fmt.Errorf("delete batch global exit roots error: %v", err)
+			}
 		}
 	}
 
@@ -462,12 +481,13 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 			return fmt.Errorf("delete forkchoice finalized error: %v", err)
 		}
 	}
+
 	/////////////////////////////////////////
 	// finish delete batch connected stuff //
 	/////////////////////////////////////////
 
 	//get transactions before deleting them so we can delete stuff connected to them
-	transactions, err := eriDb.GetBodyTransactions(fromBlock, toBlock)
+	transactions, err := eriDb.GetBodyTransactions(unwindPoint, u.CurrentBlockNumber)
 	if err != nil {
 		return fmt.Errorf("get body transactions error: %v", err)
 	}
@@ -479,22 +499,22 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	if err := hermezDb.DeleteEffectiveGasPricePercentages(&transactionHashes); err != nil {
 		return fmt.Errorf("delete effective gas price percentages error: %v", err)
 	}
-	if err := hermezDb.DeleteStateRoots(fromBlock, toBlock); err != nil {
+	if err := hermezDb.DeleteStateRoots(unwindPoint, u.CurrentBlockNumber); err != nil {
 		return fmt.Errorf("delete state roots error: %v", err)
 	}
-	if err := hermezDb.DeleteIntermediateTxStateRoots(fromBlock, toBlock); err != nil {
+	if err := hermezDb.DeleteIntermediateTxStateRoots(unwindPoint, u.CurrentBlockNumber); err != nil {
 		return fmt.Errorf("delete intermediate tx state roots error: %v", err)
 	}
-	if err := eriDb.DeleteHeaders(fromBlock); err != nil {
+	if err := eriDb.DeleteHeaders(unwindPoint); err != nil {
 		return fmt.Errorf("delete headers error: %v", err)
 	}
-	if err := eriDb.DeleteBodies(fromBlock); err != nil {
+	if err := eriDb.DeleteBodies(unwindPoint); err != nil {
 		return fmt.Errorf("delete bodies error: %v", err)
 	}
-	if err := hermezDb.DeleteBlockBatches(fromBlock, toBlock); err != nil {
+	if err := hermezDb.DeleteBlockBatches(unwindPoint, u.CurrentBlockNumber); err != nil {
 		return fmt.Errorf("delete block batches error: %v", err)
 	}
-	if err := hermezDb.DeleteForkIdBlock(fromBlock, toBlock); err != nil {
+	if err := hermezDb.DeleteForkIdBlock(unwindPoint, u.CurrentBlockNumber); err != nil {
 		return fmt.Errorf("delete fork id block error: %v", err)
 	}
 
@@ -502,12 +522,12 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// get gers and l1BlockHashes before deleting them				    //
 	// so we can delete them in the other table as well //
 	//////////////////////////////////////////////////////
-	gers, err := hermezDb.GetBlockGlobalExitRoots(fromBlock, toBlock)
+	gers, err := hermezDb.GetBlockGlobalExitRoots(unwindPoint, u.CurrentBlockNumber)
 	if err != nil {
 		return fmt.Errorf("get block global exit roots error: %v", err)
 	}
 
-	l1BlockHashes, err := hermezDb.GetBlockL1BlockHashes(fromBlock, toBlock)
+	l1BlockHashes, err := hermezDb.GetBlockL1BlockHashes(unwindPoint, u.CurrentBlockNumber)
 	if err != nil {
 		return fmt.Errorf("get block l1 block hashes error: %v", err)
 	}
@@ -520,7 +540,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		return fmt.Errorf("delete latest used gers error: %v", err)
 	}
 
-	if err := hermezDb.DeleteBlockGlobalExitRoots(fromBlock, toBlock); err != nil {
+	if err := hermezDb.DeleteBlockGlobalExitRoots(unwindPoint, u.CurrentBlockNumber); err != nil {
 		return fmt.Errorf("delete block global exit roots error: %v", err)
 	}
 
@@ -532,22 +552,22 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		return fmt.Errorf("delete l1 block hash gers error: %v", err)
 	}
 
-	if err := hermezDb.DeleteBlockL1BlockHashes(fromBlock, toBlock); err != nil {
+	if err := hermezDb.DeleteBlockL1BlockHashes(unwindPoint, u.CurrentBlockNumber); err != nil {
 		return fmt.Errorf("delete block l1 block hashes error: %v", err)
 	}
 
-	if err := hermezDb.DeleteBlockL1InfoTreeIndexes(fromBlock, toBlock); err != nil {
+	if err := hermezDb.DeleteBlockL1InfoTreeIndexes(unwindPoint, u.CurrentBlockNumber); err != nil {
 		return fmt.Errorf("delete block l1 block hashes error: %v", err)
 	}
 	///////////////////////////////////////////////////////
 
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
-	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", fromBlock)
 
 	stageprogress := uint64(0)
-	if fromBlock > 1 {
-		stageprogress = fromBlock - 1
+	if unwindPoint > 1 {
+		stageprogress = unwindPoint - 1
 	}
+	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", stageprogress)
 	if err := stages.SaveStageProgress(tx, stages.Batches, stageprogress); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
@@ -556,9 +576,9 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// store the highest hashable block number //
 	/////////////////////////////////////////////
 	// iterate until a block with lower batch number is found
-	// this is the last block of the previous batch and the highest hashable block for verifications
-	highestHashableL2BlockNo := uint64(fromBlock)
-	for i := fromBlock; i > 0; i-- {
+	// this is the last block of the previous batch and the highest hashable block for vrifications
+	highestHashableL2BlockNo := uint64(unwindPoint)
+	for i := unwindPoint; i > 0; i-- {
 		batchNo, err := hermezDb.GetBatchNoByL2Block(i)
 		if err != nil {
 			return fmt.Errorf("get batch no by l2 block error: %v", err)

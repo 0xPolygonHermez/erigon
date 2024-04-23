@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	mapset "github.com/deckarep/golang-set/v2"
-	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/cmp"
 	"github.com/gateway-fm/cdk-erigon-lib/common/fixedgas"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -13,6 +13,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 )
 
 /*
@@ -23,6 +24,14 @@ hard compilation fail when rebasing from upstream further down the line.
 const (
 	transactionGasLimit = 30_000_000
 )
+
+type LimboBatchDetails struct {
+	Witness               []byte
+	BatchNumber           uint64
+	BadTransactionsHashes []common.Hash
+	BadTransactionsRLP    [][]byte
+	ExecutorResponse      *executor.ProcessBatchResponseV2
+}
 
 func calcProtocolBaseFee(baseFee uint64) uint64 {
 	return 0
@@ -150,6 +159,10 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	if p.awaitingBlockHandling.Load() {
+		return false, 0, nil
+	}
+
 	// First wait for the corresponding block to arrive
 	if p.lastSeenBlock.Load() < onTopOf {
 		return false, 0, nil // Too early
@@ -233,7 +246,7 @@ func (p *TxPool) ForceUpdateLatestBlock(blockNumber uint64) {
 // This function is invoked if a single tx overflow entire zk-counters.
 // In this case there is nothing we can do but to mark is as such
 // and on next "pool iteration" it will be discard
-func (p *TxPool) MarkForDiscardFromPendingBest(txHash libcommon.Hash) {
+func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -259,4 +272,62 @@ func promoteZk(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee ui
 	}
 
 	promote(pending, baseFee, queued, pendingBaseFee, discard, announcements)
+}
+
+func (p *TxPool) NewLimboBatchDetails(details LimboBatchDetails) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	p.limboBatches = append(p.limboBatches, details)
+
+	/*
+		as we know we're about to enter an unwind we need to ensure that all the transactions have been
+		handled after the unwind by the call to OnNewBlock before we can start yielding again.  There
+		is a risk that in the small window of time between this call and the next call to yield
+		by the stage loop a TX with a nonce too high will be yielded and cause an error during execution
+
+		potential dragons here as if the OnNewBlock is never called the call to yield will always return empty
+	*/
+	p.awaitingBlockHandling.Store(true)
+}
+
+func (p *TxPool) GetLimboDetails() []LimboBatchDetails {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	return p.limboBatches
+}
+
+// should be called from within a locked context from the pool
+func (p *TxPool) trimSlotsBasedOnLimbo(slots types.TxSlots) (trimmed types.TxSlots, limbo types.TxSlots) {
+	if len(p.limboBatches) > 0 {
+		// iterate over the unwind transactions removing any that appear in the limbo list
+		for idx, slot := range slots.Txs {
+			if p.isTxKnownToLimbo(slot.IDHash) {
+				limbo.Append(slot, slots.Senders.At(idx), slots.IsLocal[idx])
+			} else {
+				trimmed.Append(slot, slots.Senders.At(idx), slots.IsLocal[idx])
+			}
+		}
+		return trimmed, limbo
+	} else {
+		return slots, types.TxSlots{}
+	}
+}
+
+// should be called from within a locked context from the pool
+func (p *TxPool) isTxKnownToLimbo(hash common.Hash) bool {
+	for _, limbo := range p.limboBatches {
+		for _, txHash := range limbo.BadTransactionsHashes {
+			if txHash == hash {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (p *TxPool) appendLimboTransactions(slots types.TxSlots, blockNum uint64) {
+	for idx, slot := range slots.Txs {
+		mt := newMetaTx(slot, slots.IsLocal[idx], blockNum)
+		p.limbo.Add(mt)
+	}
 }

@@ -469,6 +469,7 @@ var AllStagesZk = []stages2.SyncStage{
 var ZkSequencerUnwindOrder = stages.UnwindOrder{
 	stages2.IntermediateHashes, // need to unwind SMT before we remove history
 	stages2.Execution,
+	stages2.SequenceExecutorVerify,
 	stages2.HashState,
 	stages2.CallTraces,
 	stages2.AccountHistoryIndex,
