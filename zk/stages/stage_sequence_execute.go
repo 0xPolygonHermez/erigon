@@ -18,6 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 func SpawnSequencingStage(
@@ -60,7 +61,7 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	if err := stagedsync.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
+	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
 		return err
 	}
 
@@ -135,6 +136,7 @@ func SpawnSequencingStage(
 				// start waiting for a new transaction to arrive
 				log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 
+				l1Recovery := cfg.zk.L1SyncStartBlock > 0
 				logTicker := time.NewTicker(10 * time.Second)
 				blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
 				overflow := false
@@ -153,21 +155,45 @@ func SpawnSequencingStage(
 						runLoopBlocks = false
 						break LOOP_TRANSACTIONS
 					default:
-						cfg.txPool.LockFlusher()
-						transactions, err := getNextTransactions(cfg, executionAt, forkId, yielded)
-						if err != nil {
-							return err
+						var transactions []types.Transaction
+						var effectiveGases []uint8
+						workRemaining := true
+
+						if l1Recovery {
+							transactions, effectiveGases, workRemaining, err = getNextL1BatchTransactions(thisBatch, forkId, sdb.hermezDb)
+							if err != nil {
+								return err
+							}
+						} else {
+							cfg.txPool.LockFlusher()
+							transactions, err = getNextPoolTransactions(cfg, executionAt, forkId, yielded)
+							if err != nil {
+								return err
+							}
+							cfg.txPool.UnlockFlusher()
 						}
-						cfg.txPool.UnlockFlusher()
+
+						for _, t := range transactions {
+							txHash := t.Hash().String()
+							_ = txHash
+						}
 
 						for i, transaction := range transactions {
 							var receipt *types.Receipt
-							receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction)
+							var effectiveGas uint8
+
+							if l1Recovery {
+								effectiveGas = effectiveGases[i]
+							} else {
+								effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
+							}
+
+							receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas)
 							if err != nil {
 								return err
 							}
 							if overflow {
-								log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash())
+								log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash(), "txs before overflow", len(addedTransactions))
 								if len(addedTransactions) == 0 {
 									return fmt.Errorf("single transaction %s overflow counters", transaction.Hash())
 								}
@@ -184,6 +210,19 @@ func SpawnSequencingStage(
 							addedTransactions = append(addedTransactions, transaction)
 							addedReceipts = append(addedReceipts, receipt)
 						}
+
+						if l1Recovery {
+							// just go into the normal loop waiting for new transactions to signal that the recovery
+							// has finished as far as it can go
+							if len(transactions) == 0 && !workRemaining {
+								continue
+							}
+
+							// if we had transactions then break the loop because we don't need to wait for more
+							// because we got them from the DB
+							runLoopBlocks = false
+							break LOOP_TRANSACTIONS
+						}
 					}
 				}
 				if overflow {
@@ -192,13 +231,14 @@ func SpawnSequencingStage(
 				}
 			} else {
 				for idx, transaction := range addedTransactions {
-					receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction)
+					effectiveGas := DeriveEffectiveGasPrice(cfg, transaction)
+					receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas)
 					if err != nil {
 						return err
 					}
 					if innerOverflow {
 						// kill the node at this stage to prevent a batch being created that can't be proven
-						panic("overflowed twice during execution")
+						panic(fmt.Sprintf("overflowed twice during execution while adding tx with index %d", idx))
 					}
 					addedReceipts[idx] = receipt
 				}
@@ -209,7 +249,7 @@ func SpawnSequencingStage(
 				return err
 			}
 
-			if err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts); err != nil {
+			if err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, l1TreeUpdateIndex); err != nil {
 				return err
 			}
 

@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
+	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/log/v3"
 
 	"encoding/binary"
@@ -30,6 +30,7 @@ type IEtherman interface {
 	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethTypes.Block, error)
 	FilterLogs(ctx context.Context, query ethereum.FilterQuery) ([]ethTypes.Log, error)
 	CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error)
+	TransactionByHash(ctx context.Context, hash common.Hash) (ethTypes.Transaction, bool, error)
 }
 
 type fetchJob struct {
@@ -118,16 +119,15 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 			latestL1Block, err := s.getLatestL1Block()
 			if err != nil {
 				log.Error("Error getting latest L1 block", "err", err)
-				continue
-			}
-
-			if latestL1Block > s.lastCheckedL1Block.Load() {
-				s.isDownloading.Store(true)
-				if err := s.queryBlocks(); err != nil {
-					log.Error("Error querying blocks", "err", err)
-					continue
+			} else {
+				if latestL1Block > s.lastCheckedL1Block.Load() {
+					s.isDownloading.Store(true)
+					if err := s.queryBlocks(); err != nil {
+						log.Error("Error querying blocks", "err", err)
+					} else {
+						s.lastCheckedL1Block.Store(latestL1Block)
+					}
 				}
-				s.lastCheckedL1Block.Store(latestL1Block)
 			}
 
 			s.isDownloading.Store(false)
@@ -138,6 +138,10 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 
 func (s *L1Syncer) GetBlock(number uint64) (*ethTypes.Block, error) {
 	return s.em.BlockByNumber(context.Background(), new(big.Int).SetUint64(number))
+}
+
+func (s *L1Syncer) GetTransaction(hash common.Hash) (ethTypes.Transaction, bool, error) {
+	return s.em.TransactionByHash(context.Background(), hash)
 }
 
 func (s *L1Syncer) GetOldAccInputHash(ctx context.Context, addr *common.Address, rollupId, batchNum uint64) (common.Hash, error) {

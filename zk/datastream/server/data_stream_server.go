@@ -134,6 +134,7 @@ func (srv *DataStreamServer) CreateStreamEntries(
 	batchNumber uint64,
 	lastBatchNumber uint64,
 	gerUpdates *[]types.GerUpdate,
+	l1InfoTreeMinTimestamps map[uint64]uint64,
 ) (*[]DataStreamEntry, error) {
 	blockNum := block.NumberU64()
 
@@ -160,8 +161,8 @@ func (srv *DataStreamServer) CreateStreamEntries(
 
 	//gerUpdates are before the bookmark for this block and are gottne by previous ones bookmark
 	if gerUpdates != nil {
-		for _, gerUpdate := range *gerUpdates {
-			entries[index] = &gerUpdate
+		for i := range *gerUpdates {
+			entries[index] = &(*gerUpdates)[i]
 			index++
 		}
 	}
@@ -190,6 +191,15 @@ func (srv *DataStreamServer) CreateStreamEntries(
 	l1InfoIndex, err := reader.GetBlockL1InfoTreeIndex(blockNum)
 	if err != nil {
 		return nil, err
+	}
+
+	if l1InfoIndex > 0 {
+		// get the l1 info data, so we can add the min timestamp to the map
+		l1Info, err := reader.GetL1InfoTreeUpdate(l1InfoIndex)
+		if err != nil {
+			return nil, err
+		}
+		l1InfoTreeMinTimestamps[l1InfoIndex] = l1Info.Timestamp
 	}
 
 	blockStart := srv.CreateBlockStartEntry(block, batchNumber, uint16(fork), ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash)
@@ -227,8 +237,9 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytes(
 	lastBatchNumber uint64,
 	bigEndian bool,
 	gerUpdates *[]types.GerUpdate,
+	l1InfoTreeMinTimestamps map[uint64]uint64,
 ) ([]byte, error) {
-	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber, lastBatchNumber, gerUpdates)
+	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber, lastBatchNumber, gerUpdates, l1InfoTreeMinTimestamps)
 	if err != nil {
 		return nil, err
 	}

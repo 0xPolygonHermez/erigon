@@ -32,6 +32,7 @@ const L1_BLOCK_HASH_GER = "l1_block_hash_ger"                          // l1 blo
 const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots" // l2blockno -> stateRoot
 const BATCH_WITNESSES = "hermez_batch_witnesses"                       // batch number -> witness
 const BATCH_COUNTERS = "hermez_batch_counters"                         // batch number -> counters
+const L1_BATCH_DATA = "l1_batch_data"                                  // batch number -> l1 batch data from transaction call data
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -77,6 +78,7 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		INTERMEDIATE_TX_STATEROOTS,
 		BATCH_WITNESSES,
 		BATCH_COUNTERS,
+		L1_BATCH_DATA,
 	}
 	for _, t := range tables {
 		if err := tx.CreateBucket(t); err != nil {
@@ -144,7 +146,6 @@ func (db *HermezDbReader) GetLatestDownloadedBatchNo() (uint64, error) {
 		return 0, err
 	}
 	return BytesToUint64(v), nil
-
 }
 
 func (db *HermezDbReader) GetHighestBlockInBatch(batchNo uint64) (uint64, error) {
@@ -346,14 +347,118 @@ func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash, stateRoot
 	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), val)
 }
 
+func (db *HermezDb) TruncateSequences(l2BlockNo uint64) error {
+	batchNo, err := db.GetBatchNoByL2Block(l2BlockNo)
+	if err != nil {
+		return err
+	}
+	if batchNo == 0 {
+		return nil
+	}
+
+	latestSeq, err := db.GetLatestSequence()
+	if err != nil {
+		return err
+	}
+
+	if latestSeq == nil {
+		return nil
+	}
+
+	if latestSeq.BatchNo <= batchNo {
+		return nil
+	}
+
+	for i := latestSeq.BatchNo; i > batchNo; i-- {
+		seq, err := db.GetSequenceByBatchNo(i)
+		if err != nil {
+			return err
+		}
+		if seq == nil {
+			continue
+		}
+		// delete seq
+		err = db.tx.Delete(L1SEQUENCES, ConcatKey(seq.L1BlockNo, seq.BatchNo))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common.Hash, stateRoot common.Hash) error {
 	return db.tx.Put(L1VERIFICATIONS, ConcatKey(l1BlockNo, batchNo), append(l1TxHash.Bytes(), stateRoot.Bytes()...))
+}
+
+func (db *HermezDb) TruncateVerifications(l2BlockNo uint64) error {
+	batchNo, err := db.GetBatchNoByL2Block(l2BlockNo)
+	if err != nil {
+		return err
+	}
+	if batchNo == 0 {
+		return nil
+	}
+
+	latestSeq, err := db.GetLatestVerification()
+	if err != nil {
+		return err
+	}
+
+	if latestSeq == nil {
+		return nil
+	}
+
+	if latestSeq.BatchNo <= batchNo {
+		return nil
+	}
+
+	for i := latestSeq.BatchNo; i > batchNo; i-- {
+		ver, err := db.GetVerificationByBatchNo(i)
+		if err != nil {
+			return err
+		}
+		if ver == nil {
+			continue
+		}
+		// delete seq
+		err = db.tx.Delete(L1VERIFICATIONS, ConcatKey(ver.L1BlockNo, ver.BatchNo))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
 	return db.tx.Put(BLOCKBATCHES, Uint64ToBytes(l2BlockNo), Uint64ToBytes(batchNo))
 }
 
+func (db *HermezDb) TruncateBlockBatches(l2BlockNo uint64) error {
+	batchNo, err := db.GetBatchNoByL2Block(l2BlockNo)
+	if err != nil {
+		return err
+	}
+
+	latestBatchNo, err := db.GetLatestDownloadedBatchNo()
+	if err != nil {
+		return err
+	}
+
+	if batchNo == 0 || latestBatchNo <= batchNo {
+		return nil
+	}
+
+	for i := latestBatchNo; i > batchNo; i-- {
+		err := db.tx.Delete(BLOCKBATCHES, Uint64ToBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 func (db *HermezDb) WriteGlobalExitRoot(ger common.Hash) error {
 	return db.tx.Put(GLOBAL_EXIT_ROOTS, ger.Bytes(), []byte{1})
 }
@@ -900,4 +1005,28 @@ func (db *HermezDbReader) GetBatchCounters(batchNumber uint64) (map[string]int, 
 	}
 
 	return countersMap, nil
+}
+
+func (db *HermezDb) WriteL1BatchData(batchNumber uint64, data []byte) error {
+	k := Uint64ToBytes(batchNumber)
+	return db.tx.Put(L1_BATCH_DATA, k, data)
+}
+
+func (db *HermezDbReader) GetL1BatchData(batchNumber uint64) ([]byte, error) {
+	k := Uint64ToBytes(batchNumber)
+	return db.tx.GetOne(L1_BATCH_DATA, k)
+}
+
+func (db *HermezDbReader) GetLastL1BatchData() (uint64, error) {
+	c, err := db.tx.Cursor(L1_BATCH_DATA)
+	if err != nil {
+		return 0, err
+	}
+
+	k, _, err := c.Last()
+	if err != nil {
+		return 0, err
+	}
+
+	return BytesToUint64(k), nil
 }

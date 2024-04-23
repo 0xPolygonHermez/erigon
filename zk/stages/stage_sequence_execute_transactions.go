@@ -18,9 +18,11 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/tx"
 )
 
-func getNextTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
+func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
 	var transactions []types.Transaction
 	var err error
 	var count int
@@ -60,6 +62,36 @@ LOOP:
 	return transactions, err
 }
 
+func getNextL1BatchTransactions(batchNumber uint64, forkId uint64, hermezDb *hermez_db.HermezDb) ([]types.Transaction, []uint8, bool, error) {
+	// we expect that the batch we're going to load in next should be in the db already because of the l1 block sync
+	// stage, if it is not there we need to panic as we're in a bad state
+	batchL2Data, err := hermezDb.GetL1BatchData(batchNumber)
+	if err != nil {
+		return nil, nil, true, err
+	}
+	if len(batchL2Data) == 0 {
+		// end of the line for batch recovery so return empty
+		return []types.Transaction{}, []uint8{}, false, nil
+	}
+
+	transactions, _, effectiveGases, err := tx.DecodeTxs(batchL2Data, forkId)
+
+	isWorkRemaining := true
+	if len(transactions) == 0 {
+		// we need to check if this batch should simply be empty or not so we need to check against the
+		// highest known batch number to see if we have work to do still
+		highestKnown, err := hermezDb.GetLastL1BatchData()
+		if err != nil {
+			return nil, nil, true, err
+		}
+		if batchNumber >= highestKnown {
+			isWorkRemaining = false
+		}
+	}
+
+	return transactions, effectiveGases, isWorkRemaining, err
+}
+
 func extractTransactionsFromSlot(slot types2.TxsRlp) ([]types.Transaction, error) {
 	transactions := make([]types.Transaction, 0, len(slot.Txs))
 	reader := bytes.NewReader([]byte{})
@@ -90,8 +122,9 @@ func attemptAddTransaction(
 	header *types.Header,
 	parentHeader *types.Header,
 	transaction types.Transaction,
+	effectiveGasPrice uint8,
 ) (*types.Receipt, bool, error) {
-	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth()-1)
+	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), cfg.zk.ShouldCountersBeUnlimited())
 	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
 	if err != nil {
 		return nil, false, err
@@ -110,7 +143,6 @@ func attemptAddTransaction(
 
 	ibs.Prepare(transaction.Hash(), common.Hash{}, 0)
 
-	effectiveGasPrice := DeriveEffectiveGasPrice(cfg, transaction)
 	receipt, execResult, err := core.ApplyTransaction_zkevm(
 		cfg.chainConfig,
 		core.GetHashFn(header, getHeader),

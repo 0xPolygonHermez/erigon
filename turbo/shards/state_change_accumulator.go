@@ -36,7 +36,6 @@ func (a *Accumulator) SendAndReset(ctx context.Context, c StateChangeConsumer, p
 	if a == nil || c == nil || len(a.changes) == 0 {
 		return
 	}
-
 	// send changes one by one because sending them at once does not work well
 	for _, change := range a.changes {
 		changes := []*remote.StateChange{change}

@@ -156,10 +156,8 @@ func prepareForkId(cfg SequenceBlockCfg, lastBatch, executionAt uint64, hermezDb
 		if err := hermezDb.WriteForkId(1, forkId); err != nil {
 			return forkId, err
 		}
-		for fId := uint64(chain.ForkID5Dragonfruit); fId <= forkId; fId++ {
-			if err := hermezDb.WriteForkIdBlockOnce(fId, 1); err != nil {
-				return forkId, err
-			}
+		if err := hermezDb.WriteForkIdBlockOnce(uint64(forkId), 1); err != nil {
+			return forkId, err
 		}
 	} else {
 		forkId, err = hermezDb.GetForkId(lastBatch)
@@ -256,6 +254,7 @@ func doFinishBlockAndUpdateState(
 	l1BlockHash common.Hash,
 	transactions []types.Transaction,
 	receipts types.Receipts,
+	l1TreeUpdateIndex uint64,
 ) error {
 	thisBlockNumber := header.Number.Uint64()
 
@@ -263,7 +262,7 @@ func doFinishBlockAndUpdateState(
 		return err
 	}
 
-	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, 0); err != nil {
+	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1TreeUpdateIndex); err != nil {
 		return err
 	}
 

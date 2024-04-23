@@ -502,7 +502,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		backend.newTxs2 = make(chan types2.Announcements, 1024)
 		//defer close(newTxs)
 		backend.txPool2DB, backend.txPool2, backend.txPool2Fetch, backend.txPool2Send, backend.txPool2GrpcServer, err = txpooluitl.AllComponents(
-			ctx, config.TxPool, config.Zk, kvcache.NewDummy(), backend.newTxs2, backend.chainDB, backend.sentriesClient.Sentries(), stateDiffClient,
+			ctx, config.TxPool, config, kvcache.NewDummy(), backend.newTxs2, backend.chainDB, backend.sentriesClient.Sentries(), stateDiffClient,
 		)
 		if err != nil {
 			return nil, err
@@ -747,10 +747,20 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 
 		// entering ZK territory!
-		cfg := backend.config.Zk
+		cfg := backend.config
+
+		// update the chain config with the zero gas from the flags
+		backend.chainConfig.SupportGasless = cfg.Gasless
+
 		backend.etherMan = newEtherMan(cfg, chainConfig.ChainName)
 
 		isSequencer := sequencer.IsSequencer()
+
+		// if the L1 block sync is set we're in recovery so can't run as a sequencer
+		if cfg.L1SyncStartBlock > 0 && !isSequencer {
+			panic("you cannot launch in l1 sync mode as an RPC node")
+		}
+
 		var l1Topics [][]libcommon.Hash
 		var l1Contracts []libcommon.Address
 		if isSequencer {
@@ -800,7 +810,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			}
 
 			verifier := legacy_executor_verifier.NewLegacyExecutorVerifier(
-				*cfg,
+				*cfg.Zk,
 				legacyExecutors,
 				backend.chainConfig,
 				backend.chainDB,
@@ -813,6 +823,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			// we need to make sure the pool is always aware of the latest block for when
 			// we switch context from being an RPC node to a sequencer
 			backend.txPool2.ForceUpdateLatestBlock(executionProgress)
+
+			l1BlockSyncer := syncer.NewL1Syncer(
+				backend.etherMan.EthClient,
+				[]libcommon.Address{cfg.AddressZkevm},
+				[][]libcommon.Hash{{contracts.SequenceBatchesTopic}},
+				cfg.L1BlockRange,
+				cfg.L1QueryDelay,
+			)
 
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
@@ -827,6 +845,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.engine,
 				backend.dataStream,
 				backend.l1Syncer,
+				l1BlockSyncer,
 				backend.txPool2,
 				backend.txPool2DB,
 				verifier,
@@ -848,7 +867,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 			backend.nodeType = zkStages.NodeTypeSynchronizer
 
-			datastreamClient := initDataStreamClient(cfg)
+			streamClient := initDataStreamClient(cfg.Zk)
 
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
@@ -862,7 +881,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.forkValidator,
 				backend.engine,
 				backend.l1Syncer,
-				datastreamClient,
+				streamClient,
 				backend.dataStream,
 			)
 
@@ -884,7 +903,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 }
 
 // creates an EtherMan instance with default parameters
-func newEtherMan(cfg *ethconfig.Zk, l2ChainName string) *etherman.Client {
+func newEtherMan(cfg *ethconfig.Config, l2ChainName string) *etherman.Client {
 	ethmanConf := etherman.Config{
 		URL:                       cfg.L1RpcUrl,
 		L1ChainID:                 cfg.L1ChainId,
@@ -976,8 +995,8 @@ func (backend *Ethereum) Init(stack *node.Node, config *ethconfig.Config) error 
 	if casted, ok := backend.engine.(*bor.Bor); ok {
 		borDb = casted.DB
 	}
-	apiList := commands.APIList(chainKv, borDb, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config.Zk, backend.l1Syncer)
-	authApiList := commands.AuthAPIList(chainKv, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config.Zk)
+	apiList := commands.APIList(chainKv, borDb, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config, backend.l1Syncer)
+	authApiList := commands.AuthAPIList(chainKv, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config)
 	go func() {
 		if err := cli.StartRpcServer(ctx, httpRpcCfg, apiList, authApiList); err != nil {
 			log.Error(err.Error())

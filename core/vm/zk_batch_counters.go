@@ -131,6 +131,8 @@ func (bcc *BatchCounterCollector) CheckForOverflow() (bool, error) {
 func (bcc *BatchCounterCollector) CombineCollectors() (Counters, error) {
 	// combine all the counters we have so far
 	combined := defaultCounters()
+	combined[S].initialAmount *= 2
+	combined[S].remaining *= 2
 
 	if err := bcc.processBatchLevelData(); err != nil {
 		return nil, err

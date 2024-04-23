@@ -25,6 +25,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/utils"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -35,7 +36,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	ethFilters "github.com/ledgerwatch/erigon/eth/filters"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/rpc"
 	ethapi2 "github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
@@ -128,6 +128,7 @@ type BaseAPI struct {
 	evmCallTimeout time.Duration
 	dirs           datadir.Dirs
 	l2RpcUrl       string
+	gasless        bool
 }
 
 func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.AggregatorV3, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs) *BaseAPI {
@@ -143,12 +144,16 @@ func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader serv
 	return &BaseAPI{filters: f, stateCache: stateCache, blocksLRU: blocksLRU, _blockReader: blockReader, _txnReader: blockReader, _agg: agg, evmCallTimeout: evmCallTimeout, _engine: engine, dirs: dirs}
 }
 
+func (api *BaseAPI) SetGasless(gasless bool) {
+	api.gasless = gasless
+}
+
 func (api *BaseAPI) chainConfig(tx kv.Tx) (*chain.Config, error) {
 	cfg, _, err := api.chainConfigWithGenesis(tx)
 
 	//[zkevm] get dynamic fork config
 	hermezDb := hermez_db.NewHermezDbReader(tx)
-	if err := stagedsync.UpdateZkEVMBlockCfg(cfg, hermezDb, ""); err != nil {
+	if err := utils.UpdateZkEVMBlockCfg(cfg, hermezDb, ""); err != nil {
 		return cfg, err
 	}
 
@@ -339,12 +344,18 @@ type APIImpl struct {
 	GasCap                     uint64
 	ReturnDataLimit            int
 	ZkRpcUrl                   string
+	PoolManagerUrl             string
 	AllowFreeTransactions      bool
 	AllowPreEIP155Transactions bool
+	L1RpcUrl                   string
+	DefaultGasPrice            uint64
+	MaxGasPrice                uint64
+	GasPriceFactor             float64
+	L1GasPrice                 L1GasPrice
 }
 
 // NewEthAPI returns APIImpl instance
-func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, returnDataLimit int, zkConfig *ethconfig.Zk) *APIImpl {
+func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, returnDataLimit int, ethCfg *ethconfig.Config) *APIImpl {
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
@@ -358,9 +369,15 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		gasCache:                   NewGasPriceCache(),
 		GasCap:                     gascap,
 		ReturnDataLimit:            returnDataLimit,
-		ZkRpcUrl:                   zkConfig.L2RpcUrl,
-		AllowFreeTransactions:      zkConfig.AllowFreeTransactions,
-		AllowPreEIP155Transactions: zkConfig.AllowPreEIP155Transactions,
+		ZkRpcUrl:                   ethCfg.L2RpcUrl,
+		PoolManagerUrl:             ethCfg.PoolManagerUrl,
+		AllowFreeTransactions:      ethCfg.AllowFreeTransactions,
+		AllowPreEIP155Transactions: ethCfg.AllowPreEIP155Transactions,
+		L1RpcUrl:                   ethCfg.L1RpcUrl,
+		DefaultGasPrice:            ethCfg.DefaultGasPrice,
+		MaxGasPrice:                ethCfg.MaxGasPrice,
+		GasPriceFactor:             ethCfg.GasPriceFactor,
+		L1GasPrice:                 L1GasPrice{},
 	}
 }
 
@@ -483,7 +500,7 @@ func newRPCBorTransaction(opaqueTx types.Transaction, txHash common.Hash, blockH
 func newRPCPendingTransaction(tx types.Transaction, current *types.Header, config *chain.Config) *RPCTransaction {
 	var baseFee *big.Int
 	if current != nil {
-		baseFee = misc.CalcBaseFee(config, current)
+		baseFee = misc.CalcBaseFeeZk(config, current)
 	}
 	return newRPCTransaction(tx, common.Hash{}, 0, 0, baseFee)
 }

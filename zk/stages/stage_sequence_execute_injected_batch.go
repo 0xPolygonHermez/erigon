@@ -55,7 +55,7 @@ func processInjectedInitialBatch(
 
 	txns := types.Transactions{*txn}
 	receipts := types.Receipts{receipt}
-	return doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, injectedBatchNumber, injected.LastGlobalExitRoot, injected.L1ParentHash, txns, receipts)
+	return doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, injectedBatchNumber, injected.LastGlobalExitRoot, injected.L1ParentHash, txns, receipts, 0)
 }
 
 func handleInjectedBatch(
@@ -75,10 +75,11 @@ func handleInjectedBatch(
 		return nil, nil, errors.New("expected 1 transaction in the injected batch")
 	}
 
-	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth()-1, uint16(forkId))
+	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
 
 	// process the tx and we can ignore the counters as an overflow at this stage means no network anyway
-	receipt, _, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), txs[0])
+	effectiveGas := DeriveEffectiveGasPrice(cfg, txs[0])
+	receipt, _, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), txs[0], effectiveGas)
 	if err != nil {
 		return nil, nil, err
 	}
