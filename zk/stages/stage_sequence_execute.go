@@ -87,6 +87,7 @@ func SpawnSequencingStage(
 		var effectiveGases []uint8
 
 		batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
+		defer batchTicker.Stop()
 		thisBatch := lastBatch + 1
 		batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
 		runLoopBlocks := true
@@ -146,8 +147,12 @@ func SpawnSequencingStage(
 				// start waiting for a new transaction to arrive
 				log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 
+				// we don't care about defer order here we just need to make sure the tickers are stopped to
+				// avoid a leak
 				logTicker := time.NewTicker(10 * time.Second)
+				defer logTicker.Stop()
 				blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
+				defer blockTicker.Stop()
 				overflow := false
 
 				// start to wait for transactions to come in from the pool and attempt to add them to the current batch.  Once we detect a counter

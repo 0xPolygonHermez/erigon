@@ -448,13 +448,13 @@ var (
 	}
 	SequencerBlockSealTime = cli.StringFlag{
 		Name:  "zkevm.sequencer-block-seal-time",
-		Usage: "Block seal time. Defaults to 250ms",
-		Value: "250ms",
+		Usage: "Block seal time. Defaults to 6s",
+		Value: "6s",
 	}
 	SequencerBatchSealTime = cli.StringFlag{
 		Name:  "zkevm.sequencer-batch-seal-time",
-		Usage: "Batch seal time. Defaults to 250ms",
-		Value: "250ms",
+		Usage: "Batch seal time. Defaults to 12s",
+		Value: "12s",
 	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",

@@ -180,6 +180,9 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forkId uint6
 		return nil, nil, err
 	}
 
+	// in the case of normal execution when not in l1 recovery
+	// we want to generate the timestamp based on the current time.  When in recovery
+	// we will pass a real delta which we then need to apply to the previous block timestamp
 	useTimestampOffsetFromParentBlock := deltaTimestamp != math.MaxUint64
 
 	nextBlockNum := previousBlockNumber + 1

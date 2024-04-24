@@ -137,30 +137,30 @@ func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot com
 		"our-old-root", oldStateRoot,
 		"blocks-count", len(resp.BlockResponses))
 
-	// for addr, all := range resp.ReadWriteAddresses {
-	// 	log.Info("executor result",
-	// 		"addr", addr,
-	// 		"nonce", all.Nonce,
-	// 		"balance", all.Balance,
-	// 		"sc-code", all.ScCode,
-	// 		"sc-storage", all.ScStorage,
-	// 		"sc-length", all.ScLength)
-	// }
+	for addr, all := range resp.ReadWriteAddresses {
+		log.Debug("executor result",
+			"addr", addr,
+			"nonce", all.Nonce,
+			"balance", all.Balance,
+			"sc-code", all.ScCode,
+			"sc-storage", all.ScStorage,
+			"sc-length", all.ScLength)
+	}
 
-	// for i, bResp := range resp.BlockResponses {
-	// 	log.Info("executor result",
-	// 		"index", i,
-	// 		"parent-hash", common.BytesToHash(bResp.ParentHash),
-	// 		"coinbase", bResp.Coinbase,
-	// 		"gas-limit", bResp.GasLimit,
-	// 		"block-number", bResp.BlockNumber,
-	// 		"timestamp", bResp.Timestamp,
-	// 		"ger", common.BytesToHash(bResp.Ger),
-	// 		"block-hash-l1", common.BytesToHash(bResp.BlockHashL1),
-	// 		"gas-used", bResp.GasUsed,
-	// 		"block-info-root", common.BytesToHash(bResp.BlockInfoRoot),
-	// 		"block-hash", common.BytesToHash(bResp.BlockHash))
-	// }
+	for i, bResp := range resp.BlockResponses {
+		log.Debug("executor result",
+			"index", i,
+			"parent-hash", common.BytesToHash(bResp.ParentHash),
+			"coinbase", bResp.Coinbase,
+			"gas-limit", bResp.GasLimit,
+			"block-number", bResp.BlockNumber,
+			"timestamp", bResp.Timestamp,
+			"ger", common.BytesToHash(bResp.Ger),
+			"block-hash-l1", common.BytesToHash(bResp.BlockHashL1),
+			"gas-used", bResp.GasUsed,
+			"block-info-root", common.BytesToHash(bResp.BlockInfoRoot),
+			"block-hash", common.BytesToHash(bResp.BlockHash))
+	}
 
 	counterUndershootCheck(counters, request.Counters, request.BatchNumber)
 
