@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   tests:
-    if: ${{ github.event_name == 'push' || !github.event.pull_request.draft }}
+    if: ${{ github.event_name == 'push' }}
     strategy:
       matrix:
         os: [ ubuntu-20.04, macos-11 ] # list of os: https://github.com/actions/virtual-environments
