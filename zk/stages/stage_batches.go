@@ -132,7 +132,7 @@ func SpawnStageBatches(
 	}
 
 	// get batch for batches progress
-	abtchesProgressBatch, err := hermezDb.GetBatchNoByL2Block(batchesProgress)
+	batchesProgressBatch, err := hermezDb.GetBatchNoByL2Block(batchesProgress)
 	if err != nil {
 		return fmt.Errorf("get batch no by l2 block error: %v", err)
 	}
@@ -168,7 +168,7 @@ func SpawnStageBatches(
 	defer stopProgressPrinter()
 
 	lastBlockHeight := batchesProgress
-	highestSeenBatchNo := abtchesProgressBatch
+	highestSeenBatchNo := batchesProgressBatch
 	endLoop := false
 	blocksWritten := uint64(0)
 	highestHashableL2BlockNo := uint64(0)
