@@ -19,6 +19,11 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+)
+
+var (
+	recoveryWaitTime = 1 * time.Hour // used to ensure we don't utilise the normal timers during l1 recovery
 )
 
 func SpawnSequencingStage(
@@ -98,8 +103,13 @@ func SpawnSequencingStage(
 	var decodedBlocks []zktx.DecodedBatchL2Data // only used in l1 recovery
 	var blockTransactions []types.Transaction
 	var effectiveGases []uint8
+	l1Recovery := cfg.zk.L1SyncStartBlock > 0
 
-	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
+	batchTime := cfg.zk.SequencerBatchSealTime
+	if l1Recovery {
+		batchTime = recoveryWaitTime
+	}
+	batchTicker := time.NewTicker(batchTime)
 	defer batchTicker.Stop()
 	thisBatch := lastBatch + 1
 	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
@@ -107,11 +117,18 @@ func SpawnSequencingStage(
 	lastStartedBn := executionAt - 1
 	yielded := mapset.NewSet[[32]byte]()
 	coinbase := cfg.zk.AddressSequencer
-	l1Recovery := cfg.zk.L1SyncStartBlock > 0
 	workRemaining := true
 	blockTracking := 0
 
 	if l1Recovery {
+		// let's check if we have any L1 data to recover
+		hermezDb := hermez_db.NewHermezDb(tx)
+		highestKnownBatch, err := hermezDb.GetLastL1BatchData()
+		if highestKnownBatch == thisBatch {
+			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
+			time.Sleep(1 * time.Second)
+			return nil
+		}
 		decodedBlocks, coinbase, workRemaining, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
 		if err != nil {
 			return err
@@ -122,12 +139,6 @@ func SpawnSequencingStage(
 
 	for bn := executionAt; runLoopBlocks; bn++ {
 		if l1Recovery {
-			// have we exhausted the blocks we have to recover?
-			if blockTracking >= len(decodedBlocks) {
-				runLoopBlocks = false
-				break
-			}
-
 			decodedBlock = decodedBlocks[blockTracking]
 			deltaTimestamp = uint64(decodedBlock.DeltaTimestamp)
 			effectiveGases = decodedBlock.EffectiveGasPricePercentages
@@ -179,13 +190,19 @@ func SpawnSequencingStage(
 
 		if !reRunBlockAfterOverflow {
 			// start waiting for a new transaction to arrive
-			log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+			if !l1Recovery {
+				log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+			}
 
 			// we don't care about defer order here we just need to make sure the tickers are stopped to
 			// avoid a leak
 			logTicker := time.NewTicker(10 * time.Second)
 			defer logTicker.Stop()
-			blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
+			blockTime := cfg.zk.SequencerBlockSealTime
+			if l1Recovery {
+				blockTime = recoveryWaitTime
+			}
+			blockTicker := time.NewTicker(blockTime)
 			defer blockTicker.Stop()
 			overflow := false
 
@@ -224,6 +241,12 @@ func SpawnSequencingStage(
 
 						receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas, l1Recovery)
 						if err != nil {
+							// if we are in recovery just log the error as a warning.  If the data is on the L1 then we should consider it as confirmed.
+							// The executor/prover would simply skip a TX with an invalid nonce for example so we don't need to worry about that here.
+							if l1Recovery {
+								log.Warn(fmt.Sprintf("[%s] error adding transaction to batch during recovery: %v", logPrefix, err))
+								continue
+							}
 							return err
 						}
 						if !l1Recovery && overflow {
@@ -250,12 +273,8 @@ func SpawnSequencingStage(
 						// has finished as far as it can go
 						if len(blockTransactions) == 0 && !workRemaining {
 							log.Info(fmt.Sprintf("[%s] L1 recovery no more transactions to recover", logPrefix))
-							continue
 						}
 
-						// if we had transactions then break the loop because we don't need to wait for more
-						// because we got them from the DB
-						runLoopBlocks = false
 						break LOOP_TRANSACTIONS
 					}
 				}
@@ -289,6 +308,15 @@ func SpawnSequencingStage(
 		}
 
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
+
+		// reset the slices for added transactions
+		addedTransactions = addedTransactions[:0]
+		addedReceipts = addedReceipts[:0]
+
+		if l1Recovery && blockTracking == len(decodedBlocks)-1 {
+			runLoopBlocks = false
+			break
+		}
 		blockTracking++
 	}
 

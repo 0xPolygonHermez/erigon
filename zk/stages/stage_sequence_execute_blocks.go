@@ -35,8 +35,8 @@ func handleStateForNewBlockStarting(
 ) error {
 	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
 
-	// handle writing to the ger manager contract
-	if l1info != nil {
+	// handle writing to the ger manager contract but only if the index is above 0
+	if l1info != nil && l1info.Index > 0 {
 		// store it so we can retrieve for the data stream
 		if err := hermezDb.WriteBlockGlobalExitRoot(blockNumber, l1info.GER); err != nil {
 			return err
