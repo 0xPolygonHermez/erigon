@@ -229,13 +229,15 @@ func SpawnSequencingStage(
 						if !l1Recovery && overflow {
 							log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash(), "txs before overflow", len(addedTransactions))
 							if len(addedTransactions) == 0 {
-								return fmt.Errorf("single transaction %s overflow counters", transaction.Hash())
-							}
-
-							// remove from yielded so they can be processed again
-							txSize := len(blockTransactions)
-							for ; i < txSize; i++ {
-								yielded.Remove(transaction.Hash())
+								// if a single tx overflow the counters mark it so but DO NOT remove it from yielded so it is not included on next loop
+								cfg.txPool.MarkForDiscardFromPendingBest(transaction.Hash())
+								log.Trace(fmt.Sprintf("single transaction %s overflow counters", transaction.Hash()))
+							} else {
+								// remove from yielded so they can be processed again
+								txSize := len(blockTransactions)
+								for ; i < txSize; i++ {
+									yielded.Remove(transaction.Hash())
+								}
 							}
 
 							break LOOP_TRANSACTIONS
