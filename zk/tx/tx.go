@@ -79,8 +79,13 @@ func DecodeBatchL2Blocks(txsData []byte, forkID uint64) ([]DecodedBatchL2Data, e
 		if num == changeL2BlockTxType {
 			hasStarted := pos > 0
 
-			// check if we're at the end of the line with an empty block and add it or if the next byte is a change block transaction
-			// we want to capture the data immediately and add it to the result
+			// if we aren't at the very start of the data then we know we're at a block boundary, so we want to capture
+			// the data we have been working on so far (hasStarted handles this).  In some cases the data will not
+			// contain any change l2 blocks, just pure transaction data, so the capture of currentData will be picked
+			// up outside the loop over txData.
+			//
+			// We also want to check if the next byte is a change block transaction,
+			// this is so that we can handle empty blocks with no transactions inside the data.
 			if hasStarted || txsData[pos+1] == changeL2BlockTxType {
 				currentData.DeltaTimestamp = currentDelta
 				currentData.L1InfoTreeIndex = currentL1InfoTreeIndex

@@ -21,10 +21,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
-var (
-	recoveryWaitTime = 1 * time.Hour // used to ensure we don't utilise the normal timers during l1 recovery
-)
-
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -104,12 +100,9 @@ func SpawnSequencingStage(
 	var effectiveGases []uint8
 	l1Recovery := cfg.zk.L1SyncStartBlock > 0
 
-	batchTime := cfg.zk.SequencerBatchSealTime
-	if l1Recovery {
-		batchTime = recoveryWaitTime
-	}
-	batchTicker := time.NewTicker(batchTime)
+	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
 	defer batchTicker.Stop()
+
 	thisBatch := lastBatch + 1
 	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
 	runLoopBlocks := true
@@ -195,11 +188,7 @@ func SpawnSequencingStage(
 			// avoid a leak
 			logTicker := time.NewTicker(10 * time.Second)
 			defer logTicker.Stop()
-			blockTime := cfg.zk.SequencerBlockSealTime
-			if l1Recovery {
-				blockTime = recoveryWaitTime
-			}
-			blockTicker := time.NewTicker(blockTime)
+			blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
 			defer blockTicker.Stop()
 			overflow := false
 
@@ -212,10 +201,14 @@ func SpawnSequencingStage(
 				case <-logTicker.C:
 					log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
 				case <-blockTicker.C:
-					break LOOP_TRANSACTIONS
+					if !l1Recovery {
+						break LOOP_TRANSACTIONS
+					}
 				case <-batchTicker.C:
-					runLoopBlocks = false
-					break LOOP_TRANSACTIONS
+					if !l1Recovery {
+						runLoopBlocks = false
+						break LOOP_TRANSACTIONS
+					}
 				default:
 					if !l1Recovery {
 						cfg.txPool.LockFlusher()
