@@ -77,19 +77,21 @@ func DecodeBatchL2Blocks(txsData []byte, forkID uint64) ([]DecodedBatchL2Data, e
 
 		// if num is 11 then we are trying to parse a `changeL2Block` transaction
 		if num == changeL2BlockTxType {
-			currentDelta = binary.BigEndian.Uint32(txsData[pos+1 : pos+5])
-			currentL1InfoTreeIndex = binary.BigEndian.Uint32(txsData[pos+5 : pos+9])
-
-			pos += changeL2BlockLength
+			hasStarted := pos > 0
 
 			// check if we're at the end of the line with an empty block and add it or if the next byte is a change block transaction
 			// we want to capture the data immediately and add it to the result
-			if pos == txDataLength || txsData[pos] == changeL2BlockTxType {
+			if hasStarted || txsData[pos+1] == changeL2BlockTxType {
 				currentData.DeltaTimestamp = currentDelta
 				currentData.L1InfoTreeIndex = currentL1InfoTreeIndex
 				result = append(result, currentData)
 				currentData = DecodedBatchL2Data{}
 			}
+
+			currentDelta = binary.BigEndian.Uint32(txsData[pos+1 : pos+5])
+			currentL1InfoTreeIndex = binary.BigEndian.Uint32(txsData[pos+5 : pos+9])
+
+			pos += changeL2BlockLength
 
 			continue
 		}
@@ -170,12 +172,14 @@ func DecodeBatchL2Blocks(txsData []byte, forkID uint64) ([]DecodedBatchL2Data, e
 			return result, err
 		}
 
-		currentData.DeltaTimestamp = currentDelta
-		currentData.L1InfoTreeIndex = currentL1InfoTreeIndex
 		currentData.Transactions = append(currentData.Transactions, legacyTx)
-		result = append(result, currentData)
-		currentData = DecodedBatchL2Data{}
 	}
+
+	// always capture the last data as there won't have been a change l2 block to seal it off
+	// or there are no change l2 blocks and the data only contains transaction info
+	currentData.DeltaTimestamp = currentDelta
+	currentData.L1InfoTreeIndex = currentL1InfoTreeIndex
+	result = append(result, currentData)
 
 	return result, nil
 }

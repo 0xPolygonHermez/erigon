@@ -19,7 +19,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
 var (
@@ -122,16 +121,14 @@ func SpawnSequencingStage(
 
 	if l1Recovery {
 		// let's check if we have any L1 data to recover
-		hermezDb := hermez_db.NewHermezDb(tx)
-		highestKnownBatch, err := hermezDb.GetLastL1BatchData()
-		if highestKnownBatch == thisBatch {
-			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
-			time.Sleep(1 * time.Second)
-			return nil
-		}
 		decodedBlocks, coinbase, workRemaining, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
 		if err != nil {
 			return err
+		}
+		if len(decodedBlocks) == 0 {
+			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
+			time.Sleep(1 * time.Second)
+			return nil
 		}
 	}
 
@@ -237,6 +234,7 @@ func SpawnSequencingStage(
 							effectiveGas = effectiveGases[i]
 						} else {
 							effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
+							effectiveGases = append(effectiveGases, effectiveGas)
 						}
 
 						receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, header, parentBlock.Header(), transaction, effectiveGas, l1Recovery)
@@ -303,7 +301,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		if err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, infoTreeIndexProgress); err != nil {
+		if err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, effectiveGases, infoTreeIndexProgress); err != nil {
 			return err
 		}
 
