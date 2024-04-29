@@ -228,12 +228,20 @@ func SpawnSequencingStage(
 						}
 						if !l1Recovery && overflow {
 							log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash(), "txs before overflow", len(addedTransactions))
+							/*
+								There are two cases when overflow could occur.
+								1. The block DOES not contains any transactions.
+									In this case it means that a single tx overflow entire zk-counters.
+									In this case we mark it so. Once marked it will be discarded from the tx-pool async (once the tx-pool process the creation of a new batch)
+									NB: The tx SHOULD not be removed from yielded set, because if removed, it will be picked again on next block
+								2. The block contains transactions.
+									In this case, we just have to remove the transaction that overflowed the zk-counters and all transactions after it, from the yielded set.
+									This removal will ensure that these transaction could be added in the next block(s)
+							*/
 							if len(addedTransactions) == 0 {
-								// if a single tx overflow the counters mark it so but DO NOT remove it from yielded so it is not included on next loop
 								cfg.txPool.MarkForDiscardFromPendingBest(transaction.Hash())
 								log.Trace(fmt.Sprintf("single transaction %s overflow counters", transaction.Hash()))
 							} else {
-								// remove from yielded so they can be processed again
 								txSize := len(blockTransactions)
 								for ; i < txSize; i++ {
 									yielded.Remove(transaction.Hash())
