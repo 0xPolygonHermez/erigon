@@ -307,7 +307,14 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(request *VerifierRequest, tx kv.
 		//TODO: get ger updates between blocks
 		gerUpdates := []dstypes.GerUpdate{}
 
-		sBytes, err := v.streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, true, &gerUpdates, l1InfoTreeMinTimestamps)
+		var sBytes []byte
+
+		if v.cfg.DatastreamVersion == 3 { // proto implementation
+			// as per comment above - always at batch boundary
+			sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, l1InfoTreeMinTimestamps, true)
+		} else {
+			sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, true, &gerUpdates, l1InfoTreeMinTimestamps)
+		}
 		if err != nil {
 			return nil, err
 		}

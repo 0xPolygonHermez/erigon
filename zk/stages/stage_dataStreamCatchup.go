@@ -11,19 +11,24 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/log/v3"
+	"time"
+	eritypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 )
 
 type DataStreamCatchupCfg struct {
-	db      kv.RwDB
-	stream  *datastreamer.StreamServer
-	chainId uint64
+	db            kv.RwDB
+	stream        *datastreamer.StreamServer
+	chainId       uint64
+	streamVersion int
 }
 
-func StageDataStreamCatchupCfg(stream *datastreamer.StreamServer, db kv.RwDB, chainId uint64) DataStreamCatchupCfg {
+func StageDataStreamCatchupCfg(stream *datastreamer.StreamServer, db kv.RwDB, chainId uint64, streamVersion int) DataStreamCatchupCfg {
 	return DataStreamCatchupCfg{
-		stream:  stream,
-		db:      db,
-		chainId: chainId,
+		stream:        stream,
+		db:            db,
+		chainId:       chainId,
+		streamVersion: streamVersion,
 	}
 }
 
@@ -55,7 +60,7 @@ func SpawnStageDataStreamCatchup(
 		createdTx = true
 	}
 
-	finalBlockNumber, err := CatchupDatastream(logPrefix, tx, stream, cfg.chainId)
+	finalBlockNumber, err := CatchupDatastream(logPrefix, tx, stream, cfg.chainId, cfg.streamVersion)
 	if err != nil {
 		return err
 	}
@@ -71,7 +76,7 @@ func SpawnStageDataStreamCatchup(
 	return err
 }
 
-func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.StreamServer, chainId uint64) (uint64, error) {
+func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.StreamServer, chainId uint64, streamVersion int) (uint64, error) {
 	srv := server.NewDataStreamServer(stream, chainId, server.StandardOperationMode)
 	reader := hermez_db.NewHermezDbReader(tx)
 
@@ -96,19 +101,139 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 		"previousProgress", previousProgress,
 	)
 
-	// skip genesis if we have no data in the stream yet
+	var lastBlock *eritypes.Block
+
+	// write genesis if we have no data in the stream yet
 	if previousProgress == 0 {
 		genesis, err := rawdb.ReadBlockByNumber(tx, 0)
 		if err != nil {
 			return 0, err
 		}
-		if err = server.WriteGenesisToStream(genesis, reader, stream, srv); err != nil {
+		lastBlock = genesis
+		if err = writeGenesisToStream(genesis, reader, stream, srv, streamVersion, chainId); err != nil {
 			return 0, err
 		}
 	}
 
-	err = server.WriteBlocksToStream(tx, reader, srv, stream, previousProgress+1, finalBlockNumber, logPrefix)
-	if err != nil {
+	logTicker := time.NewTicker(10 * time.Second)
+
+	if err = stream.StartAtomicOp(); err != nil {
+		return 0, err
+	}
+	totalToWrite := finalBlockNumber - previousProgress
+
+	insertEntryCount := 1000000
+	entries := make([]server.DataStreamEntry, insertEntryCount)
+	entriesProto := make([]server.DataStreamEntryProto, 1000000)
+	index := 0
+	for currentBlockNumber := previousProgress + 1; currentBlockNumber <= finalBlockNumber; currentBlockNumber++ {
+		select {
+		case <-logTicker.C:
+			log.Info(fmt.Sprintf("[%s]: progress", logPrefix),
+				"block", currentBlockNumber,
+				"target", finalBlockNumber, "%", float64(currentBlockNumber-previousProgress)/float64(totalToWrite)*100)
+		default:
+		}
+
+		if lastBlock == nil {
+			lastBlock, err = rawdb.ReadBlockByNumber(tx, currentBlockNumber-1)
+			if err != nil {
+				return 0, err
+			}
+		}
+
+		block, err := rawdb.ReadBlockByNumber(tx, currentBlockNumber)
+		if err != nil {
+			return 0, err
+		}
+
+		batchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber)
+		if err != nil {
+			return 0, err
+		}
+
+		prevBatchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber - 1)
+		if err != nil {
+			return 0, err
+		}
+
+		gersInBetween, err := reader.GetBatchGlobalExitRoots(prevBatchNum, batchNum)
+		if err != nil {
+			return 0, err
+		}
+
+		highestBlockInBatch, err := reader.GetHighestBlockInBatch(batchNum)
+		if err != nil {
+			return 0, err
+		}
+
+		batchEnd := highestBlockInBatch == block.NumberU64()
+
+		l1InfoMinTimestamps := make(map[uint64]uint64)
+
+		// PROTO version 3
+		if streamVersion == 3 {
+			blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, l1InfoMinTimestamps, batchEnd)
+			if err != nil {
+				return 0, err
+			}
+
+			for _, entry := range *blockEntries {
+				entriesProto[index] = entry
+				index++
+			}
+
+			// basically commit once 80% of the entries array is filled
+			if index+1 >= insertEntryCount*4/5 {
+				log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
+				if err = srv.CommitEntriesToStreamProto(entriesProto[:index]); err != nil {
+					return 0, err
+				}
+				if err = stages.SaveStageProgress(tx, stages.DataStream, currentBlockNumber); err != nil {
+					return 0, err
+				}
+				entries = make([]server.DataStreamEntry, insertEntryCount)
+				index = 0
+			}
+		} else {
+			blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps)
+			if err != nil {
+				return 0, err
+			}
+
+			for _, entry := range *blockEntries {
+				entries[index] = entry
+				index++
+			}
+
+			// basically commit onece 80% of the entries array is filled
+			if index+1 >= insertEntryCount*4/5 {
+				log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
+				if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
+					return 0, err
+				}
+				if err = stages.SaveStageProgress(tx, stages.DataStream, currentBlockNumber); err != nil {
+					return 0, err
+				}
+				entries = make([]server.DataStreamEntry, insertEntryCount)
+				index = 0
+			}
+		}
+
+		lastBlock = block
+	}
+
+	if streamVersion == 3 {
+		if err = srv.CommitEntriesToStreamProto(entriesProto[:index]); err != nil {
+			return 0, err
+		}
+	} else {
+		if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
+			return 0, err
+		}
+	}
+
+	if err = stream.CommitAtomicOp(); err != nil {
 		return 0, err
 	}
 
@@ -117,4 +242,64 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 	}
 
 	return finalBlockNumber, nil
+}
+
+func writeGenesisToStream(
+	genesis *eritypes.Block,
+	reader *hermez_db.HermezDbReader,
+	stream *datastreamer.StreamServer,
+	srv *server.DataStreamServer,
+	streamVersion int,
+	chainId uint64,
+) error {
+
+	batchNo, err := reader.GetBatchNoByL2Block(0)
+	if err != nil {
+		return err
+	}
+
+	ger, err := reader.GetBlockGlobalExitRoot(genesis.NumberU64())
+	if err != nil {
+		return err
+	}
+
+	forkId, err := reader.GetForkId(batchNo)
+	if err != nil {
+		return err
+	}
+
+	err = stream.StartAtomicOp()
+	if err != nil {
+		return err
+	}
+
+	if streamVersion == 3 {
+		batchBookmark := srv.CreateBatchBookmarkEntryProto(genesis.NumberU64())
+		l2BlockBookmark := srv.CreateL2BlockBookmarkEntryProto(genesis.NumberU64())
+		l2Block := srv.CreateL2BlockProto(genesis, batchNo, ger, 0, 0, common.Hash{}, 0)
+		batch, err := srv.CreateBatchProto(batchNo, chainId, forkId, common.Hash{}, genesis.Root())
+		if err != nil {
+			return err
+		}
+
+		if err = srv.CommitEntriesToStreamProto([]server.DataStreamEntryProto{batchBookmark, l2BlockBookmark, l2Block, batch}); err != nil {
+			return err
+		}
+	} else {
+		batchBookmark := srv.CreateBookmarkEntry(server.BatchBookmarkType, genesis.NumberU64())
+		bookmark := srv.CreateBookmarkEntry(server.BlockBookmarkType, genesis.NumberU64())
+		blockStart := srv.CreateBlockStartEntry(genesis, batchNo, uint16(forkId), ger, 0, 0, common.Hash{})
+		blockEnd := srv.CreateBlockEndEntry(genesis.NumberU64(), genesis.Hash(), genesis.Root())
+
+		if err = srv.CommitEntriesToStream([]server.DataStreamEntry{batchBookmark, bookmark, blockStart, blockEnd}, true); err != nil {
+			return err
+		}
+	}
+
+	err = stream.CommitAtomicOp()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
