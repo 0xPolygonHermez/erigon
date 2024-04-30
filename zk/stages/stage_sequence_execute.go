@@ -102,7 +102,10 @@ func SpawnSequencingStage(
 
 	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
 	defer batchTicker.Stop()
+	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
+	defer nonEmptyBatchTimer.Stop()
 
+	hasAnyTransactionsInThisBatch := false
 	thisBatch := lastBatch + 1
 	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
 	runLoopBlocks := true
@@ -209,6 +212,11 @@ func SpawnSequencingStage(
 						runLoopBlocks = false
 						break LOOP_TRANSACTIONS
 					}
+				case <-nonEmptyBatchTimer.C:
+					if !l1Recovery && hasAnyTransactionsInThisBatch {
+						runLoopBlocks = false
+						break LOOP_TRANSACTIONS
+					}
 				default:
 					if !l1Recovery {
 						cfg.txPool.LockFlusher()
@@ -267,6 +275,9 @@ func SpawnSequencingStage(
 
 						addedTransactions = append(addedTransactions, transaction)
 						addedReceipts = append(addedReceipts, receipt)
+
+						hasAnyTransactionsInThisBatch = true
+						nonEmptyBatchTimer.Reset(cfg.zk.SequencerNonEmptyBatchSealTime)
 					}
 
 					if l1Recovery {
