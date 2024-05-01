@@ -95,6 +95,7 @@ func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot com
 	log.Debug("Sending request to grpc server", "grpcUrl", e.grpcUrl)
 
 	size := 1024 * 1024 * 256 // 256mb maximum size - hack for now until trimmed witness is proved off
+	log.Info("Sending executor request", "grpcUrl", e.grpcUrl, "batch", request.BatchNumber)
 	resp, err := e.client.ProcessStatelessBatchV2(ctx, &executor.ProcessStatelessBatchRequestV2{
 		Witness:                     p.Witness,
 		DataStream:                  p.DataStream,
@@ -129,6 +130,7 @@ func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot com
 	}
 
 	log.Info("executor result",
+		"grpcUrl", e.grpcUrl,
 		"batch", request.BatchNumber,
 		"counters", counters,
 		"exec-root", common.BytesToHash(resp.NewStateRoot),
