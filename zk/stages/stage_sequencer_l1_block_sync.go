@@ -1,18 +1,20 @@
 package stages
 
 import (
+	"context"
+	"fmt"
+	"math"
+	"time"
+
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"context"
-	"github.com/ledgerwatch/log/v3"
-	"fmt"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/l1_data"
-	"time"
+	"github.com/ledgerwatch/erigon/zk/syncer"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type SequencerL1BlockSyncCfg struct {
@@ -83,7 +85,7 @@ func SpawnSequencerL1BlockSyncStage(
 	}
 
 	if !cfg.syncer.IsSyncStarted() {
-		cfg.syncer.Run(l1BlockHeight)
+		cfg.syncer.Run(l1BlockHeight, math.MaxUint64)
 	}
 
 	logChan := cfg.syncer.GetLogsChan()

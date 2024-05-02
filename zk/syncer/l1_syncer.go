@@ -97,7 +97,7 @@ func (s *L1Syncer) GetProgressMessageChan() chan string {
 	return s.progressMessageChan
 }
 
-func (s *L1Syncer) Run(lastCheckedBlock uint64) {
+func (s *L1Syncer) Run(lastCheckedBlock, to uint64) {
 	//if already started, don't start another thread
 	if s.isSyncStarted.Load() {
 		return
@@ -122,7 +122,7 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 			} else {
 				if latestL1Block > s.lastCheckedL1Block.Load() {
 					s.isDownloading.Store(true)
-					if err := s.queryBlocks(); err != nil {
+					if err := s.queryBlocks(to); err != nil {
 						log.Error("Error querying blocks", "err", err)
 					} else {
 						s.lastCheckedL1Block.Store(latestL1Block)
@@ -193,7 +193,7 @@ func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 	return latest, nil
 }
 
-func (s *L1Syncer) queryBlocks() error {
+func (s *L1Syncer) queryBlocks(to uint64) error {
 	startBlock := s.lastCheckedL1Block.Load()
 
 	log.Debug("GetHighestSequence", "startBlock", s.lastCheckedL1Block.Load())
@@ -203,6 +203,9 @@ func (s *L1Syncer) queryBlocks() error {
 	low := startBlock
 	for {
 		high := low + s.blockRange
+		if high > to {
+			high = to
+		}
 		if high > s.latestL1Block {
 			// at the end of our search
 			high = s.latestL1Block
@@ -213,7 +216,7 @@ func (s *L1Syncer) queryBlocks() error {
 			To:   high,
 		})
 
-		if high == s.latestL1Block {
+		if high == s.latestL1Block || high == to {
 			break
 		}
 		low += s.blockRange + 1

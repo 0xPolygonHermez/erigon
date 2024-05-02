@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
@@ -34,7 +35,7 @@ type IL1Syncer interface {
 	GetProgressMessageChan() chan string
 
 	GetBlock(number uint64) (*ethTypes.Block, error)
-	Run(lastCheckedBlock uint64)
+	Run(lastCheckedBlock, to uint64)
 }
 
 var ErrStateRootMismatch = fmt.Errorf("state root mismatch")
@@ -65,9 +66,9 @@ func SpawnStageL1Syncer(
 ) error {
 
 	///// DEBUG BISECT /////
-	if cfg.zkCfg.DebugLimit > 0 {
-		return nil
-	}
+	// if cfg.zkCfg.DebugLimit > 0 {
+	// 	return nil
+	// }
 	///// DEBUG BISECT /////
 
 	logPrefix := s.LogPrefix()
@@ -104,7 +105,11 @@ func SpawnStageL1Syncer(
 		}
 
 		// start the syncer
-		cfg.syncer.Run(l1BlockProgress)
+		to := uint64(math.MaxUint64)
+		if cfg.zkCfg.DebugLimit > 0 {
+			to = cfg.zkCfg.DebugLimit
+		}
+		cfg.syncer.Run(l1BlockProgress, to)
 	}
 
 	latestL1InfoTreeUpdate, found, err := hermezDb.GetLatestL1InfoTreeUpdate()

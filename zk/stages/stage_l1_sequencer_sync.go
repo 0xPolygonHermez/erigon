@@ -3,18 +3,19 @@ package stages
 import (
 	"context"
 	"fmt"
+	"math"
 
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/iden3/go-iden3-crypto/keccak256"
+	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/contracts"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/log/v3"
-	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/types"
-	"github.com/iden3/go-iden3-crypto/keccak256"
-	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type L1SequencerSyncCfg struct {
@@ -77,7 +78,7 @@ func SpawnL1SequencerSyncStage(
 	}
 
 	if !cfg.syncer.IsSyncStarted() {
-		cfg.syncer.Run(progress)
+		cfg.syncer.Run(progress, math.MaxUint64)
 	}
 
 	logChan := cfg.syncer.GetLogsChan()
