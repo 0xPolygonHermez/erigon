@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/0xPolygonHermez/cdk-erigon/zkevm/log"
 	"github.com/ledgerwatch/erigon/zk/tx"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type BatchCounterCollector struct {
