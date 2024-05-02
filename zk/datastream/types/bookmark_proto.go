@@ -5,26 +5,48 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type BookmarkBatchProto struct {
+type BookmarkProto struct {
 	*datastream.BookMark
 }
 
-func (b *BookmarkBatchProto) Marshal() ([]byte, error) {
+func NewBookmarkProto(value uint64, bookmarkType datastream.BookmarkType) *BookmarkProto {
+	return &BookmarkProto{
+		BookMark: &datastream.BookMark{
+			Type:  bookmarkType,
+			Value: value,
+		},
+	}
+}
+
+func (b *BookmarkProto) Marshal() ([]byte, error) {
 	return proto.Marshal(b.BookMark)
 }
 
-func (b *BookmarkBatchProto) Type() (datastream.EntryType, datastream.BookmarkType) {
-	return datastream.EntryType_ENTRY_TYPE_UNSPECIFIED, datastream.BookmarkType_BOOKMARK_TYPE_BATCH
+func (b *BookmarkProto) Type() EntryType {
+	return EntryType(b.BookMark.GetType())
 }
 
-type BookmarkL2BlockProto struct {
-	*datastream.BookMark
+func (b *BookmarkProto) BookmarkType() datastream.BookmarkType {
+	return b.BookMark.GetType()
 }
 
-func (b *BookmarkL2BlockProto) Marshal() ([]byte, error) {
-	return proto.Marshal(b.BookMark)
+func (b *BookmarkProto) UnmarshalBookmark(data []byte) error {
+	bookmark := &datastream.BookMark{}
+	if err := proto.Unmarshal(data, bookmark); err != nil {
+		return err
+	}
+
+	b.BookMark = bookmark
+	return nil
 }
 
-func (b *BookmarkL2BlockProto) Type() (datastream.EntryType, datastream.BookmarkType) {
-	return datastream.EntryType_ENTRY_TYPE_UNSPECIFIED, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK
+func UnmarshalBookmark(data []byte) (*BookmarkProto, error) {
+	bookmark := &datastream.BookMark{}
+	if err := proto.Unmarshal(data, bookmark); err != nil {
+		return nil, err
+	}
+
+	return &BookmarkProto{
+		BookMark: bookmark,
+	}, nil
 }

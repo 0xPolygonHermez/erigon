@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"google.golang.org/protobuf/proto"
+	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 )
 
 const (
@@ -63,7 +65,6 @@ func (g *GerUpdate) EncodeToBytesBigEndian() []byte {
 	return buf.Bytes()
 }
 
-// decodes a StartL2Block from a byte array
 func DecodeGerUpdate(data []byte) (*GerUpdate, error) {
 	if len(data) != gerUpdateDataLength {
 		if len(data) == gerUpdateDataLengthPreEtrog {
@@ -89,7 +90,6 @@ func DecodeGerUpdate(data []byte) (*GerUpdate, error) {
 	}, nil
 }
 
-// decodes a StartL2Block from a byte array
 func decodeGerUpdatePreEtrog(data []byte) (*GerUpdate, error) {
 	var ts uint64
 	buf := bytes.NewBuffer(data[8:16])
@@ -107,7 +107,6 @@ func decodeGerUpdatePreEtrog(data []byte) (*GerUpdate, error) {
 	}, nil
 }
 
-// decodes a StartL2Block from a byte array
 func DecodeGerUpdateBigEndian(data []byte) (*GerUpdate, error) {
 	if len(data) != gerUpdateDataLength {
 		return &GerUpdate{}, fmt.Errorf("expected data length: %d, got: %d", gerUpdateDataLength, len(data))
@@ -127,5 +126,23 @@ func DecodeGerUpdateBigEndian(data []byte) (*GerUpdate, error) {
 		ForkId:         binary.BigEndian.Uint16(data[68:70]),
 		ChainId:        binary.LittleEndian.Uint32(data[70:74]),
 		StateRoot:      common.BytesToHash(data[74:106]),
+	}, nil
+}
+
+func DecodeGerUpdateProto(data []byte) (*GerUpdate, error) {
+	ug := datastream.UpdateGER{}
+	err := proto.Unmarshal(data, &ug)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GerUpdate{
+		BatchNumber:    ug.BatchNumber,
+		Timestamp:      ug.Timestamp,
+		GlobalExitRoot: common.BytesToHash(ug.GlobalExitRoot),
+		Coinbase:       common.BytesToAddress(ug.Coinbase),
+		ForkId:         uint16(ug.ForkId),
+		ChainId:        uint32(ug.ChainId),
+		StateRoot:      common.BytesToHash(ug.StateRoot),
 	}, nil
 }

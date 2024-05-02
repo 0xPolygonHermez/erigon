@@ -12,7 +12,7 @@ const (
 	CmdEntry         Command = 5 // CmdEntry for the get entry TCP client command
 	CmdBookmark      Command = 6 // CmdBookmark for the get bookmark TCP client command
 
-	BookmarkLength = 9
+	BookmarkLength = 2
 )
 
 // sendHeaderCmd sends the header command to the server.

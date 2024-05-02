@@ -28,7 +28,7 @@ func NewTestDatastreamClient(fullL2Blocks []types.FullL2Block, gerUpdates []type
 	return client
 }
 
-func (c *TestDatastreamClient) ReadAllEntriesToChannel(bookmark *types.Bookmark) error {
+func (c *TestDatastreamClient) ReadAllEntriesToChannel(bookmark *types.BookmarkProto) error {
 	c.streamingAtomic.Store(true)
 
 	for _, block := range c.fullL2Blocks {

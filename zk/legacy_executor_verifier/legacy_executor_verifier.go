@@ -12,7 +12,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
-	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/erigon/zk/syncer"
@@ -304,17 +303,9 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(request *VerifierRequest, tx kv.
 			return nil, err
 		}
 
-		//TODO: get ger updates between blocks
-		gerUpdates := []dstypes.GerUpdate{}
-
 		var sBytes []byte
 
-		if v.cfg.DatastreamVersion == 3 { // proto implementation
-			// as per comment above - always at batch boundary
-			sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, l1InfoTreeMinTimestamps, true)
-		} else {
-			sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, true, &gerUpdates, l1InfoTreeMinTimestamps)
-		}
+		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, l1InfoTreeMinTimestamps, true)
 		if err != nil {
 			return nil, err
 		}

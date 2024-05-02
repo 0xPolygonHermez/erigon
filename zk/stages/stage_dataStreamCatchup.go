@@ -123,7 +123,6 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 	totalToWrite := finalBlockNumber - previousProgress
 
 	insertEntryCount := 1000000
-	entries := make([]server.DataStreamEntry, insertEntryCount)
 	entriesProto := make([]server.DataStreamEntryProto, 1000000)
 	index := 0
 	for currentBlockNumber := previousProgress + 1; currentBlockNumber <= finalBlockNumber; currentBlockNumber++ {
@@ -157,10 +156,11 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 			return 0, err
 		}
 
-		gersInBetween, err := reader.GetBatchGlobalExitRoots(prevBatchNum, batchNum)
-		if err != nil {
-			return 0, err
-		}
+		// TODO: oversight in stream write?
+		//gersInBetween, err := reader.GetBatchGlobalExitRoots(prevBatchNum, batchNum)
+		//if err != nil {
+		//	return 0, err
+		//}
 
 		highestBlockInBatch, err := reader.GetHighestBlockInBatch(batchNum)
 		if err != nil {
@@ -171,66 +171,34 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 
 		l1InfoMinTimestamps := make(map[uint64]uint64)
 
-		// PROTO version 3
-		if streamVersion == 3 {
-			blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, l1InfoMinTimestamps, batchEnd)
-			if err != nil {
+		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, l1InfoMinTimestamps, batchEnd)
+		if err != nil {
+			return 0, err
+		}
+
+		for _, entry := range *blockEntries {
+			entriesProto[index] = entry
+			index++
+		}
+
+		// basically commit once 80% of the entries array is filled
+		if index+1 >= insertEntryCount*4/5 {
+			log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
+			if err = srv.CommitEntriesToStreamProto(entriesProto[:index]); err != nil {
 				return 0, err
 			}
-
-			for _, entry := range *blockEntries {
-				entriesProto[index] = entry
-				index++
-			}
-
-			// basically commit once 80% of the entries array is filled
-			if index+1 >= insertEntryCount*4/5 {
-				log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
-				if err = srv.CommitEntriesToStreamProto(entriesProto[:index]); err != nil {
-					return 0, err
-				}
-				if err = stages.SaveStageProgress(tx, stages.DataStream, currentBlockNumber); err != nil {
-					return 0, err
-				}
-				entries = make([]server.DataStreamEntry, insertEntryCount)
-				index = 0
-			}
-		} else {
-			blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps)
-			if err != nil {
+			if err = stages.SaveStageProgress(tx, stages.DataStream, currentBlockNumber); err != nil {
 				return 0, err
 			}
-
-			for _, entry := range *blockEntries {
-				entries[index] = entry
-				index++
-			}
-
-			// basically commit onece 80% of the entries array is filled
-			if index+1 >= insertEntryCount*4/5 {
-				log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
-				if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
-					return 0, err
-				}
-				if err = stages.SaveStageProgress(tx, stages.DataStream, currentBlockNumber); err != nil {
-					return 0, err
-				}
-				entries = make([]server.DataStreamEntry, insertEntryCount)
-				index = 0
-			}
+			entriesProto = make([]server.DataStreamEntryProto, insertEntryCount)
+			index = 0
 		}
 
 		lastBlock = block
 	}
 
-	if streamVersion == 3 {
-		if err = srv.CommitEntriesToStreamProto(entriesProto[:index]); err != nil {
-			return 0, err
-		}
-	} else {
-		if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
-			return 0, err
-		}
+	if err = srv.CommitEntriesToStreamProto(entriesProto[:index]); err != nil {
+		return 0, err
 	}
 
 	if err = stream.CommitAtomicOp(); err != nil {
@@ -273,27 +241,18 @@ func writeGenesisToStream(
 		return err
 	}
 
-	if streamVersion == 3 {
-		batchBookmark := srv.CreateBatchBookmarkEntryProto(genesis.NumberU64())
-		l2BlockBookmark := srv.CreateL2BlockBookmarkEntryProto(genesis.NumberU64())
-		l2Block := srv.CreateL2BlockProto(genesis, batchNo, ger, 0, 0, common.Hash{}, 0)
-		batch, err := srv.CreateBatchProto(batchNo, chainId, forkId, common.Hash{}, genesis.Root())
-		if err != nil {
-			return err
-		}
+	batchBookmark := srv.CreateBatchBookmarkEntryProto(genesis.NumberU64())
+	l2BlockBookmark := srv.CreateL2BlockBookmarkEntryProto(genesis.NumberU64())
+	l2Block := srv.CreateL2BlockProto(genesis, batchNo, ger, 0, 0, common.Hash{}, 0)
+	batchStart, err := srv.CreateBatchStartProto(batchNo, chainId, forkId)
+	if err != nil {
+		return err
+	}
 
-		if err = srv.CommitEntriesToStreamProto([]server.DataStreamEntryProto{batchBookmark, l2BlockBookmark, l2Block, batch}); err != nil {
-			return err
-		}
-	} else {
-		batchBookmark := srv.CreateBookmarkEntry(server.BatchBookmarkType, genesis.NumberU64())
-		bookmark := srv.CreateBookmarkEntry(server.BlockBookmarkType, genesis.NumberU64())
-		blockStart := srv.CreateBlockStartEntry(genesis, batchNo, uint16(forkId), ger, 0, 0, common.Hash{})
-		blockEnd := srv.CreateBlockEndEntry(genesis.NumberU64(), genesis.Hash(), genesis.Root())
+	batchEnd, err := srv.CreateBatchEndProto(common.Hash{}, genesis.Root())
 
-		if err = srv.CommitEntriesToStream([]server.DataStreamEntry{batchBookmark, bookmark, blockStart, blockEnd}, true); err != nil {
-			return err
-		}
+	if err = srv.CommitEntriesToStreamProto([]server.DataStreamEntryProto{batchBookmark, batchStart, l2BlockBookmark, l2Block, batchEnd}); err != nil {
+		return err
 	}
 
 	err = stream.CommitAtomicOp()
