@@ -86,17 +86,16 @@ func NewLegacyExecutorVerifier(
 		executorLocks[i] = &sync.Mutex{}
 	}
 
-	streamServer := server.NewDataStreamServer(nil, chainCfg.ChainID.Uint64(), server.ExecutorOperationMode)
+	streamServer := server.NewDataStreamServer(stream, chainCfg.ChainID.Uint64(), server.ExecutorOperationMode)
 
 	verifier := &LegacyExecutorVerifier{
 		cfg:              cfg,
 		executors:        executors,
 		db:               db,
 		executorNumber:   0,
-		working:            &sync.Mutex{},
-		openRequests:      make([]*VerifierRequest, 0),
+		working:          &sync.Mutex{},
+		openRequests:     make([]*VerifierRequest, 0),
 		requestsMap:      make(map[uint64]uint64),
-
 		responses:        make([]*VerifierResponse, 0),
 		responseMutex:    &sync.Mutex{},
 		quit:             make(chan struct{}),

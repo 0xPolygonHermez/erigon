@@ -75,14 +75,16 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 	srv := server.NewDataStreamServer(stream, chainId, server.StandardOperationMode)
 	reader := hermez_db.NewHermezDbReader(tx)
 
-	// we might have not executed to that batch yet, so we need to check the highest executed block
-	// and get it's batch
-	highestExecutedBlock, err := stages.GetStageProgress(tx, stages.Execution)
+	// get the latest verified batch number
+	latestBatch, err := stages.GetStageProgress(tx, stages.SequenceExecutorVerify)
 	if err != nil {
 		return 0, err
 	}
 
-	finalBlockNumber := highestExecutedBlock
+	finalBlockNumber, err := reader.GetHighestBlockInBatch(latestBatch)
+	if err != nil {
+		return 0, err
+	}
 
 	previousProgress, err := stages.GetStageProgress(tx, stages.DataStream)
 	if err != nil {
@@ -90,7 +92,6 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 	}
 
 	log.Info(fmt.Sprintf("[%s] Getting progress", logPrefix),
-		"highestExecutedBlock", highestExecutedBlock,
 		"adding up to blockNum", finalBlockNumber,
 		"previousProgress", previousProgress,
 	)
