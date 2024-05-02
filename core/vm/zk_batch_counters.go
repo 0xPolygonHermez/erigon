@@ -1,8 +1,10 @@
 package vm
 
 import (
+	"fmt"
 	"math"
 
+	"github.com/0xPolygonHermez/cdk-erigon/zkevm/log"
 	"github.com/ledgerwatch/erigon/zk/tx"
 )
 
@@ -118,12 +120,21 @@ func (bcc *BatchCounterCollector) CheckForOverflow() (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	logText := "Counters stats"
+	overflow := false
 	for _, v := range combined {
+		logText += fmt.Sprintf(" %s: initial: %v used: %v (remaining: %v)", v.name, v.initialAmount, v.used, v.remaining)
 		if v.remaining < 0 {
-			return true, nil
+			overflow = true
+			log.Info("Counter overflow detected", "counter", v.name, "remaining", v.remaining, "used", v.used)
 		}
 	}
-	return false, nil
+
+	if overflow {
+		log.Info(logText)
+	}
+
+	return overflow, nil
 }
 
 // CombineCollectors takes the batch level data from all transactions and combines these counters with each transactions'
