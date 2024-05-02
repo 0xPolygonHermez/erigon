@@ -120,17 +120,20 @@ func (bcc *BatchCounterCollector) CheckForOverflow() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	logText := "Counters stats"
 	overflow := false
 	for _, v := range combined {
-		logText += fmt.Sprintf(" %s: initial: %v used: %v (remaining: %v)", v.name, v.initialAmount, v.used, v.remaining)
 		if v.remaining < 0 {
+			log.Info("[VCOUNTER] Counter overflow detected", "counter", v.name, "remaining", v.remaining, "used", v.used)
 			overflow = true
-			log.Info("Counter overflow detected", "counter", v.name, "remaining", v.remaining, "used", v.used)
 		}
 	}
 
+	// if we have an overflow we want to log the counters for debugging purposes
 	if overflow {
+		logText := "[VCOUNTER] Counters stats"
+		for _, v := range combined {
+			logText += fmt.Sprintf(" %s: initial: %v used: %v (remaining: %v)", v.name, v.initialAmount, v.used, v.remaining)
+		}
 		log.Info(logText)
 	}
 
