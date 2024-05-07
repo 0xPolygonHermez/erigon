@@ -783,10 +783,11 @@ func (db *HermezDbReader) GetBatchNo(forkId uint64) (batchNo uint64, found bool,
 		if err != nil {
 			break
 		}
-		currentForkId := BytesToUint64(k)
+		currentForkId := BytesToUint64(v)
 		if currentForkId == forkId {
-			batchNo = BytesToUint64(v)
+			batchNo = BytesToUint64(k)
 			found = true
+			break
 		}
 	}
 

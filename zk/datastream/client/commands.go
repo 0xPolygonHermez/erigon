@@ -28,10 +28,6 @@ func (c *StreamClient) sendHeaderCmd() error {
 // sendStartBookmarkCmd sends a start command to the server, indicating
 // that the client wishes to start streaming from the given bookmark
 func (c *StreamClient) sendStartBookmarkCmd(bookmark []byte) error {
-	if len(bookmark) != BookmarkLength {
-		return fmt.Errorf("bookmark length must be 9 bytes, got %d", len(bookmark))
-	}
-
 	err := c.sendCommand(CmdStartBookmark)
 	if err != nil {
 		return err

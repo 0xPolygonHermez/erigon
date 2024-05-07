@@ -443,7 +443,6 @@ func (c *StreamClient) readFullBlockProto() (*types.FullL2Block, *types.BatchSta
 		}
 		log.Trace("l2 block", "l2Block", l2Block)
 
-		var l2Txs []types.L2TransactionProto
 		file, err = c.readFileEntry()
 		if err != nil {
 			return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("read file entry error: %v", err)
@@ -457,7 +456,7 @@ func (c *StreamClient) readFullBlockProto() (*types.FullL2Block, *types.BatchSta
 				if err != nil {
 					return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("parse L2 transaction error: %v", err)
 				}
-				l2Txs = append(l2Txs, *l2Tx)
+				l2Block.L2Txs = append(l2Block.L2Txs, *l2Tx)
 				log.Trace("l2tx", "tx", l2Tx)
 			} else {
 				return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("unexpected entry type, expected transaction or batch end: %d", file.EntryType)

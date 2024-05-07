@@ -117,7 +117,9 @@ func SpawnStageBatches(
 	}
 	defer log.Info(fmt.Sprintf("[%s] Finished Batches stage", logPrefix))
 
+	freshTx := false
 	if tx == nil {
+		freshTx = true
 		log.Debug(fmt.Sprintf("[%s] batches: no tx provided, creating a new one", logPrefix))
 		var err error
 		tx, err = cfg.db.BeginRw(ctx)
@@ -164,7 +166,7 @@ func SpawnStageBatches(
 			// Create bookmark
 			var bookmark *types.BookmarkProto
 			if stageProgressBlockNo == 0 {
-				bookmark = types.NewBookmarkProto(0, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
+				bookmark = types.NewBookmarkProto(1, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
 			} else {
 				bookmark = types.NewBookmarkProto(stageProgressBlockNo, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
 			}
@@ -400,8 +402,7 @@ LOOP:
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
-	if firstCycle {
-		log.Debug(fmt.Sprintf("[%s] batches: first cycle, committing tx", logPrefix))
+	if freshTx {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("failed to commit tx, %w", err)
 		}
@@ -688,11 +689,11 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block,
 			return fmt.Errorf("write effective gas price percentage error: %v", err)
 		}
 
-		if err := hermezDb.WriteStateRoot(l2Block.L2BlockNumber, transaction.StateRoot); err != nil {
+		if err := hermezDb.WriteStateRoot(l2Block.L2BlockNumber, transaction.IntermediateStateRoot); err != nil {
 			return fmt.Errorf("write rpc root error: %v", err)
 		}
 
-		if err := hermezDb.WriteIntermediateTxStateRoot(l2Block.L2BlockNumber, ltx.Hash(), transaction.StateRoot); err != nil {
+		if err := hermezDb.WriteIntermediateTxStateRoot(l2Block.L2BlockNumber, ltx.Hash(), transaction.IntermediateStateRoot); err != nil {
 			return fmt.Errorf("write rpc root error: %v", err)
 		}
 	}

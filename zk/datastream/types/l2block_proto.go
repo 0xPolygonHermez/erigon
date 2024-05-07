@@ -23,7 +23,7 @@ type FullL2Block struct {
 	L1BlockHash     libcommon.Hash
 	L2Blockhash     libcommon.Hash
 	StateRoot       libcommon.Hash
-	L2Txs           []L2Transaction
+	L2Txs           []L2TransactionProto
 	ParentHash      libcommon.Hash
 	BatchEnd        bool
 	LocalExitRoot   libcommon.Hash
