@@ -20,10 +20,6 @@ func WriteBlocksToStream(
 	from, to uint64,
 	logPrefix string,
 ) error {
-
-	foo := stream.GetHeader()
-	_ = foo
-
 	logTicker := time.NewTicker(10 * time.Second)
 	var lastBlock *eritypes.Block
 	var err error
@@ -32,7 +28,7 @@ func WriteBlocksToStream(
 	}
 	totalToWrite := to - (from - 1)
 	insertEntryCount := 1000000
-	entries := make([]DataStreamEntry, insertEntryCount)
+	entries := make([]DataStreamEntryProto, insertEntryCount)
 	index := 0
 	copyFrom := from
 	for currentBlockNumber := from; currentBlockNumber <= to; currentBlockNumber++ {
@@ -66,13 +62,22 @@ func WriteBlocksToStream(
 			return err
 		}
 
-		gersInBetween, err := reader.GetBatchGlobalExitRoots(prevBatchNum, batchNum)
+		// todo - this needs handling for older blocks in the stream
+		//gersInBetween, err := reader.GetBatchGlobalExitRoots(prevBatchNum, batchNum)
+		//if err != nil {
+		//	return err
+		//}
+
+		highestBlockInBatch, err := reader.GetHighestBlockInBatch(batchNum)
 		if err != nil {
 			return err
 		}
 
+		batchEnd := highestBlockInBatch == block.NumberU64()
+
 		l1InfoMinTimestamps := make(map[uint64]uint64)
-		blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps)
+
+		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, l1InfoMinTimestamps, batchEnd)
 		if err != nil {
 			return err
 		}
@@ -85,17 +90,17 @@ func WriteBlocksToStream(
 		// basically commit onece 80% of the entries array is filled
 		if index+1 >= insertEntryCount*4/5 {
 			log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
-			if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
+			if err = srv.CommitEntriesToStreamProto(entries[:index]); err != nil {
 				return err
 			}
-			entries = make([]DataStreamEntry, insertEntryCount)
+			entries = make([]DataStreamEntryProto, insertEntryCount)
 			index = 0
 		}
 
 		lastBlock = block
 	}
 
-	if err = srv.CommitEntriesToStream(entries[:index], true); err != nil {
+	if err = srv.CommitEntriesToStreamProto(entries[:index]); err != nil {
 		return err
 	}
 
@@ -111,9 +116,11 @@ func WriteGenesisToStream(
 	reader *hermez_db.HermezDbReader,
 	stream *datastreamer.StreamServer,
 	srv *DataStreamServer,
+	streamVersion int,
+	chainId uint64,
 ) error {
 
-	batch, err := reader.GetBatchNoByL2Block(0)
+	batchNo, err := reader.GetBatchNoByL2Block(0)
 	if err != nil {
 		return err
 	}
@@ -123,7 +130,7 @@ func WriteGenesisToStream(
 		return err
 	}
 
-	fork, err := reader.GetForkId(batch)
+	forkId, err := reader.GetForkId(batchNo)
 	if err != nil {
 		return err
 	}
@@ -133,12 +140,17 @@ func WriteGenesisToStream(
 		return err
 	}
 
-	batchBookmark := srv.CreateBookmarkEntry(BatchBookmarkType, genesis.NumberU64())
-	bookmark := srv.CreateBookmarkEntry(BlockBookmarkType, genesis.NumberU64())
-	blockStart := srv.CreateBlockStartEntry(genesis, batch, uint16(fork), ger, 0, 0, common.Hash{})
-	blockEnd := srv.CreateBlockEndEntry(genesis.NumberU64(), genesis.Hash(), genesis.Root())
+	batchBookmark := srv.CreateBatchBookmarkEntryProto(genesis.NumberU64())
+	l2BlockBookmark := srv.CreateL2BlockBookmarkEntryProto(genesis.NumberU64())
+	l2Block := srv.CreateL2BlockProto(genesis, batchNo, ger, 0, 0, common.Hash{}, 0)
+	batchStart, err := srv.CreateBatchStartProto(batchNo, chainId, forkId)
+	if err != nil {
+		return err
+	}
 
-	if err = srv.CommitEntriesToStream([]DataStreamEntry{batchBookmark, bookmark, blockStart, blockEnd}, true); err != nil {
+	batchEnd, err := srv.CreateBatchEndProto(common.Hash{}, genesis.Root())
+
+	if err = srv.CommitEntriesToStreamProto([]DataStreamEntryProto{batchBookmark, batchStart, l2BlockBookmark, l2Block, batchEnd}); err != nil {
 		return err
 	}
 

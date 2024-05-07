@@ -8,6 +8,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/debug_tools"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 )
 
 const localDatastream = "localhost:6900"
@@ -22,8 +23,8 @@ func main() {
 	}
 
 	// Create client
-	localClient := client.NewClient(localDatastream, client.BigEndianVersion, 500)
-	remoteClient := client.NewClient(cfg.Datastream, client.BigEndianVersion, 500)
+	localClient := client.NewClient(localDatastream, 3, 500)
+	remoteClient := client.NewClient(cfg.Datastream, 3, 500)
 
 	// Start client (connect to the server)
 	defer localClient.Stop()
@@ -37,15 +38,15 @@ func main() {
 	}
 
 	// create bookmark
-	bookmark := types.NewL2BlockBookmark(fromBlock)
+	bookmark := types.NewBookmarkProto(fromBlock, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
 
 	// Read all entries from server
-	blocksReadLocal, gerUpdatesLocal, _, _, err := localClient.ReadEntries(bookmark, amountToRead)
+	blocksReadLocal, gerUpdatesLocal, _, _, _, err := localClient.ReadEntries(bookmark, amountToRead)
 	if err != nil {
 		panic(err)
 	}
 	// Read all entries from server
-	blocksReadRemote, gerUpdatesRemote, _, _, err := remoteClient.ReadEntries(bookmark, amountToRead)
+	blocksReadRemote, gerUpdatesRemote, _, _, _, err := remoteClient.ReadEntries(bookmark, amountToRead)
 	if err != nil {
 		panic(err)
 	}
