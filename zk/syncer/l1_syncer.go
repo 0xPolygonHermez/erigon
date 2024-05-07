@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -59,12 +60,11 @@ type L1Syncer struct {
 	lastCheckedL1Block atomic.Uint64
 
 	// Channels
-	logsChan            chan ethTypes.Log
+	logsChan            chan []ethTypes.Log
 	progressMessageChan chan string
 }
 
 func NewL1Syncer(em IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64) *L1Syncer {
-
 	return &L1Syncer{
 		em:                  em,
 		l1ContractAddresses: l1ContractAddresses,
@@ -72,7 +72,7 @@ func NewL1Syncer(em IEtherman, l1ContractAddresses []common.Address, topics [][]
 		blockRange:          blockRange,
 		queryDelay:          queryDelay,
 		progressMessageChan: make(chan string),
-		logsChan:            make(chan ethTypes.Log),
+		logsChan:            make(chan []ethTypes.Log),
 	}
 }
 
@@ -89,7 +89,7 @@ func (s *L1Syncer) GetLastCheckedL1Block() uint64 {
 }
 
 // Channels
-func (s *L1Syncer) GetLogsChan() chan ethTypes.Log {
+func (s *L1Syncer) GetLogsChan() chan []ethTypes.Log {
 	return s.logsChan
 }
 
@@ -181,6 +181,62 @@ func (s *L1Syncer) GetOldAccInputHash(ctx context.Context, addr *common.Address,
 	}
 }
 
+func (s *L1Syncer) QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Block, error) {
+	// more thread causes error on remote rpc server
+	numThreads := 2
+	blocksMap := map[uint64]*ethTypes.Block{}
+
+	if len(logs) > (numThreads << 2) {
+		var wg sync.WaitGroup
+		var err error
+
+		logsSize := len(logs)
+		blocksArray := make([]*ethTypes.Block, logsSize)
+
+		wg.Add(numThreads)
+
+		for i := 0; i < numThreads; i++ {
+			go func(cpuI int) {
+				defer wg.Done()
+
+				durationTick := time.Now()
+				for j := cpuI; j < logsSize; j += numThreads {
+					l := logs[j]
+					block, e := s.GetBlock(l.BlockNumber)
+					if e != nil {
+						err = e
+						return
+					}
+					blocksArray[j] = block
+					if time.Since(durationTick).Seconds() > 10 {
+						log.Info(fmt.Sprintf("[%s] %s %d/%d", logPrefix, "Query L1 blocks", j>>1, logsSize>>1), "thread", cpuI+1)
+						durationTick = time.Now()
+					}
+				}
+			}(i)
+		}
+		wg.Wait()
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, block := range blocksArray {
+			blocksMap[block.NumberU64()] = block
+		}
+	} else {
+		for _, l := range logs {
+			block, err := s.GetBlock(l.BlockNumber)
+			if err != nil {
+				return nil, err
+			}
+			blocksMap[l.BlockNumber] = block
+		}
+	}
+
+	return blocksMap, nil
+}
+
 func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 	latestBlock, err := s.em.BlockByNumber(context.Background(), nil)
 	if err != nil {
@@ -247,9 +303,7 @@ loop:
 			}
 			progress += res.Size
 			if len(res.Logs) > 0 {
-				for _, l := range res.Logs {
-					s.logsChan <- l
-				}
+				s.logsChan <- res.Logs
 			}
 
 			if complete == len(fetches) {
