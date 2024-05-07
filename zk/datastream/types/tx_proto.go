@@ -10,6 +10,16 @@ type TxProto struct {
 	*datastream.Transaction
 }
 
+type L2TransactionProto struct {
+	L2BlockNumber               uint64
+	Index                       uint64
+	IsValid                     bool
+	Encoded                     []byte
+	EffectiveGasPricePercentage uint8
+	IntermediateStateRoot       libcommon.Hash
+	Debug                       Debug
+}
+
 func (t *TxProto) Marshal() ([]byte, error) {
 	return proto.Marshal(t.Transaction)
 }
@@ -18,24 +28,21 @@ func (t *TxProto) Type() EntryType {
 	return EntryType(datastream.EntryType_ENTRY_TYPE_TRANSACTION)
 }
 
-func UnmarshalTx(data []byte) (*L2Transaction, error) {
+func UnmarshalTx(data []byte) (*L2TransactionProto, error) {
 	tx := datastream.Transaction{}
 	err := proto.Unmarshal(data, &tx)
 	if err != nil {
 		return nil, err
 	}
 
-	isValid := uint8(0)
-	if tx.IsValid {
-		isValid = 1
-	}
-
-	l2Tx := &L2Transaction{
-		EffectiveGasPricePercentage: uint8(tx.EffectiveGasPricePercentage),
-		IsValid:                     isValid,
-		StateRoot:                   libcommon.BytesToHash(tx.ImStateRoot),
-		EncodedLength:               uint32(len(tx.Encoded)),
+	l2Tx := &L2TransactionProto{
+		L2BlockNumber:               tx.L2BlockNumber,
+		Index:                       tx.Index,
+		IsValid:                     tx.IsValid,
 		Encoded:                     tx.Encoded,
+		EffectiveGasPricePercentage: uint8(tx.EffectiveGasPricePercentage),
+		IntermediateStateRoot:       libcommon.BytesToHash(tx.ImStateRoot),
+		Debug:                       ProcessDebug(tx.Debug),
 	}
 
 	return l2Tx, nil

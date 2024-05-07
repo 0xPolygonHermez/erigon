@@ -26,6 +26,7 @@ type GerUpdate struct {
 	ForkId         uint16         // 2 bytes
 	ChainId        uint32         // 4 bytes
 	StateRoot      common.Hash    // 32 bytes
+	Debug          Debug          // proto only
 }
 
 func (g *GerUpdate) EntryType() EntryType {
@@ -144,5 +145,6 @@ func DecodeGerUpdateProto(data []byte) (*GerUpdate, error) {
 		ForkId:         uint16(ug.ForkId),
 		ChainId:        uint32(ug.ChainId),
 		StateRoot:      common.BytesToHash(ug.StateRoot),
+		Debug:          ProcessDebug(ug.Debug),
 	}, nil
 }

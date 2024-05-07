@@ -27,6 +27,9 @@ type FullL2Block struct {
 	ParentHash      libcommon.Hash
 	BatchEnd        bool
 	LocalExitRoot   libcommon.Hash
+	BlockGasLimit   uint64
+	BlockInfoRoot   libcommon.Hash
+	Debug           Debug
 }
 
 func (b *L2BlockProto) Marshal() ([]byte, error) {
@@ -55,6 +58,9 @@ func UnmarshalL2Block(data []byte) (*FullL2Block, error) {
 		L1BlockHash:     libcommon.BytesToHash(block.L1Blockhash),
 		L2Blockhash:     libcommon.Hash{},
 		StateRoot:       libcommon.BytesToHash(block.StateRoot),
+		BlockGasLimit:   block.BlockGasLimit,
+		BlockInfoRoot:   libcommon.BytesToHash(block.BlockInfoRoot),
+		Debug:           ProcessDebug(block.Debug),
 	}
 
 	return l2Block, nil

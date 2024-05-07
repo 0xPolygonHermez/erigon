@@ -6,6 +6,15 @@ import (
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 )
 
+type BatchType uint32
+
+var (
+	BatchTypeUnspecified BatchType = 0
+	BatchTypeRegular               = 1
+	BatchTypeForced                = 2
+	BatchTypeInjected              = 3
+)
+
 type BatchStartProto struct {
 	*datastream.BatchStart
 }
@@ -15,9 +24,11 @@ type BatchEndProto struct {
 }
 
 type BatchStart struct {
-	Number  uint64
-	ForkId  uint64
-	ChainId uint64
+	Number    uint64
+	BatchType BatchType
+	ForkId    uint64
+	ChainId   uint64
+	Debug     Debug
 }
 
 func (b *BatchStartProto) Marshal() ([]byte, error) {
@@ -31,6 +42,7 @@ func (b *BatchStartProto) Type() EntryType {
 type BatchEnd struct {
 	LocalExitRoot libcommon.Hash
 	StateRoot     libcommon.Hash
+	Debug         Debug
 }
 
 func (b *BatchEndProto) Marshal() ([]byte, error) {
@@ -51,6 +63,7 @@ func UnmarshalBatchStart(data []byte) (*BatchStart, error) {
 		Number:  batch.Number,
 		ForkId:  batch.ForkId,
 		ChainId: batch.ChainId,
+		Debug:   ProcessDebug(batch.Debug),
 	}, nil
 }
 
@@ -63,5 +76,6 @@ func UnmarshalBatchEnd(data []byte) (*BatchEnd, error) {
 	return &BatchEnd{
 		LocalExitRoot: libcommon.BytesToHash(batchEnd.LocalExitRoot),
 		StateRoot:     libcommon.BytesToHash(batchEnd.StateRoot),
+		Debug:         ProcessDebug(batchEnd.Debug),
 	}, nil
 }

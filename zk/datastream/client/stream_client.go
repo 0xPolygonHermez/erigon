@@ -443,7 +443,7 @@ func (c *StreamClient) readFullBlockProto() (*types.FullL2Block, *types.BatchSta
 		}
 		log.Trace("l2 block", "l2Block", l2Block)
 
-		var l2Txs []types.L2Transaction
+		var l2Txs []types.L2TransactionProto
 		file, err = c.readFileEntry()
 		if err != nil {
 			return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("read file entry error: %v", err)
