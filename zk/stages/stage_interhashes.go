@@ -202,19 +202,27 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	}
 	log.Debug(fmt.Sprintf("[%s] Unwinding intermediate hashes", s.LogPrefix()), "from", s.BlockNumber, "to", u.UnwindPoint)
 
+	var expectedRootHash common.Hash
 	syncHeadHeader := rawdb.ReadHeaderByNumber(tx, u.UnwindPoint)
 	if err != nil {
 		return err
 	}
 	if syncHeadHeader == nil {
 		log.Warn("header not found for block number", "block", u.UnwindPoint)
+	} else {
+		expectedRootHash = syncHeadHeader.Root
 	}
 
-	root, err := unwindZkSMT(s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, true, syncHeadHeader, quit)
+	root, err := unwindZkSMT(s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, true, &expectedRootHash, quit)
 	if err != nil {
 		return err
 	}
 	_ = root
+
+	// ensure we update the head header hash as in the zk world this is handled in the inters stage
+	if err := rawdb.WriteHeadHeaderHash(tx, syncHeadHeader.Hash()); err != nil {
+		return err
+	}
 
 	if err := u.Done(tx); err != nil {
 		return err
@@ -428,14 +436,9 @@ func zkIncrementIntermediateHashes(logPrefix string, s *stagedsync.StageState, d
 	return hash, nil
 }
 
-func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, syncHeadHeader *types.Header, quit <-chan struct{}) (common.Hash, error) {
+func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quit <-chan struct{}) (common.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Unwind trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Unwind ended", logPrefix))
-
-	// ensure we update the head header hash as in the zk world this is handled in the inters stage
-	if err := rawdb.WriteHeadHeaderHash(db, syncHeadHeader.Hash()); err != nil {
-		return common.Hash{}, err
-	}
 
 	eridb := db2.NewEriDb(db)
 	dbSmt := smt.NewSMT(eridb)
@@ -571,7 +574,7 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, 
 		return trie.EmptyRoot, err
 	}
 
-	if err := verifyLastHash(dbSmt, syncHeadHeader, checkRoot, logPrefix); err != nil {
+	if err := verifyLastHash(dbSmt, expectedRootHash, checkRoot, logPrefix); err != nil {
 		log.Error("failed to verify hash")
 		eridb.RollbackBatch()
 		return trie.EmptyRoot, err
@@ -587,11 +590,11 @@ func unwindZkSMT(logPrefix string, from, to uint64, db kv.RwTx, checkRoot bool, 
 	return hash, nil
 }
 
-func verifyLastHash(dbSmt *smt.SMT, syncHeadHeader *types.Header, checkRoot bool, logPrefix string) error {
+func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *common.Hash, checkRoot bool, logPrefix string) error {
 	hash := common.BigToHash(dbSmt.LastRoot())
 
-	if checkRoot && hash != syncHeadHeader.Hash() {
-		panic(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, syncHeadHeader.Hash()))
+	if checkRoot && hash != *expectedRootHash {
+		panic(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
 	}
 	log.Info(fmt.Sprintf("[%s] Trie root matches", logPrefix), "hash", hash.Hex())
 	return nil
