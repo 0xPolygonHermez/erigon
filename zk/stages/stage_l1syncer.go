@@ -33,7 +33,7 @@ type IL1Syncer interface {
 	GetLogsChan() chan []ethTypes.Log
 	GetProgressMessageChan() chan string
 
-	QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Block, error)
+	L1QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Block, error)
 	GetBlock(number uint64) (*ethTypes.Block, error)
 	Run(lastCheckedBlock uint64)
 }
@@ -144,7 +144,7 @@ Loop:
 				}
 			}
 
-			blocksMap, err := cfg.syncer.QueryBlocks(logPrefix, logsForQueryBlocks)
+			blocksMap, err := cfg.syncer.L1QueryBlocks(logPrefix, logsForQueryBlocks)
 			if err != nil {
 				return err
 			}

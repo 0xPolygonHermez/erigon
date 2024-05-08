@@ -46,11 +46,12 @@ type jobResult struct {
 }
 
 type L1Syncer struct {
-	em                  IEtherman
-	l1ContractAddresses []common.Address
-	topics              [][]common.Hash
-	blockRange          uint64
-	queryDelay          uint64
+	em                   IEtherman
+	l1ContractAddresses  []common.Address
+	topics               [][]common.Hash
+	blockRange           uint64
+	queryDelay           uint64
+	l1QueryBlocksThreads uint64
 
 	latestL1Block uint64
 
@@ -64,15 +65,16 @@ type L1Syncer struct {
 	progressMessageChan chan string
 }
 
-func NewL1Syncer(em IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64) *L1Syncer {
+func NewL1Syncer(em IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay, l1QueryBlocksThreads uint64) *L1Syncer {
 	return &L1Syncer{
-		em:                  em,
-		l1ContractAddresses: l1ContractAddresses,
-		topics:              topics,
-		blockRange:          blockRange,
-		queryDelay:          queryDelay,
-		progressMessageChan: make(chan string),
-		logsChan:            make(chan []ethTypes.Log),
+		em:                   em,
+		l1ContractAddresses:  l1ContractAddresses,
+		topics:               topics,
+		blockRange:           blockRange,
+		queryDelay:           queryDelay,
+		l1QueryBlocksThreads: l1QueryBlocksThreads,
+		progressMessageChan:  make(chan string),
+		logsChan:             make(chan []ethTypes.Log),
 	}
 }
 
@@ -181,16 +183,15 @@ func (s *L1Syncer) GetOldAccInputHash(ctx context.Context, addr *common.Address,
 	}
 }
 
-func (s *L1Syncer) QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Block, error) {
+func (s *L1Syncer) L1QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Block, error) {
 	// more thread causes error on remote rpc server
-	numThreads := 2
+	numThreads := int(s.l1QueryBlocksThreads)
 	blocksMap := map[uint64]*ethTypes.Block{}
+	logsSize := len(logs)
 
-	if len(logs) > (numThreads << 2) {
+	if numThreads > 1 && logsSize > (numThreads<<2) {
 		var wg sync.WaitGroup
 		var err error
-
-		logsSize := len(logs)
 		blocksArray := make([]*ethTypes.Block, logsSize)
 
 		wg.Add(numThreads)
@@ -208,10 +209,7 @@ func (s *L1Syncer) QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint6
 						return
 					}
 					blocksArray[j] = block
-					if time.Since(durationTick).Seconds() > 10 {
-						log.Info(fmt.Sprintf("[%s] %s %d/%d", logPrefix, "Query L1 blocks", j>>1, logsSize>>1), "thread", cpuI+1)
-						durationTick = time.Now()
-					}
+					tryToLogL1QueryBlocks(logPrefix, j/numThreads, logsSize/numThreads, cpuI+1, &durationTick)
 				}
 			}(i)
 		}
@@ -225,16 +223,25 @@ func (s *L1Syncer) QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint6
 			blocksMap[block.NumberU64()] = block
 		}
 	} else {
-		for _, l := range logs {
+		durationTick := time.Now()
+		for i, l := range logs {
 			block, err := s.GetBlock(l.BlockNumber)
 			if err != nil {
 				return nil, err
 			}
 			blocksMap[l.BlockNumber] = block
+			tryToLogL1QueryBlocks(logPrefix, i, logsSize, 1, &durationTick)
 		}
 	}
 
 	return blocksMap, nil
+}
+
+func tryToLogL1QueryBlocks(logPrefix string, current, total, threadNum int, durationTick *time.Time) {
+	if time.Since(*durationTick).Seconds() > 10 {
+		log.Info(fmt.Sprintf("[%s] %s %d/%d", logPrefix, "Query L1 blocks", current, total), "thread", threadNum)
+		*durationTick = time.Now()
+	}
 }
 
 func (s *L1Syncer) getLatestL1Block() (uint64, error) {

@@ -88,7 +88,7 @@ Loop:
 	for {
 		select {
 		case logs := <-logChan:
-			blocksMap, err := cfg.syncer.QueryBlocks(logPrefix, logs)
+			blocksMap, err := cfg.syncer.L1QueryBlocks(logPrefix, logs)
 			if err != nil {
 				return err
 			}
