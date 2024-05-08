@@ -23,9 +23,12 @@ func NewPromise[T any](f func() (T, error)) *Promise[T] {
 	return p
 }
 
-func (p *Promise[T]) Get() (T, error) {
+func (p *Promise[T]) Get(f func(r T) error) (T, error) {
 	p.wg.Wait()
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	if p.err == nil && f != nil {
+		return p.result, f(p.result)
+	}
 	return p.result, p.err
 }
