@@ -743,31 +743,14 @@ func (db *HermezDb) deleteFromBucketWithUintKeysRange(bucket string, fromBlockNu
 }
 
 func (db *HermezDbReader) GetForkId(batchNo uint64) (uint64, error) {
-	c, err := db.tx.Cursor(FORKIDS)
+	data, err := db.tx.GetOne(FORKIDS, Uint64ToBytes(batchNo))
 	if err != nil {
 		return 0, err
 	}
-	defer c.Close()
 
-	var forkId uint64 = 0
-	var k, v []byte
-
-	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
-		if err != nil {
-			break
-		}
-		currentBatchNo := BytesToUint64(k)
-		if currentBatchNo <= batchNo {
-			forkId = BytesToUint64(v)
-		} else {
-			break
-		}
-	}
-
-	return forkId, err
+	return BytesToUint64(data), nil
 }
 
-// TODO: have a table storing these the other way round
 func (db *HermezDbReader) GetBatchNo(forkId uint64) (batchNo uint64, found bool, err error) {
 	c, err := db.tx.Cursor(FORKIDS)
 	if err != nil {
