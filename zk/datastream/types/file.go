@@ -6,11 +6,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 )
 
-type EntryType uint32
-
 const (
-	FileEntryMinSize  uint32    = 17 // 1+4+4+8
-	BookmarkEntryType EntryType = 176
+	FileEntryMinSize uint32 = 17 // 1+4+4+8
 )
 
 type FileEntry struct {

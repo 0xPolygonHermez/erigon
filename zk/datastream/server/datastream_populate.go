@@ -68,16 +68,9 @@ func WriteBlocksToStream(
 		//	return err
 		//}
 
-		highestBlockInBatch, err := reader.GetHighestBlockInBatch(batchNum)
-		if err != nil {
-			return err
-		}
-
-		batchEnd := highestBlockInBatch == block.NumberU64()
-
 		l1InfoMinTimestamps := make(map[uint64]uint64)
 
-		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, l1InfoMinTimestamps, batchEnd)
+		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, l1InfoMinTimestamps)
 		if err != nil {
 			return err
 		}

@@ -37,7 +37,7 @@ func (b *L2BlockProto) Marshal() ([]byte, error) {
 }
 
 func (b *L2BlockProto) Type() EntryType {
-	return EntryType(datastream.EntryType_ENTRY_TYPE_L2_BLOCK)
+	return EntryTypeL2Block
 }
 
 func UnmarshalL2Block(data []byte) (*FullL2Block, error) {

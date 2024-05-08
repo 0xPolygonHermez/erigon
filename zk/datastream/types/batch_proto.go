@@ -36,7 +36,7 @@ func (b *BatchStartProto) Marshal() ([]byte, error) {
 }
 
 func (b *BatchStartProto) Type() EntryType {
-	return EntryType(datastream.EntryType_ENTRY_TYPE_BATCH_START)
+	return EntryTypeBatchStart
 }
 
 type BatchEnd struct {
@@ -50,7 +50,7 @@ func (b *BatchEndProto) Marshal() ([]byte, error) {
 }
 
 func (b *BatchEndProto) Type() EntryType {
-	return EntryType(datastream.EntryType_ENTRY_TYPE_BATCH_END)
+	return EntryTypeBatchEnd
 }
 
 func UnmarshalBatchStart(data []byte) (*BatchStart, error) {

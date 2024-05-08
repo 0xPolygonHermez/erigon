@@ -25,7 +25,7 @@ func (t *TxProto) Marshal() ([]byte, error) {
 }
 
 func (t *TxProto) Type() EntryType {
-	return EntryType(datastream.EntryType_ENTRY_TYPE_TRANSACTION)
+	return EntryTypeL2Tx
 }
 
 func UnmarshalTx(data []byte) (*L2TransactionProto, error) {

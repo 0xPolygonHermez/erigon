@@ -13,9 +13,6 @@ import (
 const (
 	gerUpdateDataLength         = 106
 	gerUpdateDataLengthPreEtrog = 102
-
-	// EntryTypeL2Block represents a L2 block
-	EntryTypeGerUpdate EntryType = 4
 )
 
 type GerUpdate struct {

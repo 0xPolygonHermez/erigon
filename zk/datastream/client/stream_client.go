@@ -396,7 +396,7 @@ func (c *StreamClient) readFullBlockProto() (*types.FullL2Block, *types.BatchSta
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("parse bookmark error: %v", err)
 			}
-			if bookmark.Type() == types.EntryType(datastream.BookmarkType_BOOKMARK_TYPE_BATCH) {
+			if bookmark.BookmarkType() == datastream.BookmarkType_BOOKMARK_TYPE_BATCH {
 				batchBookmark = bookmark
 				log.Trace("batch bookmark", "bookmark", bookmark)
 				return nil, nil, nil, &gerUpdates, batchBookmark, nil, 0, 0, nil
@@ -481,10 +481,10 @@ func (c *StreamClient) readFullBlockProto() (*types.FullL2Block, *types.BatchSta
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("parse bookmark error: %v", err)
 			}
-			if bookmark.Type() == types.EntryType(datastream.BookmarkType_BOOKMARK_TYPE_BATCH) {
+			if bookmark.BookmarkType() == datastream.BookmarkType_BOOKMARK_TYPE_BATCH {
 				batchBookmark = bookmark
 				log.Trace("batch bookmark", "bookmark", bookmark)
-				return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("unexpected bookmark type: %d", file.EntryType)
+				return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("unexpected bookmark type: %d", bookmark.BookmarkType())
 			} else {
 				blockBookmark = bookmark
 				log.Trace("block bookmark", "bookmark", bookmark)

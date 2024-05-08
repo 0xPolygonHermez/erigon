@@ -23,7 +23,7 @@ func (b *BookmarkProto) Marshal() ([]byte, error) {
 }
 
 func (b *BookmarkProto) Type() EntryType {
-	return EntryType(b.BookMark.GetType())
+	return BookmarkEntryType
 }
 
 func (b *BookmarkProto) BookmarkType() datastream.BookmarkType {

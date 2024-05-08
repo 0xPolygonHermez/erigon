@@ -166,7 +166,6 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	batchNumber uint64,
 	lastBatchNumber uint64,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
-	batchEnd bool,
 ) (*[]DataStreamEntryProto, error) {
 	blockNum := block.NumberU64()
 
@@ -174,36 +173,45 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	entryCount += len(block.Transactions()) // transactions
 
 	if lastBatchNumber != batchNumber {
-		entryCount++ // batch bookmark
+		entryCount += 3 // end last batch + new batch bookmark + new batch start
 	}
 
-	if batchEnd {
-		entryCount++ // batch
-	}
+	//if batchEnd {
+	//	entryCount++ // batch end
+	//}
 
 	entries := make([]DataStreamEntryProto, entryCount)
 	index := 0
 
 	// BATCH BOOKMARK
 	if batchNumber != lastBatchNumber {
+		// seal off the last batch
+		end, err := srv.CreateBatchEndProto(lastBlock.Root(), lastBlock.Root())
+		if err != nil {
+			return nil, err
+		}
+		entries[index] = end
+		index++
+
+		// bookmark for new batch
 		batchBookmark := srv.CreateBatchBookmarkEntryProto(batchNumber)
 		entries[index] = batchBookmark
+		index++
+
+		// new batch starting
+		fork, err := reader.GetForkId(batchNumber)
+		if err != nil {
+			return nil, err
+		}
+		batch, err := srv.CreateBatchStartProto(batchNumber, srv.chainId, fork)
+		if err != nil {
+			return nil, err
+		}
+		entries[index] = batch
 		index++
 	}
 
 	deltaTimestamp := block.Time() - lastBlock.Time()
-
-	// BATCH START
-	fork, err := reader.GetForkId(batchNumber)
-	if err != nil {
-		return nil, err
-	}
-
-	batch, err := srv.CreateBatchStartProto(batchNumber, srv.chainId, fork)
-	if err != nil {
-		return nil, err
-	}
-	entries[index] = batch
 
 	// L2 BLOCK BOOKMARK
 	l2blockBookmark := srv.CreateL2BlockBookmarkEntryProto(blockNum)
@@ -256,11 +264,6 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 		index++
 	}
 
-	// BATCH
-	if batchEnd {
-		// TODO: batch end create: block.Root(), block.Root()
-	}
-
 	return &entries, nil
 }
 
@@ -271,9 +274,8 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytesProto(
 	batchNumber uint64,
 	lastBatchNumber uint64,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
-	batchEnd bool,
 ) ([]byte, error) {
-	entries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNumber, lastBatchNumber, l1InfoTreeMinTimestamps, batchEnd)
+	entries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNumber, lastBatchNumber, l1InfoTreeMinTimestamps)
 	if err != nil {
 		return nil, err
 	}

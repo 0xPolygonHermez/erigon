@@ -305,7 +305,7 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(request *VerifierRequest, tx kv.
 
 		var sBytes []byte
 
-		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, l1InfoTreeMinTimestamps, true)
+		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, l1InfoTreeMinTimestamps)
 		if err != nil {
 			return nil, err
 		}
