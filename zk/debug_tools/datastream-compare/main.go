@@ -143,14 +143,8 @@ func main() {
 					blockMismatch = true
 				}
 
-				if localTx.StateRoot != remoteTx.StateRoot {
-					log.Error("Block txs StateRoot don't match", "localBlockNumber", localBlock.L2BlockNumber, "localBlockTx", localTx.StateRoot, "remoteBlockTx", remoteTx.StateRoot)
-					blockMismatch = true
-				}
-
-				if localTx.EncodedLength != remoteTx.EncodedLength {
-					log.Error("Block txs EncodedLength don't match", "localBlockNumber", localBlock.L2BlockNumber, "localBlockTx", localTx.EncodedLength, "remoteBlockTx", remoteTx.EncodedLength, "local.Encoded", localTx.Encoded, "remote.Encoded", remoteTx.Encoded)
-
+				if localTx.IntermediateStateRoot != remoteTx.IntermediateStateRoot {
+					log.Error("Block txs StateRoot don't match", "localBlockNumber", localBlock.L2BlockNumber, "localBlockTx", localTx.IntermediateStateRoot, "remoteBlockTx", remoteTx.IntermediateStateRoot)
 					blockMismatch = true
 				}
 
