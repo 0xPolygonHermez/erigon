@@ -36,7 +36,7 @@ func getLatestBlockNumberWritten(stream *datastreamer.StreamServer, header *data
 	return l2EndBlock.L2BlockNumber, nil
 }
 
-func ConsequitiveWriteBlocksToStream(
+func ConsecutiveWriteBlocksToStream(
 	tx kv.Tx,
 	reader *hermez_db.HermezDbReader,
 	srv *DataStreamServer,
