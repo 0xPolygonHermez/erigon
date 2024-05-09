@@ -25,6 +25,37 @@ func (api *APIImpl) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 		return &price, nil
 	}
 
+	res, err := client.JSONRPCCall(api.l2RpcUrl, "eth_gasPrice")
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Error != nil {
+		return nil, fmt.Errorf("RPC error response: %s", res.Error.Message)
+	}
+	if res.Error != nil {
+		return nil, fmt.Errorf("RPC error response: %s", res.Error.Message)
+	}
+
+	var resultString string
+	if err := json.Unmarshal(res.Result, &resultString); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal result: %v", err)
+	}
+
+	price, ok := big.NewInt(0).SetString(resultString[2:], 16)
+	if !ok {
+		return nil, fmt.Errorf("failed to convert result to big.Int")
+	}
+
+	return (*hexutil.Big)(price), nil
+}
+
+func (api *APIImpl) GasPrice_nonRedirected(ctx context.Context) (*hexutil.Big, error) {
+	if api.BaseAPI.gasless {
+		var price hexutil.Big
+		return &price, nil
+	}
+
 	// if gas price timestamp is older than 3 seconds, update it
 	if time.Since(api.L1GasPrice.timestamp) > 3*time.Second || api.L1GasPrice.gasPrice == nil {
 		l1GasPrice, err := api.l1GasPrice()
