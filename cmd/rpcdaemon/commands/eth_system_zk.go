@@ -20,6 +20,20 @@ type L1GasPrice struct {
 }
 
 func (api *APIImpl) GasPrice(ctx context.Context) (*hexutil.Big, error) {
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	cc, err := api.chainConfig(tx)
+	if err != nil {
+		return nil, err
+	}
+	chainId := cc.ChainID
+	if !api.isZkNonSequencer(chainId) {
+		return api.GasPrice_nonRedirected(ctx)
+	}
+
 	if api.BaseAPI.gasless {
 		var price hexutil.Big
 		return &price, nil
