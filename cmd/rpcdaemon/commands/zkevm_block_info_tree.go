@@ -11,7 +11,6 @@ import (
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
@@ -32,7 +31,7 @@ type TxInfo struct {
 	data                []byte
 	l2TxHash            *common.Hash
 	txIndex             int
-	receipt             *ethTypes.Receipt
+	receipt             *types.Receipt
 	logIndex            uint64
 	cumulativeGasUsed   uint64
 	effectivePercentage uint8
@@ -96,10 +95,15 @@ func (api *ZkEvmAPIImpl) GetL2BlockInfoTree(ctx context.Context, blockNum rpc.Bl
 	vmConfig := vm.NewTraceVmConfig()
 	vmConfig.Debug = false
 	vmConfig.NoReceipts = false
-	_, blockContext, _, ibs, _, ger, l1BlockHash, err := transactions.ComputeTxEnv_ZkEvm(ctx, api.ethApi._engine, block, chainConfig, api.ethApi._blockReader, tx, 0, api.ethApi.historyV3(tx))
+
+	txEnv, err := transactions.ComputeTxEnv_ZkEvm(ctx, api.ethApi._engine, block, chainConfig, api.ethApi._blockReader, tx, 0, api.ethApi.historyV3(tx))
 	if err != nil {
 		return nil, err
 	}
+	blockContext := txEnv.BlockContext
+	ibs := txEnv.Ibs
+	ger := txEnv.GlobalExitRoot
+	l1BlockHash := txEnv.L1BlockHash
 
 	usedGas := new(uint64)
 	gp := new(core.GasPool).AddGas(block.GasLimit())
