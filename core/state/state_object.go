@@ -184,6 +184,7 @@ func (so *stateObject) GetCommittedState(key *libcommon.Hash, out *uint256.Int) 
 		}
 	}
 	if so.created {
+		so.db.stateReader.ReadAccountStorage(so.address, so.data.GetIncarnation(), key)
 		out.Clear()
 		return
 	}
