@@ -116,11 +116,6 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(ctx context.Context, tx kv.RwT
 		}, nil
 	}
 
-	execer := v.getNextOnlineAvailableExecutor()
-	if execer == nil {
-		return nil, ErrNoExecutorAvailable
-	}
-
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 
 	// get the data stream bytes
@@ -174,20 +169,28 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(ctx context.Context, tx kv.RwT
 		L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
 	}
 
-	previousBlock, _ := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
+	previousBlock, err := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
+	if err != nil {
+		return nil, err
+	}
 
 	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
 	promise := NewPromise[*VerifierResponse](func() (*VerifierResponse, error) {
 		p := payload
 		r := request
-		root := previousBlock.Root()
+		blockCopy := previousBlock.Copy()
 		failureResponse := &VerifierResponse{
 			BatchNumber: request.BatchNumber,
 			Valid:       false,
 			Witness:     witness,
 		}
 
-		ok, err2 := execer.Verify(p, r, root)
+		e := v.getNextOnlineAvailableExecutor()
+		if e == nil {
+			return nil, ErrNoExecutorAvailable
+		}
+
+		ok, err2 := e.Verify(p, r, blockCopy.Root())
 		if err2 != nil {
 			return failureResponse, err2
 		}

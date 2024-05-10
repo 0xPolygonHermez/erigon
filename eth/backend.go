@@ -800,8 +800,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			if len(cfg.ExecutorUrls) > 0 && cfg.ExecutorUrls[0] != "" {
 				levCfg := legacy_executor_verifier.Config{
 					GrpcUrls:              cfg.ExecutorUrls,
-					Timeout:               time.Second * 60,
-					MaxConcurrentRequests: 1,
+					Timeout:               cfg.ExecutorRequestTimeout,
+					MaxConcurrentRequests: cfg.ExecutorMaxConcurrentRequests,
 				}
 				executors := legacy_executor_verifier.NewExecutors(levCfg)
 				for _, e := range executors {
