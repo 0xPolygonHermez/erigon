@@ -255,6 +255,34 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytes(
 	return result, nil
 }
 
+// must be done on offline server
+// finds the position of the endBlock entry for the given number
+// and unwinds the datastream file to it
+func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
+	// check if server is online
+
+	// find blockend entry
+	bookmark := types.NewL2BlockBookmark(blockNumber)
+	entryNum, err := srv.stream.GetBookmark(bookmark.EncodeBigEndian())
+	if err != nil {
+		return err
+	}
+
+	//find end block entry to delete from it onward
+	for {
+		entry, err := srv.stream.GetEntry(entryNum)
+		if err != nil {
+			return nil
+		}
+		if entry.Type == datastreamer.EntryType(3) {
+			break
+		}
+		entryNum -= 1
+	}
+
+	return srv.stream.TruncateFile(entryNum)
+}
+
 const (
 	PACKET_TYPE_DATA = 2
 	// NOOP_ENTRY_NUMBER is used because we don't care about the entry number when feeding an atrificial
