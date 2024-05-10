@@ -184,7 +184,13 @@ func (so *stateObject) GetCommittedState(key *libcommon.Hash, out *uint256.Int) 
 		}
 	}
 	if so.created {
-		so.db.stateReader.ReadAccountStorage(so.address, so.data.GetIncarnation(), key)
+		/*
+		* Due to specifics of an SMT, it needs to know all intermediate nodes to write stuff.
+		* If the smart contract is just created, and the slot is reset after use,
+		* it will never get registered in the witness, and SMT won't be able to insert data there,
+		* getting the HASH key.
+		 */
+		so.registerKeyReadForWitness(key)
 		out.Clear()
 		return
 	}
