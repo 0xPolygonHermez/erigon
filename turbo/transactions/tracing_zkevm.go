@@ -23,17 +23,17 @@ import (
 )
 
 // ComputeTxEnv returns the execution environment of a certain transaction.
-func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, block *types.Block, cfg *chain.Config, headerReader services.HeaderReader, dbtx kv.Tx, txIndex int, historyV3 bool) (core.Message, evmtypes.BlockContext, evmtypes.TxContext, *state.IntraBlockState, state.StateReader, error) {
+func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, block *types.Block, cfg *chain.Config, headerReader services.HeaderReader, dbtx kv.Tx, txIndex int, historyV3 bool) (core.Message, evmtypes.BlockContext, evmtypes.TxContext, *state.IntraBlockState, state.StateReader, *libcommon.Hash, *libcommon.Hash, error) {
 	reader, err := rpchelper.CreateHistoryStateReader(dbtx, block.NumberU64(), txIndex, historyV3, cfg.ChainName)
 	if err != nil {
-		return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, err
+		return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, nil, nil, err
 	}
 
 	// Create the parent state database
 	statedb := state.New(reader)
 
 	if txIndex == 0 && len(block.Transactions()) == 0 {
-		return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, statedb, reader, nil
+		return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, statedb, reader, nil, nil, nil
 	}
 	getHeader := func(hash libcommon.Hash, n uint64) *types.Header {
 		h, _ := headerReader.HeaderByNumber(ctx, dbtx, n)
@@ -54,9 +54,9 @@ func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, bloc
 
 	vmConfig := vm.NewTraceVmConfig()
 
-	blockContext, excessDataGas, _, _, err := core.PrepareBlockTxExecution(cfg, &vmConfig, core.GetHashFn(header, getHeader), nil, engine.(consensus.Engine), stagedsync.NewChainReaderImpl(cfg, dbtx, nil), block, statedb, hermezReader, block.GasLimit())
+	blockContext, excessDataGas, ger, l1BlockHash, err := core.PrepareBlockTxExecution(cfg, &vmConfig, core.GetHashFn(header, getHeader), nil, engine.(consensus.Engine), stagedsync.NewChainReaderImpl(cfg, dbtx, nil), block, statedb, hermezReader, block.GasLimit())
 	if err != nil {
-		return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, err
+		return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, nil, nil, err
 	}
 
 	// Recompute transactions up to the target index.
@@ -74,7 +74,7 @@ func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, bloc
 		}
 
 		TxContext := core.NewEVMTxContext(msg)
-		return msg, *blockContext, TxContext, statedb, reader, nil
+		return msg, *blockContext, TxContext, statedb, reader, ger, l1BlockHash, nil
 	}
 
 	gp := new(core.GasPool).AddGas(block.GasLimit())
@@ -82,32 +82,32 @@ func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, bloc
 		select {
 		default:
 		case <-ctx.Done():
-			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, ctx.Err()
+			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, nil, nil, ctx.Err()
 		}
 
 		txHash := txn.Hash()
 		vmenv, effectiveGasPricePercentage, err := core.PrepareForTxExecution(cfg, &vmConfig, blockContext, hermezReader, statedb, block, &txHash, txIndex)
 		if err != nil {
-			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, err
+			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, nil, nil, err
 		}
 
 		msg, txContext, err := core.GetTxContext(cfg, engine, statedb, header, txn, vmenv, effectiveGasPricePercentage)
 		if err != nil {
-			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, err
+			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, nil, nil, err
 		}
 
 		if idx == txIndex {
-			return msg, vmenv.Context(), txContext, statedb, reader, nil
+			return msg, vmenv.Context(), txContext, statedb, reader, ger, l1BlockHash, nil
 		}
 
 		if _, _, err := core.ApplyMessageWithTxContext(msg, txContext, gp, statedb, reader.(*state.PlainState), header.Number, txn, nil, vmenv); err != nil {
-			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, err
+			return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, nil, nil, err
 		}
 
 		if idx+1 == len(block.Transactions()) {
 			// Return the state from evaluating all txs in the block, note no msg or TxContext in this case
-			return nil, vmenv.Context(), evmtypes.TxContext{}, statedb, reader, nil
+			return nil, vmenv.Context(), evmtypes.TxContext{}, statedb, reader, ger, l1BlockHash, nil
 		}
 	}
-	return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, fmt.Errorf("transaction index %d out of range for block %x", txIndex, block.Hash())
+	return nil, evmtypes.BlockContext{}, evmtypes.TxContext{}, nil, nil, ger, l1BlockHash, fmt.Errorf("transaction index %d out of range for block %x", txIndex, block.Hash())
 }
