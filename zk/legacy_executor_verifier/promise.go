@@ -32,3 +32,9 @@ func (p *Promise[T]) Get(f func(r T) error) (T, error) {
 	}
 	return p.result, p.err
 }
+
+func (p *Promise[T]) GetNonBlocking() (T, error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.result, p.err
+}

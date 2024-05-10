@@ -4,6 +4,11 @@ import (
 	"context"
 	"sync"
 
+	"encoding/hex"
+	"fmt"
+	"strconv"
+
+	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/chain"
@@ -14,11 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/erigon/zk/syncer"
-	"fmt"
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
-	"strconv"
 	"github.com/ledgerwatch/log/v3"
-	"encoding/hex"
 )
 
 const (
@@ -65,7 +66,6 @@ type LegacyExecutorVerifier struct {
 	executorGrpc     executor.ExecutorServiceClient
 
 	promises     []*Promise[*VerifierResponse]
-	promisesLock sync.Mutex
 	addedBatches map[uint64]struct{}
 }
 
@@ -96,7 +96,6 @@ func NewLegacyExecutorVerifier(
 		witnessGenerator: witnessGenerator,
 		l1Syncer:         l1Syncer,
 		promises:         make([]*Promise[*VerifierResponse], 0),
-		promisesLock:     sync.Mutex{},
 		addedBatches:     make(map[uint64]struct{}),
 	}
 
@@ -225,26 +224,31 @@ func writeBatchToStream(result *VerifierResponse, hdb *hermez_db.HermezDbReader,
 }
 
 func (v *LegacyExecutorVerifier) ConsumeResultsUnsafe(tx kv.RwTx) ([]*VerifierResponse, error) {
-	v.promisesLock.Lock()
-	defer v.promisesLock.Unlock()
-
 	hdb := hermez_db.NewHermezDbReader(tx)
 
-	results := make([]*VerifierResponse, len(v.promises))
-	for i, promise := range v.promises {
-		result, err := promise.Get(func(r *VerifierResponse) error {
-			return writeBatchToStream(v.promises[i].result, hdb, tx, v)
-		})
+	results := make([]*VerifierResponse, 0, len(v.promises))
+	for _, promise := range v.promises {
+		result, err := promise.GetNonBlocking()
+		if result == nil && err == nil {
+			break
+		}
 		if err != nil {
 			log.Error("error getting verifier result", "err", err)
 		}
-		results[i] = result
+		if result != nil {
+			err = writeBatchToStream(result, hdb, tx, v)
+			if err != nil {
+				log.Error("error getting verifier result", "err", err)
+			}
+		}
+
+		results = append(results, result)
 		// remove from addedBatches
 		delete(v.addedBatches, result.BatchNumber)
 	}
 
-	// clear the promises
-	v.promises = nil
+	// leave only non-processed promises
+	v.promises = v.promises[len(results):]
 
 	return results, nil
 }
