@@ -66,7 +66,6 @@ type LegacyExecutorVerifier struct {
 	executorGrpc     executor.ExecutorServiceClient
 
 	promises     []*Promise[*VerifierResponse]
-	promisesLock sync.Mutex
 	addedBatches map[uint64]struct{}
 }
 
@@ -97,7 +96,6 @@ func NewLegacyExecutorVerifier(
 		witnessGenerator: witnessGenerator,
 		l1Syncer:         l1Syncer,
 		promises:         make([]*Promise[*VerifierResponse], 0),
-		promisesLock:     sync.Mutex{},
 		addedBatches:     make(map[uint64]struct{}),
 	}
 
@@ -226,9 +224,6 @@ func writeBatchToStream(result *VerifierResponse, hdb *hermez_db.HermezDbReader,
 }
 
 func (v *LegacyExecutorVerifier) ConsumeResultsUnsafe(tx kv.RwTx) ([]*VerifierResponse, error) {
-	v.promisesLock.Lock()
-	defer v.promisesLock.Unlock()
-
 	hdb := hermez_db.NewHermezDbReader(tx)
 
 	results := make([]*VerifierResponse, 0, len(v.promises))
@@ -252,8 +247,8 @@ func (v *LegacyExecutorVerifier) ConsumeResultsUnsafe(tx kv.RwTx) ([]*VerifierRe
 		delete(v.addedBatches, result.BatchNumber)
 	}
 
-	// clear the promises
-	v.promises = nil
+	// leave only non-processed promises
+	v.promises = v.promises[len(results):]
 
 	return results, nil
 }
