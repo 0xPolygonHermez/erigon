@@ -235,7 +235,7 @@ func (v *LegacyExecutorVerifier) ConsumeResultsUnsafe(tx kv.RwTx) ([]*VerifierRe
 	for _, promise := range v.promises {
 		result, err := promise.GetNonBlocking()
 		if result == nil && err == nil {
-			continue
+			break
 		}
 		if err != nil {
 			log.Error("error getting verifier result", "err", err)
