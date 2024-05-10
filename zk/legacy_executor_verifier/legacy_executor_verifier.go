@@ -4,6 +4,11 @@ import (
 	"context"
 	"sync"
 
+	"encoding/hex"
+	"fmt"
+	"strconv"
+
+	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/chain"
@@ -14,11 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/erigon/zk/syncer"
-	"fmt"
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
-	"strconv"
 	"github.com/ledgerwatch/log/v3"
-	"encoding/hex"
 )
 
 const (
@@ -230,15 +231,23 @@ func (v *LegacyExecutorVerifier) ConsumeResultsUnsafe(tx kv.RwTx) ([]*VerifierRe
 
 	hdb := hermez_db.NewHermezDbReader(tx)
 
-	results := make([]*VerifierResponse, len(v.promises))
-	for i, promise := range v.promises {
-		result, err := promise.Get(func(r *VerifierResponse) error {
-			return writeBatchToStream(v.promises[i].result, hdb, tx, v)
-		})
+	results := make([]*VerifierResponse, 0, len(v.promises))
+	for _, promise := range v.promises {
+		result, err := promise.GetNonBlocking()
+		if result == nil && err == nil {
+			continue
+		}
 		if err != nil {
 			log.Error("error getting verifier result", "err", err)
 		}
-		results[i] = result
+		if result != nil {
+			err = writeBatchToStream(result, hdb, tx, v)
+			if err != nil {
+				log.Error("error getting verifier result", "err", err)
+			}
+		}
+
+		results = append(results, result)
 		// remove from addedBatches
 		delete(v.addedBatches, result.BatchNumber)
 	}
