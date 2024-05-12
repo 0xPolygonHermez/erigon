@@ -15,25 +15,30 @@ import (
 )
 
 func getLatestBlockNumberWritten(stream *datastreamer.StreamServer, header *datastreamer.HeaderEntry) (uint64, error) {
-	if header.TotalEntries == 0 {
+	total := header.TotalEntries
+	if total == 0 {
 		return 0, nil
 	}
 
-	entry, err := stream.GetEntry(header.TotalEntries - 1)
-	if err != nil {
-		return 0, err
+	var blockNumber uint64
+	var entry datastreamer.FileEntry
+
+	for ; total > 0 && entry.Type != datastreamer.EntryType(1); total-- {
+		entry, err := stream.GetEntry(total)
+		if err != nil {
+			return 0, err
+		}
+		if entry.Type == datastreamer.EntryType(2) {
+			l2Block, err := types.UnmarshalL2Block(entry.Data)
+			if err != nil {
+				return 0, err
+			}
+			blockNumber = l2Block.L2BlockNumber
+			break
+		}
 	}
 
-	if entry.Type != datastreamer.EntryType(3) {
-		return 0, fmt.Errorf("expected endL2BlockEntry, got %d", entry.Type)
-	}
-
-	l2EndBlock, err := types.DecodeEndL2BlockBigEndian(entry.Data)
-	if err != nil {
-		return 0, err
-	}
-
-	return l2EndBlock.L2BlockNumber, nil
+	return blockNumber, nil
 }
 
 func ConsecutiveWriteBlocksToStream(
