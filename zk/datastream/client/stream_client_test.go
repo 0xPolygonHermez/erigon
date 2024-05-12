@@ -1,6 +1,8 @@
 package client
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -39,7 +41,7 @@ func Test_readHeaderEntry(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		c := NewClient("", 0, 0)
+		c := NewClient(context.Background(), "", 0, 0)
 		server, conn := net.Pipe()
 		defer server.Close()
 		defer c.Stop()
@@ -103,7 +105,7 @@ func Test_readResultEntry(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		c := NewClient("", 0, 0)
+		c := NewClient(context.Background(), "", 0, 0)
 		server, conn := net.Pipe()
 		defer server.Close()
 		defer c.Stop()
@@ -172,7 +174,7 @@ func Test_readFileEntry(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		c := NewClient("", 0, 0)
+		c := NewClient(context.Background(), "", 0, 0)
 		server, conn := net.Pipe()
 		defer server.Close()
 		defer c.Stop()

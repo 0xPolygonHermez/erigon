@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -17,14 +18,15 @@ const amountToRead = 10
 
 // This code downloads headers and blocks from a datastream server.
 func main() {
+	ctx := context.Background()
 	cfg, err := debug_tools.GetConf()
 	if err != nil {
 		panic(fmt.Sprintf("RPGCOnfig: %s", err))
 	}
 
 	// Create client
-	localClient := client.NewClient(localDatastream, 3, 500)
-	remoteClient := client.NewClient(cfg.Datastream, 3, 500)
+	localClient := client.NewClient(ctx, localDatastream, client.BigEndianVersion, 500)
+	remoteClient := client.NewClient(ctx, cfg.Datastream, client.BigEndianVersion, 500)
 
 	// Start client (connect to the server)
 	defer localClient.Stop()

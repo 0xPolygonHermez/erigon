@@ -866,7 +866,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 			*/
 
-			streamClient := initDataStreamClient(cfg.Zk)
+			streamClient := initDataStreamClient(ctx, cfg.Zk)
 
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
@@ -922,12 +922,12 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName string) *etherman.Client {
 }
 
 // creates a datastream client with default parameters
-func initDataStreamClient(cfg *ethconfig.Zk) *client.StreamClient {
+func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk) *client.StreamClient {
 	// datastream
 	// Create client
 	log.Info("Starting datastream client...")
 	// retry connection
-	datastreamClient := client.NewClient(cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout)
+	datastreamClient := client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout)
 
 	for i := 0; i < 30; i++ {
 		// Start client (connect to the server)
@@ -1332,6 +1332,11 @@ func (s *Ethereum) Protocols() []p2p.Protocol {
 func (s *Ethereum) Start() error {
 	s.sentriesClient.StartStreamLoops(s.sentryCtx)
 	time.Sleep(10 * time.Millisecond) // just to reduce logs order confusion
+
+	// don't start the stageloop if debug.no-sync flag set
+	if s.config.DebugNoSync {
+		return nil
+	}
 
 	go stages2.StageLoop(s.sentryCtx, s.chainConfig, s.chainDB, s.stagedSync, s.sentriesClient.Hd, s.notifications, s.sentriesClient.UpdateHead, s.waitForStageLoopStop, s.config.Sync.LoopThrottle)
 

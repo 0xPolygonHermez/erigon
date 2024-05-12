@@ -53,6 +53,7 @@ type ZkEvmAPI interface {
 	GetProverInput(ctx context.Context, batchNumber uint64, mode *WitnessMode, debug *bool) (*legacy_executor_verifier.RpcPayload, error)
 	GetLatestGlobalExitRoot(ctx context.Context) (common.Hash, error)
 	GetExitRootsByGER(ctx context.Context, globalExitRoot common.Hash) (*ZkExitRoots, error)
+	GetL2BlockInfoTree(ctx context.Context, blockNum rpc.BlockNumberOrHash) (json.RawMessage, error)
 }
 
 // APIImpl is implementation of the ZkEvmAPI interface based on remote Db access
@@ -426,6 +427,8 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 	// the call later to `getReceipts` sets the incorrect sender because of this so we need to calc and hold
 	// these ahead of time.  TODO: fix senders stage to avoid this or update them with the new hash in execution
 	number := baseBlock.NumberU64()
+	hermezReader := hermez_db.NewHermezDbReader(tx)
+
 	signer := eritypes.MakeSigner(cc, number)
 	var senders []common.Address
 	var effectiveGasPricePercentages []uint8
@@ -436,7 +439,7 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 				return types.Block{}, err
 			}
 			senders = append(senders, sender)
-			effectiveGasPricePercentage, err := api.ethApi.getEffectiveGasPricePercentage(tx, txn.Hash())
+			effectiveGasPricePercentage, err := hermezReader.GetEffectiveGasPricePercentage(txn.Hash())
 			if err != nil {
 				return types.Block{}, err
 			}
