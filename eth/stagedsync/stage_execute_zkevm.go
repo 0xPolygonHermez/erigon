@@ -460,6 +460,10 @@ func UnwindExecutionStageZk(u *UnwindState, s *StageState, tx kv.RwTx, ctx conte
 	if err = unwindExecutionStage(u, s, tx, ctx, cfg, initialCycle); err != nil {
 		return err
 	}
+	if err = UnwindExecutionStageDbWrites(u, tx); err != nil {
+		return err
+	}
+
 	if err = u.Done(tx); err != nil {
 		return err
 	}
@@ -534,4 +538,14 @@ func PruneExecutionStageZk(s *PruneState, tx kv.RwTx, cfg ExecuteBlockCfg, ctx c
 		}
 	}
 	return nil
+}
+
+func UnwindExecutionStageDbWrites(u *UnwindState, tx kv.RwTx) error {
+	// backward values that by default handinged in stage_headers
+	// TODO: check for other missing value like - WriteHeader_zkEvm, WriteHeadHeaderHash, WriteCanonicalHash, WriteBody, WriteSenders, WriteTxLookupEntries_zkEvm
+	hash, err := rawdb.ReadCanonicalHash(tx, u.UnwindPoint)
+	if err != nil {
+		return err
+	}
+	rawdb.WriteHeadHeaderHash(tx, hash)
 }

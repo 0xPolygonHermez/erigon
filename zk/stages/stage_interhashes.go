@@ -219,11 +219,6 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	}
 	_ = root
 
-	// ensure we update the head header hash as in the zk world this is handled in the inters stage
-	if err := rawdb.WriteHeadHeaderHash(tx, syncHeadHeader.Hash()); err != nil {
-		return err
-	}
-
 	if err := u.Done(tx); err != nil {
 		return err
 	}
