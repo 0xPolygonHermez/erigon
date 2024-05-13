@@ -43,6 +43,9 @@ type StreamClient struct {
 	l2BlockChan    chan types.FullL2Block
 	gerUpdatesChan chan types.GerUpdate // NB: unused from etrog onwards (forkid 7)
 	errChan        chan error
+
+	// keeps track of the latest fork from the stream to assign to l2 blocks
+	currentFork uint64
 }
 
 const (
@@ -278,6 +281,7 @@ LOOP:
 
 		// write batch starts to channel
 		if batchStart != nil {
+			c.currentFork = (*batchStart).ForkId
 			c.batchStartChan <- *batchStart
 			continue
 		}
@@ -297,6 +301,11 @@ LOOP:
 		if batchEnd != nil {
 			fullBlock.BatchEnd = true
 			fullBlock.LocalExitRoot = batchEnd.LocalExitRoot
+		}
+
+		// ensure the block is assigned the currently known fork
+		if fullBlock != nil {
+			fullBlock.ForkId = c.currentFork
 		}
 
 		c.lastWrittenTime.Store(time.Now().UnixNano())

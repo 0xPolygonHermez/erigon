@@ -245,7 +245,6 @@ LOOP:
 				break LOOP
 			}
 
-			l2Block.ForkId = lastForkId
 			l2Block.ChainId = cfg.zkCfg.L2ChainId
 
 			atLeastOneBlockWritten = true
