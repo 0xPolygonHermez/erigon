@@ -548,4 +548,6 @@ func UnwindExecutionStageDbWrites(u *UnwindState, tx kv.RwTx) error {
 		return err
 	}
 	rawdb.WriteHeadHeaderHash(tx, hash)
+
+	return nil
 }
