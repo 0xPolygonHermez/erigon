@@ -166,7 +166,7 @@ func SpawnStageBatches(
 			// Create bookmark
 			var bookmark *types.BookmarkProto
 			if stageProgressBlockNo == 0 {
-				bookmark = types.NewBookmarkProto(1, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
+				bookmark = types.NewBookmarkProto(0, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
 			} else {
 				bookmark = types.NewBookmarkProto(stageProgressBlockNo, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
 			}

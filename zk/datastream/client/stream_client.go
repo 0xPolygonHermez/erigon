@@ -288,7 +288,9 @@ LOOP:
 			}
 		}
 
-		if fullBlock == nil {
+		// we could have a scenario where a batch start is immediately followed by a batch end,
+		// so we need to report an error if the batch end is nil, and we have no block to process
+		if fullBlock == nil && batchEnd == nil {
 			return fmt.Errorf("block is nil, batch")
 		}
 
@@ -387,7 +389,7 @@ func (c *StreamClient) readFullBlockProto() (*types.FullL2Block, *types.BatchSta
 	var batchStart *types.BatchStart
 	var batchEnd *types.BatchEnd
 
-	for !file.IsL2Block() && !file.IsBatchStart() {
+	for !file.IsL2Block() && !file.IsBatchStart() && !file.IsBatchEnd() {
 		if file.IsBookmark() {
 			bookmark, err := types.UnmarshalBookmark(file.Data)
 			if err != nil {
@@ -430,6 +432,19 @@ func (c *StreamClient) readFullBlockProto() (*types.FullL2Block, *types.BatchSta
 		}
 		log.Trace("batch start", "batchStart", batchStart)
 		return nil, batchStart, nil, &gerUpdates, nil, nil, fromEntry, entriesRead, nil
+	}
+
+	if file.IsBatchEnd() {
+		batchEnd, err = types.UnmarshalBatchEnd(file.Data)
+		if err != nil {
+			return nil, nil, nil, nil, nil, nil, 0, 0, fmt.Errorf("parse batch end error: %v", err)
+		}
+		log.Trace("batch end", "batchEnd", batchEnd)
+		// we might not have a block here if the batch end was immediately after the batch start
+		if l2Block == nil {
+			l2Block = &types.FullL2Block{}
+		}
+		return l2Block, nil, batchEnd, &gerUpdates, nil, nil, fromEntry, entriesRead, nil
 	}
 
 	// Now handle the L2 block
