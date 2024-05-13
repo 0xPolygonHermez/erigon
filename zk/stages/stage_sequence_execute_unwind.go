@@ -41,6 +41,10 @@ func UnwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.Stage
 	if err = unwindExecutionStage(u, s, tx, ctx, cfg, initialCycle); err != nil {
 		return err
 	}
+	if err = stagedsync.UnwindExecutionStageDbWrites(u, tx); err != nil {
+		return err
+	}
+
 	if err = u.Done(tx); err != nil {
 		return err
 	}
