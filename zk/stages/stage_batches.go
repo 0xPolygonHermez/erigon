@@ -218,6 +218,10 @@ LOOP:
 			}
 
 			atLeastOneBlockWritten = true
+
+			if l2Block.L2BlockNumber == 0 {
+				continue
+			}
 			// if already had this block, unwind all stages, because the ones we have are wrong
 			if l2Block.L2BlockNumber < lastBlockHeight+1 {
 				log.Warn(fmt.Sprintf("[%s] Unwinding to block %d", logPrefix, l2Block.L2BlockNumber))
