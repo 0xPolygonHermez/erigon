@@ -160,7 +160,7 @@ func SpawnStageBatches(
 			// this will download all blocks from datastream and push them in a channel
 			// if no error, break, else continue trying to get them
 			// Create bookmark
-			bookmark := types.NewL2BlockBookmark(batchesProgress)
+			bookmark := types.NewL2BlockBookmark(batchesProgress + 1)
 			cfg.dsClient.ReadAllEntriesToChannel(bookmark)
 		}()
 	}
