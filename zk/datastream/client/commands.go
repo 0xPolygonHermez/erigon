@@ -11,8 +11,6 @@ const (
 	CmdStartBookmark Command = 4 // CmdStartBookmark for the start from bookmark TCP client command
 	CmdEntry         Command = 5 // CmdEntry for the get entry TCP client command
 	CmdBookmark      Command = 6 // CmdBookmark for the get bookmark TCP client command
-
-	BookmarkLength = 2
 )
 
 // sendHeaderCmd sends the header command to the server.
