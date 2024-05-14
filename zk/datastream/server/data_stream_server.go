@@ -255,6 +255,36 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytes(
 	return result, nil
 }
 
+func (srv *DataStreamServer) GetHighestBlockNumber() (uint64, error) {
+	header := srv.stream.GetHeader()
+
+	if header.TotalEntries == 0 {
+		return 0, nil
+	}
+
+	//find end block entry to delete from it onward
+	entryNum := header.TotalEntries - 1
+	var err error
+	var entry datastreamer.FileEntry
+	for {
+		entry, err = srv.stream.GetEntry(entryNum)
+		if err != nil {
+			return 0, err
+		}
+		if entry.Type == datastreamer.EntryType(3) {
+			break
+		}
+		entryNum -= 1
+	}
+
+	endBlockEntry, err := types.DecodeEndL2BlockBigEndian(entry.Data)
+	if err != nil {
+		return 0, err
+	}
+
+	return endBlockEntry.L2BlockNumber, nil
+}
+
 // must be done on offline server
 // finds the position of the endBlock entry for the given number
 // and unwinds the datastream file to it
@@ -272,7 +302,7 @@ func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
 	for {
 		entry, err := srv.stream.GetEntry(entryNum)
 		if err != nil {
-			return nil
+			return err
 		}
 		if entry.Type == datastreamer.EntryType(3) {
 			break
@@ -280,7 +310,7 @@ func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
 		entryNum -= 1
 	}
 
-	return srv.stream.TruncateFile(entryNum)
+	return srv.stream.TruncateFile(entryNum + 1)
 }
 
 const (
