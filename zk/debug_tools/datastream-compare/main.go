@@ -25,8 +25,8 @@ func main() {
 	}
 
 	// Create client
-	localClient := client.NewClient(ctx, localDatastream, client.BigEndianVersion, 500)
-	remoteClient := client.NewClient(ctx, cfg.Datastream, client.BigEndianVersion, 500)
+	localClient := client.NewClient(ctx, localDatastream, 3, 500)
+	remoteClient := client.NewClient(ctx, cfg.Datastream, 3, 500)
 
 	// Start client (connect to the server)
 	defer localClient.Stop()
