@@ -14,6 +14,7 @@ import (
 
 	"errors"
 
+	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -29,11 +30,11 @@ import (
 	smtNs "github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
+	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 )
 
 const (
@@ -56,13 +57,11 @@ type HasChangeSetWriter interface {
 	ChangeSetWriter() *state.ChangeSetWriter
 }
 
-type ChangeSetHook func(blockNum uint64, wr *state.ChangeSetWriter)
-
 type SequenceBlockCfg struct {
 	db            kv.RwDB
 	batchSize     datasize.ByteSize
 	prune         prune.Mode
-	changeSetHook ChangeSetHook
+	changeSetHook stagedsync.ChangeSetHook
 	chainConfig   *chain.Config
 	engine        consensus.Engine
 	zkVmConfig    *vm.ZkConfig
@@ -87,7 +86,7 @@ func StageSequenceBlocksCfg(
 	db kv.RwDB,
 	pm prune.Mode,
 	batchSize datasize.ByteSize,
-	changeSetHook ChangeSetHook,
+	changeSetHook stagedsync.ChangeSetHook,
 	chainConfig *chain.Config,
 	engine consensus.Engine,
 	vmConfig *vm.ZkConfig,
@@ -129,6 +128,29 @@ func StageSequenceBlocksCfg(
 		txPool:        txPool,
 		txPoolDb:      txPoolDb,
 	}
+}
+
+func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockCfg {
+	return stagedsync.StageExecuteBlocksCfg(
+		sCfg.db,
+		sCfg.prune,
+		sCfg.batchSize,
+		sCfg.changeSetHook,
+		sCfg.chainConfig,
+		sCfg.engine,
+		&sCfg.zkVmConfig.Config,
+		sCfg.accumulator,
+		sCfg.stateStream,
+		sCfg.badBlockHalt,
+		sCfg.historyV3,
+		sCfg.dirs,
+		sCfg.blockReader,
+		headerdownload.NewHeaderDownload(1, 1, sCfg.engine, sCfg.blockReader),
+		sCfg.genesis,
+		sCfg.syncCfg,
+		sCfg.agg,
+		sCfg.zk,
+	)
 }
 
 type stageDb struct {

@@ -6,6 +6,12 @@ import (
 	"strconv"
 	"sync"
 
+	"errors"
+	"fmt"
+	"sort"
+	"time"
+
+	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/chain"
@@ -17,11 +23,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/log/v3"
-	"fmt"
-	"sort"
-	"time"
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
-	"errors"
 )
 
 const (
@@ -117,7 +118,7 @@ func (v *LegacyExecutorVerifier) StopWork() {
 
 func (v *LegacyExecutorVerifier) StartWork() {
 	go func() {
-	tick := time.NewTicker(1 * time.Second)
+		tick := time.NewTicker(1 * time.Second)
 	LOOP:
 		for {
 			select {
@@ -184,6 +185,8 @@ func (v *LegacyExecutorVerifier) getNextOnlineExecutor() ILegacyExecutor {
 
 	return exec
 }
+
+var counter = 0
 
 func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *VerifierRequest) (bool, error) {
 	// if we have no executor config then just skip this step and treat everything as OK
@@ -286,6 +289,11 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 		}
 	}
 
+	if request.BatchNumber == 3 && counter == 0 {
+		ok = false
+		counter++
+	}
+
 	response := &VerifierResponse{
 		BatchNumber:      request.BatchNumber,
 		Valid:            ok,
@@ -336,6 +344,12 @@ func (v *LegacyExecutorVerifier) handleResponse(response *VerifierResponse) {
 	v.responseMutex.Lock()
 	defer v.responseMutex.Unlock()
 	v.responses = append(v.responses, response)
+}
+
+func (v *LegacyExecutorVerifier) CancelAllRequests() {
+	v.working.Lock()
+	defer v.working.Unlock()
+	v.openRequests = []*VerifierRequest{}
 }
 
 // not thread safe

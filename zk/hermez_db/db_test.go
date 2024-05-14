@@ -3,12 +3,13 @@ package hermez_db
 import (
 	"context"
 	"fmt"
+	"testing"
+
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/kv/mdbx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type IHermezDb interface {
@@ -344,7 +345,7 @@ func TestTruncateBlockBatches(t *testing.T) {
 	}
 
 	l2BlockNo := uint64(500)
-	err := db.TruncateBlockBatches(l2BlockNo)
+	err := db.TruncateBlockBatches(l2BlockNo+1, 1000)
 	require.NoError(t, err)
 
 	for i := l2BlockNo + 1; i <= 1000; i++ {

@@ -23,6 +23,7 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 
 	"github.com/ledgerwatch/erigon/common/dbutils"
+	"github.com/ledgerwatch/erigon/core/rawdb"
 )
 
 // DeleteHeader - dangerous, use DeleteAncientBlocks/TruncateBlocks methods
@@ -41,5 +42,20 @@ func DeleteSenders(db kv.Deleter, hash libcommon.Hash, number uint64) error {
 	if err := db.Delete(kv.Senders, dbutils.BlockBodyKey(number, hash)); err != nil {
 		return fmt.Errorf("failed to delete block senders: %w", err)
 	}
+	return nil
+}
+
+func TruncateSenders(db kv.RwTx, fromBlockNum, toBlockNum uint64) error {
+	for i := fromBlockNum; i <= toBlockNum; i++ {
+		block, err := rawdb.ReadBlockByNumber(db, i)
+		if err != nil {
+			return err
+		}
+
+		if err = DeleteSenders(db, block.Header().Hash(), i); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
