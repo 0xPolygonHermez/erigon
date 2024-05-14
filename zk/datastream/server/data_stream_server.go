@@ -347,18 +347,18 @@ func (srv *DataStreamServer) GetHighestBlockNumber() (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		if entry.Type == datastreamer.EntryType(3) {
+		if entry.Type == datastreamer.EntryType(2) {
 			break
 		}
 		entryNum -= 1
 	}
 
-	endBlockEntry, err := types.DecodeEndL2BlockBigEndian(entry.Data)
+	l2Block, err := types.UnmarshalL2Block(entry.Data)
 	if err != nil {
 		return 0, err
 	}
 
-	return endBlockEntry.L2BlockNumber, nil
+	return l2Block.L2BlockNumber, nil
 }
 
 // must be done on offline server
@@ -368,8 +368,12 @@ func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
 	// check if server is online
 
 	// find blockend entry
-	bookmark := types.NewL2BlockBookmark(blockNumber)
-	entryNum, err := srv.stream.GetBookmark(bookmark.EncodeBigEndian())
+	bookmark := types.NewBookmarkProto(blockNumber, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
+	marshalled, err := bookmark.Marshal()
+	if err != nil {
+		return err
+	}
+	entryNum, err := srv.stream.GetBookmark(marshalled)
 	if err != nil {
 		return err
 	}
