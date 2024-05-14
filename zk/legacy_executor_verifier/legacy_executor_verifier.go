@@ -186,8 +186,6 @@ func (v *LegacyExecutorVerifier) getNextOnlineExecutor() ILegacyExecutor {
 	return exec
 }
 
-var counter = 0
-
 func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *VerifierRequest) (bool, error) {
 	// if we have no executor config then just skip this step and treat everything as OK
 	if len(v.executors) == 0 {
@@ -287,11 +285,6 @@ func (v *LegacyExecutorVerifier) handleRequest(ctx context.Context, request *Ver
 		if err = server.WriteBlocksToStream(tx, hermezDb, v.streamServer, v.stream, blocks[0], blocks[len(blocks)-1], "verifier"); err != nil {
 			return true, err
 		}
-	}
-
-	if request.BatchNumber == 3 && counter == 0 {
-		ok = false
-		counter++
 	}
 
 	response := &VerifierResponse{
