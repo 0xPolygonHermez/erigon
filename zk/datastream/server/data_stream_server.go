@@ -14,9 +14,6 @@ import (
 
 type BookmarkType byte
 
-var BlockBookmarkType BookmarkType = 0
-var BatchBookmarkType BookmarkType = 1
-
 type OperationMode int
 
 const (
@@ -159,56 +156,93 @@ func (srv *DataStreamServer) CreateBatchEndProto(localExitRoot, stateRoot libcom
 	}, nil
 }
 
+func (srv *DataStreamServer) CreateGerUpdateProto(
+	batchNumber, timestamp uint64,
+	ger libcommon.Hash,
+	coinbase libcommon.Address,
+	forkId uint64,
+	chainId uint64,
+	stateRoot libcommon.Hash,
+) (*types.GerUpdateProto, error) {
+	return &types.GerUpdateProto{
+		UpdateGER: &datastream.UpdateGER{
+			BatchNumber:    batchNumber,
+			Timestamp:      timestamp,
+			GlobalExitRoot: ger.Bytes(),
+			Coinbase:       coinbase.Bytes(),
+			ForkId:         forkId,
+			ChainId:        chainId,
+			StateRoot:      stateRoot.Bytes(),
+			Debug:          nil,
+		},
+	}, nil
+}
+
 func (srv *DataStreamServer) CreateStreamEntriesProto(
 	block *eritypes.Block,
 	reader *hermez_db.HermezDbReader,
 	lastBlock *eritypes.Block,
 	batchNumber uint64,
 	lastBatchNumber uint64,
+	gers []types.GerUpdateProto,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 ) (*[]DataStreamEntryProto, error) {
 	blockNum := block.NumberU64()
 
 	entryCount := 2                         // l2 block bookmark + l2 block
 	entryCount += len(block.Transactions()) // transactions
+	entryCount += len(gers)
 
+	var err error
 	if lastBatchNumber != batchNumber {
-		entryCount += 3 // end last batch + new batch bookmark + new batch start
+		// we know we have some batch bookmarks to add, but we need to figure out how many because there
+		// could be empty batches in between blocks that could contain ger updates and we need to handle
+		// all of those scenarios
+		entryCount += int(3 * (batchNumber - lastBatchNumber)) // batch bookmark + batch start + batch end
 	}
-
-	//if batchEnd {
-	//	entryCount++ // batch end
-	//}
 
 	entries := make([]DataStreamEntryProto, entryCount)
 	index := 0
 
 	// BATCH BOOKMARK
 	if batchNumber != lastBatchNumber {
-		// seal off the last batch
-		end, err := srv.CreateBatchEndProto(lastBlock.Root(), lastBlock.Root())
-		if err != nil {
-			return nil, err
-		}
-		entries[index] = end
-		index++
+		for i := 0; i < int(batchNumber-lastBatchNumber); i++ {
+			workingBatch := lastBatchNumber + uint64(i)
+			nextWorkingBatch := workingBatch + 1
 
-		// bookmark for new batch
-		batchBookmark := srv.CreateBatchBookmarkEntryProto(batchNumber)
-		entries[index] = batchBookmark
-		index++
+			// handle any gers that need to be written before closing the batch down
+			for _, ger := range gers {
+				if ger.BatchNumber == workingBatch {
+					entries[index] = &ger
+					index++
+				}
+			}
 
-		// new batch starting
-		fork, err := reader.GetForkId(batchNumber)
-		if err != nil {
-			return nil, err
+			// seal off the last batch
+			end, err := srv.CreateBatchEndProto(lastBlock.Root(), lastBlock.Root())
+			if err != nil {
+				return nil, err
+			}
+			entries[index] = end
+			index++
+
+			// bookmark for new batch
+			batchBookmark := srv.CreateBatchBookmarkEntryProto(nextWorkingBatch)
+			entries[index] = batchBookmark
+			index++
+
+			// new batch starting
+			fork, err := reader.GetForkId(nextWorkingBatch)
+			if err != nil {
+				return nil, err
+			}
+			batch, err := srv.CreateBatchStartProto(nextWorkingBatch, srv.chainId, fork)
+			if err != nil {
+				return nil, err
+			}
+			entries[index] = batch
+			index++
 		}
-		batch, err := srv.CreateBatchStartProto(batchNumber, srv.chainId, fork)
-		if err != nil {
-			return nil, err
-		}
-		entries[index] = batch
-		index++
 	}
 
 	deltaTimestamp := block.Time() - lastBlock.Time()
@@ -275,7 +309,12 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytesProto(
 	lastBatchNumber uint64,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 ) ([]byte, error) {
-	entries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNumber, lastBatchNumber, l1InfoTreeMinTimestamps)
+	gersInBetween, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNumber, lastBatchNumber, gersInBetween, l1InfoTreeMinTimestamps)
 	if err != nil {
 		return nil, err
 	}

@@ -110,15 +110,14 @@ func WriteBlocksToStream(
 			return err
 		}
 
-		// todo - this needs handling for older blocks in the stream
-		//gersInBetween, err := reader.GetBatchGlobalExitRoots(prevBatchNum, batchNum)
-		//if err != nil {
-		//	return err
-		//}
+		gersInBetween, err := reader.GetBatchGlobalExitRootsProto(prevBatchNum, batchNum)
+		if err != nil {
+			return err
+		}
 
 		l1InfoMinTimestamps := make(map[uint64]uint64)
 
-		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, l1InfoMinTimestamps)
+		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps)
 		if err != nil {
 			return err
 		}

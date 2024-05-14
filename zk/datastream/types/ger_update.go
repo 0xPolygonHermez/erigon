@@ -15,6 +15,33 @@ const (
 	gerUpdateDataLengthPreEtrog = 102
 )
 
+type GerUpdateProto struct {
+	*datastream.UpdateGER
+}
+
+func (g *GerUpdateProto) Marshal() ([]byte, error) {
+	return proto.Marshal(g.UpdateGER)
+}
+
+func (g *GerUpdateProto) Type() EntryType {
+	return EntryTypeGerUpdate
+}
+
+func ConvertGerUpdateToProto(g GerUpdate) GerUpdateProto {
+	return GerUpdateProto{
+		UpdateGER: &datastream.UpdateGER{
+			BatchNumber:    g.BatchNumber,
+			Timestamp:      g.Timestamp,
+			GlobalExitRoot: g.GlobalExitRoot.Bytes(),
+			Coinbase:       g.Coinbase.Bytes(),
+			ForkId:         uint64(g.ForkId),
+			ChainId:        uint64(g.ChainId),
+			StateRoot:      g.StateRoot.Bytes(),
+			Debug:          nil,
+		},
+	}
+}
+
 type GerUpdate struct {
 	BatchNumber    uint64         // 8 bytes
 	Timestamp      uint64         // 8 bytes
