@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"errors"
 	"fmt"
@@ -62,12 +63,14 @@ type LegacyExecutorVerifier struct {
 	executors      []ILegacyExecutor
 	executorNumber int
 
-	working       *sync.Mutex
-	openRequests  []*VerifierRequest
-	requestsMap   map[uint64]uint64
-	responses     []*VerifierResponse
-	responseMutex *sync.Mutex
-	quit          chan struct{}
+	working           *sync.Mutex
+	cancelingRequests uint32
+	addingRequests    uint32
+	openRequests      []*VerifierRequest
+	requestsMap       map[uint64]uint64
+	responses         []*VerifierResponse
+	responseMutex     *sync.Mutex
+	quit              chan struct{}
 
 	streamServer     *server.DataStreamServer
 	stream           *datastreamer.StreamServer
@@ -93,20 +96,21 @@ func NewLegacyExecutorVerifier(
 	streamServer := server.NewDataStreamServer(stream, chainCfg.ChainID.Uint64(), server.ExecutorOperationMode)
 
 	verifier := &LegacyExecutorVerifier{
-		cfg:              cfg,
-		executors:        executors,
-		db:               db,
-		executorNumber:   0,
-		working:          &sync.Mutex{},
-		openRequests:     make([]*VerifierRequest, 0),
-		requestsMap:      make(map[uint64]uint64),
-		responses:        make([]*VerifierResponse, 0),
-		responseMutex:    &sync.Mutex{},
-		quit:             make(chan struct{}),
-		streamServer:     streamServer,
-		stream:           stream,
-		witnessGenerator: witnessGenerator,
-		l1Syncer:         l1Syncer,
+		cfg:               cfg,
+		executors:         executors,
+		db:                db,
+		executorNumber:    0,
+		working:           &sync.Mutex{},
+		cancelingRequests: 0,
+		openRequests:      make([]*VerifierRequest, 0),
+		requestsMap:       make(map[uint64]uint64),
+		responses:         make([]*VerifierResponse, 0),
+		responseMutex:     &sync.Mutex{},
+		quit:              make(chan struct{}),
+		streamServer:      streamServer,
+		stream:            stream,
+		witnessGenerator:  witnessGenerator,
+		l1Syncer:          l1Syncer,
 	}
 
 	return verifier
@@ -150,6 +154,11 @@ func (v *LegacyExecutorVerifier) processOpenRequests() {
 
 	// process the requests
 	for _, request := range v.openRequests {
+		// stop processing current requests if there is a cancel request
+		if atomic.LoadUint32(&v.cancelingRequests) == 1 {
+			return
+		}
+
 		processed, err := v.handleRequest(context.Background(), request)
 		if err != nil {
 			log.Error("[Verifier] error handling request", "batch", request.BatchNumber, "err", err)
@@ -340,9 +349,18 @@ func (v *LegacyExecutorVerifier) handleResponse(response *VerifierResponse) {
 }
 
 func (v *LegacyExecutorVerifier) CancelAllRequests() {
+	atomic.StoreUint32(&v.cancelingRequests, 1)
+
+	// lets wait for all threads that are waiting to add to v.openRequests to finish
+	for atomic.LoadUint32(&v.addingRequests) > 0 {
+		time.Sleep(1 * time.Microsecond)
+	}
+
 	v.working.Lock()
 	defer v.working.Unlock()
 	v.openRequests = []*VerifierRequest{}
+
+	atomic.StoreUint32(&v.cancelingRequests, 0)
 }
 
 // not thread safe
@@ -363,9 +381,11 @@ func (v *LegacyExecutorVerifier) AddRequest(request *VerifierRequest) {
 }
 
 func (v *LegacyExecutorVerifier) addRequestWhenFree(request *VerifierRequest) {
+	atomic.AddUint32(&v.addingRequests, 1)
 	v.working.Lock()
 	v.openRequests = append(v.openRequests, request)
 	v.working.Unlock()
+	atomic.AddUint32(&v.addingRequests, ^uint32(0)) // decrement by 1
 
 	v.processOpenRequests()
 }
