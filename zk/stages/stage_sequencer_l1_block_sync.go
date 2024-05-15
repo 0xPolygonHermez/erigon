@@ -101,6 +101,10 @@ func SpawnSequencerL1BlockSyncStage(
 		totalBlocks = 1
 	}
 
+	logTicker := time.NewTicker(10 * time.Second)
+	defer logTicker.Stop()
+	var latestBatch uint64
+
 LOOP:
 	for {
 		select {
@@ -112,7 +116,7 @@ LOOP:
 				}
 
 				lastBatchSequenced := l.Topics[1].Big().Uint64()
-				_ = lastBatchSequenced
+				latestBatch = lastBatchSequenced
 
 				batches, coinbase, err := l1_data.DecodeL1BatchData(transaction.GetData())
 				if err != nil {
@@ -146,9 +150,12 @@ LOOP:
 					totalBlocks += len(decoded)
 					log.Debug(fmt.Sprintf("[%s] Wrote L1 batch", logPrefix), "batch", b, "blocks", len(decoded), "totalBlocks", totalBlocks)
 				}
+
 			}
 		case msg := <-progressChan:
 			log.Info(fmt.Sprintf("[%s] %s", logPrefix, msg))
+		case <-logTicker.C:
+			log.Info(fmt.Sprintf("[%s] Syncing L1 blocks", logPrefix), "latest-batch", latestBatch)
 		default:
 			if !cfg.syncer.IsDownloading() {
 				break LOOP
