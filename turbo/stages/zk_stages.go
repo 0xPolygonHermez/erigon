@@ -135,7 +135,69 @@ func NewSequencerZkStages(ctx context.Context,
 		),
 		stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg),
 		zkStages.StageZkInterHashesCfg(db, true, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk),
-		zkStages.StageSequencerExecutorVerifyCfg(db, verifier),
+		zkStages.StageSequencerExecutorVerifyCfg(db, verifier, false),
+		stagedsync.StageHistoryCfg(db, cfg.Prune, dirs.Tmp),
+		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp),
+		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),
+		stagedsync.StageTxLookupCfg(db, cfg.Prune, dirs.Tmp, snapshots, controlServer.ChainConfig.Bor),
+		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator),
+		runInTestMode)
+}
+
+// NewVerifierZkStages creates stages for zk verifier (RPC mode)
+func NewVerifierZkStages(ctx context.Context,
+	db kv.RwDB,
+	cfg *ethconfig.Config,
+	controlServer *sentry.MultiClient,
+	notifications *shards.Notifications,
+	snapDownloader proto_downloader.DownloaderClient,
+	snapshots *snapshotsync.RoSnapshots,
+	agg *state.AggregatorV3,
+	forkValidator *engineapi.ForkValidator,
+	engine consensus.Engine,
+	l1Syncer *syncer.L1Syncer,
+	datastreamClient zkStages.DatastreamClient,
+	datastreamServer *datastreamer.StreamServer,
+	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
+) []*stagedsync.Stage {
+	dirs := cfg.Dirs
+	blockReader := snapshotsync.NewBlockReaderWithSnapshots(snapshots, cfg.TransactionsV3)
+	blockRetire := snapshotsync.NewBlockRetire(1, dirs.Tmp, snapshots, db, snapDownloader, notifications.Events)
+
+	// During Import we don't want other services like header requests, body requests etc. to be running.
+	// Hence we run it in the test mode.
+	runInTestMode := cfg.ImportMode
+
+	return zkStages.VerifierZkStages(ctx,
+		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
+		zkStages.StageBatchesCfg(db, datastreamClient, cfg.Zk),
+		zkStages.StageDataStreamCatchupCfg(datastreamServer, db, cfg.Genesis.Config.ChainID.Uint64()),
+		stagedsync.StageCumulativeIndexCfg(db),
+		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig),
+		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockRetire, controlServer.Hd),
+		stagedsync.StageExecuteBlocksCfg(
+			db,
+			cfg.Prune,
+			cfg.BatchSize,
+			nil,
+			controlServer.ChainConfig,
+			controlServer.Engine,
+			&vm.Config{},
+			notifications.Accumulator,
+			cfg.StateStream,
+			/*stateStream=*/ false,
+			cfg.HistoryV3,
+			dirs,
+			blockReader,
+			controlServer.Hd,
+			cfg.Genesis,
+			cfg.Sync,
+			agg,
+			cfg.Zk,
+		),
+		stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg),
+		zkStages.StageZkInterHashesCfg(db, true, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk),
+		zkStages.StageSequencerExecutorVerifyCfg(db, verifier, true),
 		stagedsync.StageHistoryCfg(db, cfg.Prune, dirs.Tmp),
 		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp),
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),

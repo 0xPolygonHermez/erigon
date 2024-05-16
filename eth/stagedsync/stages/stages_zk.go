@@ -28,5 +28,6 @@ var (
 	L1InfoTree                  SyncStage = "L1InfoTree"
 	HighestUsedL1InfoIndex      SyncStage = "HighestUsedL1InfoTree"
 	SequenceExecutorVerify      SyncStage = "SequenceExecutorVerify"
+	Verifier                    SyncStage = "Verifier"
 	L1BlockSync                 SyncStage = "L1BlockSync"
 )

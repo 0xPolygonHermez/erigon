@@ -583,6 +583,11 @@ var (
 		Usage: "Support gasless transactions",
 		Value: false,
 	}
+	Verifier = cli.BoolFlag{
+		Name:  "zkevm.verifier",
+		Usage: "Verify batches against Executors",
+		Value: false,
+	}
 	DebugNoSync = cli.BoolFlag{
 		Name:  "debug.no-sync",
 		Usage: "Disable syncing",

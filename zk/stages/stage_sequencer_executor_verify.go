@@ -13,21 +13,25 @@ import (
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/log/v3"
 	"fmt"
+	"github.com/ledgerwatch/erigon/zk/constants"
 )
 
 type SequencerExecutorVerifyCfg struct {
-	db       kv.RwDB
-	verifier *legacy_executor_verifier.LegacyExecutorVerifier
-	txPool   *txpool.TxPool
+	db           kv.RwDB
+	verifier     *legacy_executor_verifier.LegacyExecutorVerifier
+	txPool       *txpool.TxPool
+	verifierMode bool
 }
 
 func StageSequencerExecutorVerifyCfg(
 	db kv.RwDB,
 	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
+	verifierMode bool,
 ) SequencerExecutorVerifyCfg {
 	return SequencerExecutorVerifyCfg{
-		db:       db,
-		verifier: verifier,
+		db:           db,
+		verifier:     verifier,
+		verifierMode: verifierMode,
 	}
 }
 
@@ -53,7 +57,7 @@ func SpawnSequencerExecutorVerifyStage(
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	// progress here is at the batch level
-	progress, err := stages.GetStageProgress(tx, stages.SequenceExecutorVerify)
+	progress, err := getStageProgress(tx, cfg.verifierMode)
 	if err != nil {
 		return err
 	}
@@ -62,6 +66,22 @@ func SpawnSequencerExecutorVerifyStage(
 	executeProgress, err := stages.GetStageProgress(tx, stages.Execution)
 	if err != nil {
 		return err
+	}
+
+	// return if we're not yet beyond forkid 7
+	hdb := hermez_db.NewHermezDb(tx)
+	block, found, err := hdb.GetForkIdBlock(uint64(constants.ForkID7Etrog))
+	if err != nil {
+		return err
+	}
+	if !found {
+		log.Warn("Node not synced far enough for verification (block not found)", "progress", progress, "execution", executeProgress)
+		return nil
+	}
+
+	if executeProgress < block {
+		log.Warn("Node not synced far enough for verification (execution below block height)", "progress", progress, "execution", executeProgress)
+		return nil
 	}
 
 	// we need to get the batch number for the latest block, so we can search for new batches to send for
@@ -76,7 +96,7 @@ func SpawnSequencerExecutorVerifyStage(
 	// this mode of operation
 	canVerify := cfg.verifier.HasExecutors()
 	if !canVerify {
-		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, latestBatch); err != nil {
+		if err = setStageProgress(tx, cfg.verifierMode, latestBatch); err != nil {
 			return err
 		}
 		if freshTx {
@@ -115,11 +135,14 @@ func SpawnSequencerExecutorVerifyStage(
 
 			// for now just return early and do not update any stage progress, safest option for now
 			log.Error("Batch failed verification, skipping updating executor verify progress", "batch", response.BatchNumber)
+			if cfg.verifierMode {
+				panic("Batch failed verification, skipping updating executor verify progress")
+			}
 			break
 		}
 
 		// all good so just update the stage progress for now
-		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, response.BatchNumber); err != nil {
+		if err = setStageProgress(tx, cfg.verifierMode, response.BatchNumber); err != nil {
 			return err
 		}
 
@@ -147,7 +170,7 @@ func SpawnSequencerExecutorVerifyStage(
 	for batch := progress + 1; batch <= latestBatch; batch++ {
 		// we do not need to verify batch 1 as this is the injected batch so just updated progress and move on
 		if batch == injectedBatchNumber {
-			if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, injectedBatchNumber); err != nil {
+			if err = setStageProgress(tx, cfg.verifierMode, injectedBatchNumber); err != nil {
 				return err
 			}
 		} else {
@@ -169,9 +192,12 @@ func SpawnSequencerExecutorVerifyStage(
 				return err
 			}
 
-			counters, err := hermezDb.GetBatchCounters(batch)
-			if err != nil {
-				return err
+			counters := make(map[string]int, 0)
+			if !cfg.verifierMode {
+				counters, err = hermezDb.GetBatchCounters(batch)
+				if err != nil {
+					return err
+				}
 			}
 
 			forkId, err := hermezDb.GetForkId(batch)
@@ -193,6 +219,20 @@ func SpawnSequencerExecutorVerifyStage(
 	}
 
 	return nil
+}
+
+func getStageProgress(tx kv.RwTx, verifier bool) (uint64, error) {
+	if verifier {
+		return stages.GetStageProgress(tx, stages.Verifier)
+	}
+	return stages.GetStageProgress(tx, stages.SequenceExecutorVerify)
+}
+
+func setStageProgress(tx kv.RwTx, verifier bool, progress uint64) error {
+	if verifier {
+		return stages.SaveStageProgress(tx, stages.Verifier, progress)
+	}
+	return stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, progress)
 }
 
 func UnwindSequencerExecutorVerifyStage(

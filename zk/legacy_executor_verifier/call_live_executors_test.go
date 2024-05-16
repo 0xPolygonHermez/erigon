@@ -14,7 +14,98 @@ import (
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/ledgerwatch/erigon/core"
+	erigonchain "github.com/gateway-fm/cdk-erigon-lib/chain"
+	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/core/types"
+	"context"
+	"github.com/ledgerwatch/erigon/zk/witness"
+	"github.com/ledgerwatch/erigon/node"
+	"github.com/ledgerwatch/erigon/core/vm/stack"
 )
+
+func TestVerifyBatchesFromNode(t *testing.T) {
+
+	executorUrls := []string{
+		"34.175.105.40:50071",
+		"34.175.237.160:50071",
+		"34.175.42.120:50071",
+		"34.175.236.212:50071",
+		"34.175.232.61:50071",
+		"34.175.167.26:50071",
+		"51.210.116.237:50071",
+		"34.175.214.161:50071",
+		//"34.175.73.226:50071",
+	}
+	executors := make([]*Executor, len(executorUrls))
+	for i, url := range executorUrls {
+		executors[i] = NewExecutor(url, 5000*time.Millisecond, false, 1)
+	}
+	var legacyExecutors []ILegacyExecutor
+	for _, e := range executors {
+		legacyExecutors = append(legacyExecutors, e)
+	}
+
+	// chainKv
+	chainKv, err := node.OpenDatabase(stack.Config(), kv.ChainDB)
+	if err != nil {
+		return nil, err
+	}
+
+	// chain config
+	var chainConfig *chain.Config
+	var genesis *types.Block
+	if err := chainKv.Update(context.Background(), func(tx kv.RwTx) error {
+		h, err := rawdb.ReadCanonicalHash(tx, 0)
+		if err != nil {
+			panic(err)
+		}
+		genesisSpec := config.Genesis
+		if h != (libcommon.Hash{}) { // fallback to db content
+			genesisSpec = nil
+		}
+		var genesisErr error
+		chainConfig, genesis, genesisErr = core.WriteGenesisBlock(tx, genesisSpec, config.OverrideShanghaiTime, tmpdir)
+		if _, ok := genesisErr.(*erigonchain.ConfigCompatError); genesisErr != nil && !ok {
+			return genesisErr
+		}
+
+		currentBlock = rawdb.ReadCurrentBlock(tx)
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
+	// chain db
+
+	// witness generator
+	witnessGenerator := witness.NewGenerator(
+		config.Dirs,
+		config.HistoryV3,
+		backend.agg,
+		backend.blockReader,
+		backend.chainConfig,
+		backend.engine,
+	)
+
+	verifier := NewLegacyExecutorVerifier(
+		*cfg.Zk,
+		executors,
+		backend.chainConfig,
+		backend.chainDB,
+		witnessGenerator,
+		backend.l1Syncer,
+		backend.dataStream,
+	)
+
+	// load the chainconfig
+	// load the zk config
+
+	// we should get a list of executors, and wire up the verifiers, and then generate the payloads from the node to send!
+}
 
 func TestVerifyBatches(t *testing.T) {
 	dumpDir := filepath.Join("verifier_dumps")
@@ -42,10 +133,7 @@ func TestVerifyBatches(t *testing.T) {
 	}
 	executors := make([]*Executor, len(executorUrls))
 	for i, url := range executorUrls {
-		executors[i], err = NewExecutor(url, 5000*time.Millisecond, false)
-		if err != nil {
-			t.Fatalf("Failed to create executor %s: %v,", url, err)
-		}
+		executors[i] = NewExecutor(url, 5000*time.Millisecond, false, 1)
 	}
 
 	for _, fileInfo := range payloadFiles {

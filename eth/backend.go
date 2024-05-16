@@ -803,6 +803,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.blockReader,
 				backend.chainConfig,
 				backend.engine,
+				false,
 			)
 
 			var legacyExecutors []legacy_executor_verifier.ILegacyExecutor
@@ -863,6 +864,62 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
 
+		} else if cfg.Verifier {
+
+			witnessGenerator := witness.NewGenerator(
+				config.Dirs,
+				config.HistoryV3,
+				backend.agg,
+				backend.blockReader,
+				backend.chainConfig,
+				backend.engine,
+				true,
+			)
+
+			var legacyExecutors []legacy_executor_verifier.ILegacyExecutor
+			if len(cfg.ExecutorUrls) > 0 && cfg.ExecutorUrls[0] != "" {
+				levCfg := legacy_executor_verifier.Config{
+					GrpcUrls:              cfg.ExecutorUrls,
+					Timeout:               cfg.ExecutorRequestTimeout,
+					MaxConcurrentRequests: cfg.ExecutorMaxConcurrentRequests,
+					DumpToDisk:            cfg.ExecutorRecordToDisk,
+				}
+				executors := legacy_executor_verifier.NewExecutors(levCfg)
+				for _, e := range executors {
+					legacyExecutors = append(legacyExecutors, e)
+				}
+			}
+
+			verifier := legacy_executor_verifier.NewLegacyExecutorVerifier(
+				*cfg.Zk,
+				legacyExecutors,
+				backend.chainConfig,
+				backend.chainDB,
+				witnessGenerator,
+				backend.l1Syncer,
+				backend.dataStream,
+			)
+
+			streamClient := initDataStreamClient(ctx, cfg.Zk)
+
+			backend.syncStages = stages2.NewVerifierZkStages(
+				backend.sentryCtx,
+				backend.chainDB,
+				config,
+				backend.sentriesClient,
+				backend.notifications,
+				backend.downloaderClient,
+				allSnapshots,
+				backend.agg,
+				backend.forkValidator,
+				backend.engine,
+				backend.l1Syncer,
+				streamClient,
+				backend.dataStream,
+				verifier,
+			)
+
+			backend.syncUnwindOrder = zkStages.ZkUnwindOrder
 		} else {
 			/*
 			 if we are syncing from for the RPC, we do the normal ZK sync loop

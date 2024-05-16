@@ -58,6 +58,8 @@ type Zk struct {
 
 	PoolManagerUrl         string
 	DisableVirtualCounters bool
+
+	Verifier bool
 }
 
 var DefaultZkConfig = &Zk{}

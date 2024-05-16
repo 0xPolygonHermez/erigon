@@ -59,15 +59,12 @@ type Executor struct {
 func NewExecutors(cfg Config) []*Executor {
 	executors := make([]*Executor, len(cfg.GrpcUrls))
 	for i, grpcUrl := range cfg.GrpcUrls {
-		executors[i], err = NewExecutor(grpcUrl, cfg.Timeout, cfg.DumpToDisk, cfg.MaxConcurrentRequests)
-		if err != nil {
-			log.Warn("Failed to create executor", "error", err)
-		}
+		executors[i] = NewExecutor(grpcUrl, cfg.Timeout, cfg.DumpToDisk, cfg.MaxConcurrentRequests)
 	}
 	return executors
 }
 
-func NewExecutor(grpcUrl string, timeout time.Duration, dumpToDisk bool, maxConcurrentRequests int) (*Executor, error) {
+func NewExecutor(grpcUrl string, timeout time.Duration, dumpToDisk bool, maxConcurrentRequests int) *Executor {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 

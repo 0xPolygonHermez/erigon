@@ -528,6 +528,7 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 		api.ethApi._blockReader,
 		chainConfig,
 		api.ethApi._engine,
+		false,
 	)
 
 	fullWitness := false

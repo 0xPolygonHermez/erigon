@@ -39,13 +39,14 @@ var (
 )
 
 type Generator struct {
-	tx          kv.Tx
-	dirs        datadir.Dirs
-	historyV3   bool
-	agg         *libstate.AggregatorV3
-	blockReader services.FullBlockReader
-	chainCfg    *chain.Config
-	engine      consensus.EngineReader
+	tx           kv.Tx
+	dirs         datadir.Dirs
+	historyV3    bool
+	agg          *libstate.AggregatorV3
+	blockReader  services.FullBlockReader
+	chainCfg     *chain.Config
+	engine       consensus.EngineReader
+	unrestricted bool
 }
 
 func NewGenerator(
@@ -55,14 +56,16 @@ func NewGenerator(
 	blockReader services.FullBlockReader,
 	chainCfg *chain.Config,
 	engine consensus.EngineReader,
+	unrestricted bool,
 ) *Generator {
 	return &Generator{
-		dirs:        dirs,
-		historyV3:   historyV3,
-		agg:         agg,
-		blockReader: blockReader,
-		chainCfg:    chainCfg,
-		engine:      engine,
+		dirs:         dirs,
+		historyV3:    historyV3,
+		agg:          agg,
+		blockReader:  blockReader,
+		chainCfg:     chainCfg,
+		engine:       engine,
+		unrestricted: unrestricted,
 	}
 }
 
@@ -100,7 +103,7 @@ func (g *Generator) GenerateWitness(tx kv.Tx, ctx context.Context, startBlock, e
 	}
 
 	if startBlock-1 < latestBlock {
-		if latestBlock-startBlock > maxGetProofRewindBlockCount {
+		if latestBlock-startBlock > maxGetProofRewindBlockCount && !g.unrestricted {
 			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", maxGetProofRewindBlockCount, latestBlock)
 		}
 
