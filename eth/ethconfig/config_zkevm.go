@@ -32,6 +32,8 @@ type Zk struct {
 	SequencerNonEmptyBatchSealTime         time.Duration
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
+	ExecutorRequestTimeout                 time.Duration
+	ExecutorMaxConcurrentRequests          int
 	L1QueryBlocksThreads                   uint64
 	AllowFreeTransactions                  bool
 	AllowPreEIP155Transactions             bool
@@ -48,6 +50,7 @@ type Zk struct {
 	SyncLimit        uint64
 	Gasless          bool
 
+	DebugNoSync    bool
 	DebugLimit     uint64
 	DebugStep      uint64
 	DebugStepAfter uint64

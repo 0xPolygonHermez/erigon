@@ -29,6 +29,9 @@ func main() {
 			defer borDb.Close()
 		}
 
+		ethConfig := ethconfig.Defaults
+		ethConfig.L2RpcUrl = cfg.L2RpcUrl
+
 		// TODO: Replace with correct consensus Engine
 		engine := ethash.NewFaker()
 		// zkevm: the raw pool needed for limbo calls will not work if rpcdaemon is running as a standalone process.  Only the sequencer would have this detail

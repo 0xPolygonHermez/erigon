@@ -3,15 +3,17 @@ package legacy_executor_verifier
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"sync/atomic"
+	"time"
+
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/log/v3"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/connectivity"
-	"time"
-	"errors"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -20,8 +22,9 @@ var (
 )
 
 type Config struct {
-	GrpcUrls []string
-	Timeout  time.Duration
+	GrpcUrls              []string
+	Timeout               time.Duration
+	MaxConcurrentRequests int
 }
 
 type Payload struct {
@@ -47,25 +50,23 @@ type RpcPayload struct {
 }
 
 type Executor struct {
-	grpcUrl    string
-	conn       *grpc.ClientConn
-	connCancel context.CancelFunc
-	client     executor.ExecutorServiceClient
+	grpcUrl                string
+	conn                   *grpc.ClientConn
+	connCancel             context.CancelFunc
+	client                 executor.ExecutorServiceClient
+	semaphore              chan struct{}
+	cancelAllVerifications uint32
 }
 
 func NewExecutors(cfg Config) []*Executor {
 	executors := make([]*Executor, len(cfg.GrpcUrls))
-	var err error
 	for i, grpcUrl := range cfg.GrpcUrls {
-		executors[i], err = NewExecutor(grpcUrl, cfg.Timeout)
-		if err != nil {
-			log.Warn("Failed to create executor", "error", err)
-		}
+		executors[i] = NewExecutor(grpcUrl, cfg.Timeout, cfg.MaxConcurrentRequests)
 	}
 	return executors
 }
 
-func NewExecutor(grpcUrl string, timeout time.Duration) (*Executor, error) {
+func NewExecutor(grpcUrl string, timeout time.Duration, maxConcurrentRequests int) *Executor {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -83,9 +84,10 @@ func NewExecutor(grpcUrl string, timeout time.Duration) (*Executor, error) {
 		conn:       conn,
 		connCancel: cancel,
 		client:     client,
+		semaphore:  make(chan struct{}, maxConcurrentRequests),
 	}
 
-	return e, nil
+	return e
 }
 
 func (e *Executor) Close() {
@@ -97,6 +99,19 @@ func (e *Executor) Close() {
 	if err != nil {
 		log.Warn("Failed to close grpc connection", err)
 	}
+}
+
+// QueueLength check 'how busy' the executor is
+func (e *Executor) QueueLength() int {
+	return len(e.semaphore)
+}
+
+func (e *Executor) CancelAllVerifications() {
+	atomic.StoreUint32(&e.cancelAllVerifications, 1)
+}
+
+func (e *Executor) AllowAllVerifications() {
+	atomic.StoreUint32(&e.cancelAllVerifications, 0)
 }
 
 func (e *Executor) CheckOnline() bool {
@@ -134,6 +149,12 @@ func (e *Executor) CheckOnline() bool {
 }
 
 func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot common.Hash) (bool, *executor.ProcessBatchResponseV2, error) {
+	e.semaphore <- struct{}{}
+	defer func() { <-e.semaphore }()
+	if atomic.LoadUint32(&e.cancelAllVerifications) == 1 {
+		return false, nil, fmt.Errorf("cancelling all pending requests")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 

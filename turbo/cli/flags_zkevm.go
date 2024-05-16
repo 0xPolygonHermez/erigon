@@ -97,6 +97,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SequencerNonEmptyBatchSealTime:         sequencerNonEmptyBatchSealTime,
 		ExecutorUrls:                           strings.Split(ctx.String(utils.ExecutorUrls.Name), ","),
 		ExecutorStrictMode:                     ctx.Bool(utils.ExecutorStrictMode.Name),
+		ExecutorRequestTimeout:                 ctx.Duration(utils.ExecutorRequestTimeout.Name),
+		ExecutorMaxConcurrentRequests:          ctx.Int(utils.ExecutorMaxConcurrentRequests.Name),
 		L1QueryBlocksThreads:                   ctx.Uint64(utils.L1QueryBlocksThreads.Name),
 		AllowFreeTransactions:                  ctx.Bool(utils.AllowFreeTransactions.Name),
 		AllowPreEIP155Transactions:             ctx.Bool(utils.AllowPreEIP155Transactions.Name),
@@ -110,6 +112,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		WitnessFull:                            ctx.Bool(utils.WitnessFullFlag.Name),
 		SyncLimit:                              ctx.Uint64(utils.SyncLimit.Name),
 		Gasless:                                ctx.Bool(utils.SupportGasless.Name),
+		DebugNoSync:                            ctx.Bool(utils.DebugNoSync.Name),
 		DebugLimit:                             ctx.Uint64(utils.DebugLimit.Name),
 		DebugStep:                              ctx.Uint64(utils.DebugStep.Name),
 		DebugStepAfter:                         ctx.Uint64(utils.DebugStepAfter.Name),
@@ -128,7 +131,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		checkFlag(utils.ExecutorStrictMode.Name, cfg.ExecutorStrictMode)
 
 		// if we are running in strict mode, the default, and we have no executor URLs then we panic
-		if cfg.Zk.ExecutorStrictMode && (len(cfg.Zk.ExecutorUrls) == 0 || cfg.ExecutorUrls[0] == "") {
+		if cfg.ExecutorStrictMode && !cfg.HasExecutors() {
 			panic("You must set executor urls when running in executor strict mode (zkevm.executor-strict)")
 		}
 	}
