@@ -261,27 +261,34 @@ func UnwindSequencerExecutorVerifyStage(
 	cfg SequencerExecutorVerifyCfg,
 	initialCycle bool,
 ) (err error) {
-	freshTx := tx == nil
-	if freshTx {
-		tx, err = cfg.db.BeginRw(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-	}
+	/*
+		The "Unwinder" keeps stage's progress in blocks.
+		If a stage's current progress is <= unwindPoint then the unwind is not invoked for this stage (sync.go line 386)
+		For this particular case, the progress is in batches => its progress is always <= unwindPoint, because unwindPoint is in blocks
+		This is not a problem, because this stage's progress actually keeps the number of last verified batch and we never unwind the last verified batch
+	*/
 
-	logPrefix := u.LogPrefix()
-	log.Info(fmt.Sprintf("[%s] Unwind Executor Verify", logPrefix), "from", s.BlockNumber, "to", u.UnwindPoint)
+	// freshTx := tx == nil
+	// if freshTx {
+	// 	tx, err = cfg.db.BeginRw(ctx)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	defer tx.Rollback()
+	// }
 
-	if err = u.Done(tx); err != nil {
-		return err
-	}
+	// logPrefix := u.LogPrefix()
+	// log.Info(fmt.Sprintf("[%s] Unwind Executor Verify", logPrefix), "from", s.BlockNumber, "to", u.UnwindPoint)
 
-	if freshTx {
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-	}
+	// if err = u.Done(tx); err != nil {
+	// 	return err
+	// }
+
+	// if freshTx {
+	// 	if err = tx.Commit(); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	return nil
 }
