@@ -148,11 +148,12 @@ func (srv *DataStreamServer) CreateBatchStartProto(batchNo, chainId, forkId uint
 	}
 }
 
-func (srv *DataStreamServer) CreateBatchEndProto(localExitRoot, stateRoot libcommon.Hash) *types.BatchEndProto {
+func (srv *DataStreamServer) CreateBatchEndProto(localExitRoot, stateRoot libcommon.Hash, batchNumber uint64) *types.BatchEndProto {
 	return &types.BatchEndProto{
 		BatchEnd: &datastream.BatchEnd{
 			LocalExitRoot: localExitRoot.Bytes(),
 			StateRoot:     stateRoot.Bytes(),
+			Number:        batchNumber,
 		},
 	}
 }
@@ -221,7 +222,7 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 
 			// seal off the last batch
 			root := lastBlock.Root()
-			end := srv.CreateBatchEndProto(root, root)
+			end := srv.CreateBatchEndProto(root, root, workingBatch)
 			entries[index] = end
 			index++
 
