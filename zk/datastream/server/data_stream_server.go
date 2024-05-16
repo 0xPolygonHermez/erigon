@@ -137,23 +137,24 @@ func (srv *DataStreamServer) CreateTransactionProto(
 	}, nil
 }
 
-func (srv *DataStreamServer) CreateBatchStartProto(batchNo, chainId, forkId uint64) (*types.BatchStartProto, error) {
+func (srv *DataStreamServer) CreateBatchStartProto(batchNo, chainId, forkId uint64, batchType datastream.BatchType) *types.BatchStartProto {
 	return &types.BatchStartProto{
 		BatchStart: &datastream.BatchStart{
 			Number:  batchNo,
 			ForkId:  forkId,
 			ChainId: chainId,
+			Type:    batchType,
 		},
-	}, nil
+	}
 }
 
-func (srv *DataStreamServer) CreateBatchEndProto(localExitRoot, stateRoot libcommon.Hash) (*types.BatchEndProto, error) {
+func (srv *DataStreamServer) CreateBatchEndProto(localExitRoot, stateRoot libcommon.Hash) *types.BatchEndProto {
 	return &types.BatchEndProto{
 		BatchEnd: &datastream.BatchEnd{
 			LocalExitRoot: localExitRoot.Bytes(),
 			StateRoot:     stateRoot.Bytes(),
 		},
-	}, nil
+	}
 }
 
 func (srv *DataStreamServer) CreateGerUpdateProto(
@@ -163,7 +164,7 @@ func (srv *DataStreamServer) CreateGerUpdateProto(
 	forkId uint64,
 	chainId uint64,
 	stateRoot libcommon.Hash,
-) (*types.GerUpdateProto, error) {
+) *types.GerUpdateProto {
 	return &types.GerUpdateProto{
 		UpdateGER: &datastream.UpdateGER{
 			BatchNumber:    batchNumber,
@@ -175,7 +176,7 @@ func (srv *DataStreamServer) CreateGerUpdateProto(
 			StateRoot:      stateRoot.Bytes(),
 			Debug:          nil,
 		},
-	}, nil
+	}
 }
 
 func (srv *DataStreamServer) CreateStreamEntriesProto(
@@ -219,10 +220,8 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 			}
 
 			// seal off the last batch
-			end, err := srv.CreateBatchEndProto(lastBlock.Root(), lastBlock.Root())
-			if err != nil {
-				return nil, err
-			}
+			root := lastBlock.Root()
+			end := srv.CreateBatchEndProto(root, root)
 			entries[index] = end
 			index++
 
@@ -232,20 +231,28 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 			index++
 
 			// new batch starting
+			batchType := datastream.BatchType_BATCH_TYPE_REGULAR
+			if batchNumber == 1 {
+				batchType = datastream.BatchType_BATCH_TYPE_INJECTED
+			}
 			fork, err := reader.GetForkId(nextWorkingBatch)
 			if err != nil {
 				return nil, err
 			}
-			batch, err := srv.CreateBatchStartProto(nextWorkingBatch, srv.chainId, fork)
-			if err != nil {
-				return nil, err
-			}
+			batch := srv.CreateBatchStartProto(nextWorkingBatch, srv.chainId, fork, batchType)
 			entries[index] = batch
 			index++
 		}
 	}
 
 	deltaTimestamp := block.Time() - lastBlock.Time()
+
+	// todo: temporary for now whilst we aren't handling more than one injected batch as a sequencer
+	// this could go into the DB as a quick lookup to check for injected batches
+	if block.NumberU64() == 1 {
+		deltaTimestamp = block.Time()
+		l1InfoTreeMinTimestamps[0] = block.Time()
+	}
 
 	// L2 BLOCK BOOKMARK
 	l2blockBookmark := srv.CreateL2BlockBookmarkEntryProto(blockNum)

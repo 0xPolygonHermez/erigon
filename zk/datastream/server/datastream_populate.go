@@ -12,6 +12,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 )
 
 func getLatestBlockNumberWritten(stream *datastreamer.StreamServer, header *datastreamer.HeaderEntry) (uint64, error) {
@@ -195,12 +196,8 @@ func WriteGenesisToStream(
 	batchBookmark := srv.CreateBatchBookmarkEntryProto(genesis.NumberU64())
 	l2BlockBookmark := srv.CreateL2BlockBookmarkEntryProto(genesis.NumberU64())
 	l2Block := srv.CreateL2BlockProto(genesis, batchNo, ger, 0, 0, common.Hash{}, 0)
-	batchStart, err := srv.CreateBatchStartProto(batchNo, chainId, forkId)
-	if err != nil {
-		return err
-	}
-
-	batchEnd, err := srv.CreateBatchEndProto(common.Hash{}, genesis.Root())
+	batchStart := srv.CreateBatchStartProto(batchNo, chainId, forkId, datastream.BatchType_BATCH_TYPE_REGULAR)
+	batchEnd := srv.CreateBatchEndProto(common.Hash{}, genesis.Root())
 
 	if err = srv.CommitEntriesToStreamProto([]DataStreamEntryProto{batchBookmark, batchStart, l2BlockBookmark, l2Block, batchEnd}); err != nil {
 		return err
