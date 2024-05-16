@@ -2,7 +2,6 @@ package legacy_executor_verifier
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"encoding/hex"
@@ -100,7 +99,7 @@ func NewLegacyExecutorVerifier(
 	}
 }
 
-var counter = int32(0)
+// var counter = int32(0)
 
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(ctx context.Context, tx kv.RwTx, request *VerifierRequest) (*Promise[*VerifierResponse], error) {
 	// if we have no executor config then just skip this step and treat everything as OK
@@ -193,10 +192,10 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(ctx context.Context, tx kv.RwT
 			}
 		}
 
-		if request.BatchNumber == 3 && atomic.LoadInt32(&counter) == 0 {
-			ok = false
-			atomic.StoreInt32(&counter, 1)
-		}
+		// if request.BatchNumber == 2 && atomic.LoadInt32(&counter) == 0 {
+		// 	ok = false
+		// 	atomic.StoreInt32(&counter, 1)
+		// }
 
 		response := &VerifierResponse{
 			BatchNumber:      request.BatchNumber,
