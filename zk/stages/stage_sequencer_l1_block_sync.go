@@ -124,7 +124,7 @@ LOOP:
 					} else {
 						log.Warn("Error getting transaction, attempting again", "hash", l.TxHash.String(), "err", err)
 						attempts++
-						if attempts > 10 {
+						if attempts > 50 {
 							return err
 						}
 						time.Sleep(500 * time.Millisecond)
