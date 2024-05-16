@@ -70,7 +70,7 @@ func SpawnSequencerExecutorVerifyStage(
 
 	// return if we're not yet beyond forkid 7
 	hdb := hermez_db.NewHermezDb(tx)
-	block, found, err := hdb.GetForkIdBlock(uint64(constants.ForkID7Etrog))
+	block7, found, err := hdb.GetForkIdBlock(uint64(constants.ForkID7Etrog))
 	if err != nil {
 		return err
 	}
@@ -79,9 +79,19 @@ func SpawnSequencerExecutorVerifyStage(
 		return nil
 	}
 
-	if executeProgress < block {
+	if executeProgress < block7 {
 		log.Warn("Node not synced far enough for verification (execution below block height)", "progress", progress, "execution", executeProgress)
 		return nil
+	}
+
+	// start off at forkid7
+	if progress == 0 && cfg.verifierMode {
+		// set to highest batch
+		batch, err := hdb.GetBatchNoByL2Block(block7)
+		if err != nil {
+			return err
+		}
+		progress = batch
 	}
 
 	// we need to get the batch number for the latest block, so we can search for new batches to send for
