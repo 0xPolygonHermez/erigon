@@ -7,7 +7,7 @@ const privateKey = "";
 module.exports = {
   solidity: "0.8.24",
   networks: {
-    bali: {
+    testnet: {
       url: endpointUrl,
       accounts: [privateKey],
     },
