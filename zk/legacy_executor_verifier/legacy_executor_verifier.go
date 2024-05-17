@@ -2,6 +2,7 @@ package legacy_executor_verifier
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"encoding/hex"
@@ -24,6 +25,7 @@ import (
 )
 
 var ErrNoExecutorAvailable = fmt.Errorf("no executor available")
+var ErrCancelledRequest = fmt.Errorf("cancelled request")
 
 type VerifierRequest struct {
 	BatchNumber  uint64
@@ -71,8 +73,10 @@ type ILegacyExecutor interface {
 	Verify(*Payload, *VerifierRequest, common.Hash) (bool, *executor.ProcessBatchResponseV2, error)
 	CheckOnline() bool
 	QueueLength() int
-	CancelAllVerifications()
-	AllowAllVerifications()
+	// CancelAllVerifications()
+	// AllowAllVerifications()
+	AquireAccess()
+	ReleaseAccess()
 }
 
 type WitnessGenerator interface {
@@ -80,10 +84,11 @@ type WitnessGenerator interface {
 }
 
 type LegacyExecutorVerifier struct {
-	db             kv.RwDB
-	cfg            ethconfig.Zk
-	executors      []ILegacyExecutor
-	executorNumber int
+	db                     kv.RwDB
+	cfg                    ethconfig.Zk
+	executors              []ILegacyExecutor
+	executorNumber         int
+	cancelAllVerifications uint32
 
 	quit chan struct{}
 
@@ -107,17 +112,18 @@ func NewLegacyExecutorVerifier(
 ) *LegacyExecutorVerifier {
 	streamServer := server.NewDataStreamServer(stream, chainCfg.ChainID.Uint64(), server.ExecutorOperationMode)
 	return &LegacyExecutorVerifier{
-		db:               db,
-		cfg:              cfg,
-		executors:        executors,
-		executorNumber:   0,
-		quit:             make(chan struct{}),
-		streamServer:     streamServer,
-		stream:           stream,
-		witnessGenerator: witnessGenerator,
-		l1Syncer:         l1Syncer,
-		promises:         make([]*Promise[*VerifierBundle], 0),
-		addedBatches:     make(map[uint64]struct{}),
+		db:                     db,
+		cfg:                    cfg,
+		executors:              executors,
+		executorNumber:         0,
+		cancelAllVerifications: 0,
+		quit:                   make(chan struct{}),
+		streamServer:           streamServer,
+		stream:                 stream,
+		witnessGenerator:       witnessGenerator,
+		l1Syncer:               l1Syncer,
+		promises:               make([]*Promise[*VerifierBundle], 0),
+		addedBatches:           make(map[uint64]struct{}),
 	}
 }
 
@@ -127,6 +133,17 @@ func NewLegacyExecutorVerifier(
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
 	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
 	promise := NewPromise[*VerifierBundle](func() (*VerifierBundle, error) {
+		e := v.getNextOnlineAvailableExecutor()
+		if e == nil {
+			return nil, ErrNoExecutorAvailable
+		}
+
+		e.AquireAccess()
+		defer e.ReleaseAccess()
+		if atomic.LoadUint32(&v.cancelAllVerifications) == 1 {
+			return nil, ErrCancelledRequest
+		}
+
 		var err error
 		var tx kv.Tx
 		var hermezDb *hermez_db.HermezDbReader
@@ -213,11 +230,6 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 			return nil, err
 		}
 
-		e := v.getNextOnlineAvailableExecutor()
-		if e == nil {
-			return nil, ErrNoExecutorAvailable
-		}
-
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
 		if executorErr != nil {
 			if errors.Is(err, ErrExecutorStateRootMismatch) {
@@ -229,7 +241,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 			}
 		}
 
-		// if request.BatchNumber == 2 && atomic.LoadInt32(&counter) == 0 {
+		// if request.BatchNumber == 30 && counter == 0 {
 		// 	ok = false
 		// 	atomic.StoreInt32(&counter, 1)
 		// }
@@ -264,6 +276,11 @@ func (v *LegacyExecutorVerifier) ProcessResultsUnsafe(tx kv.RwTx) ([]*VerifierRe
 
 		verifierResponse := verifierBundle.response
 		if err != nil {
+			// let leave it for debug purposes
+			if errors.Is(err, ErrCancelledRequest) {
+				panic("this should never happen")
+			}
+
 			log.Error("error on our end while preparing the verification request, re-queueing the task", "err", err)
 			// this is an error on our end, so just re-create the promise at exact position where it was
 			if verifierBundle.request.isOverdue() {
@@ -297,9 +314,7 @@ func (v *LegacyExecutorVerifier) ProcessResultsUnsafe(tx kv.RwTx) ([]*VerifierRe
 
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) CancelAllRequestsUnsafe() {
-	for _, e := range v.executors {
-		e.CancelAllVerifications()
-	}
+	atomic.StoreUint32(&v.cancelAllVerifications, 1)
 
 	for _, e := range v.executors {
 		// lets wait for all threads that are waiting to add to v.openRequests to finish
@@ -308,9 +323,7 @@ func (v *LegacyExecutorVerifier) CancelAllRequestsUnsafe() {
 		}
 	}
 
-	for _, e := range v.executors {
-		e.AllowAllVerifications()
-	}
+	atomic.StoreUint32(&v.cancelAllVerifications, 0)
 
 	v.promises = make([]*Promise[*VerifierBundle], 0)
 }
