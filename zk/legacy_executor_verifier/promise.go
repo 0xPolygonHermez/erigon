@@ -3,20 +3,24 @@ package legacy_executor_verifier
 import "sync"
 
 type Promise[T any] struct {
-	result T
-	err    error
 	wg     sync.WaitGroup
 	mutex  sync.Mutex
+	task   func() (T, error) // kept only if err != nil
+	result T
+	err    error
 }
 
-func NewPromise[T any](f func() (T, error)) *Promise[T] {
+func NewPromise[T any](task func() (T, error)) *Promise[T] {
 	p := &Promise[T]{}
 	p.wg.Add(1)
 	go func() {
-		result, err := f()
+		result, err := task()
 		p.mutex.Lock()
 		p.result = result
 		p.err = err
+		if err != nil {
+			p.task = task
+		}
 		p.mutex.Unlock()
 		p.wg.Done()
 	}()
@@ -24,16 +28,11 @@ func NewPromise[T any](f func() (T, error)) *Promise[T] {
 }
 
 func (p *Promise[T]) Get(f func(r T) error) (T, error) {
-	p.wg.Wait()
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	if p.err == nil && f != nil {
-		return p.result, f(p.result)
-	}
+	p.wg.Wait() // .Wait ensures that all memory operations before .Done are visible after .Wait => no need to lock/unlock the mutex
 	return p.result, p.err
 }
 
-func (p *Promise[T]) GetNonBlocking() (T, error) {
+func (p *Promise[T]) TryGet() (T, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return p.result, p.err

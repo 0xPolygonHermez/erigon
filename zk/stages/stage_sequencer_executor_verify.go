@@ -11,6 +11,7 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
@@ -23,17 +24,20 @@ type SequencerExecutorVerifyCfg struct {
 	db       kv.RwDB
 	verifier *legacy_executor_verifier.LegacyExecutorVerifier
 	txPool   *txpool.TxPool
+	cfgZk    *ethconfig.Zk
 }
 
 func StageSequencerExecutorVerifyCfg(
 	db kv.RwDB,
 	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
 	pool *txpool.TxPool,
+	cfgZk *ethconfig.Zk,
 ) SequencerExecutorVerifyCfg {
 	return SequencerExecutorVerifyCfg{
 		db:       db,
 		verifier: verifier,
 		txPool:   pool,
+		cfgZk:    cfgZk,
 	}
 }
 
@@ -46,6 +50,10 @@ func SpawnSequencerExecutorVerifyStage(
 	initialCycle bool,
 	quiet bool,
 ) error {
+	logPrefix := s.LogPrefix()
+	log.Info(fmt.Sprintf("[%s] Starting sequencer verify stage", logPrefix))
+	defer log.Info(fmt.Sprintf("[%s] Finished sequencer verify stage", logPrefix))
+
 	var err error
 	freshTx := tx == nil
 	if freshTx {
@@ -80,8 +88,12 @@ func SpawnSequencerExecutorVerifyStage(
 	// we could be running in a state with no executors so we need instant response that we are in an
 	// ok state to save lag in the data stream !!Dragons: there will be no witnesses stored running in
 	// this mode of operation
-	canVerify := cfg.verifier.HasExecutors()
+	canVerify := cfg.verifier.HasExecutorsUnsafe()
 	if !canVerify {
+		hermezDbReader := hermez_db.NewHermezDbReader(tx)
+		if err = cfg.verifier.WriteBatchToStream(latestBatch, hermezDbReader, tx); err != nil {
+			return err
+		}
 		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, latestBatch); err != nil {
 			return err
 		}
@@ -95,8 +107,9 @@ func SpawnSequencerExecutorVerifyStage(
 
 	// get ordered promises from the verifier
 	// NB: this call is where the stream write happens (so it will be delayed until this stage is run)
-	responses, err := cfg.verifier.ConsumeResultsUnsafe(tx)
+	responses, err := cfg.verifier.ProcessResultsUnsafe(tx)
 	if err != nil {
+		//TODO: what happen with promises if this request returns here?
 		return err
 	}
 
@@ -237,10 +250,7 @@ func SpawnSequencerExecutorVerifyStage(
 				return err
 			}
 
-			_, addErr := cfg.verifier.AddRequestUnsafe(ctx, tx, &legacy_executor_verifier.VerifierRequest{BatchNumber: batch, ForkId: forkId, StateRoot: block.Root(), Counters: counters})
-			if addErr != nil {
-				log.Error("Failed to add request to verifier", "batch", batch, "err", addErr)
-			}
+			cfg.verifier.AddRequestUnsafe(legacy_executor_verifier.NewVerifierRequest(batch, forkId, block.Root(), counters), cfg.cfgZk.SequencerBatchSealTime)
 		}
 	}
 
