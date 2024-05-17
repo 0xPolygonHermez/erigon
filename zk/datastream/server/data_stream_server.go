@@ -95,6 +95,7 @@ func (srv *DataStreamServer) CreateL2BlockProto(
 	l1InfoIndex uint32,
 	l1BlockHash libcommon.Hash,
 	minTimestamp uint64,
+	blockInfoRoot libcommon.Hash,
 ) *types.L2BlockProto {
 	return &types.L2BlockProto{
 		L2Block: &datastream.L2Block{
@@ -109,6 +110,7 @@ func (srv *DataStreamServer) CreateL2BlockProto(
 			StateRoot:       block.Root().Bytes(),
 			GlobalExitRoot:  ger.Bytes(),
 			Coinbase:        block.Coinbase().Bytes(),
+			BlockInfoRoot:   blockInfoRoot.Bytes(),
 		},
 	}
 }
@@ -117,6 +119,7 @@ func (srv *DataStreamServer) CreateTransactionProto(
 	effectiveGasPricePercentage uint8,
 	stateRoot libcommon.Hash,
 	tx eritypes.Transaction,
+	blockNumber uint64,
 ) (*types.TxProto, error) {
 	buf := make([]byte, 0)
 	writer := bytes.NewBuffer(buf)
@@ -133,6 +136,7 @@ func (srv *DataStreamServer) CreateTransactionProto(
 			IsValid:                     true, // TODO: SEQ: we don't store this value anywhere currently as a sync node
 			ImStateRoot:                 stateRoot.Bytes(),
 			Encoded:                     encoded,
+			L2BlockNumber:               blockNumber,
 		},
 	}, nil
 }
@@ -285,8 +289,13 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 		}
 	}
 
+	blockInfoRoot, err := reader.GetBlockInfoRoot(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
 	// L2 BLOCK
-	l2Block := srv.CreateL2BlockProto(block, batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex])
+	l2Block := srv.CreateL2BlockProto(block, batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot)
 	entries[index] = l2Block
 	index++
 
@@ -301,7 +310,7 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 		}
 
 		// TRANSACTION
-		transaction, err := srv.CreateTransactionProto(effectiveGasPricePercentage, intermediateRoot, tx)
+		transaction, err := srv.CreateTransactionProto(effectiveGasPricePercentage, intermediateRoot, tx, blockNum)
 		entries[index] = transaction
 		index++
 	}

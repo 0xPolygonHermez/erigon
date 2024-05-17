@@ -147,6 +147,10 @@ Loop:
 			break Loop
 		}
 
+		if err = hermezDb.WriteBlockInfoRoot(blockNum, *execRs.BlockInfoTree); err != nil {
+			return err
+		}
+
 		// exec loop variables
 		header := block.HeaderNoCopy()
 		header.GasUsed = uint64(execRs.GasUsed)
@@ -383,7 +387,7 @@ func executeBlockZk(
 	initialCycle bool,
 	stateStream bool,
 	roHermezDb state.ReadOnlyHermezDb,
-) (*core.EphemeralExecResult, error) {
+) (*core.EphemeralExecResultZk, error) {
 	blockNum := block.NumberU64()
 
 	stateReader, stateWriter, err := newStateReaderWriter(batch, tx, block, writeChangesets, cfg.accumulator, initialCycle, stateStream)
