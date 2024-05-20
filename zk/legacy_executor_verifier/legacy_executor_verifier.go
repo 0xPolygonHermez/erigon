@@ -147,13 +147,9 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		var err error
-		var tx kv.Tx
-		var hermezDb *hermez_db.HermezDbReader
 		var blocks []uint64
-		// hermezDb := hermez_db.NewHermezDbReader(tx)
 		startTime := time.Now()
 		ctx := context.Background()
-
 		// mapmutation has some issue with us not having a quit channel on the context call to `Done` so
 		// here we're creating a cancelable context and just deferring the cancel
 		innerCtx, cancel := context.WithCancel(ctx)
@@ -161,33 +157,27 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 
 		// get the data stream bytes
 		for time.Since(startTime) < 2*sequencerBatchSealTime {
-			tx, err = v.db.BeginRo(innerCtx)
-			if err != nil {
-				return verifierBundle, err
-			}
-
-			hermezDb = hermez_db.NewHermezDbReader(tx)
-			blocks, err = hermezDb.GetL2BlockNosByBatch(request.BatchNumber)
-			if err != nil {
-				tx.Rollback()
-				return verifierBundle, err
-			}
-
 			// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
 			// committed yet so just requeue the request
+			blocks, err = v.availableBlocksToProcess(innerCtx, request.BatchNumber)
+			if err != nil {
+				return verifierBundle, err
+			}
+
 			if len(blocks) > 0 {
 				break
 			}
 
-			tx.Rollback()
 			time.Sleep(time.Second)
 		}
 
+		tx, err := v.db.BeginRo(innerCtx)
 		defer tx.Rollback()
-
-		if len(blocks) == 0 {
-			return verifierBundle, fmt.Errorf("error: no blocks in batch %d", request.BatchNumber)
+		if err != nil {
+			return verifierBundle, err
 		}
+
+		hermezDb := hermez_db.NewHermezDbReader(tx)
 
 		l1InfoTreeMinTimestamps := make(map[uint64]uint64)
 		streamBytes, err := v.getStreamBytes(request, tx, blocks, hermezDb, l1InfoTreeMinTimestamps)
@@ -382,6 +372,24 @@ func (v *LegacyExecutorVerifier) getNextOnlineAvailableExecutor() ILegacyExecuto
 	}
 
 	return exec
+}
+
+func (v *LegacyExecutorVerifier) availableBlocksToProcess(innerCtx context.Context, batchNumber uint64) ([]uint64, error) {
+	tx, err := v.db.BeginRo(innerCtx)
+	defer tx.Rollback()
+	if err != nil {
+		return []uint64{}, err
+	}
+
+	hermezDb := hermez_db.NewHermezDbReader(tx)
+	blocks, err := hermezDb.GetL2BlockNosByBatch(batchNumber)
+	if err != nil {
+		return []uint64{}, err
+	}
+
+	// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
+	// committed yet so just requeue the request
+	return blocks, nil
 }
 
 func (v *LegacyExecutorVerifier) getStreamBytes(request *VerifierRequest, tx kv.Tx, blocks []uint64, hermezDb *hermez_db.HermezDbReader, l1InfoTreeMinTimestamps map[uint64]uint64) ([]byte, error) {

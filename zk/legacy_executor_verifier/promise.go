@@ -20,11 +20,12 @@ func NewPromise[T any](task func() (T, error)) *Promise[T] {
 	p := &Promise[T]{}
 	p.wg.Add(1)
 	go func() {
-		defer p.wg.Done()      // this will be the second defer that is executed when the function retunrs
-		defer p.mutex.Unlock() // this will be the first defer that is executed when the function retunrs
+		defer p.wg.Done() // this will be the second defer that is executed when the function retunrs
 
 		result, err := task()
 		p.mutex.Lock()
+		defer p.mutex.Unlock() // this will be the first defer that is executed when the function retunrs
+
 		if p.cancelled {
 			err = ErrPromiseCancelled
 		} else {
