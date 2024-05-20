@@ -264,7 +264,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 }
 
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
-func (v *LegacyExecutorVerifier) ProcessResultsUnsafe(tx kv.RwTx) ([]*VerifierResponse, error) {
+func (v *LegacyExecutorVerifier) ProcessResultsSequentiallyUnsafe(tx kv.RwTx) ([]*VerifierResponse, error) {
 	hdb := hermez_db.NewHermezDbReader(tx)
 
 	results := make([]*VerifierResponse, 0, len(v.promises))

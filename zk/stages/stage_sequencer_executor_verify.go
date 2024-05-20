@@ -107,18 +107,13 @@ func SpawnSequencerExecutorVerifyStage(
 
 	// get ordered promises from the verifier
 	// NB: this call is where the stream write happens (so it will be delayed until this stage is run)
-	responses, err := cfg.verifier.ProcessResultsUnsafe(tx)
+	responses, err := cfg.verifier.ProcessResultsSequentiallyUnsafe(tx)
 	if err != nil {
 		//TODO: what happen with promises if this request returns here?
 		return err
 	}
 
 	for _, response := range responses {
-		if response == nil {
-			// something went wrong in the verification process (but not a failed verification)
-			return fmt.Errorf("verifier failed (but not due to verification)")
-		}
-
 		// ensure that the first response is the next batch based on the current stage progress
 		// otherwise just return early until we get it
 		if response.BatchNumber != progress+1 {
