@@ -248,7 +248,11 @@ func responseCheck(resp *executor.ProcessBatchResponseV2, request *VerifierReque
 		// the provided witness
 		log.Error("executor error", "detail", resp.ProverId)
 		return false, resp, fmt.Errorf("%w: error in response: %s", ErrExecutorUnknownError, resp.Error)
+	}
 
+	if resp.ErrorRom != executor.RomError_ROM_ERROR_NO_ERROR && resp.ErrorRom != executor.RomError_ROM_ERROR_UNSPECIFIED {
+		log.Error("executor ROM error", "detail", resp.ErrorRom)
+		return false, resp, fmt.Errorf("error in response: %s", resp.ErrorRom)
 	}
 
 	if !bytes.Equal(resp.NewStateRoot, request.StateRoot.Bytes()) {
