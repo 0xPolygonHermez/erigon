@@ -75,6 +75,13 @@ func SpawnSequencerL1BlockSyncStage(
 		return err
 	}
 
+	// check if the highest batch from the L1 is higher than the config value if it is set
+	if cfg.zkCfg.L1SyncStopBatch > 0 && highestKnownBatch > cfg.zkCfg.L1SyncStopBatch {
+		log.Info("Stopping L1 sync stage based on configured stop batch", "config", cfg.zkCfg.L1SyncStopBatch, "highest-known", highestKnownBatch)
+		time.Sleep(5 * time.Second)
+	}
+
+	// check if execution has caught up to the tip of the chain
 	if highestBatch > 0 && highestKnownBatch == highestBatch {
 		log.Info("L1 block sync recovery has completed!", "batch", highestBatch)
 		time.Sleep(5 * time.Second)
@@ -151,7 +158,6 @@ LOOP:
 
 				// iterate over the batches in reverse order to ensure that the batches are written in the correct order
 				// this is important because the batches are written in reverse order
-
 				for idx, batch := range batches {
 					b := initBatch + uint64(idx)
 					data := append(coinbase.Bytes(), batch...)
@@ -165,6 +171,12 @@ LOOP:
 					}
 					totalBlocks += len(decoded)
 					log.Debug(fmt.Sprintf("[%s] Wrote L1 batch", logPrefix), "batch", b, "blocks", len(decoded), "totalBlocks", totalBlocks)
+
+					// check if we need to stop here based on config
+					if cfg.zkCfg.L1SyncStopBatch > 0 && b == cfg.zkCfg.L1SyncStopBatch {
+						log.Info("Stopping L1 sync based on stop block config")
+						break LOOP
+					}
 				}
 
 			}
