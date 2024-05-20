@@ -233,6 +233,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 			}
 		}
 
+		// debug purposes
 		// if request.BatchNumber == 30 && counter == 0 {
 		// 	ok = false
 		// 	atomic.StoreInt32(&counter, 1)
