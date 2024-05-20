@@ -2,6 +2,7 @@ package legacy_executor_verifier
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"encoding/hex"
@@ -23,16 +24,28 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-const (
-	ROLLUP_ID = 1 // todo [zkevm] this should be read from config to anticipate more than 1 rollup per manager contract
-)
+var ErrNoExecutorAvailable = fmt.Errorf("no executor available")
 
 type VerifierRequest struct {
-	BatchNumber uint64
-	ForkId      uint64
-	StateRoot   common.Hash
-	CheckCount  int
-	Counters    map[string]int
+	BatchNumber  uint64
+	ForkId       uint64
+	StateRoot    common.Hash
+	Counters     map[string]int
+	creationTime time.Time
+}
+
+func NewVerifierRequest(batchNumber, forkId uint64, stateRoot common.Hash, counters map[string]int) *VerifierRequest {
+	return &VerifierRequest{
+		BatchNumber:  batchNumber,
+		ForkId:       forkId,
+		StateRoot:    stateRoot,
+		Counters:     counters,
+		creationTime: time.Now(),
+	}
+}
+
+func (vr *VerifierRequest) isOverdue() bool {
+	return time.Since(vr.creationTime) > time.Duration(30*time.Minute)
 }
 
 type VerifierResponse struct {
@@ -43,14 +56,24 @@ type VerifierResponse struct {
 	Error            error
 }
 
-var ErrNoExecutorAvailable = fmt.Errorf("no executor available")
+type VerifierBundle struct {
+	request  *VerifierRequest
+	response *VerifierResponse
+}
+
+func NewVerifierBundle(request *VerifierRequest, response *VerifierResponse) *VerifierBundle {
+	return &VerifierBundle{
+		request:  request,
+		response: response,
+	}
+}
 
 type ILegacyExecutor interface {
 	Verify(*Payload, *VerifierRequest, common.Hash) (bool, *executor.ProcessBatchResponseV2, error)
 	CheckOnline() bool
 	QueueLength() int
-	CancelAllVerifications()
-	AllowAllVerifications()
+	AquireAccess()
+	ReleaseAccess()
 }
 
 type WitnessGenerator interface {
@@ -58,10 +81,11 @@ type WitnessGenerator interface {
 }
 
 type LegacyExecutorVerifier struct {
-	db             kv.RwDB
-	cfg            ethconfig.Zk
-	executors      []ILegacyExecutor
-	executorNumber int
+	db                     kv.RwDB
+	cfg                    ethconfig.Zk
+	executors              []ILegacyExecutor
+	executorNumber         int
+	cancelAllVerifications atomic.Bool
 
 	quit chan struct{}
 
@@ -70,7 +94,7 @@ type LegacyExecutorVerifier struct {
 	witnessGenerator WitnessGenerator
 	l1Syncer         *syncer.L1Syncer
 
-	promises     []*Promise[*VerifierResponse]
+	promises     []*Promise[*VerifierBundle]
 	addedBatches map[uint64]struct{}
 }
 
@@ -85,127 +109,142 @@ func NewLegacyExecutorVerifier(
 ) *LegacyExecutorVerifier {
 	streamServer := server.NewDataStreamServer(stream, chainCfg.ChainID.Uint64(), server.ExecutorOperationMode)
 	return &LegacyExecutorVerifier{
-		db:               db,
-		cfg:              cfg,
-		executors:        executors,
-		executorNumber:   0,
-		quit:             make(chan struct{}),
-		streamServer:     streamServer,
-		stream:           stream,
-		witnessGenerator: witnessGenerator,
-		l1Syncer:         l1Syncer,
-		promises:         make([]*Promise[*VerifierResponse], 0),
-		addedBatches:     make(map[uint64]struct{}),
+		db:                     db,
+		cfg:                    cfg,
+		executors:              executors,
+		executorNumber:         0,
+		cancelAllVerifications: atomic.Bool{},
+		quit:                   make(chan struct{}),
+		streamServer:           streamServer,
+		stream:                 stream,
+		witnessGenerator:       witnessGenerator,
+		l1Syncer:               l1Syncer,
+		promises:               make([]*Promise[*VerifierBundle], 0),
+		addedBatches:           make(map[uint64]struct{}),
 	}
 }
 
 // var counter = int32(0)
 
-func (v *LegacyExecutorVerifier) AddRequestUnsafe(ctx context.Context, tx kv.RwTx, request *VerifierRequest) (*Promise[*VerifierResponse], error) {
-	// if we have no executor config then just skip this step and treat everything as OK
-	if !v.HasExecutors() {
-		response := &VerifierResponse{
-			BatchNumber: request.BatchNumber,
-			Valid:       true,
-		}
-		return &Promise[*VerifierResponse]{
-			result: response,
-			err:    nil,
-		}, nil
-	}
-
-	hermezDb := hermez_db.NewHermezDbReader(tx)
-
-	// get the data stream bytes
-	blocks, err := hermezDb.GetL2BlockNosByBatch(request.BatchNumber)
-	if err != nil {
-		return nil, err
-	}
-
-	// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
-	// committed yet so just requeue the request
-	if len(blocks) == 0 {
-		request.CheckCount++
-		return nil, nil
-	}
-
-	l1InfoTreeMinTimestamps := make(map[uint64]uint64)
-	streamBytes, err := v.getStreamBytes(request, tx, blocks, hermezDb, l1InfoTreeMinTimestamps)
-	if err != nil {
-		return nil, err
-	}
-
-	witness, err := v.witnessGenerator.GenerateWitness(tx, ctx, blocks[0], blocks[len(blocks)-1], false, v.cfg.WitnessFull)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debug("witness generated", "data", hex.EncodeToString(witness))
-
-	// executor is perfectly happy with just an empty hash here
-	oldAccInputHash := common.HexToHash("0x0")
-
-	// now we need to figure out the timestamp limit for this payload.  It must be:
-	// timestampLimit >= currentTimestamp (from batch pre-state) + deltaTimestamp
-	// so to ensure we have a good value we can take the timestamp of the last block in the batch
-	// and just add 5 minutes
-	lastBlock, err := rawdb.ReadBlockByNumber(tx, blocks[len(blocks)-1])
-	if err != nil {
-		return nil, err
-	}
-
-	timestampLimit := lastBlock.Time()
-	payload := &Payload{
-		Witness:                 witness,
-		DataStream:              streamBytes,
-		Coinbase:                v.cfg.AddressSequencer.String(),
-		OldAccInputHash:         oldAccInputHash.Bytes(),
-		L1InfoRoot:              nil,
-		TimestampLimit:          timestampLimit,
-		ForcedBlockhashL1:       []byte{0},
-		ContextId:               strconv.Itoa(int(request.BatchNumber)),
-		L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
-	}
-
-	previousBlock, err := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
-	if err != nil {
-		return nil, err
-	}
-
+// Unsafe is not thread-safe so it MUST be invoked only from a single thread
+func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
 	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
-	promise := NewPromise[*VerifierResponse](func() (*VerifierResponse, error) {
-		p := payload
-		r := request
-		blockCopy := previousBlock.Copy()
+	// ProcessResultsSequentiallyUnsafe relies on the fact that this function returns ALWAYS non-verifierBundle and error. The only exception is the case when verifications has been canceled. Only then the verifierBundle can be nil
+	promise := NewPromise[*VerifierBundle](func() (*VerifierBundle, error) {
+		verifierBundle := NewVerifierBundle(request, nil)
 
 		e := v.getNextOnlineAvailableExecutor()
 		if e == nil {
-			return nil, ErrNoExecutorAvailable
+			return verifierBundle, ErrNoExecutorAvailable
 		}
 
-		ok, executorResponse, executorErr := e.Verify(p, r, blockCopy.Root())
+		e.AquireAccess()
+		defer e.ReleaseAccess()
+		if v.cancelAllVerifications.Load() {
+			return nil, ErrPromiseCancelled
+		}
+
+		var err error
+		var blocks []uint64
+		startTime := time.Now()
+		ctx := context.Background()
+		// mapmutation has some issue with us not having a quit channel on the context call to `Done` so
+		// here we're creating a cancelable context and just deferring the cancel
+		innerCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		// get the data stream bytes
+		for time.Since(startTime) < 2*sequencerBatchSealTime {
+			// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
+			// committed yet so just requeue the request
+			blocks, err = v.availableBlocksToProcess(innerCtx, request.BatchNumber)
+			if err != nil {
+				return verifierBundle, err
+			}
+
+			if len(blocks) > 0 {
+				break
+			}
+
+			time.Sleep(time.Second)
+		}
+
+		tx, err := v.db.BeginRo(innerCtx)
+		if err != nil {
+			return verifierBundle, err
+		}
+		defer tx.Rollback()
+
+		hermezDb := hermez_db.NewHermezDbReader(tx)
+
+		l1InfoTreeMinTimestamps := make(map[uint64]uint64)
+		streamBytes, err := v.getStreamBytes(request, tx, blocks, hermezDb, l1InfoTreeMinTimestamps)
+		if err != nil {
+			return verifierBundle, err
+		}
+
+		witness, err := v.witnessGenerator.GenerateWitness(tx, innerCtx, blocks[0], blocks[len(blocks)-1], false, v.cfg.WitnessFull)
+		if err != nil {
+			return verifierBundle, err
+		}
+
+		log.Debug("witness generated", "data", hex.EncodeToString(witness))
+
+		// executor is perfectly happy with just an empty hash here
+		oldAccInputHash := common.HexToHash("0x0")
+
+		// now we need to figure out the timestamp limit for this payload.  It must be:
+		// timestampLimit >= currentTimestamp (from batch pre-state) + deltaTimestamp
+		// so to ensure we have a good value we can take the timestamp of the last block in the batch
+		// and just add 5 minutes
+		lastBlock, err := rawdb.ReadBlockByNumber(tx, blocks[len(blocks)-1])
+		if err != nil {
+			return verifierBundle, err
+		}
+
+		timestampLimit := lastBlock.Time()
+		payload := &Payload{
+			Witness:                 witness,
+			DataStream:              streamBytes,
+			Coinbase:                v.cfg.AddressSequencer.String(),
+			OldAccInputHash:         oldAccInputHash.Bytes(),
+			L1InfoRoot:              nil,
+			TimestampLimit:          timestampLimit,
+			ForcedBlockhashL1:       []byte{0},
+			ContextId:               strconv.Itoa(int(request.BatchNumber)),
+			L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
+		}
+
+		previousBlock, err := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
+		if err != nil {
+			return verifierBundle, err
+		}
+
+		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
 		if executorErr != nil {
 			if errors.Is(err, ErrExecutorStateRootMismatch) {
 				log.Error("[Verifier] State root mismatch detected", "err", err)
 			} else if errors.Is(err, ErrExecutorUnknownError) {
 				log.Error("[Verifier] Unexpected error found from executor", "err", err)
+			} else {
+				log.Error("[Verifier] Error", "err", err)
 			}
 		}
 
-		// if request.BatchNumber == 2 && atomic.LoadInt32(&counter) == 0 {
+		// debug purposes
+		// if request.BatchNumber == 30 && counter == 0 {
 		// 	ok = false
 		// 	atomic.StoreInt32(&counter, 1)
 		// }
 
-		response := &VerifierResponse{
+		verifierBundle.response = &VerifierResponse{
 			BatchNumber:      request.BatchNumber,
 			Valid:            ok,
 			Witness:          witness,
 			ExecutorResponse: executorResponse,
 			Error:            executorErr,
 		}
-
-		return response, nil
+		return verifierBundle, nil
 	})
 
 	// add batch to the list of batches we've added
@@ -213,29 +252,51 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(ctx context.Context, tx kv.RwT
 
 	// add the promise to the list of promises
 	v.promises = append(v.promises, promise)
-	return promise, nil
+	return promise
 }
 
-func (v *LegacyExecutorVerifier) ConsumeResultsUnsafe(tx kv.RwTx) ([]*VerifierResponse, error) {
+// Unsafe is not thread-safe so it MUST be invoked only from a single thread
+func (v *LegacyExecutorVerifier) ProcessResultsSequentiallyUnsafe(tx kv.RwTx) ([]*VerifierResponse, error) {
 	hdb := hermez_db.NewHermezDbReader(tx)
 
 	results := make([]*VerifierResponse, 0, len(v.promises))
-	for _, promise := range v.promises {
-		result, err := promise.GetNonBlocking()
-		if result == nil && err == nil {
+	for i := 0; i < len(v.promises); i++ {
+		verifierBundle, err := v.promises[i].TryGet()
+		if verifierBundle == nil && err == nil {
 			break
 		}
+
 		if err != nil {
-			log.Error("error getting verifier result", "err", err)
+			// let leave it for debug purposes
+			// a cancelled promise is removed from v.promises => it should never appear here, that's why let's panic if it happens, because it will indicate for massive error
+			if errors.Is(err, ErrPromiseCancelled) {
+				panic("this should never happen")
+			}
+
+			log.Error("error on our end while preparing the verification request, re-queueing the task", "err", err)
+			// this is an error on our end, so just re-create the promise at exact position where it was
+			if verifierBundle.request.isOverdue() {
+				return nil, fmt.Errorf("error: batch %d couldn't be processed in 30 minutes", verifierBundle.request.BatchNumber)
+			}
+
+			v.promises[i] = NewPromise[*VerifierBundle](v.promises[i].task)
+			break
 		}
-		if result != nil {
-			if err = v.writeBatchToStream(result, hdb, tx); err != nil {
+
+		verifierResponse := verifierBundle.response
+		if verifierResponse.Valid {
+			if err = v.WriteBatchToStream(verifierResponse.BatchNumber, hdb, tx); err != nil {
 				log.Error("error getting verifier result", "err", err)
 			}
 		}
 
-		results = append(results, result)
-		delete(v.addedBatches, result.BatchNumber)
+		results = append(results, verifierResponse)
+		delete(v.addedBatches, verifierResponse.BatchNumber)
+
+		// no point to process any further responses if we've found an invalid one
+		if !verifierResponse.Valid {
+			break
+		}
 	}
 
 	// leave only non-processed promises
@@ -244,10 +305,17 @@ func (v *LegacyExecutorVerifier) ConsumeResultsUnsafe(tx kv.RwTx) ([]*VerifierRe
 	return results, nil
 }
 
+// Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) CancelAllRequestsUnsafe() {
-	for _, e := range v.executors {
-		e.CancelAllVerifications()
+	// cancel all promises
+	// all queued promises will return ErrPromiseCancelled while getting its result
+	for _, p := range v.promises {
+		p.Cancel()
 	}
+
+	// the goal of this car is to ensure that running promises are stopped as soon as possible
+	// we need it because the promise's function must finish and then the promise checks if it has been cancelled
+	v.cancelAllVerifications.Store(true)
 
 	for _, e := range v.executors {
 		// lets wait for all threads that are waiting to add to v.openRequests to finish
@@ -256,24 +324,24 @@ func (v *LegacyExecutorVerifier) CancelAllRequestsUnsafe() {
 		}
 	}
 
-	for _, e := range v.executors {
-		e.AllowAllVerifications()
-	}
+	v.cancelAllVerifications.Store(false)
 
-	v.promises = make([]*Promise[*VerifierResponse], 0)
+	v.promises = make([]*Promise[*VerifierBundle], 0)
 }
 
-func (v *LegacyExecutorVerifier) HasExecutors() bool {
+// Unsafe is not thread-safe so it MUST be invoked only from a single thread
+func (v *LegacyExecutorVerifier) HasExecutorsUnsafe() bool {
 	return len(v.executors) > 0
 }
 
+// Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) IsRequestAddedUnsafe(batch uint64) bool {
 	_, ok := v.addedBatches[batch]
 	return ok
 }
 
-func (v *LegacyExecutorVerifier) writeBatchToStream(result *VerifierResponse, hdb *hermez_db.HermezDbReader, roTx kv.Tx) error {
-	blks, err := hdb.GetL2BlockNosByBatch(result.BatchNumber)
+func (v *LegacyExecutorVerifier) WriteBatchToStream(batchNumber uint64, hdb *hermez_db.HermezDbReader, roTx kv.Tx) error {
+	blks, err := hdb.GetL2BlockNosByBatch(batchNumber)
 	if err != nil {
 		return err
 	}
@@ -303,6 +371,24 @@ func (v *LegacyExecutorVerifier) getNextOnlineAvailableExecutor() ILegacyExecuto
 	}
 
 	return exec
+}
+
+func (v *LegacyExecutorVerifier) availableBlocksToProcess(innerCtx context.Context, batchNumber uint64) ([]uint64, error) {
+	tx, err := v.db.BeginRo(innerCtx)
+	if err != nil {
+		return []uint64{}, err
+	}
+	defer tx.Rollback()
+
+	hermezDb := hermez_db.NewHermezDbReader(tx)
+	blocks, err := hermezDb.GetL2BlockNosByBatch(batchNumber)
+	if err != nil {
+		return []uint64{}, err
+	}
+
+	// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
+	// committed yet so just requeue the request
+	return blocks, nil
 }
 
 func (v *LegacyExecutorVerifier) getStreamBytes(request *VerifierRequest, tx kv.Tx, blocks []uint64, hermezDb *hermez_db.HermezDbReader, l1InfoTreeMinTimestamps map[uint64]uint64) ([]byte, error) {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -50,12 +49,11 @@ type RpcPayload struct {
 }
 
 type Executor struct {
-	grpcUrl                string
-	conn                   *grpc.ClientConn
-	connCancel             context.CancelFunc
-	client                 executor.ExecutorServiceClient
-	semaphore              chan struct{}
-	cancelAllVerifications uint32
+	grpcUrl    string
+	conn       *grpc.ClientConn
+	connCancel context.CancelFunc
+	client     executor.ExecutorServiceClient
+	semaphore  chan struct{}
 }
 
 func NewExecutors(cfg Config) []*Executor {
@@ -106,12 +104,12 @@ func (e *Executor) QueueLength() int {
 	return len(e.semaphore)
 }
 
-func (e *Executor) CancelAllVerifications() {
-	atomic.StoreUint32(&e.cancelAllVerifications, 1)
+func (e *Executor) AquireAccess() {
+	e.semaphore <- struct{}{}
 }
 
-func (e *Executor) AllowAllVerifications() {
-	atomic.StoreUint32(&e.cancelAllVerifications, 0)
+func (e *Executor) ReleaseAccess() {
+	<-e.semaphore
 }
 
 func (e *Executor) CheckOnline() bool {
@@ -149,12 +147,6 @@ func (e *Executor) CheckOnline() bool {
 }
 
 func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot common.Hash) (bool, *executor.ProcessBatchResponseV2, error) {
-	e.semaphore <- struct{}{}
-	defer func() { <-e.semaphore }()
-	if atomic.LoadUint32(&e.cancelAllVerifications) == 1 {
-		return false, nil, fmt.Errorf("cancelling all pending requests")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
