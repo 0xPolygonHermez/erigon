@@ -72,8 +72,6 @@ type ILegacyExecutor interface {
 	Verify(*Payload, *VerifierRequest, common.Hash) (bool, *executor.ProcessBatchResponseV2, error)
 	CheckOnline() bool
 	QueueLength() int
-	// CancelAllVerifications()
-	// AllowAllVerifications()
 	AquireAccess()
 	ReleaseAccess()
 }
@@ -87,7 +85,7 @@ type LegacyExecutorVerifier struct {
 	cfg                    ethconfig.Zk
 	executors              []ILegacyExecutor
 	executorNumber         int
-	cancelAllVerifications uint32
+	cancelAllVerifications atomic.Bool
 
 	quit chan struct{}
 
@@ -115,7 +113,7 @@ func NewLegacyExecutorVerifier(
 		cfg:                    cfg,
 		executors:              executors,
 		executorNumber:         0,
-		cancelAllVerifications: 0,
+		cancelAllVerifications: atomic.Bool{},
 		quit:                   make(chan struct{}),
 		streamServer:           streamServer,
 		stream:                 stream,
@@ -142,7 +140,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 
 		e.AquireAccess()
 		defer e.ReleaseAccess()
-		if atomic.LoadUint32(&v.cancelAllVerifications) == 1 {
+		if v.cancelAllVerifications.Load() {
 			return nil, ErrPromiseCancelled
 		}
 
@@ -172,10 +170,10 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		tx, err := v.db.BeginRo(innerCtx)
-		defer tx.Rollback()
 		if err != nil {
 			return verifierBundle, err
 		}
+		defer tx.Rollback()
 
 		hermezDb := hermez_db.NewHermezDbReader(tx)
 
@@ -317,7 +315,7 @@ func (v *LegacyExecutorVerifier) CancelAllRequestsUnsafe() {
 
 	// the goal of this car is to ensure that running promises are stopped as soon as possible
 	// we need it because the promise's function must finish and then the promise checks if it has been cancelled
-	atomic.StoreUint32(&v.cancelAllVerifications, 1)
+	v.cancelAllVerifications.Store(true)
 
 	for _, e := range v.executors {
 		// lets wait for all threads that are waiting to add to v.openRequests to finish
@@ -326,7 +324,7 @@ func (v *LegacyExecutorVerifier) CancelAllRequestsUnsafe() {
 		}
 	}
 
-	atomic.StoreUint32(&v.cancelAllVerifications, 0)
+	v.cancelAllVerifications.Store(false)
 
 	v.promises = make([]*Promise[*VerifierBundle], 0)
 }
@@ -377,10 +375,10 @@ func (v *LegacyExecutorVerifier) getNextOnlineAvailableExecutor() ILegacyExecuto
 
 func (v *LegacyExecutorVerifier) availableBlocksToProcess(innerCtx context.Context, batchNumber uint64) ([]uint64, error) {
 	tx, err := v.db.BeginRo(innerCtx)
-	defer tx.Rollback()
 	if err != nil {
 		return []uint64{}, err
 	}
+	defer tx.Rollback()
 
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 	blocks, err := hermezDb.GetL2BlockNosByBatch(batchNumber)
