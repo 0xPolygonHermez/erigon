@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "mulmod": "npx hardhat compile && npx hardhat run scripts/mulmod.js --network testnet"
+    "mulmod": "npx hardhat compile && npx hardhat run scripts/mulmod.js --network testnet",
+    "bigloop": "npx hardhat compile && npx hardhat run scripts/bigloop.js --network testnet"
   },
   "keywords": [],
   "author": "",

@@ -6,4 +6,5 @@ Copy `hardhat.config.js.example` into `hardhat.config.js` and fill in the endpoi
 
 Then run:
 
-for `mulmod` opcode activation - `npm run mulmod`
+- for `mulmod` opcode activation - `npm run mulmod`
+- for rom poseidon counters overflow - `npm run bigloop`
