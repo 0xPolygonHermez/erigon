@@ -1,13 +1,19 @@
 package legacy_executor_verifier
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
+
+var ErrPromiseCancelled = fmt.Errorf("promise cancelled")
 
 type Promise[T any] struct {
-	wg     sync.WaitGroup
-	mutex  sync.Mutex
-	task   func() (T, error) // kept only if err != nil
-	result T
-	err    error
+	wg        sync.WaitGroup
+	mutex     sync.Mutex
+	task      func() (T, error) // kept only if err != nil
+	result    T
+	err       error
+	cancelled bool
 }
 
 func NewPromise[T any](task func() (T, error)) *Promise[T] {
@@ -19,8 +25,13 @@ func NewPromise[T any](task func() (T, error)) *Promise[T] {
 
 		result, err := task()
 		p.mutex.Lock()
-		p.result = result
-		p.err = err
+		if p.cancelled {
+			err = ErrPromiseCancelled
+		} else {
+			p.result = result
+			p.err = err
+		}
+
 		if err != nil {
 			p.task = task
 		}
@@ -37,4 +48,10 @@ func (p *Promise[T]) TryGet() (T, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return p.result, p.err
+}
+
+func (p *Promise[T]) Cancel() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.cancelled = true
 }

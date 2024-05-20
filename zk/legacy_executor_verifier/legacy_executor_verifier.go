@@ -25,7 +25,6 @@ import (
 )
 
 var ErrNoExecutorAvailable = fmt.Errorf("no executor available")
-var ErrCancelledRequest = fmt.Errorf("cancelled request")
 
 type VerifierRequest struct {
 	BatchNumber  uint64
@@ -132,16 +131,19 @@ func NewLegacyExecutorVerifier(
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
 	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
+	// ProcessResultsSequentiallyUnsafe relies on the fact that this function returns ALWAYS non-verifierBundle and error. The only exception is the case when verifications has been canceled. Only then the verifierBundle can be nil
 	promise := NewPromise[*VerifierBundle](func() (*VerifierBundle, error) {
+		verifierBundle := NewVerifierBundle(request, nil)
+
 		e := v.getNextOnlineAvailableExecutor()
 		if e == nil {
-			return nil, ErrNoExecutorAvailable
+			return verifierBundle, ErrNoExecutorAvailable
 		}
 
 		e.AquireAccess()
 		defer e.ReleaseAccess()
 		if atomic.LoadUint32(&v.cancelAllVerifications) == 1 {
-			return nil, ErrCancelledRequest
+			return nil, ErrPromiseCancelled
 		}
 
 		var err error
@@ -161,14 +163,14 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		for time.Since(startTime) < 2*sequencerBatchSealTime {
 			tx, err = v.db.BeginRo(innerCtx)
 			if err != nil {
-				return nil, err
+				return verifierBundle, err
 			}
 
 			hermezDb = hermez_db.NewHermezDbReader(tx)
 			blocks, err = hermezDb.GetL2BlockNosByBatch(request.BatchNumber)
 			if err != nil {
 				tx.Rollback()
-				return nil, err
+				return verifierBundle, err
 			}
 
 			// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
@@ -184,18 +186,18 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		defer tx.Rollback()
 
 		if len(blocks) == 0 {
-			return nil, fmt.Errorf("error: no blocks in batch %d", request.BatchNumber)
+			return verifierBundle, fmt.Errorf("error: no blocks in batch %d", request.BatchNumber)
 		}
 
 		l1InfoTreeMinTimestamps := make(map[uint64]uint64)
 		streamBytes, err := v.getStreamBytes(request, tx, blocks, hermezDb, l1InfoTreeMinTimestamps)
 		if err != nil {
-			return nil, err
+			return verifierBundle, err
 		}
 
 		witness, err := v.witnessGenerator.GenerateWitness(tx, innerCtx, blocks[0], blocks[len(blocks)-1], false, v.cfg.WitnessFull)
 		if err != nil {
-			return nil, err
+			return verifierBundle, err
 		}
 
 		log.Debug("witness generated", "data", hex.EncodeToString(witness))
@@ -209,7 +211,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		// and just add 5 minutes
 		lastBlock, err := rawdb.ReadBlockByNumber(tx, blocks[len(blocks)-1])
 		if err != nil {
-			return nil, err
+			return verifierBundle, err
 		}
 
 		timestampLimit := lastBlock.Time()
@@ -227,7 +229,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 
 		previousBlock, err := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
 		if err != nil {
-			return nil, err
+			return verifierBundle, err
 		}
 
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
@@ -246,13 +248,14 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		// 	atomic.StoreInt32(&counter, 1)
 		// }
 
-		return NewVerifierBundle(request, &VerifierResponse{
+		verifierBundle.response = &VerifierResponse{
 			BatchNumber:      request.BatchNumber,
 			Valid:            ok,
 			Witness:          witness,
 			ExecutorResponse: executorResponse,
 			Error:            executorErr,
-		}), nil
+		}
+		return verifierBundle, nil
 	})
 
 	// add batch to the list of batches we've added
@@ -274,10 +277,10 @@ func (v *LegacyExecutorVerifier) ProcessResultsSequentiallyUnsafe(tx kv.RwTx) ([
 			break
 		}
 
-		verifierResponse := verifierBundle.response
 		if err != nil {
 			// let leave it for debug purposes
-			if errors.Is(err, ErrCancelledRequest) {
+			// a cancelled promise is removed from v.promises => it should never appear here, that's why let's panic if it happens, because it will indicate for massive error
+			if errors.Is(err, ErrPromiseCancelled) {
 				panic("this should never happen")
 			}
 
@@ -291,6 +294,7 @@ func (v *LegacyExecutorVerifier) ProcessResultsSequentiallyUnsafe(tx kv.RwTx) ([
 			break
 		}
 
+		verifierResponse := verifierBundle.response
 		if verifierResponse.Valid {
 			if err = v.WriteBatchToStream(verifierResponse.BatchNumber, hdb, tx); err != nil {
 				log.Error("error getting verifier result", "err", err)
@@ -314,6 +318,14 @@ func (v *LegacyExecutorVerifier) ProcessResultsSequentiallyUnsafe(tx kv.RwTx) ([
 
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) CancelAllRequestsUnsafe() {
+	// cancel all promises
+	// all queued promises will return ErrPromiseCancelled while getting its result
+	for _, p := range v.promises {
+		p.Cancel()
+	}
+
+	// the goal of this car is to ensure that running promises are stopped as soon as possible
+	// we need it because the promise's function must finish and then the promise checks if it has been cancelled
 	atomic.StoreUint32(&v.cancelAllVerifications, 1)
 
 	for _, e := range v.executors {
