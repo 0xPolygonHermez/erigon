@@ -95,7 +95,7 @@ LOOP:
 	})
 
 	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
-	chunks := chunkLogs(allLogs, 100)
+	chunks := chunkLogs(allLogs, 20)
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -130,8 +130,8 @@ LOOP:
 		}
 	}
 
-	// save the progress
-	progress = allLogs[len(allLogs)-1].BlockNumber
+	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
+	progress = allLogs[len(allLogs)-1].BlockNumber + 1
 	if err := stages.SaveStageProgress(tx, stages.L1InfoTree, progress); err != nil {
 		return err
 	}
