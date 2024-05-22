@@ -781,23 +781,32 @@ func (db *HermezDb) WriteForkId(batchNo, forkId uint64) error {
 }
 
 func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, bool, error) {
-	batchNo, found, err := db.GetBatchNo(forkId)
+	c, err := db.tx.Cursor(FORKID_BLOCK)
 	if err != nil {
 		return 0, false, err
 	}
+	defer c.Close()
 
-	// if we can't find the batch just return
-	if !found {
-		return 0, false, nil
+	var blockNum uint64 = 0
+	var k, v []byte
+	found := false
+
+	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			break
+		}
+		currentForkId := BytesToUint64(k)
+		if currentForkId == forkId {
+			blockNum = BytesToUint64(v)
+			log.Debug(fmt.Sprintf("[HermezDbReader] Got block num %d for forkId %d", blockNum, forkId))
+			found = true
+			break
+		} else {
+			continue
+		}
 	}
 
-	blockNum, foundBlock, err := db.GetLowestBlockInBatch(batchNo)
-	if err != nil {
-		return 0, false, err
-	}
-
-	// have to find the batch by forkid, and the block by batch
-	return blockNum, foundBlock, nil
+	return blockNum, found, err
 }
 
 func (db *HermezDb) DeleteForkIdBlock(fromBlockNo, toBlockNo uint64) error {
