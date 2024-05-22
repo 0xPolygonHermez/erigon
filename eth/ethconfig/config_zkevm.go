@@ -12,6 +12,7 @@ type Zk struct {
 	L2DataStreamerUrl                      string
 	L2DataStreamerTimeout                  time.Duration
 	L1SyncStartBlock                       uint64
+	L1SyncStopBatch                        uint64
 	L1ChainId                              uint64
 	L1RpcUrl                               string
 	AddressSequencer                       common.Address
@@ -61,8 +62,8 @@ type Zk struct {
 
 var DefaultZkConfig = &Zk{}
 
-func (c *Zk) ShouldCountersBeUnlimited() bool {
-	return c.DisableVirtualCounters && !c.ExecutorStrictMode && len(c.ExecutorUrls) != 0
+func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
+	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && len(c.ExecutorUrls) != 0)
 }
 
 func (c *Zk) HasExecutors() bool {

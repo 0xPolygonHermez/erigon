@@ -524,6 +524,17 @@ func (db *HermezDbReader) GetReusedL1InfoTreeIndex(blockNo uint64) (bool, error)
 	return len(bytes) > 0, nil
 }
 
+func (db *HermezDb) DeleteReusedL1InfoTreeIndexes(fromBlock, toBlock uint64) error {
+	for i := fromBlock; i <= toBlock; i++ {
+		err := db.tx.Delete(REUSED_L1_INFO_TREE_INDEX, Uint64ToBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (db *HermezDb) WriteGerForL1BlockHash(l1BlockHash common.Hash, ger common.Hash) error {
 	return db.tx.Put(L1_BLOCK_HASH_GER, l1BlockHash.Bytes(), ger.Bytes())
 }
@@ -758,38 +769,11 @@ func (db *HermezDb) deleteFromBucketWithUintKeysRange(bucket string, fromBlockNu
 }
 
 func (db *HermezDbReader) GetForkId(batchNo uint64) (uint64, error) {
-	data, err := db.tx.GetOne(FORKIDS, Uint64ToBytes(batchNo))
+	v, err := db.tx.GetOne(FORKIDS, Uint64ToBytes(batchNo))
 	if err != nil {
 		return 0, err
 	}
-
-	return BytesToUint64(data), nil
-}
-
-func (db *HermezDbReader) GetBatchNo(forkId uint64) (batchNo uint64, found bool, err error) {
-	c, err := db.tx.Cursor(FORKIDS)
-	if err != nil {
-		return 0, false, err
-	}
-	defer c.Close()
-
-	batchNo = 0
-	var k, v []byte
-	found = false
-
-	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
-		if err != nil {
-			break
-		}
-		currentForkId := BytesToUint64(v)
-		if currentForkId == forkId {
-			batchNo = BytesToUint64(k)
-			found = true
-			break
-		}
-	}
-
-	return batchNo, found, err
+	return BytesToUint64(v), nil
 }
 
 func (db *HermezDb) WriteForkId(batchNo, forkId uint64) error {
@@ -997,6 +981,28 @@ func (db *HermezDbReader) GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, e
 		return 0, err
 	}
 	return BytesToUint64(v), nil
+}
+
+func (db *HermezDbReader) GetLatestL1InfoTreeIndex() (uint64, error) {
+	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	var k, v []byte
+	for k, v, err = c.Last(); k != nil; k, v, err = c.Prev() {
+		if err != nil {
+			break
+		}
+
+		if len(v) != 0 && v[0] == 1 {
+			blockNum := BytesToUint64(k[:8])
+			return blockNum, nil
+		}
+	}
+
+	return 0, nil
 }
 
 func (db *HermezDb) WriteL1InjectedBatch(batch *types.L1InjectedBatch) error {

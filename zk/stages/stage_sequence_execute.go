@@ -120,7 +120,7 @@ func SpawnSequencingStage(
 
 	hasAnyTransactionsInThisBatch := false
 	thisBatch := lastBatch + 1
-	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId))
+	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
 	runLoopBlocks := true
 	lastStartedBn := executionAt - 1
 	yielded := mapset.NewSet[[32]byte]()
@@ -129,6 +129,12 @@ func SpawnSequencingStage(
 	decodedBlocksSize := uint64(0)
 
 	if l1Recovery {
+		if cfg.zk.L1SyncStopBatch > 0 && thisBatch > cfg.zk.L1SyncStopBatch {
+			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
+			time.Sleep(1 * time.Second)
+			return nil
+		}
+
 		// let's check if we have any L1 data to recover
 		decodedBlocks, coinbase, workRemaining, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
 		if err != nil {
@@ -168,6 +174,7 @@ func SpawnSequencingStage(
 			clonedBatchCounters = batchCounters.Clone()
 			addedTransactions = []types.Transaction{}
 			addedReceipts = []*types.Receipt{}
+			effectiveGases = []uint8{}
 			header, parentBlock, err = prepareHeader(tx, blockNumber, deltaTimestamp, forkId, coinbase)
 			if err != nil {
 				return err

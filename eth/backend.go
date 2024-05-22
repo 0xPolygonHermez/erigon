@@ -192,9 +192,9 @@ type Ethereum struct {
 	kvRPC          *remotedbserver.KvServer
 
 	// zk
-	dataStream *datastreamer.StreamServer
-	l1Syncer   *syncer.L1Syncer
-	etherMan   *etherman.Client
+	dataStream      *datastreamer.StreamServer
+	l1Syncer        *syncer.L1Syncer
+	etherManClients []*etherman.Client
 
 	preStartTasks *PreStartTasks
 }
@@ -751,7 +751,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		// update the chain config with the zero gas from the flags
 		backend.chainConfig.SupportGasless = cfg.Gasless
 
-		backend.etherMan = newEtherMan(cfg, chainConfig.ChainName)
+		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
+		backend.etherManClients = make([]*etherman.Client, len(l1Urls))
+		for i, url := range l1Urls {
+			backend.etherManClients[i] = newEtherMan(cfg, chainConfig.ChainName, url)
+		}
 
 		isSequencer := sequencer.IsSequencer()
 
@@ -763,23 +767,36 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		var l1Topics [][]libcommon.Hash
 		var l1Contracts []libcommon.Address
 		if isSequencer {
-			l1Topics = [][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic, contracts.InitialSequenceBatchesTopic}}
-			l1Contracts = []libcommon.Address{cfg.AddressGerManager, cfg.AddressZkevm}
+			l1Topics = [][]libcommon.Hash{{contracts.InitialSequenceBatchesTopic}}
+			l1Contracts = []libcommon.Address{cfg.AddressZkevm}
 		} else {
 			l1Topics = [][]libcommon.Hash{{
 				contracts.SequencedBatchTopicPreEtrog,
 				contracts.SequencedBatchTopicEtrog,
 				contracts.VerificationTopicPreEtrog,
 				contracts.VerificationTopicEtrog,
-				contracts.UpdateL1InfoTreeTopic,
 			}}
-			l1Contracts = []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin, cfg.AddressGerManager}
+			l1Contracts = []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin}
+		}
+
+		ethermanClients := make([]syncer.IEtherman, len(backend.etherManClients))
+		for i, c := range backend.etherManClients {
+			ethermanClients[i] = c.EthClient
 		}
 
 		backend.l1Syncer = syncer.NewL1Syncer(
-			backend.etherMan.EthClient,
+			ethermanClients,
 			l1Contracts,
 			l1Topics,
+			cfg.L1BlockRange,
+			cfg.L1QueryDelay,
+			cfg.L1QueryBlocksThreads,
+		)
+
+		l1InfoTreeSyncer := syncer.NewL1Syncer(
+			ethermanClients,
+			[]libcommon.Address{cfg.AddressGerManager},
+			[][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic}},
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
 			cfg.L1QueryBlocksThreads,
@@ -824,7 +841,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			backend.txPool2.ForceUpdateLatestBlock(executionProgress)
 
 			l1BlockSyncer := syncer.NewL1Syncer(
-				backend.etherMan.EthClient,
+				ethermanClients,
 				[]libcommon.Address{cfg.AddressZkevm},
 				[][]libcommon.Hash{{contracts.SequenceBatchesTopic}},
 				cfg.L1BlockRange,
@@ -845,6 +862,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.engine,
 				backend.dataStream,
 				backend.l1Syncer,
+				l1InfoTreeSyncer,
 				l1BlockSyncer,
 				backend.txPool2,
 				backend.txPool2DB,
@@ -879,6 +897,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.forkValidator,
 				backend.engine,
 				backend.l1Syncer,
+				l1InfoTreeSyncer,
 				streamClient,
 				backend.dataStream,
 			)
@@ -901,9 +920,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 }
 
 // creates an EtherMan instance with default parameters
-func newEtherMan(cfg *ethconfig.Config, l2ChainName string) *etherman.Client {
+func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Client {
 	ethmanConf := etherman.Config{
-		URL:                       cfg.L1RpcUrl,
+		URL:                       url,
 		L1ChainID:                 cfg.L1ChainId,
 		L2ChainID:                 cfg.L2ChainId,
 		L2ChainName:               l2ChainName,

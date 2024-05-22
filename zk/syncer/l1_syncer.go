@@ -29,6 +29,7 @@ var errorShortResponseLT96 = fmt.Errorf("response too short to contain last batc
 const rollupSequencedBatchesSignature = "0x25280169" // hardcoded abi signature
 
 type IEtherman interface {
+	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethTypes.Header, error)
 	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethTypes.Block, error)
 	FilterLogs(ctx context.Context, query ethereum.FilterQuery) ([]ethTypes.Log, error)
 	CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error)
@@ -47,7 +48,9 @@ type jobResult struct {
 }
 
 type L1Syncer struct {
-	em                   IEtherman
+	etherMans            []IEtherman
+	ethermanIndex        uint8
+	ethermanMtx          *sync.Mutex
 	l1ContractAddresses  []common.Address
 	topics               [][]common.Hash
 	blockRange           uint64
@@ -64,11 +67,14 @@ type L1Syncer struct {
 	// Channels
 	logsChan            chan []ethTypes.Log
 	progressMessageChan chan string
+	quit                chan struct{}
 }
 
-func NewL1Syncer(em IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay, l1QueryBlocksThreads uint64) *L1Syncer {
+func NewL1Syncer(etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay, l1QueryBlocksThreads uint64) *L1Syncer {
 	return &L1Syncer{
-		em:                   em,
+		etherMans:            etherMans,
+		ethermanIndex:        0,
+		ethermanMtx:          &sync.Mutex{},
 		l1ContractAddresses:  l1ContractAddresses,
 		topics:               topics,
 		blockRange:           blockRange,
@@ -76,7 +82,22 @@ func NewL1Syncer(em IEtherman, l1ContractAddresses []common.Address, topics [][]
 		l1QueryBlocksThreads: l1QueryBlocksThreads,
 		progressMessageChan:  make(chan string),
 		logsChan:             make(chan []ethTypes.Log),
+		quit:                 make(chan struct{}),
 	}
+}
+
+func (s *L1Syncer) getNextEtherman() IEtherman {
+	s.ethermanMtx.Lock()
+	defer s.ethermanMtx.Unlock()
+
+	if s.ethermanIndex >= uint8(len(s.etherMans)) {
+		s.ethermanIndex = 0
+	}
+
+	etherman := s.etherMans[s.ethermanIndex]
+	s.ethermanIndex++
+
+	return etherman
 }
 
 func (s *L1Syncer) IsSyncStarted() bool {
@@ -89,6 +110,10 @@ func (s *L1Syncer) IsDownloading() bool {
 
 func (s *L1Syncer) GetLastCheckedL1Block() uint64 {
 	return s.lastCheckedL1Block.Load()
+}
+
+func (s *L1Syncer) Stop() {
+	s.quit <- struct{}{}
 }
 
 // Channels
@@ -119,6 +144,12 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 		defer log.Info("Stopping L1 syncer thread")
 
 		for {
+			select {
+			case <-s.quit:
+				return
+			default:
+			}
+
 			latestL1Block, err := s.getLatestL1Block()
 			if err != nil {
 				log.Error("Error getting latest L1 block", "err", err)
@@ -139,12 +170,19 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 	}()
 }
 
+func (s *L1Syncer) GetHeader(number uint64) (*ethTypes.Header, error) {
+	em := s.getNextEtherman()
+	return em.HeaderByNumber(context.Background(), new(big.Int).SetUint64(number))
+}
+
 func (s *L1Syncer) GetBlock(number uint64) (*ethTypes.Block, error) {
-	return s.em.BlockByNumber(context.Background(), new(big.Int).SetUint64(number))
+	em := s.getNextEtherman()
+	return em.BlockByNumber(context.Background(), new(big.Int).SetUint64(number))
 }
 
 func (s *L1Syncer) GetTransaction(hash common.Hash) (ethTypes.Transaction, bool, error) {
-	return s.em.TransactionByHash(context.Background(), hash)
+	em := s.getNextEtherman()
+	return em.TransactionByHash(context.Background(), hash)
 }
 
 func (s *L1Syncer) GetOldAccInputHash(ctx context.Context, addr *common.Address, rollupId, batchNum uint64) (common.Hash, error) {
@@ -184,16 +222,16 @@ func (s *L1Syncer) GetOldAccInputHash(ctx context.Context, addr *common.Address,
 	}
 }
 
-func (s *L1Syncer) L1QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Block, error) {
+func (s *L1Syncer) L1QueryHeaders(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error) {
 	// more thread causes error on remote rpc server
 	numThreads := int(s.l1QueryBlocksThreads)
-	blocksMap := map[uint64]*ethTypes.Block{}
+	headersMap := map[uint64]*ethTypes.Header{}
 	logsSize := len(logs)
 
 	if numThreads > 1 && logsSize > (numThreads<<2) {
 		var wg sync.WaitGroup
 		var err error
-		blocksArray := make([]*ethTypes.Block, logsSize)
+		headersArray := make([]*ethTypes.Header, logsSize)
 
 		wg.Add(numThreads)
 
@@ -204,12 +242,12 @@ func (s *L1Syncer) L1QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uin
 				durationTick := time.Now()
 				for j := cpuI; j < logsSize; j += numThreads {
 					l := logs[j]
-					block, e := s.GetBlock(l.BlockNumber)
+					header, e := s.GetHeader(l.BlockNumber)
 					if e != nil {
 						err = e
 						return
 					}
-					blocksArray[j] = block
+					headersArray[j] = header
 					tryToLogL1QueryBlocks(logPrefix, j/numThreads, logsSize/numThreads, cpuI+1, &durationTick)
 				}
 			}(i)
@@ -220,22 +258,22 @@ func (s *L1Syncer) L1QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uin
 			return nil, err
 		}
 
-		for _, block := range blocksArray {
-			blocksMap[block.NumberU64()] = block
+		for _, header := range headersArray {
+			headersMap[header.Number.Uint64()] = header
 		}
 	} else {
 		durationTick := time.Now()
 		for i, l := range logs {
-			block, err := s.GetBlock(l.BlockNumber)
+			header, err := s.GetHeader(l.BlockNumber)
 			if err != nil {
 				return nil, err
 			}
-			blocksMap[l.BlockNumber] = block
+			headersMap[l.BlockNumber] = header
 			tryToLogL1QueryBlocks(logPrefix, i, logsSize, 1, &durationTick)
 		}
 	}
 
-	return blocksMap, nil
+	return headersMap, nil
 }
 
 func tryToLogL1QueryBlocks(logPrefix string, current, total, threadNum int, durationTick *time.Time) {
@@ -246,7 +284,8 @@ func tryToLogL1QueryBlocks(logPrefix string, current, total, threadNum int, dura
 }
 
 func (s *L1Syncer) getLatestL1Block() (uint64, error) {
-	latestBlock, err := s.em.BlockByNumber(context.Background(), big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	em := s.getNextEtherman()
+	latestBlock, err := em.BlockByNumber(context.Background(), big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 	if err != nil {
 		return 0, err
 	}
@@ -350,7 +389,8 @@ func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult
 			var err error
 			retry := 0
 			for {
-				logs, err = s.em.FilterLogs(context.Background(), query)
+				em := s.getNextEtherman()
+				logs, err = em.FilterLogs(context.Background(), query)
 				if err != nil {
 					log.Debug("getSequencedLogs retry error", "err", err)
 					retry++
@@ -380,7 +420,8 @@ func (s *L1Syncer) callGetRollupSequencedBatches(ctx context.Context, addr *comm
 	rollupID := fmt.Sprintf("%064x", rollupId)
 	batchNumber := fmt.Sprintf("%064x", batchNum)
 
-	resp, err := s.em.CallContract(ctx, ethereum.CallMsg{
+	em := s.getNextEtherman()
+	resp, err := em.CallContract(ctx, ethereum.CallMsg{
 		To:   addr,
 		Data: common.FromHex(rollupSequencedBatchesSignature + rollupID + batchNumber),
 	}, nil)
