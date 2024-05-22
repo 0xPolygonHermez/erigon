@@ -41,8 +41,8 @@ func SpawnL1SequencerSyncStage(
 	quiet bool,
 ) (err error) {
 	logPrefix := s.LogPrefix()
-	log.Info(fmt.Sprintf("[%s] Starting L1 Info Tree stage", logPrefix))
-	defer log.Info(fmt.Sprintf("[%s] Finished L1 Info Tree stage", logPrefix))
+	log.Info(fmt.Sprintf("[%s] Starting L1 Sequencer sync stage", logPrefix))
+	defer log.Info(fmt.Sprintf("[%s] Finished L1 Sequencer sync stage", logPrefix))
 
 	freshTx := tx == nil
 	if freshTx {
@@ -53,28 +53,19 @@ func SpawnL1SequencerSyncStage(
 		defer tx.Rollback()
 	}
 
-	hermezDb := hermez_db.NewHermezDb(tx)
-
-	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
+	progress, err := stages.GetStageProgress(tx, stages.L1SequencerSync)
 	if err != nil {
 		return err
 	}
 	if progress == 0 {
 		progress = cfg.zkCfg.L1FirstBlock - 1
 	}
-
-	latestUpdate, found, err := hermezDb.GetLatestL1InfoTreeUpdate()
-	if err != nil {
-		return err
+	if progress > 0 {
+		// if we have progress then we can assume that we have the single injected batch already so can just return here
+		return nil
 	}
 
-	// because the info tree updates are used by the RPC node and the sequencer, and we can switch between
-	// the two, we need to ensure consistency when migrating from RPC to sequencer modes of operation,
-	// so we keep track of these block numbers outside of the usual stage progress
-	latestL1InfoTreeBlockNumber, err := hermezDb.GetL1InfoTreeHighestBlock()
-	if err != nil {
-		return err
-	}
+	hermezDb := hermez_db.NewHermezDb(tx)
 
 	if !cfg.syncer.IsSyncStarted() {
 		cfg.syncer.Run(progress)
@@ -82,7 +73,6 @@ func SpawnL1SequencerSyncStage(
 
 	logChan := cfg.syncer.GetLogsChan()
 	progressChan := cfg.syncer.GetProgressMessageChan()
-	infoTreeUpdates := 0
 
 Loop:
 	for {
@@ -96,23 +86,15 @@ Loop:
 			for _, l := range logs {
 				block := blocksMap[l.BlockNumber]
 				switch l.Topics[0] {
-				case contracts.UpdateL1InfoTreeTopic:
-					if latestL1InfoTreeBlockNumber > 0 && l.BlockNumber <= latestL1InfoTreeBlockNumber {
-						continue
-					}
-					latestUpdate, err = HandleL1InfoTreeUpdate(cfg.syncer, hermezDb, l, latestUpdate, found, block)
-					if err != nil {
-						return err
-					}
-					found = true
-					infoTreeUpdates++
-					latestL1InfoTreeBlockNumber = l.BlockNumber
 				case contracts.InitialSequenceBatchesTopic:
 					if err := HandleInitialSequenceBatches(cfg.syncer, hermezDb, l, block); err != nil {
 						return err
 					}
+					// we only ever handle a single injected batch as a sequencer currently so we can just
+					// exit early here
+					break Loop
 				default:
-					log.Warn("received unexpected topic from l1 sync stage", "topic", l.Topics[0])
+					log.Warn("received unexpected topic from l1 sequencer sync stage", "topic", l.Topics[0])
 				}
 			}
 		case progMsg := <-progressChan:
@@ -124,16 +106,14 @@ Loop:
 		}
 	}
 
-	if err = hermezDb.WriteL1InfoTreeHighestBlock(latestL1InfoTreeBlockNumber); err != nil {
-		return err
-	}
+	cfg.syncer.Stop()
 
 	progress = cfg.syncer.GetLastCheckedL1Block()
-	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, progress); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.L1SequencerSync, progress); err != nil {
 		return err
 	}
 
-	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", infoTreeUpdates)
+	log.Info(fmt.Sprintf("[%s] L1 Sequencer sync finished", logPrefix))
 
 	if freshTx {
 		if err = tx.Commit(); err != nil {

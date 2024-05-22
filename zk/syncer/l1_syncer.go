@@ -66,6 +66,7 @@ type L1Syncer struct {
 	// Channels
 	logsChan            chan []ethTypes.Log
 	progressMessageChan chan string
+	quit                chan struct{}
 }
 
 func NewL1Syncer(etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay, l1QueryBlocksThreads uint64) *L1Syncer {
@@ -80,6 +81,7 @@ func NewL1Syncer(etherMans []IEtherman, l1ContractAddresses []common.Address, to
 		l1QueryBlocksThreads: l1QueryBlocksThreads,
 		progressMessageChan:  make(chan string),
 		logsChan:             make(chan []ethTypes.Log),
+		quit:                 make(chan struct{}),
 	}
 }
 
@@ -107,6 +109,10 @@ func (s *L1Syncer) IsDownloading() bool {
 
 func (s *L1Syncer) GetLastCheckedL1Block() uint64 {
 	return s.lastCheckedL1Block.Load()
+}
+
+func (s *L1Syncer) Stop() {
+	s.quit <- struct{}{}
 }
 
 // Channels
@@ -137,6 +143,12 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 		defer log.Info("Stopping L1 syncer thread")
 
 		for {
+			select {
+			case <-s.quit:
+				return
+			default:
+			}
+
 			latestL1Block, err := s.getLatestL1Block()
 			if err != nil {
 				log.Error("Error getting latest L1 block", "err", err)
