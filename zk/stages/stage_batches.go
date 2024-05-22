@@ -607,16 +607,9 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// store the highest used l1 info index//
 	/////////////////////////////////////////
 
-	var highestL1InfoTreeIndex uint64
-	for i := fromBlock - 1; i > 0; i-- {
-		highestL1InfoTreeIndex, err = hermezDb.GetBlockL1InfoTreeIndex(i)
-		if err != nil {
-			return fmt.Errorf("get block l1 info tree index error: %v", err)
-		}
-
-		if highestL1InfoTreeIndex > 0 {
-			break
-		}
+	highestL1InfoTreeIndex, err := hermezDb.GetLatestL1InfoTreeIndex()
+	if err != nil {
+		return fmt.Errorf("get latest l1 info tree index error: %v", err)
 	}
 
 	if err := stages.SaveStageProgress(tx, stages.HighestUsedL1InfoIndex, highestL1InfoTreeIndex); err != nil {

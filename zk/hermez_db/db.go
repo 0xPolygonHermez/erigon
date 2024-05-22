@@ -957,6 +957,28 @@ func (db *HermezDbReader) GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, e
 	return BytesToUint64(v), nil
 }
 
+func (db *HermezDbReader) GetLatestL1InfoTreeIndex() (uint64, error) {
+	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	var k, v []byte
+	for k, v, err = c.Last(); k != nil; k, v, err = c.Prev() {
+		if err != nil {
+			break
+		}
+
+		if len(v) != 0 && v[0] == 1 {
+			blockNum := BytesToUint64(k[:8])
+			return blockNum, nil
+		}
+	}
+
+	return 0, nil
+}
+
 func (db *HermezDb) WriteL1InjectedBatch(batch *types.L1InjectedBatch) error {
 	var nextIndex uint64 = 0
 
