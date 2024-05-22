@@ -78,16 +78,16 @@ Loop:
 	for {
 		select {
 		case logs := <-logChan:
-			blocksMap, err := cfg.syncer.L1QueryBlocks(logPrefix, logs)
+			headersMap, err := cfg.syncer.L1QueryHeaders(logPrefix, logs)
 			if err != nil {
 				return err
 			}
 
 			for _, l := range logs {
-				block := blocksMap[l.BlockNumber]
+				header := headersMap[l.BlockNumber]
 				switch l.Topics[0] {
 				case contracts.InitialSequenceBatchesTopic:
-					if err := HandleInitialSequenceBatches(cfg.syncer, hermezDb, l, block); err != nil {
+					if err := HandleInitialSequenceBatches(cfg.syncer, hermezDb, l, header); err != nil {
 						return err
 					}
 					// we only ever handle a single injected batch as a sequencer currently so we can just
@@ -130,7 +130,7 @@ func HandleL1InfoTreeUpdate(
 	l ethTypes.Log,
 	latestUpdate *types.L1InfoTreeUpdate,
 	found bool,
-	block *ethTypes.Block,
+	header *ethTypes.Header,
 ) (*types.L1InfoTreeUpdate, error) {
 	if len(l.Topics) != 3 {
 		log.Warn("Received log for info tree that did not have 3 topics")
@@ -158,14 +158,14 @@ func HandleL1InfoTreeUpdate(
 
 	// now we need the block timestamp and the parent hash information for the block tied
 	// to this event
-	if block == nil {
-		block, err = syncer.GetBlock(l.BlockNumber)
+	if header == nil {
+		header, err = syncer.GetHeader(l.BlockNumber)
 		if err != nil {
 			return nil, err
 		}
 	}
-	update.ParentHash = block.ParentHash()
-	update.Timestamp = block.Time()
+	update.ParentHash = header.ParentHash
+	update.Timestamp = header.Time
 	update.BlockNumber = l.BlockNumber
 
 	if err = hermezDb.WriteL1InfoTreeUpdate(update); err != nil {
@@ -190,12 +190,12 @@ func HandleInitialSequenceBatches(
 	syncer IL1Syncer,
 	db *hermez_db.HermezDb,
 	l ethTypes.Log,
-	l1Block *ethTypes.Block,
+	header *ethTypes.Header,
 ) error {
 	var err error
 
-	if l1Block == nil {
-		l1Block, err = syncer.GetBlock(l.BlockNumber)
+	if header == nil {
+		header, err = syncer.GetHeader(l.BlockNumber)
 		if err != nil {
 			return err
 		}
@@ -209,9 +209,9 @@ func HandleInitialSequenceBatches(
 
 	ib := &types.L1InjectedBatch{
 		L1BlockNumber:      l.BlockNumber,
-		Timestamp:          l1Block.Time(),
-		L1BlockHash:        l1Block.Hash(),
-		L1ParentHash:       l1Block.ParentHash(),
+		Timestamp:          header.Time,
+		L1BlockHash:        header.Hash(),
+		L1ParentHash:       header.ParentHash,
 		LastGlobalExitRoot: common.BytesToHash(l.Data[injectedBatchLastGerStartByte:injectedBatchLastGerEndByte]),
 		Sequencer:          common.BytesToAddress(l.Data[injectedBatchSequencerStartByte:injectedBatchSequencerEndByte]),
 		Transaction:        txData,

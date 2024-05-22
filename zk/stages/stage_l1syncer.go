@@ -33,8 +33,9 @@ type IL1Syncer interface {
 	GetLogsChan() chan []ethTypes.Log
 	GetProgressMessageChan() chan string
 
-	L1QueryBlocks(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Block, error)
+	L1QueryHeaders(logPrefix string, logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error)
 	GetBlock(number uint64) (*ethTypes.Block, error)
+	GetHeader(number uint64) (*ethTypes.Header, error)
 	Run(lastCheckedBlock uint64)
 	Stop()
 }

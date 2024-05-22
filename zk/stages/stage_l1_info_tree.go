@@ -109,16 +109,16 @@ LOOP:
 		default:
 		}
 
-		blocksMap, err := cfg.syncer.L1QueryBlocks(logPrefix, chunk)
+		headersMap, err := cfg.syncer.L1QueryHeaders(logPrefix, chunk)
 		if err != nil {
 			return err
 		}
 
 		for _, l := range chunk {
-			block := blocksMap[l.BlockNumber]
+			header := headersMap[l.BlockNumber]
 			switch l.Topics[0] {
 			case contracts.UpdateL1InfoTreeTopic:
-				latestUpdate, err = HandleL1InfoTreeUpdate(cfg.syncer, hermezDb, l, latestUpdate, found, block)
+				latestUpdate, err = HandleL1InfoTreeUpdate(cfg.syncer, hermezDb, l, latestUpdate, found, header)
 				if err != nil {
 					return err
 				}
