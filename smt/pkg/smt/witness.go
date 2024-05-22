@@ -24,7 +24,7 @@ func BuildWitness(s *SMT, rd trie.RetainDecider, ctx context.Context) (*trie.Wit
 				If a path (or rather a prefix of a path) must be retained then rd.Retain(prefix of a path) returns true. Otherwise it returns false.
 				If a node (leaf or not) must be retained then rd.Retain returns true for all of the prefixes of its path => rd.Retains returns true for all node's ancestors all the way up to the root. (1)
 				Therefore if a leaf must be retained then rd.Retain will return true not only for leaf's path but it will return true for all leaf's ancestors' paths.
-				If a node must be retained it could be either because of a modificaton or because of a deletion.
+				If a node must be retained it could be either because of a modification or because of a deletion.
 				In case of modification it is enough to retain only the node but in case of deletion the witness must includes the node's sibling.
 				Because of (1) if a node must be retained then its parent must be retained too => we're safe to decide whether a node must be retained or not by using its parent's parent.
 				Using a parent's path will ensure that if a node is included in the witness then its sibling will also be included, because they have the same parent.
