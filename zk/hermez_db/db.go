@@ -504,6 +504,17 @@ func (db *HermezDbReader) GetReusedL1InfoTreeIndex(blockNo uint64) (bool, error)
 	return len(bytes) > 0, nil
 }
 
+func (db *HermezDb) DeleteReusedL1InfoTreeIndexes(fromBlock, toBlock uint64) error {
+	for i := fromBlock; i <= toBlock; i++ {
+		err := db.tx.Delete(REUSED_L1_INFO_TREE_INDEX, Uint64ToBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (db *HermezDb) WriteGerForL1BlockHash(l1BlockHash common.Hash, ger common.Hash) error {
 	return db.tx.Put(L1_BLOCK_HASH_GER, l1BlockHash.Bytes(), ger.Bytes())
 }
