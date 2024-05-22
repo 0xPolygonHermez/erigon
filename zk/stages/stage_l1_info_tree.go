@@ -131,7 +131,9 @@ LOOP:
 	}
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
-	progress = allLogs[len(allLogs)-1].BlockNumber + 1
+	if len(allLogs) > 0 {
+		progress = allLogs[len(allLogs)-1].BlockNumber + 1
+	}
 	if err := stages.SaveStageProgress(tx, stages.L1InfoTree, progress); err != nil {
 		return err
 	}
