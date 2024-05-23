@@ -82,7 +82,7 @@ func handleInjectedBatch(
 	parentBlock *types.Block,
 	forkId uint64,
 ) (*types.Transaction, *types.Receipt, uint8, error) {
-	decodedBlocks, err := zktx.DecodeBatchL2Blocks(injected.Transaction, 5)
+	decodedBlocks, err := zktx.DecodeBatchL2Blocks(injected.Transaction, forkId)
 	if err != nil {
 		return nil, nil, 0, err
 	}
