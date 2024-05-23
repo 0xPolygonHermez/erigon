@@ -157,7 +157,7 @@ func makeLog_zkevm_regularLogIndexes(size int) executionFunc {
 }
 
 // [zkEvm] log data length must be a multiple of 32, if not - fill 0 at the end until it is
-func makeLog_zkevm(size int, logInexShouldBeFromZero bool) executionFunc {
+func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 		if interpreter.readOnly {
 			return nil, ErrWriteProtection
@@ -253,7 +253,7 @@ func makeLog_zkevm(size int, logInexShouldBeFromZero bool) executionFunc {
 			// core/state doesn't know the current block number.
 			BlockNumber: interpreter.evm.Context().BlockNumber,
 		}
-		if logInexShouldBeFromZero {
+		if logIndexPerTx {
 			interpreter.evm.IntraBlockState().AddLog_zkEvm(&log)
 		} else {
 			interpreter.evm.IntraBlockState().AddLog(&log)
