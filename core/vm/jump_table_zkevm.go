@@ -14,10 +14,10 @@ func newForkID4InstructionSet() JumpTable {
 
 	// zkevm logs have data length multiple of 32
 	// zeroes are added to the end in order to fill the 32 bytes if needed
-	instructionSet[LOG1].execute = makeLog_zkevm(1)
-	instructionSet[LOG2].execute = makeLog_zkevm(2)
-	instructionSet[LOG3].execute = makeLog_zkevm(3)
-	instructionSet[LOG4].execute = makeLog_zkevm(4)
+	instructionSet[LOG1].execute = makeLog_zkevm_logIndexFromZero(1)
+	instructionSet[LOG2].execute = makeLog_zkevm_logIndexFromZero(2)
+	instructionSet[LOG3].execute = makeLog_zkevm_logIndexFromZero(3)
+	instructionSet[LOG4].execute = makeLog_zkevm_logIndexFromZero(4)
 
 	instructionSet[DELEGATECALL].execute = opDelegateCall_zkevm
 	instructionSet[CALLCODE].execute = opCallCode_zkevm
@@ -72,10 +72,10 @@ func newForkID8InstructionSet() JumpTable {
 
 	// zkevm logs have data length multiple of 32
 	// zeroes are added to the end in order to fill the 32 bytes if needed
-	instructionSet[LOG1].execute = makeLog_zkevm_fixedIndexes(1)
-	instructionSet[LOG2].execute = makeLog_zkevm_fixedIndexes(2)
-	instructionSet[LOG3].execute = makeLog_zkevm_fixedIndexes(3)
-	instructionSet[LOG4].execute = makeLog_zkevm_fixedIndexes(4)
+	instructionSet[LOG1].execute = makeLog_zkevm_regularLogIndexes(1)
+	instructionSet[LOG2].execute = makeLog_zkevm_regularLogIndexes(2)
+	instructionSet[LOG3].execute = makeLog_zkevm_regularLogIndexes(3)
+	instructionSet[LOG4].execute = makeLog_zkevm_regularLogIndexes(4)
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet

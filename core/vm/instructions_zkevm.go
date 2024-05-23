@@ -148,111 +148,16 @@ func opSendAll_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContex
 	return nil, errStopToken
 }
 
-// [zkEvm] log data length must be a multiple of 32, if not - fill 0 at the end until it is
-// fixed bug in forkId8 with indexes starting always from 0
-func makeLog_zkevm_fixedIndexes(size int) executionFunc {
-	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-		if interpreter.readOnly {
-			return nil, ErrWriteProtection
-		}
-		topics := make([]libcommon.Hash, size)
-		stack := scope.Stack
-		mStart, mSize := stack.Pop(), stack.Pop()
-		for i := 0; i < size; i++ {
-			addr := stack.Pop()
-			topics[i] = addr.Bytes32()
-		}
+func makeLog_zkevm_logIndexFromZero(size int) executionFunc {
+	return makeLog_zkevm(size, true)
+}
 
-		d := scope.Memory.GetCopy(int64(mStart.Uint64()), int64(mSize.Uint64()))
-
-		forkBlock := uint64(0)
-		if interpreter.evm.ChainConfig().ForkID88ElderberryBlock != nil {
-			forkBlock = interpreter.VM.evm.ChainConfig().ForkID88ElderberryBlock.Uint64()
-		}
-		blockNo := interpreter.VM.evm.Context().BlockNumber
-
-		// APPLY BUG ONLY ABOVE FORKID9
-		if forkBlock == 0 || blockNo < forkBlock {
-			// [zkEvm] fill 0 at the end
-			dataLen := len(d)
-			lenMod32 := dataLen & 31
-			if lenMod32 != 0 {
-				d = append(d, make([]byte, 32-lenMod32)...)
-			}
-		} else {
-			// bug start
-			/*
-			  \  /
-			 (o)(o)
-			 /    \
-			 \    /
-			  \  /
-			   \/
-			*/
-
-			dataHex := hex.EncodeToString(d)
-
-			bugPossible := false
-
-			// if the first part of datahex < 16 (mSize < 32), remove leading zero
-			if len(dataHex) > 0 && dataHex[0] == '0' && dataHex[1] != '0' && mSize.Uint64() < 32 {
-				bugPossible = true
-				log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", mSize.Uint64())
-			}
-
-			if bugPossible {
-				dataHex = dataHex[1:]
-
-				// pad the hex out
-				dataHex = appendZerosHex(dataHex, 64)
-
-				msInt := mSize.Uint64()
-
-				// conditional padding to match C++ bug
-				if int(msInt*2) > len(dataHex) {
-					dataHex = prependZerosHex(dataHex, int(msInt*2))
-				}
-
-				if len(dataHex) > int(msInt*2) {
-					dataHex = dataHex[:msInt*2]
-				}
-
-				d, _ = hex.DecodeString(dataHex)
-			} else {
-				// erigon behaviour
-				// [zkEvm] fill 0 at the end
-				dataLen := len(d)
-				lenMod32 := dataLen & 31
-				if lenMod32 != 0 {
-					d = append(d, make([]byte, 32-lenMod32)...)
-				}
-			}
-			/*
-			  \  /
-			 (o)(o)
-			 /    \
-			 \    /
-			  \  /
-			   \/
-			*/
-			// bug end
-		}
-
-		interpreter.evm.IntraBlockState().AddLog(&types.Log{
-			Address: scope.Contract.Address(),
-			Topics:  topics,
-			Data:    d,
-			// This is a non-consensus field, but assigned here because
-			// core/state doesn't know the current block number.
-			BlockNumber: interpreter.evm.Context().BlockNumber,
-		})
-
-		return nil, nil
-	}
+func makeLog_zkevm_regularLogIndexes(size int) executionFunc {
+	return makeLog_zkevm(size, false)
 }
 
 // [zkEvm] log data length must be a multiple of 32, if not - fill 0 at the end until it is
-func makeLog_zkevm(size int) executionFunc {
+func makeLog_zkevm(size int, logInexShouldBeFromZero bool) executionFunc {
 	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 		if interpreter.readOnly {
 			return nil, ErrWriteProtection
@@ -340,14 +245,19 @@ func makeLog_zkevm(size int) executionFunc {
 			// bug end
 		}
 
-		interpreter.evm.IntraBlockState().AddLog_zkEvm(&types.Log{
+		log := types.Log{
 			Address: scope.Contract.Address(),
 			Topics:  topics,
 			Data:    d,
 			// This is a non-consensus field, but assigned here because
 			// core/state doesn't know the current block number.
 			BlockNumber: interpreter.evm.Context().BlockNumber,
-		})
+		}
+		if logInexShouldBeFromZero {
+			interpreter.evm.IntraBlockState().AddLog_zkEvm(&log)
+		} else {
+			interpreter.evm.IntraBlockState().AddLog(&log)
+		}
 
 		return nil, nil
 	}
