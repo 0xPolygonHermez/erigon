@@ -72,10 +72,10 @@ func newForkID8InstructionSet() JumpTable {
 
 	// zkevm logs have data length multiple of 32
 	// zeroes are added to the end in order to fill the 32 bytes if needed
-	instructionSet[LOG1].execute = makeLog(1)
-	instructionSet[LOG2].execute = makeLog(2)
-	instructionSet[LOG3].execute = makeLog(3)
-	instructionSet[LOG4].execute = makeLog(4)
+	instructionSet[LOG1].execute = makeLog_zkevm_fixedIndexes(1)
+	instructionSet[LOG2].execute = makeLog_zkevm_fixedIndexes(2)
+	instructionSet[LOG3].execute = makeLog_zkevm_fixedIndexes(3)
+	instructionSet[LOG4].execute = makeLog_zkevm_fixedIndexes(4)
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
