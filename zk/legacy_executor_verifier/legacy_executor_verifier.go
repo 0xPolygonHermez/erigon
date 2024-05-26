@@ -301,8 +301,6 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(request *VerifierRequest, tx kv.
 			return nil, err
 		}
 
-		log.Trace("[Verifier] stream bytes", "batch", request.BatchNumber, "block", blockNumber, "bytes", fmt.Sprintf("0x%s", sBytes))
-
 		streamBytes = append(streamBytes, sBytes...)
 		lastBlock = block
 		// we only put in the batch bookmark at the start of the stream data once
