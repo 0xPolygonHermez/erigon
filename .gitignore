@@ -16,6 +16,13 @@
 build/_vendor/pkg
 /*.a
 docs/readthedocs/build
+data/
+data_mainnet/
+data_bak
+start.sh
+xlayerconfig-mainnet.yaml
+xlayerconfig-testnet.yaml
+
 
 #*
 .#*
