@@ -65,6 +65,7 @@ func SpawnSequencerExecutorVerifyStage(
 	}
 
 	hermezDb := hermez_db.NewHermezDb(tx)
+	hermezDbReader := hermez_db.NewHermezDbReader(tx)
 
 	// progress here is at the batch level
 	progress, err := stages.GetStageProgress(tx, stages.SequenceExecutorVerify)
@@ -127,13 +128,6 @@ func SpawnSequencerExecutorVerifyStage(
 			// and need to go into limbo and then trigger a rewind.  The rewind will put all TX back into the
 			// pool, but as it knows about these limbo transactions it will place them into limbo instead
 			// of queueing them again
-			limboDetails := txpool.LimboBatchDetails{
-				Witness:               response.Witness,
-				BatchNumber:           response.BatchNumber,
-				ExecutorResponse:      response.ExecutorResponse,
-				BadTransactionsHashes: make([]common.Hash, 0),
-				BadTransactionsRLP:    make([][]byte, 0),
-			}
 
 			// now we need to figure out the highest block number in the batch
 			// and grab all the transaction hashes along the way to inform the
@@ -142,19 +136,41 @@ func SpawnSequencerExecutorVerifyStage(
 			if err != nil {
 				return err
 			}
-
-			// sort the block numbers into ascending order
+			if len(blockNumbers) == 0 {
+				panic("failing to verify a batch without blocks")
+			}
 			sort.Slice(blockNumbers, func(i, j int) bool {
 				return blockNumbers[i] < blockNumbers[j]
 			})
 
-			var lowestBlock *types.Block
+			var lowestBlock, highestBlock *types.Block
+			forkId, err := hermezDb.GetForkId(response.BatchNumber)
+			if err != nil {
+				return err
+			}
+			l1InfoTreeMinTimestamps := make(map[uint64]uint64)
+			_, err = cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blockNumbers, hermezDbReader, l1InfoTreeMinTimestamps, nil)
+			if err != nil {
+				return err
+			}
+
+			limboDetails := txpool.LimboBatchDetails{
+				Witness:                 response.Witness,
+				StreamBytes:             make([][]byte, 0),
+				L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
+				BatchNumber:             response.BatchNumber,
+				ForkId:                  forkId,
+				ExecutorResponse:        response.ExecutorResponse,
+				BadTransactionsHashes:   make([]common.Hash, 0),
+				BadTransactionsRLP:      make([][]byte, 0),
+			}
 
 			for _, blockNumber := range blockNumbers {
 				block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
 				if err != nil {
 					return err
 				}
+				highestBlock = block
 				if lowestBlock == nil {
 					// capture the first block, then we can set the bad block hash in the unwind to terminate the
 					// stage loop and broadcast the accumulator changes to the txpool before the next stage loop
@@ -169,18 +185,28 @@ func SpawnSequencerExecutorVerifyStage(
 					if err != nil {
 						return err
 					}
+
+					blocksForStreamBytes := []uint64{block.NumberU64()}
+					streamBytes, err := cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blocksForStreamBytes, hermezDbReader, l1InfoTreeMinTimestamps, nil)
+					if err != nil {
+						return err
+					}
+
 					limboDetails.BadTransactionsHashes = append(limboDetails.BadTransactionsHashes, hash)
 					limboDetails.BadTransactionsRLP = append(limboDetails.BadTransactionsRLP, buffer.Bytes())
+					limboDetails.StreamBytes = append(limboDetails.StreamBytes, streamBytes)
+
 					log.Info(fmt.Sprintf("[%s] adding transaction to limbo", s.LogPrefix()), "hash", hash)
 				}
 			}
 
+			limboDetails.TimestampLimit = highestBlock.Time()
+			limboDetails.FirstBlockNumber = lowestBlock.NumberU64()
+			limboDetails.Root = highestBlock.Root()
 			cfg.txPool.NewLimboBatchDetails(limboDetails)
 
-			if lowestBlock != nil {
-				u.UnwindTo(lowestBlock.NumberU64()-1, lowestBlock.Hash())
-				cfg.verifier.CancelAllRequestsUnsafe()
-			}
+			u.UnwindTo(lowestBlock.NumberU64()-1, lowestBlock.Hash())
+			cfg.verifier.CancelAllRequestsUnsafe()
 			return nil
 		}
 

@@ -126,7 +126,7 @@ func WriteBlocksToStream(
 		}
 
 		l1InfoMinTimestamps := make(map[uint64]uint64)
-		blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps)
+		blockEntries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps, nil)
 		if err != nil {
 			return err
 		}

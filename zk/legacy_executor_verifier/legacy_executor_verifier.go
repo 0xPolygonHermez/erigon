@@ -126,6 +126,37 @@ func NewLegacyExecutorVerifier(
 
 // var counter = int32(0)
 
+func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, witness, streamBytes []byte, timestampLimit, firstBlockNumber uint64, l1InfoTreeMinTimestamps map[uint64]uint64) error {
+	oldAccInputHash := common.HexToHash("0x0")
+	payload := &Payload{
+		Witness:                 witness,
+		DataStream:              streamBytes,
+		Coinbase:                v.cfg.AddressSequencer.String(),
+		OldAccInputHash:         oldAccInputHash.Bytes(),
+		L1InfoRoot:              nil,
+		TimestampLimit:          timestampLimit,
+		ForcedBlockhashL1:       []byte{0},
+		ContextId:               strconv.FormatUint(request.BatchNumber, 10),
+		L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
+	}
+
+	e := v.getNextOnlineAvailableExecutor()
+	if e == nil {
+		return ErrNoExecutorAvailable
+	}
+
+	e.AquireAccess()
+	defer e.ReleaseAccess()
+
+	previousBlock, err := rawdb.ReadBlockByNumber(tx, firstBlockNumber-1)
+	if err != nil {
+		return err
+	}
+
+	_, _, executorErr := e.Verify(payload, request, previousBlock.Root())
+	return executorErr
+}
+
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
 	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
@@ -178,7 +209,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		hermezDb := hermez_db.NewHermezDbReader(tx)
 
 		l1InfoTreeMinTimestamps := make(map[uint64]uint64)
-		streamBytes, err := v.getStreamBytes(request, tx, blocks, hermezDb, l1InfoTreeMinTimestamps)
+		streamBytes, err := v.GetStreamBytes(request.BatchNumber, tx, blocks, hermezDb, l1InfoTreeMinTimestamps, nil)
 		if err != nil {
 			return verifierBundle, err
 		}
@@ -190,9 +221,6 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 
 		log.Debug("witness generated", "data", hex.EncodeToString(witness))
 
-		// executor is perfectly happy with just an empty hash here
-		oldAccInputHash := common.HexToHash("0x0")
-
 		// now we need to figure out the timestamp limit for this payload.  It must be:
 		// timestampLimit >= currentTimestamp (from batch pre-state) + deltaTimestamp
 		// so to ensure we have a good value we can take the timestamp of the last block in the batch
@@ -202,6 +230,8 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 			return verifierBundle, err
 		}
 
+		// executor is perfectly happy with just an empty hash here
+		oldAccInputHash := common.HexToHash("0x0")
 		timestampLimit := lastBlock.Time()
 		payload := &Payload{
 			Witness:                 witness,
@@ -211,7 +241,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 			L1InfoRoot:              nil,
 			TimestampLimit:          timestampLimit,
 			ForcedBlockhashL1:       []byte{0},
-			ContextId:               strconv.Itoa(int(request.BatchNumber)),
+			ContextId:               strconv.FormatUint(request.BatchNumber, 10),
 			L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
 		}
 
@@ -232,7 +262,8 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		// debug purposes
-		// if request.BatchNumber == 30 && counter == 0 {
+		// if request.BatchNumber == 15 && counter == 0 {
+		// 	// time.Sleep(25 * time.Second)
 		// 	ok = false
 		// 	atomic.StoreInt32(&counter, 1)
 		// }
@@ -391,7 +422,14 @@ func (v *LegacyExecutorVerifier) availableBlocksToProcess(innerCtx context.Conte
 	return blocks, nil
 }
 
-func (v *LegacyExecutorVerifier) getStreamBytes(request *VerifierRequest, tx kv.Tx, blocks []uint64, hermezDb *hermez_db.HermezDbReader, l1InfoTreeMinTimestamps map[uint64]uint64) ([]byte, error) {
+func (v *LegacyExecutorVerifier) GetStreamBytes(
+	batchNumber uint64,
+	tx kv.Tx,
+	blocks []uint64,
+	hermezDb *hermez_db.HermezDbReader,
+	l1InfoTreeMinTimestamps map[uint64]uint64,
+	transactionsToInclude map[uint64]uint64, // passing nil here will include all transactions in the blocks
+) ([]byte, error) {
 	lastBlock, err := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
 	if err != nil {
 		return nil, err
@@ -401,7 +439,7 @@ func (v *LegacyExecutorVerifier) getStreamBytes(request *VerifierRequest, tx kv.
 	// as we only ever use the executor verifier for whole batches we can safely assume that the previous batch
 	// will always be the request batch - 1 and that the first block in the batch will be at the batch
 	// boundary so we will always add in the batch bookmark to the stream
-	previousBatch := request.BatchNumber - 1
+	previousBatch := batchNumber - 1
 
 	for _, blockNumber := range blocks {
 		block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
@@ -412,14 +450,14 @@ func (v *LegacyExecutorVerifier) getStreamBytes(request *VerifierRequest, tx kv.
 		//TODO: get ger updates between blocks
 		gerUpdates := []dstypes.GerUpdate{}
 
-		sBytes, err := v.streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, true, &gerUpdates, l1InfoTreeMinTimestamps)
+		sBytes, err := v.streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, batchNumber, previousBatch, true, &gerUpdates, l1InfoTreeMinTimestamps, transactionsToInclude)
 		if err != nil {
 			return nil, err
 		}
 		streamBytes = append(streamBytes, sBytes...)
 		lastBlock = block
 		// we only put in the batch bookmark at the start of the stream data once
-		previousBatch = request.BatchNumber
+		previousBatch = batchNumber
 	}
 
 	return streamBytes, nil

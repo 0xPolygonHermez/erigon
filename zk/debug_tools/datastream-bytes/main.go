@@ -57,8 +57,8 @@ func main() {
 
 			gerUpdates := []dstypes.GerUpdate{}
 			var l1InfoTreeMinTimestamps map[uint64]uint64
-            
-			sBytes, err := streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, uint64(batchNum), uint64(previousBatch), true, &gerUpdates, l1InfoTreeMinTimestamps)
+
+			sBytes, err := streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, uint64(batchNum), uint64(previousBatch), true, &gerUpdates, l1InfoTreeMinTimestamps, nil)
 			if err != nil {
 				return err
 			}

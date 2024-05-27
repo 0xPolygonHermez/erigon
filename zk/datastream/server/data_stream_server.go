@@ -135,6 +135,7 @@ func (srv *DataStreamServer) CreateStreamEntries(
 	lastBatchNumber uint64,
 	gerUpdates *[]types.GerUpdate,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
+	transactionsToInclude map[uint64]uint64, // passing nil here will include all transactions in the blocks
 ) (*[]DataStreamEntry, error) {
 	blockNum := block.NumberU64()
 
@@ -240,8 +241,9 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytes(
 	bigEndian bool,
 	gerUpdates *[]types.GerUpdate,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
+	transactionsToInclude map[uint64]uint64, // passing nil here will include all transactions in the blocks
 ) ([]byte, error) {
-	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber, lastBatchNumber, gerUpdates, l1InfoTreeMinTimestamps)
+	entries, err := srv.CreateStreamEntries(block, reader, lastBlock, batchNumber, lastBatchNumber, gerUpdates, l1InfoTreeMinTimestamps, transactionsToInclude)
 	if err != nil {
 		return nil, err
 	}

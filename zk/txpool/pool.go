@@ -140,7 +140,8 @@ const (
 	DuplicateHash       DiscardReason = 21 // There was an existing transaction with the same hash
 	InitCodeTooLarge    DiscardReason = 22 // EIP-3860 - transaction init code is too large
 	UnsupportedTx       DiscardReason = 23 // unsupported transaction type
-	OverflowZkCounters  DiscardReason = 24 // unsupported transaction type
+	OverflowZkCounters  DiscardReason = 24
+	DiscardByLimbo      DiscardReason = 25
 )
 
 func (r DiscardReason) String() string {
@@ -195,6 +196,8 @@ func (r DiscardReason) String() string {
 		return "unsupported transaction type"
 	case OverflowZkCounters:
 		return "overflow zk-counters"
+	case DiscardByLimbo:
+		return "limbo error"
 	default:
 		panic(fmt.Sprintf("discard reason: %d", r))
 	}
@@ -313,8 +316,10 @@ type TxPool struct {
 	flushMtx *sync.Mutex
 
 	// limbo specific fields where bad batch transactions identified by the executor go
-	limbo        *SubPool
-	limboBatches []LimboBatchDetails
+	// limbo        *SubPool
+	limboStatusMap map[string]int // txhash -> limbo status
+	limboSlots     *types.TxSlots
+	limboBatches   []LimboBatchDetails
 
 	// used to denote some process has made the pool aware that an unwind is about to occur and to wait
 	// until the unwind has been processed before allowing yielding of transactions again
@@ -363,8 +368,10 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		shanghaiTime:            shanghaiTime,
 		allowFreeTransactions:   ethCfg.AllowFreeTransactions,
 		flushMtx:                &sync.Mutex{},
-		limbo:                   NewSubPool(LimboSubPool, LimboSubPoolSize),
-		limboBatches:            make([]LimboBatchDetails, 0),
+		// limbo:                   NewSubPool(LimboSubPool, LimboSubPoolSize),
+		limboStatusMap: make(map[string]int),
+		limboSlots:     &types.TxSlots{},
+		limboBatches:   make([]LimboBatchDetails, 0),
 	}, nil
 }
 
@@ -450,13 +457,26 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 
 	blockNum := p.lastSeenBlock.Load()
 
+	if len(unwindTxs.Txs) > 0 {
+		fmt.Println("OK")
+	}
+
 	// zkevm - handle limbo transactions if we are aware of any limbo state
 	var limboTxs types.TxSlots
 	unwindTxs, limboTxs = p.trimSlotsBasedOnLimbo(unwindTxs)
 
-	if len(limboTxs.Txs) > 0 {
-		p.appendLimboTransactions(limboTxs, blockNum)
-	}
+	// if len(limboTxs.Txs) > 0 {
+	// 	p.appendLimboTransactions(limboTxs, blockNum)
+	// }
+
+	// validLimbo, invalidLimbo := p.getValidSplitsFromLimbo()
+	// for idx, slot := range validLimbo.Txs {
+	// 	unwindTxs.Append(slot, validLimbo.Senders.At(idx), validLimbo.IsLocal[idx])
+	// }
+	// for idx, slot := range invalidLimbo.Txs {
+	// 	mt := newMetaTx(slot, invalidLimbo.IsLocal[idx], blockNum)
+	// 	p.discardLocked(mt, DiscardByLimbo)
+	// }
 
 	//log.Debug("[txpool] new block", "unwinded", len(unwindTxs.txs), "mined", len(minedTxs.txs), "baseFee", baseFee, "blockHeight", blockHeight)
 
@@ -498,8 +518,10 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 		}
 	}
 
-	// always store false here as we've finally handled the new block
-	p.awaitingBlockHandling.Store(false)
+	if len(limboTxs.Txs) > 0 {
+		// always store false here as we've finally handled the new block
+		p.awaitingBlockHandling.Store(false)
+	}
 
 	//log.Info("[txpool] new block", "number", p.lastSeenBlock.Load(), "pendngBaseFee", pendingBaseFee, "in", time.Since(t))
 	return nil

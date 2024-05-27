@@ -24,6 +24,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
+// var allowAdd int = 1
+
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -265,6 +267,10 @@ func SpawnSequencingStage(
 							return err
 						}
 						cfg.txPool.UnlockFlusher()
+
+						// if allowAdd == 0 {
+						// 	blockTransactions = []types.Transaction{}
+						// }
 					}
 
 					for i, transaction := range blockTransactions {
@@ -287,6 +293,9 @@ func SpawnSequencingStage(
 								log.Warn(fmt.Sprintf("[%s] error adding transaction to batch during recovery: %v", logPrefix, err))
 								continue
 							}
+							// a := transaction.Hash().Hex()
+							// if a != "" {
+							// }
 							return err
 						}
 						if !l1Recovery && overflow {
@@ -381,6 +390,10 @@ func SpawnSequencingStage(
 			return err
 		}
 	}
+
+	// if thisBatch == 3 {
+	// 	allowAdd ^= 1
+	// }
 
 	return nil
 }
