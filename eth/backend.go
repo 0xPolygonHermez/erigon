@@ -790,7 +790,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			l1Topics,
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
-			cfg.L1QueryBlocksThreads,
 		)
 
 		l1InfoTreeSyncer := syncer.NewL1Syncer(
@@ -799,7 +798,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			[][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic}},
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
-			cfg.L1QueryBlocksThreads,
 		)
 
 		if isSequencer {
@@ -819,6 +817,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 					GrpcUrls:              cfg.ExecutorUrls,
 					Timeout:               cfg.ExecutorRequestTimeout,
 					MaxConcurrentRequests: cfg.ExecutorMaxConcurrentRequests,
+					OutputLocation:        cfg.ExecutorPayloadOutput,
 				}
 				executors := legacy_executor_verifier.NewExecutors(levCfg)
 				for _, e := range executors {
@@ -846,7 +845,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				[][]libcommon.Hash{{contracts.SequenceBatchesTopic}},
 				cfg.L1BlockRange,
 				cfg.L1QueryDelay,
-				cfg.L1QueryBlocksThreads,
 			)
 
 			backend.syncStages = stages2.NewSequencerZkStages(

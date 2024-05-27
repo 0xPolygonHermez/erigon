@@ -100,7 +100,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorStrictMode:                     ctx.Bool(utils.ExecutorStrictMode.Name),
 		ExecutorRequestTimeout:                 ctx.Duration(utils.ExecutorRequestTimeout.Name),
 		ExecutorMaxConcurrentRequests:          ctx.Int(utils.ExecutorMaxConcurrentRequests.Name),
-		L1QueryBlocksThreads:                   ctx.Uint64(utils.L1QueryBlocksThreads.Name),
 		AllowFreeTransactions:                  ctx.Bool(utils.AllowFreeTransactions.Name),
 		AllowPreEIP155Transactions:             ctx.Bool(utils.AllowPreEIP155Transactions.Name),
 		EffectiveGasPriceForEthTransfer:        uint8(math.Round(effectiveGasPriceForEthTransferVal * 255.0)),
@@ -119,6 +118,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DebugStepAfter:                         ctx.Uint64(utils.DebugStepAfter.Name),
 		PoolManagerUrl:                         ctx.String(utils.PoolManagerUrl.Name),
 		DisableVirtualCounters:                 ctx.Bool(utils.DisableVirtualCounters.Name),
+		ExecutorPayloadOutput:                  ctx.String(utils.ExecutorPayloadOutput.Name),
 	}
 
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.L2ChainId)

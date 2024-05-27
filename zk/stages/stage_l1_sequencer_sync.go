@@ -57,12 +57,12 @@ func SpawnL1SequencerSyncStage(
 	if err != nil {
 		return err
 	}
-	if progress == 0 {
-		progress = cfg.zkCfg.L1FirstBlock - 1
-	}
 	if progress > 0 {
 		// if we have progress then we can assume that we have the single injected batch already so can just return here
 		return nil
+	}
+	if progress == 0 {
+		progress = cfg.zkCfg.L1FirstBlock - 1
 	}
 
 	hermezDb := hermez_db.NewHermezDb(tx)
@@ -78,7 +78,7 @@ Loop:
 	for {
 		select {
 		case logs := <-logChan:
-			headersMap, err := cfg.syncer.L1QueryHeaders(logPrefix, logs)
+			headersMap, err := cfg.syncer.L1QueryHeaders(logs)
 			if err != nil {
 				return err
 			}
