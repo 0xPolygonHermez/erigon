@@ -492,6 +492,17 @@ func (db *HermezDbReader) GetReusedL1InfoTreeIndex(blockNo uint64) (bool, error)
 	return len(bytes) > 0, nil
 }
 
+func (db *HermezDb) DeleteReusedL1InfoTreeIndexes(fromBlock, toBlock uint64) error {
+	for i := fromBlock; i <= toBlock; i++ {
+		err := db.tx.Delete(REUSED_L1_INFO_TREE_INDEX, Uint64ToBytes(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (db *HermezDb) WriteGerForL1BlockHash(l1BlockHash common.Hash, ger common.Hash) error {
 	return db.tx.Put(L1_BLOCK_HASH_GER, l1BlockHash.Bytes(), ger.Bytes())
 }
@@ -980,6 +991,28 @@ func (db *HermezDb) TruncateBlockL1InfoTreeIndex(fromL2BlockNum, toL2BlockNum ui
 	}
 
 	return nil
+}
+
+func (db *HermezDbReader) GetLatestL1InfoTreeIndex() (uint64, error) {
+	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	var k, v []byte
+	for k, v, err = c.Last(); k != nil; k, v, err = c.Prev() {
+		if err != nil {
+			break
+		}
+
+		if len(v) != 0 && v[0] == 1 {
+			blockNum := BytesToUint64(k[:8])
+			return blockNum, nil
+		}
+	}
+
+	return 0, nil
 }
 
 func (db *HermezDb) WriteL1InjectedBatch(batch *types.L1InjectedBatch) error {
