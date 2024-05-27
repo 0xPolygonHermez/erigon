@@ -225,14 +225,6 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 				}
 
 				d, _ = hex.DecodeString(dataHex)
-			} else {
-				// erigon behaviour
-				// [zkEvm] fill 0 at the end
-				dataLen := len(d)
-				lenMod32 := dataLen & 31
-				if lenMod32 != 0 {
-					d = append(d, make([]byte, 32-lenMod32)...)
-				}
 			}
 			/*
 			  \  /
