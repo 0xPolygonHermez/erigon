@@ -780,6 +780,31 @@ func (db *HermezDb) WriteForkId(batchNo, forkId uint64) error {
 	return db.tx.Put(FORKIDS, Uint64ToBytes(batchNo), Uint64ToBytes(forkId))
 }
 
+func (db *HermezDbReader) GetLowestBatchByFork(forkId uint64) (uint64, error) {
+	c, err := db.tx.Cursor(FORKIDS)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	var batchNo uint64 = 0
+	var k, v []byte
+
+	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			break
+		}
+		currentForkId := BytesToUint64(v)
+		if currentForkId == forkId {
+			batchNo = BytesToUint64(k)
+			break
+		}
+	}
+
+	return batchNo, err
+
+}
+
 func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, bool, error) {
 	c, err := db.tx.Cursor(FORKID_BLOCK)
 	if err != nil {
