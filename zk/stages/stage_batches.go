@@ -284,7 +284,6 @@ LOOP:
 
 			// if we're above StepAfter, and we're at a step, move the stages on
 			if cfg.zkCfg.DebugStep > 0 && cfg.zkCfg.DebugStepAfter > 0 && l2Block.L2BlockNumber > cfg.zkCfg.DebugStepAfter {
-				fmt.Printf("[%s] Debug step after reached, continuing stage\n", logPrefix)
 				if l2Block.L2BlockNumber%cfg.zkCfg.DebugStep == 0 {
 					fmt.Printf("[%s] Debug step reached, stopping stage\n", logPrefix)
 					endLoop = true

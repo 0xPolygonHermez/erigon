@@ -75,7 +75,31 @@ func fetchFromCache(key string) ([]byte, bool) {
 		}
 	}
 
+	// Check if the cached response contains an error
+	var jsonResponse map[string]interface{}
+	if err := json.Unmarshal(data, &jsonResponse); err == nil {
+		if _, hasError := jsonResponse["error"]; hasError {
+			// Cache entry is an error, evict it
+			evictFromCache(key)
+			return nil, false
+		}
+	}
+
 	return data, true
+}
+
+func evictFromCache(key string) {
+	err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketName))
+		e := tx.Bucket([]byte(expiryBucket))
+		if err := b.Delete([]byte(key)); err != nil {
+			return err
+		}
+		return e.Delete([]byte(key))
+	})
+	if err != nil {
+		log.Println("Failed to evict from cache:", err)
+	}
 }
 
 func saveToCache(key string, response []byte, duration time.Duration) {
@@ -148,6 +172,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	if _, ignore := methodsToIgnore[method]; !ignore {
 		if cachedResponse, found := fetchFromCache(cacheKey); found {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Cache-Status", "HIT")
 			w.Write(cachedResponse)
 			return
 		}
@@ -202,6 +227,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Cache-Status", "MISS")
 	w.Write(responseBody)
 }
 
