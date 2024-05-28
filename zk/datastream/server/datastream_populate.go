@@ -198,7 +198,7 @@ func WriteGenesisToStream(
 	l2Block := srv.CreateL2BlockProto(genesis, batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{})
 	batchStart := srv.CreateBatchStartProto(batchNo, chainId, forkId, datastream.BatchType_BATCH_TYPE_REGULAR)
 
-	if err = srv.CommitEntriesToStreamProto([]DataStreamEntryProto{batchBookmark, batchStart, l2BlockBookmark, l2Block, batchEnd}); err != nil {
+	if err = srv.CommitEntriesToStreamProto([]DataStreamEntryProto{batchBookmark, batchStart, l2BlockBookmark, l2Block}); err != nil {
 		return err
 	}
 
