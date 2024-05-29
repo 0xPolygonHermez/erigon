@@ -88,7 +88,7 @@ There are bookmarks for Batches (type = 1) and L2Blocks (type = 2).
 
 * **MinTimestamp**: L1InfoTree contains: GER, L1BlockHash and minTimeStamp
 
-  - For ForkID >= 7: Timestamp when a GER was inserted in the L1InfoTree.
+  - For ForkID >= 7: Timestamp of the block containing the block info tree update.
   
   - For ForkID < 7: 0
 
