@@ -76,9 +76,7 @@ There are bookmarks for Batches (type = 1) and L2Blocks (type = 2).
 
 * **StateRoot** 
 
-  - For ForkIDs < 7: Final state root of the L2Block (see also *IntermediateStateRoot* in *L1Transacton*)
-
-  - For ForkIDs >=7: Final state root of the L2Block
+  - Final state root of the L2Block (For ForkIDs < 7: see also *IntermediateStateRoot* in *L1Transacton*)
 
 * **L1BlockHash**, only For ForkIDs >= 7
   
@@ -92,7 +90,7 @@ There are bookmarks for Batches (type = 1) and L2Blocks (type = 2).
 
   - For ForkID >= 7: Timestamp when a GER was inserted in the L1InfoTree.
   
-  - For ForkID < 7: Block Timestamp
+  - For ForkID < 7: 0
 
   - For Genesis block: 0
 
@@ -120,7 +118,7 @@ There are bookmarks for Batches (type = 1) and L2Blocks (type = 2).
 
 * EffectiveGasPricePercentage: Only available for ForkIDs >= 5, 0 in other ForkIDs.
 
-* IntermediateStateRoot: For ForkIDs < 7 is the resulting SR_A of the TX execution, previous to storing it in the system SC and so getting a new SR_B.
+* IntermediateStateRoot: (Only for ForkIDs < 7) is the resulting SR_A of the TX execution, previous to storing it in the system SC and so getting a new SR_B.
 
 ### UpdateGER
 
