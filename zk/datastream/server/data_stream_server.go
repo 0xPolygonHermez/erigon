@@ -321,21 +321,7 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 		return nil, err
 	}
 
-	forkId, err := reader.GetForkId(batchNumber)
-
-	var blockHash []byte
-	if forkId >= EtrogBatchNumber {
-		blockHash = block.Root().Bytes()
-	} else {
-		// pre fork 7 a block would only have 1 tx in it, so we need the hash of this to get the intermediate root
-		// for that transaction in that block
-		hash := block.Transactions()[0].Hash()
-		interRoot, err := reader.GetIntermediateTxStateRoot(block.NumberU64(), hash)
-		if err != nil {
-			return nil, err
-		}
-		blockHash = interRoot.Bytes()
-	}
+	blockHash := block.Hash().Bytes()
 
 	// L2 BLOCK
 	l2Block := srv.CreateL2BlockProto(block, blockHash, batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot)
