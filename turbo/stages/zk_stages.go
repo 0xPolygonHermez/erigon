@@ -115,6 +115,7 @@ func NewSequencerZkStages(ctx context.Context,
 		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, l1InfoTreeSyncer),
 		zkStages.StageSequencerL1BlockSyncCfg(db, cfg.Zk, l1BlockSyncer),
 		zkStages.StageDataStreamCatchupCfg(datastreamServer, db, cfg.Genesis.Config.ChainID.Uint64()),
+		zkStages.StageSequencerInterhashesCfg(db, notifications.Accumulator),
 		zkStages.StageSequenceBlocksCfg(
 			db,
 			cfg.Prune,

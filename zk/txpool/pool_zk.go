@@ -2,7 +2,9 @@ package txpool
 
 import (
 	"bytes"
+	"container/heap"
 	"fmt"
+	"sort"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -10,6 +12,8 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/common/fixedgas"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/types"
+	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
+	CollectionsQueueNs "github.com/golang-collections/collections/queue"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/log/v3"
@@ -23,6 +27,30 @@ hard compilation fail when rebasing from upstream further down the line.
 const (
 	transactionGasLimit = 30_000_000
 )
+
+type heapSlice struct {
+	ms             []*metaTx
+	pendingBaseFee uint64
+}
+
+func (_this *heapSlice) Len() int { return len(_this.ms) }
+func (_this *heapSlice) Swap(i, j int) {
+	_this.ms[i], _this.ms[j] = _this.ms[j], _this.ms[i]
+}
+func (_this *heapSlice) Less(i, j int) bool {
+	return _this.ms[i].better(_this.ms[j], *uint256.NewInt(_this.pendingBaseFee))
+}
+func (_this *heapSlice) Push(x interface{}) {
+	_this.ms = append(_this.ms, x.(*metaTx))
+}
+func (_this *heapSlice) Pop() interface{} {
+	old := _this.ms
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil // avoid memory leak
+	_this.ms = old[0 : n-1]
+	return item
+}
 
 func calcProtocolBaseFee(baseFee uint64) uint64 {
 	return 0
@@ -254,6 +282,55 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 	}
 }
 
+func (p *PendingPool) EnforceBestInvariantsZk() {
+	sendersMap := map[uint64]*CollectionsQueueNs.Queue{}
+
+	sort.SliceStable(p.best.ms, func(i, j int) bool {
+		return SortByNonceLess(p.best.ms[i], p.best.ms[j])
+	})
+
+	for _, mt := range p.best.ms {
+		mtsSortedByNonce, found := sendersMap[mt.Tx.SenderID]
+		if !found {
+			mtsSortedByNonce = CollectionsQueueNs.New()
+			sendersMap[mt.Tx.SenderID] = mtsSortedByNonce
+		}
+		mtsSortedByNonce.Enqueue(mt)
+	}
+
+	bestQueue := &heapSlice{
+		ms:             make([]*metaTx, 0, len(sendersMap)),
+		pendingBaseFee: p.best.pendingBaseFee,
+	}
+	heap.Init(bestQueue)
+	for _, mtsSortedByNonce := range sendersMap {
+		if mtsSortedByNonce.Len() != 0 {
+			heap.Push(bestQueue, mtsSortedByNonce.Dequeue())
+		}
+	}
+
+	for i := 0; len(bestQueue.ms) > 0; i++ {
+		bestMt := heap.Pop(bestQueue).(*metaTx)
+		bestMt.bestIndex = i
+		p.best.ms[i] = bestMt
+
+		mtsSortedByNonce := sendersMap[bestMt.Tx.SenderID]
+		if mtsSortedByNonce.Len() > 0 {
+			heap.Push(bestQueue, mtsSortedByNonce.Dequeue())
+		}
+	}
+}
+
+func (p *TxPool) addLockedZk(mt *metaTx) {
+	// remove the new tx from deletedTxs and discardReasonsLRU in order to be a complete mirror of discardLocked function
+	for i, mt_ := range p.deletedTxs {
+		if mt_.Tx.IDHash == mt.Tx.IDHash {
+			p.deletedTxs = append(p.deletedTxs[:i], p.deletedTxs[i+1:]...)
+			p.discardReasonsLRU.Remove(string(mt.Tx.IDHash[:]))
+		}
+	}
+}
+
 // Discard a metaTx from the best pending pool if it has overflow the zk-counters during execution
 func promoteZk(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint64, discard func(*metaTx, DiscardReason), announcements *types.Announcements) {
 	invalidMts := []*metaTx{}
@@ -271,4 +348,10 @@ func promoteZk(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee ui
 	}
 
 	promote(pending, baseFee, queued, pendingBaseFee, discard, announcements)
+}
+
+func markAsLocal(txSlots *types2.TxSlots) {
+	for i := range txSlots.IsLocal {
+		txSlots.IsLocal[i] = true
+	}
 }

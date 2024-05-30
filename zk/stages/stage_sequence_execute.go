@@ -273,10 +273,6 @@ func SpawnSequencingStage(
 							return err
 						}
 						cfg.txPool.UnlockFlusher()
-
-						// if allowAdd == 0 {
-						// 	blockTransactions = []types.Transaction{}
-						// }
 					}
 
 					for i, transaction := range blockTransactions {

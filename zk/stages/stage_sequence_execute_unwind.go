@@ -48,12 +48,6 @@ func unwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.Stage
 	hermezDb := hermez_db.NewHermezDb(tx)
 	fromBatch, err := hermezDb.GetBatchNoByL2Block(u.UnwindPoint)
 
-	unwindState := &stagedsync.UnwindState{UnwindPoint: u.UnwindPoint}
-	stageState := &stagedsync.StageState{BlockNumber: s.BlockNumber}
-	if err = UnwindZkIntermediateHashesStage(unwindState, stageState, tx, ZkInterHashesCfg{}, ctx); err != nil {
-		return err
-	}
-
 	if err := stagedsync.UnwindExecutionStageErigon(u, s, tx, ctx, cfg.toErigonExecuteBlockCfg(), initialCycle); err != nil {
 		return err
 	}

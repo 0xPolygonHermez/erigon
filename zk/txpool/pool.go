@@ -316,7 +316,6 @@ type TxPool struct {
 	flushMtx *sync.Mutex
 
 	// limbo specific fields where bad batch transactions identified by the executor go
-	// limbo        *SubPool
 	limboStatusMap map[string]int // txhash -> limbo status
 	limboSlots     *types.TxSlots
 	limboBatches   []LimboBatchDetails
@@ -368,10 +367,9 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		shanghaiTime:            shanghaiTime,
 		allowFreeTransactions:   ethCfg.AllowFreeTransactions,
 		flushMtx:                &sync.Mutex{},
-		// limbo:                   NewSubPool(LimboSubPool, LimboSubPoolSize),
-		limboStatusMap: make(map[string]int),
-		limboSlots:     &types.TxSlots{},
-		limboBatches:   make([]LimboBatchDetails, 0),
+		limboStatusMap:          make(map[string]int),
+		limboSlots:              &types.TxSlots{},
+		limboBatches:            make([]LimboBatchDetails, 0),
 	}, nil
 }
 
@@ -457,13 +455,13 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 
 	blockNum := p.lastSeenBlock.Load()
 
-	if len(unwindTxs.Txs) > 0 {
-		fmt.Println("OK")
-	}
-
 	// zkevm - handle limbo transactions if we are aware of any limbo state
+	cached := unwindTxs
+
 	var limboTxs types.TxSlots
 	unwindTxs, limboTxs = p.trimSlotsBasedOnLimbo(unwindTxs)
+
+	unwindTxs = cached
 
 	// if len(limboTxs.Txs) > 0 {
 	// 	p.appendLimboTransactions(limboTxs, blockNum)
@@ -1140,6 +1138,8 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 	}
 
 	p.byHash[string(mt.Tx.IDHash[:])] = mt
+	// remove the new tx from deletedTxs and discardReasonsLRU in order to be a complete mirror of discardLocked function
+	p.addLockedZk(mt)
 
 	if replaced := p.all.replaceOrInsert(mt); replaced != nil {
 		if assert.Enable {

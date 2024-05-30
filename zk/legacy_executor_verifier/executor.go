@@ -7,16 +7,17 @@ import (
 	"fmt"
 	"time"
 
+	"encoding/json"
+	"os"
+	"path"
+
+	"github.com/dustin/go-humanize"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/log/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
-	"github.com/dustin/go-humanize"
 	"google.golang.org/grpc/credentials/insecure"
-	"encoding/json"
-	"os"
-	"path"
 )
 
 var (
@@ -181,12 +182,12 @@ func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot com
 	if e.outputLocation != "" {
 		asJson, err := json.Marshal(grpcRequest)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 		file := path.Join(e.outputLocation, fmt.Sprintf("payload_%d.json", request.BatchNumber))
 		err = os.WriteFile(file, asJson, 0644)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 	}
 
