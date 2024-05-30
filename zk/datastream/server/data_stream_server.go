@@ -316,6 +316,11 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 		}
 	}
 
+	forkId, err := reader.GetForkId(batchNumber)
+	if err != nil {
+		return nil, err
+	}
+
 	blockInfoRoot, err := reader.GetBlockInfoRoot(blockNum)
 	if err != nil {
 		return nil, err
@@ -333,9 +338,13 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 		if err != nil {
 			return nil, err
 		}
-		intermediateRoot, err := reader.GetIntermediateTxStateRoot(block.NumberU64(), tx.Hash())
-		if err != nil {
-			return nil, err
+
+		var intermediateRoot libcommon.Hash
+		if forkId < EtrogBatchNumber {
+			intermediateRoot, err = reader.GetIntermediateTxStateRoot(block.NumberU64(), tx.Hash())
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// TRANSACTION
