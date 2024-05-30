@@ -90,7 +90,7 @@ func WriteBlocksToStream(
 		return err
 	}
 	totalToWrite := to - (from - 1)
-	insertEntryCount := 1000000
+	insertEntryCount := 100_000
 	entries := make([]DataStreamEntryProto, insertEntryCount)
 	index := 0
 	copyFrom := from
