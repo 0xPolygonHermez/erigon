@@ -130,22 +130,20 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 
 	eridb.OpenBatch(quit)
 
-	if cfg.zk.IncrementTreeAlways {
-		// increment only behaviour
-		log.Debug(fmt.Sprintf("[%s] IncrementTreeAlways true - incrementing tree", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
-		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
+	// if syncing in batch process should not regenerate the tree
+	if cfg.zk.SyncInBatch != 0 && to-s.BlockNumber == cfg.zk.SyncInBatch+1 && shouldRegenerate {
+		log.Info(fmt.Sprintf("[%s] Need not to regenerate, because in batch syncing process, interval = %d, cfg.zk.SyncInBatch = %d", logPrefix, to-s.BlockNumber, cfg.zk.SyncInBatch))
+		shouldRegenerate = false
+	}
+
+	// default behaviour
+	if s.BlockNumber == 0 || shouldRegenerate {
+		if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt); err != nil {
 			return trie.EmptyRoot, err
 		}
 	} else {
-		// default behaviour
-		if s.BlockNumber == 0 || shouldRegenerate {
-			if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt); err != nil {
-				return trie.EmptyRoot, err
-			}
-		} else {
-			if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
-				return trie.EmptyRoot, err
-			}
+		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
+			return trie.EmptyRoot, err
 		}
 	}
 

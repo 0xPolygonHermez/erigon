@@ -116,6 +116,17 @@ Loop:
 			break
 		}
 
+		if cfg.zk.SyncInBatch > 0 {
+			point, err := stages.GetStageProgress(tx, stages.PointBlockNumber)
+			if err != nil {
+				return fmt.Errorf("failed to get stage next point blocknubmer progress, %w", err)
+			}
+			if blockNum > point {
+				log.Info(fmt.Sprintf("Next point block number %d, block %d", point, blockNum))
+				break
+			}
+		}
+
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}

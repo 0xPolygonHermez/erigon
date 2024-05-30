@@ -213,6 +213,28 @@ func SpawnStageBatches(
 	streamingAtomic := cfg.dsClient.GetStreamingAtomic()
 	errChan := cfg.dsClient.GetErrChan()
 
+	point, err := stages.GetStageProgress(tx, stages.PointBlockNumber)
+	if err != nil {
+		return fmt.Errorf("fail to set stage point blocknumber progress, %w", err)
+	}
+	if cfg.zkCfg.SyncInBatch > 0 && point < lastBlockHeight {
+		if !firstCycle {
+			nextPoint, err := stages.GetStageProgress(tx, stages.NextPointBlockNumber)
+			if err != nil {
+				return fmt.Errorf("failed to get stage next point blocknubmer progress, %w", err)
+			}
+			point = nextPoint
+		}
+		err = stages.SaveStageProgress(tx, stages.PointBlockNumber, point)
+		if err != nil {
+			return fmt.Errorf("fail to set stage point blocknumber progress, %w", err)
+		}
+		err = stages.SaveStageProgress(tx, stages.NextPointBlockNumber, point+cfg.zkCfg.SyncInBatch)
+		if err != nil {
+			return fmt.Errorf("fail to set stage next point blocknumber progress, %w", err)
+		}
+	}
+
 LOOP:
 	for {
 		// get batch start and use to update forkid
@@ -244,6 +266,25 @@ LOOP:
 				// stop the node going into a crazy loop
 				time.Sleep(2 * time.Second)
 				break LOOP
+			}
+
+			if cfg.zkCfg.SyncInBatch > 0 {
+				nextPoint := uint64(1)
+				if !firstCycle {
+					nextPoint, err = stages.GetStageProgress(tx, stages.NextPointBlockNumber)
+					if err != nil {
+						return fmt.Errorf("failed to get stage next point blocknubmer progress, %w", err)
+					}
+				}
+				if l2Block.L2BlockNumber > nextPoint {
+					time.Sleep(2 * time.Second)
+					err = stages.SaveStageProgress(tx, stages.NextPointBlockNumber, nextPoint+cfg.zkCfg.SyncInBatch)
+					if err != nil {
+						return fmt.Errorf("fail to set stage next point blocknumber progress, %w", err)
+					}
+					log.Info("Next point block number", "nextPoint", nextPoint+cfg.zkCfg.SyncInBatch)
+					break LOOP
+				}
 			}
 
 			l2Block.ChainId = cfg.zkCfg.L2ChainId
@@ -323,6 +364,12 @@ LOOP:
 			progressChan <- blocksWritten
 
 			if endLoop && cfg.zkCfg.DebugLimit > 0 {
+				break LOOP
+			}
+
+			if cfg.zkCfg.SyncInBatch > 0 && l2Block.L2BlockNumber >= point {
+				time.Sleep(2 * time.Second)
+				log.Info(fmt.Sprintf("[%s] Next point %d block number have reached", logPrefix, point))
 				break LOOP
 			}
 		case gerUpdate := <-gerUpdateChan:
