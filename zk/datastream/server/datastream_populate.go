@@ -132,7 +132,13 @@ func WriteBlocksToStream(
 
 		l1InfoMinTimestamps := make(map[uint64]uint64)
 
-		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps)
+		// as we're writing to the stream here and not just generating for the executor we want to run in standard mode
+		mode := StandardOperationMode
+
+		// we do not want to force the closing of a batch when writing to the stream - this is only the domain of talking to the executor
+		const forceBatchEnd = false
+
+		blockEntries, err := srv.CreateStreamEntriesProto(mode, block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps, forceBatchEnd)
 		if err != nil {
 			return err
 		}
