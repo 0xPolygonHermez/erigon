@@ -124,7 +124,7 @@ func NewLegacyExecutorVerifier(
 	}
 }
 
-var counter = int32(0)
+// var counter = int32(0)
 
 func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, witness, streamBytes []byte, timestampLimit, firstBlockNumber uint64, l1InfoTreeMinTimestamps map[uint64]uint64) error {
 	oldAccInputHash := common.HexToHash("0x0")
@@ -262,11 +262,11 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		// debug purposes
-		if request.BatchNumber == 10 && counter == 0 {
-			// time.Sleep(25 * time.Second)
-			ok = false
-			counter = 1
-		}
+		// if request.BatchNumber == 3 && counter == 0 {
+		// 	// time.Sleep(25 * time.Second)
+		// 	ok = false
+		// 	counter = 1
+		// }
 
 		verifierBundle.response = &VerifierResponse{
 			BatchNumber:      request.BatchNumber,

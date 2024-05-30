@@ -1138,8 +1138,7 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 	}
 
 	p.byHash[string(mt.Tx.IDHash[:])] = mt
-	// remove the new tx from deletedTxs and discardReasonsLRU in order to be a complete mirror of discardLocked function
-	p.addLockedZk(mt)
+	// p.addLockedZk(mt)
 
 	if replaced := p.all.replaceOrInsert(mt); replaced != nil {
 		if assert.Enable {
