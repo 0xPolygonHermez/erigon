@@ -131,7 +131,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	eridb.OpenBatch(quit)
 
 	// if syncing in batch process should not regenerate the tree
-	if cfg.zk.SyncInBatch != 0 && to-s.BlockNumber == cfg.zk.SyncInBatch+1 && shouldRegenerate {
+	if cfg.zk.SyncInBatch != 0 && to-s.BlockNumber == cfg.zk.SyncInBatch && shouldRegenerate {
 		log.Info(fmt.Sprintf("[%s] Need not to regenerate, because in batch syncing process, interval = %d, cfg.zk.SyncInBatch = %d", logPrefix, to-s.BlockNumber, cfg.zk.SyncInBatch))
 		shouldRegenerate = false
 	}
