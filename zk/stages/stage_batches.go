@@ -268,25 +268,6 @@ LOOP:
 				break LOOP
 			}
 
-			if cfg.zkCfg.SyncInBatch > 0 {
-				nextPoint := uint64(1)
-				if !firstCycle {
-					nextPoint, err = stages.GetStageProgress(tx, stages.NextPointBlockNumber)
-					if err != nil {
-						return fmt.Errorf("failed to get stage next point blocknubmer progress, %w", err)
-					}
-				}
-				if l2Block.L2BlockNumber > nextPoint {
-					time.Sleep(2 * time.Second)
-					err = stages.SaveStageProgress(tx, stages.NextPointBlockNumber, nextPoint+cfg.zkCfg.SyncInBatch)
-					if err != nil {
-						return fmt.Errorf("fail to set stage next point blocknumber progress, %w", err)
-					}
-					log.Info("Next point block number", "nextPoint", nextPoint+cfg.zkCfg.SyncInBatch)
-					break LOOP
-				}
-			}
-
 			l2Block.ChainId = cfg.zkCfg.L2ChainId
 
 			atLeastOneBlockWritten = true
