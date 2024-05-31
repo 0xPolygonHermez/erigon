@@ -46,6 +46,8 @@ import (
 	"os"
 	"path"
 
+	"time"
+
 	"github.com/ledgerwatch/erigon/cl/clparams"
 	"github.com/ledgerwatch/erigon/cmd/downloader/downloadernat"
 	"github.com/ledgerwatch/erigon/common/paths"
@@ -60,7 +62,6 @@ import (
 	"github.com/ledgerwatch/erigon/p2p/netutil"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/params/networkname"
-	"time"
 )
 
 // These are all the command line flags we support.
@@ -565,6 +566,11 @@ var (
 	SyncLimit = cli.UintFlag{
 		Name:  "zkevm.sync-limit",
 		Usage: "Limit the number of blocks to sync, this will halt batches and execution to this number but keep the node active",
+		Value: 0,
+	}
+	SyncInBatch = cli.UintFlag{
+		Name:  "zkevm.sync-in-batch",
+		Usage: "Limit the number of blocks to sync in a batch",
 		Value: 0,
 	}
 	PoolManagerUrl = cli.StringFlag{

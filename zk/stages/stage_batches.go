@@ -217,7 +217,7 @@ func SpawnStageBatches(
 	if err != nil {
 		return fmt.Errorf("fail to set stage point blocknumber progress, %w", err)
 	}
-	if cfg.zkCfg.SyncInBatch > 0 && point < lastBlockHeight {
+	if cfg.zkCfg.SyncInBatch > 0 && lastBlockHeight >= point {
 		if !firstCycle {
 			nextPoint, err := stages.GetStageProgress(tx, stages.NextPointBlockNumber)
 			if err != nil {
