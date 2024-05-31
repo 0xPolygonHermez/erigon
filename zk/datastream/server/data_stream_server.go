@@ -234,19 +234,16 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 			if workingBatch > 0 {
 				checkBatch := workingBatch
 				for ; checkBatch > 0; checkBatch-- {
-					blocks, err := reader.GetL2BlockNosByBatch(checkBatch)
+					lastBlockNumber, err := reader.GetHighestBlockInBatch(checkBatch)
 					if err != nil {
 						return nil, err
 					}
-					if len(blocks) == 0 {
-						continue
-					}
-					lastBlockNumber := blocks[len(blocks)-1]
 					stateReader := state.NewPlainState(tx, lastBlockNumber, nil)
 					rawLer, err := stateReader.ReadAccountStorage(state.GER_MANAGER_ADDRESS, 1, &state.GLOBAL_EXIT_ROOT_POS_1)
 					if err != nil {
 						return nil, err
 					}
+					stateReader.Close()
 					localExitRoot = libcommon.BytesToHash(rawLer)
 				}
 			}
@@ -283,7 +280,7 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	// this could go into the DB as a quick lookup to check for injected batches
 	if block.NumberU64() == 1 {
 		deltaTimestamp = block.Time()
-		l1InfoTreeMinTimestamps[0] = block.Time()
+		l1InfoTreeMinTimestamps[0] = 0
 	}
 
 	// L2 BLOCK BOOKMARK
