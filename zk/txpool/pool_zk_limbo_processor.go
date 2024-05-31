@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
-	"github.com/gateway-fm/cdk-erigon-lib/types"
-	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
@@ -43,7 +41,7 @@ func (_this *LimboSubPoolProcessor) StartWork() {
 			case <-_this.quit:
 				break LOOP
 			case <-tick.C:
-				// _this.run()
+				_this.run()
 			}
 		}
 	}()
@@ -51,6 +49,7 @@ func (_this *LimboSubPoolProcessor) StartWork() {
 
 func (_this *LimboSubPoolProcessor) run() {
 	log.Info("[Limbo pool processor] Starting")
+	defer log.Info("[Limbo pool processor] End")
 
 	ctx := context.Background()
 	limboBatchDetails := _this.txPool.GetLimboDetailsCloned()
@@ -72,12 +71,6 @@ func (_this *LimboSubPoolProcessor) run() {
 		unlimitedCounters[k] = math.MaxInt32
 	}
 
-	var slots types.TxSlots
-	chainId := _this.getChainIdAsInt256()
-
-	parseCtx := types.NewTxParseContext(*chainId).ChainIDRequired()
-	parseCtx.ValidateRLP(_this.txPool.ValidateSerializedTxn)
-	validTxs := []*string{}
 	invalidTxs := []*string{}
 
 	for _, batchDetails := range limboBatchDetails {
@@ -86,53 +79,15 @@ func (_this *LimboSubPoolProcessor) run() {
 			err := _this.verifier.VerifySync(tx, request, batchDetails.Witness, streamBytes, batchDetails.TimestampLimit, batchDetails.FirstBlockNumber, batchDetails.L1InfoTreeMinTimestamps)
 			idHash := hexutils.BytesToHex(batchDetails.BadTransactionsHashes[i][:])
 			if err != nil {
-				validTxs = append(validTxs, &idHash)
-				// invalidTxMap[idHash] = struct{}{}
+				invalidTxs = append(invalidTxs, &idHash)
 				log.Info("[Limbo pool processor]", "invalid tx", batchDetails.BadTransactionsHashes[i])
 				continue
 			}
 
-			invalidTxs = append(invalidTxs, &idHash)
 			log.Info("[Limbo pool processor]", "valid tx", batchDetails.BadTransactionsHashes[i])
-
-			// isTxKnown, err := _this.txPool.IdHashKnown(tx, batchDetails.BadTransactionsHashes[i][:])
-			// if isTxKnown {
-			// 	fmt.Println(err)
-			// 	fmt.Println("")
-			// }
-			slots.Resize(1)
-			slots.Txs[0] = &types.TxSlot{}
-			slots.IsLocal[0] = true
-			_, err = parseCtx.ParseTransaction(batchDetails.BadTransactionsRLP[i], 0, slots.Txs[0], slots.Senders.At(0), false /* hasEnvelope */, func(hash []byte) error {
-				// if known, _ := _this.txPool.IdHashKnown(tx, hash); known {
-				// 	return types.ErrAlreadyKnown
-				// }
-				return nil
-			})
-			if err != nil {
-				panic(err)
-			}
-
-			mt := newMetaTx(slots.Txs[0], slots.IsLocal[0], _this.txPool.lastSeenBlock.Load())
-			_this.txPool.pending.Add(mt)
-
-			// discardReasons, err := _this.txPool.AddLocalTxs(ctx, slots, tx)
-			// if err != nil {
-			// 	fmt.Println(discardReasons)
-			// 	panic(err)
-			// 	return
-			// }
-
-			//TODO: requeue to txpool
 		}
 	}
 
-	// _this.txPool.MarkProcessedLimboDetails(size, validTxs, invalidTxs)
-	log.Info("[Limbo pool processor] End")
+	_this.txPool.MarkProcessedLimboDetails(size, invalidTxs)
 
-}
-
-func (_this *LimboSubPoolProcessor) getChainIdAsInt256() *uint256.Int {
-	chainId, _ := uint256.FromBig(_this.chainConfig.ChainID)
-	return chainId
 }

@@ -148,6 +148,7 @@ func SpawnSequencerExecutorVerifyStage(
 			if err != nil {
 				return err
 			}
+
 			l1InfoTreeMinTimestamps := make(map[uint64]uint64)
 			_, err = cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blockNumbers, hermezDbReader, l1InfoTreeMinTimestamps, nil)
 			if err != nil {
@@ -162,7 +163,6 @@ func SpawnSequencerExecutorVerifyStage(
 				ForkId:                  forkId,
 				ExecutorResponse:        response.ExecutorResponse,
 				BadTransactionsHashes:   make([]common.Hash, 0),
-				BadTransactionsRLP:      make([][]byte, 0),
 			}
 
 			for _, blockNumber := range blockNumbers {
@@ -173,8 +173,7 @@ func SpawnSequencerExecutorVerifyStage(
 				highestBlock = block
 				if lowestBlock == nil {
 					// capture the first block, then we can set the bad block hash in the unwind to terminate the
-					// stage loop and broadcast the accumulator changes to the txpool before the next stage loop
-					// run
+					// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
 					lowestBlock = block
 				}
 				for _, transaction := range block.Transactions() {
@@ -193,7 +192,6 @@ func SpawnSequencerExecutorVerifyStage(
 					}
 
 					limboDetails.BadTransactionsHashes = append(limboDetails.BadTransactionsHashes, hash)
-					limboDetails.BadTransactionsRLP = append(limboDetails.BadTransactionsRLP, buffer.Bytes())
 					limboDetails.StreamBytes = append(limboDetails.StreamBytes, streamBytes)
 
 					log.Info(fmt.Sprintf("[%s] adding transaction to limbo", s.LogPrefix()), "hash", hash)
@@ -203,7 +201,7 @@ func SpawnSequencerExecutorVerifyStage(
 			limboDetails.TimestampLimit = highestBlock.Time()
 			limboDetails.FirstBlockNumber = lowestBlock.NumberU64()
 			limboDetails.Root = highestBlock.Root()
-			cfg.txPool.NewLimboBatchDetails(limboDetails)
+			cfg.txPool.ProcessLimboBatchDetails(limboDetails)
 
 			u.UnwindTo(lowestBlock.NumberU64()-1, lowestBlock.Hash())
 			cfg.verifier.CancelAllRequestsUnsafe()

@@ -41,6 +41,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/status-im/keycard-go/hexutils"
 
 	"github.com/gateway-fm/cdk-erigon-lib/chain"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -316,13 +317,7 @@ type TxPool struct {
 	flushMtx *sync.Mutex
 
 	// limbo specific fields where bad batch transactions identified by the executor go
-	limboStatusMap map[string]int // txhash -> limbo status
-	limboSlots     *types.TxSlots
-	limboBatches   []LimboBatchDetails
-
-	// used to denote some process has made the pool aware that an unwind is about to occur and to wait
-	// until the unwind has been processed before allowing yielding of transactions again
-	awaitingBlockHandling atomic.Bool
+	limbo *Limbo
 }
 
 func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, ethCfg *ethconfig.Config, cache kvcache.Cache, chainID uint256.Int, shanghaiTime *big.Int, londonBlock *big.Int) (*TxPool, error) {
@@ -367,15 +362,15 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		shanghaiTime:            shanghaiTime,
 		allowFreeTransactions:   ethCfg.AllowFreeTransactions,
 		flushMtx:                &sync.Mutex{},
-		limboStatusMap:          make(map[string]int),
-		limboSlots:              &types.TxSlots{},
-		limboBatches:            make([]LimboBatchDetails, 0),
+		limbo:                   newLimbo(),
 	}, nil
 }
 
 func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChangeBatch, unwindTxs, minedTxs types.TxSlots, tx kv.Tx) error {
 	defer newBlockTimer.UpdateDuration(time.Now())
 	//t := time.Now()
+
+	isAfterLimbo := len(unwindTxs.Txs) > 0
 
 	cache := p.cache()
 	cache.OnNewBlock(stateChanges)
@@ -427,6 +422,8 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 		p.queued.worst.pendingBaseFee = pendingBaseFee
 	}
 
+	p.addLimboToUnwindTxs(&unwindTxs)
+
 	p.blockGasLimit.Store(stateChanges.BlockGasLimit)
 	if err := p.senders.onNewBlock(stateChanges, unwindTxs, minedTxs); err != nil {
 		return err
@@ -455,26 +452,8 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 
 	blockNum := p.lastSeenBlock.Load()
 
-	// zkevm - handle limbo transactions if we are aware of any limbo state
-	cached := unwindTxs
-
-	var limboTxs types.TxSlots
-	unwindTxs, limboTxs = p.trimSlotsBasedOnLimbo(unwindTxs)
-
-	unwindTxs = cached
-
-	// if len(limboTxs.Txs) > 0 {
-	// 	p.appendLimboTransactions(limboTxs, blockNum)
-	// }
-
-	// validLimbo, invalidLimbo := p.getValidSplitsFromLimbo()
-	// for idx, slot := range validLimbo.Txs {
-	// 	unwindTxs.Append(slot, validLimbo.Senders.At(idx), validLimbo.IsLocal[idx])
-	// }
-	// for idx, slot := range invalidLimbo.Txs {
-	// 	mt := newMetaTx(slot, invalidLimbo.IsLocal[idx], blockNum)
-	// 	p.discardLocked(mt, DiscardByLimbo)
-	// }
+	sendersWithChangedStateBeforeLimboTrim := prepareSendersWithChangedState(&unwindTxs)
+	unwindTxs, limboTxs, forDiscard := p.trimLimboSlots(&unwindTxs)
 
 	//log.Debug("[txpool] new block", "unwinded", len(unwindTxs.txs), "mined", len(minedTxs.txs), "baseFee", baseFee, "blockHeight", blockHeight)
 
@@ -491,8 +470,10 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 		p.queued,
 		p.all,
 		p.byHash,
+		sendersWithChangedStateBeforeLimboTrim,
 		p.addLocked,
-		p.discardLocked)
+		p.discardLocked,
+	)
 	if err != nil {
 		return err
 	}
@@ -516,9 +497,15 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 		}
 	}
 
-	if len(limboTxs.Txs) > 0 {
+	for idx, slot := range forDiscard.Txs {
+		mt := newMetaTx(slot, forDiscard.IsLocal[idx], blockNum)
+		p.discardLocked(mt, DiscardByLimbo)
+		log.Info("[txpool] Discarding", "tx-hash", hexutils.BytesToHex(slot.IDHash[:]))
+	}
+	p.finalizeLimboOnNewBlock(limboTxs)
+	if isAfterLimbo {
 		// always store false here as we've finally handled the new block
-		p.awaitingBlockHandling.Store(false)
+		p.allowYieldingTransactions()
 	}
 
 	//log.Info("[txpool] new block", "number", p.lastSeenBlock.Load(), "pendngBaseFee", pendingBaseFee, "in", time.Since(t))
@@ -1031,7 +1018,7 @@ func addTxs(blockNum uint64, cacheView kvcache.CacheView, senders *sendersBatch,
 func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges *remote.StateChangeBatch,
 	senders *sendersBatch, newTxs types.TxSlots, pendingBaseFee uint64, blockGasLimit uint64,
 	pending *PendingPool, baseFee, queued *SubPool,
-	byNonce *BySenderAndNonce, byHash map[string]*metaTx, add func(*metaTx, *types.Announcements) DiscardReason, discard func(*metaTx, DiscardReason)) (types.Announcements, error) {
+	byNonce *BySenderAndNonce, byHash map[string]*metaTx, sendersWithChangedStateBeforeLimboTrim map[uint64]struct{}, add func(*metaTx, *types.Announcements) DiscardReason, discard func(*metaTx, DiscardReason)) (types.Announcements, error) {
 	protocolBaseFee := calcProtocolBaseFee(pendingBaseFee)
 	if assert.Enable {
 		for _, txn := range newTxs.Txs {
@@ -1053,11 +1040,13 @@ func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges
 	announcements := types.Announcements{}
 	for i, txn := range newTxs.Txs {
 		if _, ok := byHash[string(txn.IDHash[:])]; ok {
+			delete(sendersWithChangedStateBeforeLimboTrim, txn.SenderID)
 			continue
 		}
 		mt := newMetaTx(txn, newTxs.IsLocal[i], blockNum)
 		if reason := add(mt, &announcements); reason != NotSet {
 			discard(mt, reason)
+			delete(sendersWithChangedStateBeforeLimboTrim, txn.SenderID)
 			continue
 		}
 		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
@@ -1073,11 +1062,16 @@ func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges
 				addr := gointerfaces.ConvertH160toAddress(change.Address)
 				id, ok := senders.getID(addr)
 				if !ok {
+					delete(sendersWithChangedStateBeforeLimboTrim, id)
 					continue
 				}
 				sendersWithChangedState[id] = struct{}{}
 			}
 		}
+	}
+
+	for senderId := range sendersWithChangedStateBeforeLimboTrim {
+		sendersWithChangedState[senderId] = struct{}{}
 	}
 
 	for senderID := range sendersWithChangedState {

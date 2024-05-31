@@ -178,7 +178,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	if p.awaitingBlockHandling.Load() {
+	if p.isDeniedYieldingTransactions() {
 		return false, 0, nil
 	}
 

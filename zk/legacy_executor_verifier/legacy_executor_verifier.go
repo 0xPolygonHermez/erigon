@@ -124,8 +124,6 @@ func NewLegacyExecutorVerifier(
 	}
 }
 
-// var counter = int32(0)
-
 func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, witness, streamBytes []byte, timestampLimit, firstBlockNumber uint64, l1InfoTreeMinTimestamps map[uint64]uint64) error {
 	oldAccInputHash := common.HexToHash("0x0")
 	payload := &Payload{
@@ -156,6 +154,8 @@ func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, 
 	_, _, executorErr := e.Verify(payload, request, previousBlock.Root())
 	return executorErr
 }
+
+// var counter = int32(0)
 
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
@@ -262,7 +262,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		// debug purposes
-		// if request.BatchNumber == 3 && counter == 0 {
+		// if request.BatchNumber == 10 && counter == 0 {
 		// 	// time.Sleep(25 * time.Second)
 		// 	ok = false
 		// 	counter = 1
