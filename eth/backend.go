@@ -736,7 +736,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			// the stream re-populated from scratch.  So we check the stream for the latest header and if it is
 			// 0 we can just set the datastream progress to 0 also which will force a re-population of the stream
 			latestHeader := backend.dataStream.GetHeader()
-			if latestHeader.TotalEntries == 0 && executionProgress > 0 {
+			if latestHeader.TotalEntries == 0 {
 				log.Info("[dataStream] setting the stream progress to 0")
 				if err := stages.SaveStageProgress(tx, stages.DataStream, 0); err != nil {
 					return nil, err
@@ -776,7 +776,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				contracts.VerificationTopicPreEtrog,
 				contracts.VerificationTopicEtrog,
 			}}
-			l1Contracts = []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin}
+			l1Contracts = []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin, cfg.AddressZkevm}
 		}
 
 		ethermanClients := make([]syncer.IEtherman, len(backend.etherManClients))
