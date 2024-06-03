@@ -33,8 +33,10 @@ The index is known by simply tracking the events from the GER manager contract o
 
 At the point of building a new block the sequencer will check to see if the next index is available to use:
 
-- Current index + 1 exists in DB?
-  - if yes - minTimestamp on L1 info tree update <= current block timestamp
+- Current index + 1 exists in DB? (this means that the block has been finalised on the L1 and we can proceed to check if we can use this or not)
+  - if yes check: minTimestamp on L1 info tree update <= current block timestamp
+    - if yes: use this index
+    - if no: stop the search here, we cannot use any further index so we will use index 0 to denote no change
 
 If this condition is met then we can use this index for this block.  This check is performed at the start of each block creation.
 
