@@ -1526,6 +1526,9 @@ func (p *TxPool) flushLocked(tx kv.RwTx) (err error) {
 	if err := PutLastSeenBlock(tx, p.lastSeenBlock.Load(), encID); err != nil {
 		return err
 	}
+	if err := p.flushLockedLimbo(tx); err != nil {
+		return err
+	}
 
 	// clean - in-memory data structure as later as possible - because if during this Tx will happen error,
 	// DB will stay consistent but some in-memory structures may be already cleaned, and retry will not work
@@ -1618,6 +1621,10 @@ func (p *TxPool) fromDB(ctx context.Context, tx kv.Tx, coreTx kv.Tx) error {
 		return err
 	}
 	p.pendingBaseFee.Store(pendingBaseFee)
+
+	if err = p.fromDBLimbo(ctx, tx, cacheView); err != nil {
+		return err
+	}
 
 	return nil
 }

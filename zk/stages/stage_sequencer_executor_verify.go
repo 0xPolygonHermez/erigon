@@ -161,7 +161,6 @@ func SpawnSequencerExecutorVerifyStage(
 				L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
 				BatchNumber:             response.BatchNumber,
 				ForkId:                  forkId,
-				ExecutorResponse:        response.ExecutorResponse,
 				BadTransactionsHashes:   make([]common.Hash, 0),
 			}
 
