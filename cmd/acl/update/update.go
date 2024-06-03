@@ -8,10 +8,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/cmd/snapshots/sync"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/zk/txpool"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/urfave/cli/v2"
 )
 
@@ -104,100 +104,94 @@ var AddCommand = cli.Command{
 
 // addRun is the entry point for the add command that adds the ACL policy for the given address
 func addRun(cliCtx *cli.Context) error {
-	logger := sync.Logger(cliCtx.Context)
-
 	if !cliCtx.IsSet(utils.DataDirFlag.Name) {
 		return errors.New("data directory is not set")
 	}
 
 	dataDir := cliCtx.String(utils.DataDirFlag.Name)
 
-	logger.Info("Adding ACL policy", "dataDir", dataDir, "address", address, "policy", policy)
+	log.Info("Adding ACL policy", "dataDir", dataDir, "address", address, "policy", policy)
 
 	aclDB, err := txpool.OpenACLDB(cliCtx.Context, dataDir)
 	if err != nil {
-		logger.Error("Failed to open ACL database", "err", err)
+		log.Error("Failed to open ACL database", "err", err)
 		return err
 	}
 
 	addr := common.HexToAddress(address)
 	policy, err := txpool.ResolvePolicy(policy)
 	if err != nil {
-		logger.Error("Failed to resolve policy", "err", err)
+		log.Error("Failed to resolve policy", "err", err)
 		return err
 	}
 
 	if err := txpool.AddPolicy(cliCtx.Context, aclDB, aclType, addr, policy); err != nil {
-		logger.Error("Failed to add policy", "err", err)
+		log.Error("Failed to add policy", "err", err)
 		return err
 	}
 
-	logger.Info("Policy added", "address", address, "policy", policy)
+	log.Info("Policy added", "address", address, "policy", policy)
 
 	return nil
 }
 
 // removeRun is the entry point for the remove command that removes the ACL policy for the given address
 func removeRun(cliCtx *cli.Context) error {
-	logger := sync.Logger(cliCtx.Context)
-
 	if !cliCtx.IsSet(utils.DataDirFlag.Name) {
 		return errors.New("data directory is not set")
 	}
 
 	dataDir := cliCtx.String(utils.DataDirFlag.Name)
 
-	logger.Info("Removing ACL policy", "dataDir", dataDir, "address", address, "policy", policy)
+	log.Info("Removing ACL policy", "dataDir", dataDir, "address", address, "policy", policy)
 
 	aclDB, err := txpool.OpenACLDB(cliCtx.Context, dataDir)
 	if err != nil {
-		logger.Error("Failed to open ACL database", "err", err)
+		log.Error("Failed to open ACL database", "err", err)
 		return err
 	}
 
 	addr := common.HexToAddress(address)
 	policy, err := txpool.ResolvePolicy(policy)
 	if err != nil {
-		logger.Error("Failed to resolve policy", "err", err)
+		log.Error("Failed to resolve policy", "err", err)
 		return err
 	}
 
 	if err := txpool.RemovePolicy(cliCtx.Context, aclDB, aclType, addr, policy); err != nil {
-		logger.Error("Failed to remove policy", "err", err)
+		log.Error("Failed to remove policy", "err", err)
 		return err
 	}
 
-	logger.Info("Policy removed", "address", address, "policy", policy)
+	log.Info("Policy removed", "address", address, "policy", policy)
 
 	return nil
 }
 
 // updateRun is the entry point for the update command that updates the ACL based on the given CSV file
 func updateRun(cliCtx *cli.Context) error {
-	logger := sync.Logger(cliCtx.Context)
-
 	if !cliCtx.IsSet(utils.DataDirFlag.Name) {
 		return errors.New("data directory is not set")
 	}
 
 	dataDir := cliCtx.String(utils.DataDirFlag.Name)
 
-	logger.Info("Updating ACL", "dataDir", dataDir)
+	log.Info("Updating ACL", "dataDir", dataDir)
 
 	aclDB, err := txpool.OpenACLDB(cliCtx.Context, dataDir)
 	if err != nil {
-		logger.Error("Failed to open ACL database", "err", err)
+		log.Error("Failed to open ACL database", "err", err)
 		return err
 	}
 
 	addresses, policies, err := readCSV(csvFile)
 	if err != nil {
-		logger.Error("Failed to read CSV file", "err", err)
+		log.Error("Failed to read CSV file", "err", err)
 		return err
 	}
 
 	if err := txpool.UpdatePolicies(cliCtx.Context, aclDB, aclType, addresses, policies); err != nil {
-		logger.Error("Failed to update policies", "err", err)
+		log.Error("Failed to update policies", "err", err)
 		return err
 	}
 

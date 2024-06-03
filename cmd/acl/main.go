@@ -5,15 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
-	"github.com/ledgerwatch/erigon-lib/common/disk"
-	"github.com/ledgerwatch/erigon-lib/common/mem"
 	"github.com/ledgerwatch/erigon/cmd/acl/mode"
 	"github.com/ledgerwatch/erigon/cmd/acl/update"
-	"github.com/ledgerwatch/erigon/cmd/snapshots/sync"
-	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/ledgerwatch/log/v3"
@@ -54,21 +49,11 @@ func main() {
 
 	for _, command := range app.Commands {
 		command.Before = func(ctx *cli.Context) error {
-			logger, err := setupLogger(ctx)
-
-			if err != nil {
-				return err
-			}
-
 			var cancel context.CancelFunc
 
-			ctx.Context, cancel = context.WithCancel(sync.WithLogger(ctx.Context, logger))
+			ctx.Context, cancel = context.WithCancel(context.Background())
 
-			// setup periodic logging and prometheus updates
-			go mem.LogMemStats(ctx.Context, logger)
-			go disk.UpdateDiskStats(ctx.Context, logger)
-
-			go handleTerminationSignals(cancel, logger)
+			go handleTerminationSignals(cancel)
 
 			return nil
 		}
@@ -80,34 +65,17 @@ func main() {
 	}
 }
 
-// setupLogger sets up the logger for the command
-func setupLogger(ctx *cli.Context) (log.Logger, error) {
-	dataDir := ctx.String(utils.DataDirFlag.Name)
-
-	if len(dataDir) > 0 {
-		logsDir := filepath.Join(dataDir, "logs")
-
-		if err := os.MkdirAll(logsDir, 0755); err != nil {
-			return nil, err
-		}
-	}
-
-	logger := logging.SetupLoggerCtx("acl-"+ctx.Command.Name, ctx, log.LvlError, log.LvlInfo, false)
-
-	return logger, nil
-}
-
 // handleTerminationSignals handles termination signals
-func handleTerminationSignals(stopFunc func(), logger log.Logger) {
+func handleTerminationSignals(stopFunc func()) {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGINT)
 
 	switch s := <-signalCh; s {
 	case syscall.SIGTERM:
-		logger.Info("Stopping")
+		log.Info("Stopping")
 		stopFunc()
 	case syscall.SIGINT:
-		logger.Info("Terminating")
+		log.Info("Terminating")
 		os.Exit(-int(syscall.SIGINT))
 	}
 }
