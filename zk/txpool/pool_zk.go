@@ -2,9 +2,7 @@ package txpool
 
 import (
 	"bytes"
-	"container/heap"
 	"fmt"
-	"sort"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -13,7 +11,6 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/types"
 	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
-	CollectionsQueueNs "github.com/golang-collections/collections/queue"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/log/v3"
@@ -278,45 +275,6 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 		if bytes.Equal(mt.Tx.IDHash[:], txHash[:]) {
 			mt.overflowZkCountersDuringExecution = true
 			break
-		}
-	}
-}
-
-func (p *PendingPool) EnforceBestInvariantsZk() {
-	sendersMap := map[uint64]*CollectionsQueueNs.Queue{}
-
-	sort.SliceStable(p.best.ms, func(i, j int) bool {
-		return SortByNonceLess(p.best.ms[i], p.best.ms[j])
-	})
-
-	for _, mt := range p.best.ms {
-		mtsSortedByNonce, found := sendersMap[mt.Tx.SenderID]
-		if !found {
-			mtsSortedByNonce = CollectionsQueueNs.New()
-			sendersMap[mt.Tx.SenderID] = mtsSortedByNonce
-		}
-		mtsSortedByNonce.Enqueue(mt)
-	}
-
-	bestQueue := &heapSlice{
-		ms:             make([]*metaTx, 0, len(sendersMap)),
-		pendingBaseFee: p.best.pendingBaseFee,
-	}
-	heap.Init(bestQueue)
-	for _, mtsSortedByNonce := range sendersMap {
-		if mtsSortedByNonce.Len() != 0 {
-			heap.Push(bestQueue, mtsSortedByNonce.Dequeue())
-		}
-	}
-
-	for i := 0; len(bestQueue.ms) > 0; i++ {
-		bestMt := heap.Pop(bestQueue).(*metaTx)
-		bestMt.bestIndex = i
-		p.best.ms[i] = bestMt
-
-		mtsSortedByNonce := sendersMap[bestMt.Tx.SenderID]
-		if mtsSortedByNonce.Len() > 0 {
-			heap.Push(bestQueue, mtsSortedByNonce.Dequeue())
 		}
 	}
 }
