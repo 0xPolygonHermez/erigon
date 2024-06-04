@@ -35,7 +35,7 @@ const (
 type Limbo struct {
 	invalidTxsMap map[string]uint8 //invalid tx: hash -> handled
 	limboSlots    *types.TxSlots
-	limboBatches  []LimboBatchDetails
+	limboBatches  []*LimboBatchDetails
 
 	// used to denote some process has made the pool aware that an unwind is about to occur and to wait
 	// until the unwind has been processed before allowing yielding of transactions again
@@ -46,14 +46,14 @@ func newLimbo() *Limbo {
 	return &Limbo{
 		invalidTxsMap:         make(map[string]uint8),
 		limboSlots:            &types.TxSlots{},
-		limboBatches:          make([]LimboBatchDetails, 0),
+		limboBatches:          make([]*LimboBatchDetails, 0),
 		awaitingBlockHandling: atomic.Bool{},
 	}
 }
 
 func (_this *Limbo) resizeBatches(newSize int) {
 	for i := len(_this.limboBatches); i < newSize; i++ {
-		_this.limboBatches = append(_this.limboBatches, LimboBatchDetails{})
+		_this.limboBatches = append(_this.limboBatches, NewLimboBatchDetails())
 	}
 }
 
@@ -69,6 +69,14 @@ type LimboBatchDetails struct {
 	BadTransactionsHashes   []common.Hash
 }
 
+func NewLimboBatchDetails() *LimboBatchDetails {
+	return &LimboBatchDetails{
+		StreamBytes:             make([][]byte, 0),
+		L1InfoTreeMinTimestamps: make(map[uint64]uint64),
+		BadTransactionsHashes:   make([]common.Hash, 0),
+	}
+}
+
 func (_this *LimboBatchDetails) resizeStreamBytes(newSize int) {
 	for i := len(_this.StreamBytes); i < newSize; i++ {
 		_this.StreamBytes = append(_this.StreamBytes, nil)
@@ -81,7 +89,7 @@ func (_this *LimboBatchDetails) resizeBadTransactionsHashes(newSize int) {
 	}
 }
 
-func (p *TxPool) ProcessLimboBatchDetails(details LimboBatchDetails) {
+func (p *TxPool) ProcessLimboBatchDetails(details *LimboBatchDetails) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.limbo.limboBatches = append(p.limbo.limboBatches, details)
@@ -97,17 +105,17 @@ func (p *TxPool) ProcessLimboBatchDetails(details LimboBatchDetails) {
 	p.denyYieldingTransactions()
 }
 
-func (p *TxPool) GetLimboDetails() []LimboBatchDetails {
+func (p *TxPool) GetLimboDetails() []*LimboBatchDetails {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	return p.limbo.limboBatches
 }
 
-func (p *TxPool) GetLimboDetailsCloned() []LimboBatchDetails {
+func (p *TxPool) GetLimboDetailsCloned() []*LimboBatchDetails {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	limboBatchesClone := make([]LimboBatchDetails, len(p.limbo.limboBatches))
+	limboBatchesClone := make([]*LimboBatchDetails, len(p.limbo.limboBatches))
 	copy(limboBatchesClone, p.limbo.limboBatches)
 	return limboBatchesClone
 }
@@ -344,7 +352,6 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 	parseCtx := types.NewTxParseContext(p.chainID)
 	parseCtx.WithSender(false)
 
-	slotsI := 0
 	for it.HasNext() {
 		k, v, err := it.Next()
 		if err != nil {
@@ -372,11 +379,7 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 			if reason := p.validateTx(txn, true, cacheView); reason != NotSet && reason != Success {
 				return nil
 			}
-			p.limbo.limboSlots.Resize(uint(slotsI + 1))
-			p.limbo.limboSlots.Txs[slotsI] = txn
-			p.limbo.limboSlots.IsLocal[slotsI] = true
-			copy(p.limbo.limboSlots.Senders.At(slotsI), addr[:])
-			slotsI++
+			p.limbo.limboSlots.Append(txn, addr[:], true)
 		case DbKeyBatchesPrefix:
 			batchesI := binary.LittleEndian.Uint32(k[1:5])
 			batchesJ := binary.LittleEndian.Uint64(k[6:14])

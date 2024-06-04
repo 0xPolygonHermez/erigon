@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -155,14 +154,11 @@ func SpawnSequencerExecutorVerifyStage(
 				return err
 			}
 
-			limboDetails := txpool.LimboBatchDetails{
-				Witness:                 response.Witness,
-				StreamBytes:             make([][]byte, 0),
-				L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
-				BatchNumber:             response.BatchNumber,
-				ForkId:                  forkId,
-				BadTransactionsHashes:   make([]common.Hash, 0),
-			}
+			limboDetails := txpool.NewLimboBatchDetails()
+			limboDetails.Witness = response.Witness
+			limboDetails.L1InfoTreeMinTimestamps = l1InfoTreeMinTimestamps
+			limboDetails.BatchNumber = response.BatchNumber
+			limboDetails.ForkId = forkId
 
 			for _, blockNumber := range blockNumbers {
 				block, err := rawdb.ReadBlockByNumber(tx, blockNumber)

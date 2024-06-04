@@ -25,30 +25,6 @@ const (
 	transactionGasLimit = 30_000_000
 )
 
-type heapSlice struct {
-	ms             []*metaTx
-	pendingBaseFee uint64
-}
-
-func (_this *heapSlice) Len() int { return len(_this.ms) }
-func (_this *heapSlice) Swap(i, j int) {
-	_this.ms[i], _this.ms[j] = _this.ms[j], _this.ms[i]
-}
-func (_this *heapSlice) Less(i, j int) bool {
-	return _this.ms[i].better(_this.ms[j], *uint256.NewInt(_this.pendingBaseFee))
-}
-func (_this *heapSlice) Push(x interface{}) {
-	_this.ms = append(_this.ms, x.(*metaTx))
-}
-func (_this *heapSlice) Pop() interface{} {
-	old := _this.ms
-	n := len(old)
-	item := old[n-1]
-	old[n-1] = nil // avoid memory leak
-	_this.ms = old[0 : n-1]
-	return item
-}
-
 func calcProtocolBaseFee(baseFee uint64) uint64 {
 	return 0
 }
