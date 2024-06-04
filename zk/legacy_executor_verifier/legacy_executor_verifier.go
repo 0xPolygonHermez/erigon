@@ -251,12 +251,12 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
 		if executorErr != nil {
-			if errors.Is(err, ErrExecutorStateRootMismatch) {
-				log.Error("[Verifier] State root mismatch detected", "err", err)
-			} else if errors.Is(err, ErrExecutorUnknownError) {
-				log.Error("[Verifier] Unexpected error found from executor", "err", err)
+			if errors.Is(executorErr, ErrExecutorStateRootMismatch) {
+				log.Error("[Verifier] State root mismatch detected", "err", executorErr)
+			} else if errors.Is(executorErr, ErrExecutorUnknownError) {
+				log.Error("[Verifier] Unexpected error found from executor", "err", executorErr)
 			} else {
-				log.Error("[Verifier] Error", "err", err)
+				log.Error("[Verifier] Error", "err", executorErr)
 			}
 		}
 
@@ -428,7 +428,7 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(
 	blocks []uint64,
 	hermezDb *hermez_db.HermezDbReader,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
-	transactionsToInclude map[uint64]uint64, // passing nil here will include all transactions in the blocks
+	transactionsToIncludeByIndex map[int]struct{}, // passing nil here will include all transactions in the blocks
 ) ([]byte, error) {
 	lastBlock, err := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
 	if err != nil {
@@ -449,7 +449,7 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(
 
 		var sBytes []byte
 
-		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, tx, lastBlock, request.BatchNumber, previousBatch, l1InfoTreeMinTimestamps, transactionsToInclude)
+		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, tx, lastBlock, batchNumber, previousBatch, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
 		if err != nil {
 			return nil, err
 		}

@@ -171,7 +171,7 @@ func SpawnSequencerExecutorVerifyStage(
 					// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
 					lowestBlock = block
 				}
-				for _, transaction := range block.Transactions() {
+				for i, transaction := range block.Transactions() {
 					hash := transaction.Hash()
 					var b []byte
 					buffer := bytes.NewBuffer(b)
@@ -181,7 +181,8 @@ func SpawnSequencerExecutorVerifyStage(
 					}
 
 					blocksForStreamBytes := []uint64{block.NumberU64()}
-					streamBytes, err := cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blocksForStreamBytes, hermezDbReader, l1InfoTreeMinTimestamps, nil)
+					transactionsToIncludeByIndex := map[int]struct{}{i: struct{}{}}
+					streamBytes, err := cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blocksForStreamBytes, hermezDbReader, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
 					if err != nil {
 						return err
 					}
