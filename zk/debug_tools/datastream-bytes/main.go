@@ -30,7 +30,7 @@ func main() {
 	err := db.View(context.Background(), func(tx kv.Tx) error {
 		hermezDb := hermez_db.NewHermezDbReader(tx)
 
-		streamServer := server.NewDataStreamServer(nil, uint64(chainId), server.StandardOperationMode)
+		streamServer := server.NewDataStreamServer(nil, uint64(chainId))
 
 		blocks, err := hermezDb.GetL2BlockNosByBatch(uint64(batchNum))
 		if err != nil {
@@ -59,7 +59,7 @@ func main() {
 
 			isBatchEnd := idx == len(blocks)-1
 
-			sBytes, err := streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, tx, lastBlock, uint64(batchNum), uint64(previousBatch), l1InfoTreeMinTimestamps, isBatchEnd)
+			sBytes, err := streamServer.CreateAndBuildStreamEntryBytesProto(server.ExecutorOperationMode, block, hermezDb, tx, lastBlock, uint64(batchNum), uint64(previousBatch), l1InfoTreeMinTimestamps, isBatchEnd)
 			if err != nil {
 				return err
 			}
