@@ -106,7 +106,7 @@ func NewLegacyExecutorVerifier(
 	l1Syncer *syncer.L1Syncer,
 	stream *datastreamer.StreamServer,
 ) *LegacyExecutorVerifier {
-	streamServer := server.NewDataStreamServer(stream, chainCfg.ChainID.Uint64(), server.ExecutorOperationMode)
+	streamServer := server.NewDataStreamServer(stream, chainCfg.ChainID.Uint64())
 	return &LegacyExecutorVerifier{
 		db:                     db,
 		cfg:                    cfg,
@@ -441,7 +441,7 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(
 	// boundary so we will always add in the batch bookmark to the stream
 	previousBatch := batchNumber - 1
 
-	for _, blockNumber := range blocks {
+	for idx, blockNumber := range blocks {
 		block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
 		if err != nil {
 			return nil, err
@@ -449,7 +449,9 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(
 
 		var sBytes []byte
 
-		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, tx, lastBlock, batchNumber, previousBatch, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
+		isBatchEnd := idx == len(blocks)-1
+
+		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(server.ExecutorOperationMode, block, hermezDb, tx, lastBlock, batchNumber, previousBatch, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndex)
 		if err != nil {
 			return nil, err
 		}
