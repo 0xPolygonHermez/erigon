@@ -17,7 +17,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
-	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/erigon/zk/syncer"
@@ -409,13 +408,13 @@ func (v *LegacyExecutorVerifier) getStreamBytes(request *VerifierRequest, tx kv.
 			return nil, err
 		}
 
-		//TODO: get ger updates between blocks
-		gerUpdates := []dstypes.GerUpdate{}
+		var sBytes []byte
 
-		sBytes, err := v.streamServer.CreateAndBuildStreamEntryBytes(block, hermezDb, lastBlock, request.BatchNumber, previousBatch, true, &gerUpdates, l1InfoTreeMinTimestamps)
+		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, tx, lastBlock, request.BatchNumber, previousBatch, l1InfoTreeMinTimestamps)
 		if err != nil {
 			return nil, err
 		}
+
 		streamBytes = append(streamBytes, sBytes...)
 		lastBlock = block
 		// we only put in the batch bookmark at the start of the stream data once
