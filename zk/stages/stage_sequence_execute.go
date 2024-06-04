@@ -88,7 +88,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64(), server.StandardOperationMode)
+		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
 		if err = server.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, srv, cfg.stream, 1, 1, logPrefix); err != nil {
 			return err
 		}
