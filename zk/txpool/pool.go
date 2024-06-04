@@ -1132,7 +1132,6 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 	}
 
 	p.byHash[string(mt.Tx.IDHash[:])] = mt
-	// p.addLockedZk(mt)
 
 	if replaced := p.all.replaceOrInsert(mt); replaced != nil {
 		if assert.Enable {

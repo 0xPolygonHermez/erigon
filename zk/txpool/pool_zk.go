@@ -255,16 +255,6 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 	}
 }
 
-func (p *TxPool) addLockedZk(mt *metaTx) {
-	// remove the new tx from deletedTxs and discardReasonsLRU in order to be a complete mirror of discardLocked function
-	for i, mt_ := range p.deletedTxs {
-		if mt_.Tx.IDHash == mt.Tx.IDHash {
-			p.deletedTxs = append(p.deletedTxs[:i], p.deletedTxs[i+1:]...)
-			p.discardReasonsLRU.Remove(string(mt.Tx.IDHash[:]))
-		}
-	}
-}
-
 // Discard a metaTx from the best pending pool if it has overflow the zk-counters during execution
 func promoteZk(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint64, discard func(*metaTx, DiscardReason), announcements *types.Announcements) {
 	invalidMts := []*metaTx{}
