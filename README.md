@@ -40,7 +40,7 @@ base and run `go run cmd/hack/allocs/main.go [your-file-name]` to convert it to 
 
 Mount the directory containing the config files on docker container: `/dynamic-mynetwork` for example
 
-To use the new config when starting erigon use the `--cfg` flag with the path to the config file e.g. `--config="/dynamic-mynetwork/dynamic-mynetwork.yaml"`
+To use the new config when starting erigon use the `--cfg` flag with the path to the config file e.g. `--cfg="/dynamic-mynetwork/dynamic-mynetwork.yaml"`
 
 ## Prereqs
 In order to use the optimal vectorized poseidon hashing for the Sparse Merkle Tree, on x86 the following packages are required (for Apple silicon it will fall back to the iden3 library and as such these dependencies are not required in that case.
