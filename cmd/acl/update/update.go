@@ -1,6 +1,7 @@
 package update
 
 import (
+	"context"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/log/v3"
@@ -184,13 +186,18 @@ func updateRun(cliCtx *cli.Context) error {
 		return err
 	}
 
-	addresses, policies, err := readCSV(csvFile)
+	return updatePolicies(cliCtx.Context, csvFile, aclType, aclDB)
+}
+
+// updatePolicies updates the ACL based on the given CSV file
+func updatePolicies(ctx context.Context, csvFilePath, aclType string, aclDB kv.RwDB) error {
+	addresses, policies, err := readCSV(csvFilePath)
 	if err != nil {
 		log.Error("Failed to read CSV file", "err", err)
 		return err
 	}
 
-	if err := txpool.UpdatePolicies(cliCtx.Context, aclDB, aclType, addresses, policies); err != nil {
+	if err := txpool.UpdatePolicies(ctx, aclDB, aclType, addresses, policies); err != nil {
 		log.Error("Failed to update policies", "err", err)
 		return err
 	}
@@ -224,14 +231,14 @@ func readCSV(filePath string) ([]common.Address, [][]txpool.Policy, error) {
 		}
 
 		if len(record) != 2 {
-			return nil, nil, errors.New("invalid record")
+			return nil, nil, fmt.Errorf("invalid record on row: %d", row)
 		}
 
 		addresses = append(addresses, common.HexToAddress(record[0]))
 
-		addressPolicies := make([]txpool.Policy, 0, len(record[1]))
+		addressPolicies := make([]txpool.Policy, 0)
 
-		stringPolicies := strings.Split(strings.TrimSpace(record[1]), ",")
+		stringPolicies := splitPolicies(record[1])
 		for _, pc := range stringPolicies {
 			policy, err := txpool.ResolvePolicy(pc)
 			if err != nil {
@@ -247,4 +254,17 @@ func readCSV(filePath string) ([]common.Address, [][]txpool.Policy, error) {
 	}
 
 	return addresses, policies, nil
+}
+
+func splitPolicies(s string) []string {
+	substrings := strings.Split(strings.TrimSpace(s), ",")
+	result := make([]string, 0, len(substrings))
+	for _, sub := range substrings {
+		trimmed := strings.TrimSpace(sub)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	return result
 }
