@@ -110,22 +110,22 @@ func UpdatePolicies(ctx context.Context, aclDB kv.RwDB, aclType string, addrs []
 
 	return aclDB.Update(ctx, func(tx kv.RwTx) error {
 		for i, addr := range addrs {
-			if len(policies[i]) == 0 {
-				// remove the address from the table
-				if err := tx.Delete(table, addr.Bytes()); err != nil {
+			if len(policies[i]) > 0 {
+				// just update the policies for the address to match the one provided
+				policyBytes := make([]byte, 0, len(policies[i]))
+				for _, p := range policies[i] {
+					policyBytes = append(policyBytes, p.ToByte())
+				}
+
+				if err := tx.Put(table, addr.Bytes(), policyBytes); err != nil {
 					return err
 				}
 
 				continue
 			}
 
-			// just update the policies for the address to match the one provided
-			policyBytes := make([]byte, 0, len(policies[i]))
-			for _, p := range policies[i] {
-				policyBytes = append(policyBytes, p.ToByte())
-			}
-
-			if err := tx.Put(table, addr.Bytes(), policyBytes); err != nil {
+			// remove the address from the table
+			if err := tx.Delete(table, addr.Bytes()); err != nil {
 				return err
 			}
 		}

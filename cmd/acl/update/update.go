@@ -20,6 +20,8 @@ import (
 const (
 	aclTypeFlag     = "type"
 	aclTypeFlagDesc = "Type of the ACL (allowlist or blocklist)"
+
+	failedToOpenDB = "Failed to open ACL database"
 )
 
 var errDataDirNotSet = errors.New("data directory is not set")
@@ -123,7 +125,7 @@ func addRun(cliCtx *cli.Context) error {
 
 	aclDB, err := txpool.OpenACLDB(cliCtx.Context, dataDir)
 	if err != nil {
-		log.Error("Failed to open ACL database", "err", err)
+		log.Error(failedToOpenDB, "err", err)
 		return err
 	}
 
@@ -156,7 +158,7 @@ func removeRun(cliCtx *cli.Context) error {
 
 	aclDB, err := txpool.OpenACLDB(cliCtx.Context, dataDir)
 	if err != nil {
-		log.Error("Failed to open ACL database", "err", err)
+		log.Error(failedToOpenDB, "err", err)
 		return err
 	}
 
@@ -189,7 +191,7 @@ func updateRun(cliCtx *cli.Context) error {
 
 	aclDB, err := txpool.OpenACLDB(cliCtx.Context, dataDir)
 	if err != nil {
-		log.Error("Failed to open ACL database", "err", err)
+		log.Error(failedToOpenDB, "err", err)
 		return err
 	}
 
