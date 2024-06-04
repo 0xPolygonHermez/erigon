@@ -381,6 +381,9 @@ func (srv *DataStreamServer) getLocalExitRoot(batch uint64, reader *hermez_db.He
 			}
 			stateReader.Close()
 			localExitRoot = libcommon.BytesToHash(rawLer)
+			if localExitRoot != (libcommon.Hash{}) {
+				break
+			}
 		}
 	}
 	return localExitRoot, nil
