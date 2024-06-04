@@ -21,7 +21,7 @@ var Command = cli.Command{
 		&utils.DataDirFlag,
 		&cli.StringFlag{
 			Name:        "mode",
-			Usage:       "Mode of the ACL (whitelist, blacklist or disabled)",
+			Usage:       "Mode of the ACL (allowlist, blocklist or disabled)",
 			Destination: &mode,
 		},
 	},
