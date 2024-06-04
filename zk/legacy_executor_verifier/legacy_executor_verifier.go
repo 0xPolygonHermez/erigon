@@ -184,7 +184,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		defer cancel()
 
 		// get the data stream bytes
-		for time.Since(startTime) < 2*sequencerBatchSealTime {
+		for time.Since(startTime) < 3*sequencerBatchSealTime {
 			// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
 			// committed yet so just requeue the request
 			blocks, err = v.availableBlocksToProcess(innerCtx, request.BatchNumber)
@@ -417,8 +417,16 @@ func (v *LegacyExecutorVerifier) availableBlocksToProcess(innerCtx context.Conte
 		return []uint64{}, err
 	}
 
-	// we might not have blocks yet as the underlying stage loop might still be running and the tx hasn't been
-	// committed yet so just requeue the request
+	for _, blockNum := range blocks {
+		block, err := rawdb.ReadBlockByNumber(tx, blockNum)
+		if err != nil {
+			return []uint64{}, err
+		}
+		if block == nil {
+			return []uint64{}, nil
+		}
+	}
+
 	return blocks, nil
 }
 
