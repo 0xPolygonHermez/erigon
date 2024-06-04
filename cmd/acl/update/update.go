@@ -17,6 +17,13 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	aclTypeFlag     = "type"
+	aclTypeFlagDesc = "Type of the ACL (allowlist or blocklist)"
+)
+
+var errDataDirNotSet = errors.New("data directory is not set")
+
 var (
 	csvFile string
 	aclType string
@@ -39,9 +46,9 @@ var UpdateCommand = cli.Command{
 			Required:    true,
 		},
 		&cli.StringFlag{
-			Name:        "type",
-			Usage:       "Type of the ACL (allowlist or blocklist)",
-			DefaultText: "allowlist",
+			Name:        aclTypeFlag,
+			Usage:       aclTypeFlagDesc,
+			DefaultText: txpool.Allowlist,
 			Destination: &aclType,
 			Required:    true,
 		},
@@ -67,9 +74,9 @@ var RemoveCommand = cli.Command{
 			Destination: &policy,
 		},
 		&cli.StringFlag{
-			Name:        "type",
-			Usage:       "Type of the ACL (allowlist or blocklist)",
-			DefaultText: "allowlist",
+			Name:        aclTypeFlag,
+			Usage:       aclTypeFlagDesc,
+			DefaultText: txpool.Allowlist,
 			Destination: &aclType,
 			Required:    true,
 		},
@@ -97,7 +104,7 @@ var AddCommand = cli.Command{
 		&cli.StringFlag{
 			Name:        "type",
 			Usage:       "Type of the ACL (allowlist or blocklist)",
-			DefaultText: "allowlist",
+			DefaultText: txpool.Allowlist,
 			Destination: &aclType,
 			Required:    true,
 		},
@@ -107,7 +114,7 @@ var AddCommand = cli.Command{
 // addRun is the entry point for the add command that adds the ACL policy for the given address
 func addRun(cliCtx *cli.Context) error {
 	if !cliCtx.IsSet(utils.DataDirFlag.Name) {
-		return errors.New("data directory is not set")
+		return errDataDirNotSet
 	}
 
 	dataDir := cliCtx.String(utils.DataDirFlag.Name)
@@ -140,7 +147,7 @@ func addRun(cliCtx *cli.Context) error {
 // removeRun is the entry point for the remove command that removes the ACL policy for the given address
 func removeRun(cliCtx *cli.Context) error {
 	if !cliCtx.IsSet(utils.DataDirFlag.Name) {
-		return errors.New("data directory is not set")
+		return errDataDirNotSet
 	}
 
 	dataDir := cliCtx.String(utils.DataDirFlag.Name)
@@ -173,7 +180,7 @@ func removeRun(cliCtx *cli.Context) error {
 // updateRun is the entry point for the update command that updates the ACL based on the given CSV file
 func updateRun(cliCtx *cli.Context) error {
 	if !cliCtx.IsSet(utils.DataDirFlag.Name) {
-		return errors.New("data directory is not set")
+		return errDataDirNotSet
 	}
 
 	dataDir := cliCtx.String(utils.DataDirFlag.Name)

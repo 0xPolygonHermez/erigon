@@ -103,14 +103,9 @@ func CheckPolicy(ctx context.Context, aclDB kv.RwDB, addr common.Address, policy
 
 // UpdatePolicies sets a policy for an address
 func UpdatePolicies(ctx context.Context, aclDB kv.RwDB, aclType string, addrs []common.Address, policies [][]Policy) error {
-	at, err := ResolveACLType(aclType)
+	table, err := resolveTable(aclType)
 	if err != nil {
 		return err
-	}
-
-	table := BlockList
-	if at == AllowListType {
-		table = Allowlist
 	}
 
 	return aclDB.Update(ctx, func(tx kv.RwTx) error {
