@@ -132,5 +132,5 @@ func OpenACLDB(ctx context.Context, dbDir string) (kv.RwDB, error) {
 
 // IsACLsPath checks if the given path is an ACLs path
 func IsACLsPath(path string) bool {
-	return strings.HasSuffix(path, "/"+aclFolder) || strings.HasSuffix(path, "\\"+aclFolder)
+	return strings.HasSuffix(path, "/"+aclFolder)
 }
