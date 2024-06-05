@@ -89,7 +89,7 @@ func TestCheckDBsCreation(t *testing.T) {
 func TestSetMode(t *testing.T) {
 	t.Parallel()
 
-	db := newTestACLDB(t, "./bre")
+	db := newTestACLDB(t, "")
 	ctx := context.Background()
 
 	t.Run("SetMode - Valid Mode", func(t *testing.T) {
