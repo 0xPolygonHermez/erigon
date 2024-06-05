@@ -84,7 +84,7 @@ func TestComputeMerkleProof(t *testing.T) {
 }
 
 func TestAddLeaf(t *testing.T) {
-	data, err := os.ReadFile("../test/vectors/src/merkle-tree/l1-info-tree/proof-vectors.json")
+	data, err := os.ReadFile("../tests/vectors/l1infotree/proof-vectors.json")
 	require.NoError(t, err)
 	var mtTestVectors []l1infotree2.L1InfoTreeProof
 	err = json.Unmarshal(data, &mtTestVectors)
@@ -105,7 +105,7 @@ func TestAddLeaf(t *testing.T) {
 }
 
 func TestAddLeaf2(t *testing.T) {
-	data, err := os.ReadFile("../test/vectors/src/merkle-tree/l1-info-tree/root-vectors.json")
+	data, err := os.ReadFile("../tests/vectors/l1infotree/root-vectors.json")
 	require.NoError(t, err)
 	var mtTestVectors []l1infotree2.L1InfoTree
 	err = json.Unmarshal(data, &mtTestVectors)
