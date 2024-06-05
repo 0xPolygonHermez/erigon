@@ -14,7 +14,10 @@ import (
 	mdbx2 "github.com/torquem-ch/mdbx-go/mdbx"
 )
 
-const modeKey = "mode"
+const (
+	aclFolder = "acls"
+	modeKey   = "mode"
+)
 
 type ACLTable string
 
@@ -111,7 +114,7 @@ func init() {
 func OpenACLDB(ctx context.Context, dbDir string) (kv.RwDB, error) {
 	path := dbDir
 	if !IsACLsPath(dbDir) {
-		path = filepath.Join(dbDir, "acls")
+		path = filepath.Join(dbDir, aclFolder)
 	}
 
 	aclDB, err := mdbx.NewMDBX(log.New()).Label(ACLDB).Path(path).
@@ -129,5 +132,5 @@ func OpenACLDB(ctx context.Context, dbDir string) (kv.RwDB, error) {
 
 // IsACLsPath checks if the given path is an ACLs path
 func IsACLsPath(path string) bool {
-	return strings.HasSuffix(path, "/acls") || strings.HasSuffix(path, "\\acls")
+	return strings.HasSuffix(path, "/"+aclFolder) || strings.HasSuffix(path, "\\"+aclFolder)
 }
