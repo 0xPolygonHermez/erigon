@@ -142,10 +142,12 @@ func SpawnSequencingStage(
 		}
 
 		// let's check if we have any L1 data to recover
-		decodedBlocks, coinbase, workRemaining, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
+		var l1InfoRoot common.Hash
+		decodedBlocks, coinbase, l1InfoRoot, workRemaining, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
 		if err != nil {
 			return err
 		}
+
 		decodedBlocksSize = uint64(len(decodedBlocks))
 		if decodedBlocksSize == 0 {
 			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
@@ -153,12 +155,21 @@ func SpawnSequencingStage(
 			return nil
 		}
 
+		// now look up the index associated with this info root
+		infoTreeIndex, found, err := sdb.hermezDb.GetL1InfoTreeIndexByRoot(l1InfoRoot)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("could not find L1 info tree index for root %s", l1InfoRoot.String())
+		}
+
 		// now let's detect a bad batch and skip it if we have to
 		currentBlock, err := rawdb.ReadBlockByNumber(sdb.tx, executionAt)
 		if err != nil {
 			return err
 		}
-		badBatch, err := checkForBadBatch(sdb.hermezDb, currentBlock.Time(), decodedBlocks)
+		badBatch, err := checkForBadBatch(thisBatch, sdb.hermezDb, currentBlock.Time(), infoTreeIndex, decodedBlocks)
 		if err != nil {
 			return err
 		}

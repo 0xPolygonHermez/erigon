@@ -152,8 +152,8 @@ func HandleL1InfoTreeUpdate(
 	}
 
 	if !found {
-		// starting from a fresh db here, so we need to create index 0
-		update.Index = 0
+		// this is a special case, so we need to start at index 1
+		update.Index = 1
 	} else {
 		// increment the index from the previous entry
 		update.Index = latestUpdate.Index + 1

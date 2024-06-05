@@ -29,7 +29,7 @@ Link: https://docs.google.com/presentation/d/1QvmaCwDIpCeMlU-KkOfCEVtekuKP7_GJEJ
 
 When building batches the sequencer is responsible for tracking the L1 info tree and storing information about the indexes, and tracking which indexes have already been used during block creation.
 
-The index is known by simply tracking the events from the GER manager contract on the L1 from the start of the network and incrementing by 1 each time a new event is found.  Index 0 is a special index and is used to denote no change.
+The index is known by simply tracking the events from the GER manager contract on the L1 from the start of the network and incrementing by 1 each time a new event is found.  Index 0 is a special index and is used to denote no change.  The hash for index 0 will remain the same across all networks as it is simply an empty tree.
 
 At the point of building a new block the sequencer will check to see if the next index is available to use:
 
@@ -51,5 +51,6 @@ The checks largely involve the L1 info tree:
 - Does the L1 info tree have the index specified in the changeL2Block transaction?
 - Is the previous block timestamp + delta from changeL2Block transaction >= minTimestamp in L1 info tree update for this block?
 - Is the previous block timestamp + delta from changeL2Block transaction <= limitTimestamp
+- Was the index used in existance at the time?
 
 If any of these conditions are met then the batch is invalid and should be discarded during L1 recovery.
