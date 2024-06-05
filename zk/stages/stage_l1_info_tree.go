@@ -138,29 +138,15 @@ LOOP:
 				}
 				found = true
 
-				if latestUpdate.Index == 1 {
-					// this is a special scenario where we know that we're at the start of the chain.  As well as processing this index 1 as
-					// normal we also need to store the special 0 index case in the database
-					newRoot, err := tree.BuildL1InfoRoot([][32]byte{})
-					if err != nil {
-						return err
-					}
-					if err = hermezDb.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), 0); err != nil {
-						return err
-					}
+				leafHash := l1infotree.HashLeafData(latestUpdate.GER, latestUpdate.ParentHash, latestUpdate.Timestamp)
+
+				err = hermezDb.WriteL1InfoTreeLeaf(latestUpdate.Index, leafHash)
+				if err != nil {
+					return err
 				}
 
-				if latestUpdate.Index > 0 {
-					leafHash := l1infotree.HashLeafData(latestUpdate.GER, latestUpdate.ParentHash, latestUpdate.Timestamp)
-
-					err = hermezDb.WriteL1InfoTreeLeaf(latestUpdate.Index, leafHash)
-					if err != nil {
-						return err
-					}
-
-					// we do not want to add index 0 to the tree
-					allLeaves = append(allLeaves, leafHash)
-				}
+				// we do not want to add index 0 to the tree
+				allLeaves = append(allLeaves, leafHash)
 
 				newRoot, err := tree.BuildL1InfoRoot(allLeaves)
 				if err != nil {

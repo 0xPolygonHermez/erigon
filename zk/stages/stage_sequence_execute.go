@@ -24,6 +24,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
+var SpecialZeroIndexHash = common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757")
+
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -156,12 +158,18 @@ func SpawnSequencingStage(
 		}
 
 		// now look up the index associated with this info root
-		infoTreeIndex, found, err := sdb.hermezDb.GetL1InfoTreeIndexByRoot(l1InfoRoot)
-		if err != nil {
-			return err
-		}
-		if !found {
-			return fmt.Errorf("could not find L1 info tree index for root %s", l1InfoRoot.String())
+		var infoTreeIndex uint64
+		if l1InfoRoot == SpecialZeroIndexHash {
+			infoTreeIndex = 0
+		} else {
+			found := false
+			infoTreeIndex, found, err = sdb.hermezDb.GetL1InfoTreeIndexByRoot(l1InfoRoot)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return fmt.Errorf("could not find L1 info tree index for root %s", l1InfoRoot.String())
+			}
 		}
 
 		// now let's detect a bad batch and skip it if we have to

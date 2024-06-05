@@ -153,7 +153,7 @@ func HandleL1InfoTreeUpdate(
 
 	if !found {
 		// this is a special case, so we need to start at index 1
-		update.Index = 1
+		update.Index = 0
 	} else {
 		// increment the index from the previous entry
 		update.Index = latestUpdate.Index + 1

@@ -3,7 +3,7 @@
 ## Summary from etrog slide deck
 
 Link: https://docs.google.com/presentation/d/1QvmaCwDIpCeMlU-KkOfCEVtekuKP7_GJEJJ2wSY9syU/edit#slide=id.g282f6c192a8_1_34
-
+ 
 - Data structure present in the Smart Contracts to allow:
   - Granularity in GlobalExitRoot during batch processing
   - Add L1 information to L2
@@ -24,6 +24,11 @@ Link: https://docs.google.com/presentation/d/1QvmaCwDIpCeMlU-KkOfCEVtekuKP7_GJEJ
 - Index 0 has GER = 0 (Special index)
   - Allow not changing GER with index = 0
   - Less gas cost data-availability
+
+## Special cases
+From a code/node perspective there are two effective L1 info roots that point to the 0 index.  A special hardcoded empty tree root of 0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757` which will always point to the 0 index, and the first actual L1 info tree update event on the network is also considered index 0.
+
+This is used for the purpose of knowing when to write to the GER manager (we only do this for index > 0, but do not write the special hash above to the contract).
 
 ## Sequencer concerns
 
