@@ -152,7 +152,7 @@ func HandleL1InfoTreeUpdate(
 	}
 
 	if !found {
-		// this is a special case, so we need to start at index 1
+		// this is a special case, so we need to start at index 0
 		update.Index = 0
 	} else {
 		// increment the index from the previous entry
