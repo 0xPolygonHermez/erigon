@@ -125,6 +125,14 @@ func WriteBlocksToStream(
 			return err
 		}
 
+		nextBatchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber + 1)
+		if err != nil {
+			return err
+		}
+
+		// a 0 next batch num here would mean we don't know about the next batch so must be at the end of the batch
+		isBatchEnd := nextBatchNum == 0 || nextBatchNum > batchNum
+
 		gersInBetween, err := reader.GetBatchGlobalExitRootsProto(prevBatchNum, batchNum)
 		if err != nil {
 			return err
@@ -132,13 +140,7 @@ func WriteBlocksToStream(
 
 		l1InfoMinTimestamps := make(map[uint64]uint64)
 
-		// as we're writing to the stream here and not just generating for the executor we want to run in standard mode
-		mode := StandardOperationMode
-
-		// we do not want to force the closing of a batch when writing to the stream - this is only the domain of talking to the executor
-		const forceBatchEnd = false
-
-		blockEntries, err := srv.CreateStreamEntriesProto(mode, block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps, forceBatchEnd)
+		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps, isBatchEnd)
 		if err != nil {
 			return err
 		}
@@ -175,6 +177,7 @@ func WriteBlocksToStream(
 func WriteGenesisToStream(
 	genesis *eritypes.Block,
 	reader *hermez_db.HermezDbReader,
+	tx kv.Tx,
 	stream *datastreamer.StreamServer,
 	srv *DataStreamServer,
 	chainId uint64,
@@ -201,7 +204,13 @@ func WriteGenesisToStream(
 	l2Block := srv.CreateL2BlockProto(genesis, genesis.Hash().Bytes(), batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{})
 	batchStart := srv.CreateBatchStartProto(batchNo, chainId, GenesisForkId, datastream.BatchType_BATCH_TYPE_REGULAR)
 
-	if err = srv.CommitEntriesToStreamProto([]DataStreamEntryProto{batchBookmark, batchStart, l2BlockBookmark, l2Block}); err != nil {
+	ler, err := srv.getLocalExitRoot(0, reader, tx)
+	if err != nil {
+		return err
+	}
+	batchEnd := srv.CreateBatchEndProto(ler, genesis.Root(), 0)
+
+	if err = srv.CommitEntriesToStreamProto([]DataStreamEntryProto{batchBookmark, batchStart, l2BlockBookmark, l2Block, batchEnd}); err != nil {
 		return err
 	}
 

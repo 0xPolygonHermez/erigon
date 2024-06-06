@@ -188,7 +188,6 @@ func (srv *DataStreamServer) CreateGerUpdateProto(
 }
 
 func (srv *DataStreamServer) CreateStreamEntriesProto(
-	mode OperationMode,
 	block *eritypes.Block,
 	reader *hermez_db.HermezDbReader,
 	tx kv.Tx,
@@ -197,7 +196,7 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	lastBatchNumber uint64,
 	gers []types.GerUpdateProto,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
-	forceBatchEnd bool,
+	isBatchEnd bool,
 ) (*[]DataStreamEntryProto, error) {
 	blockNum := block.NumberU64()
 
@@ -206,20 +205,22 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	entryCount += len(gers)
 
 	var err error
-	if lastBatchNumber != batchNumber {
-		// we know we have some batch bookmarks to add, but we need to figure out how many because there
-		// could be empty batches in between blocks that could contain ger updates and we need to handle
-		// all of those scenarios
-		entryCount += int(3 * (batchNumber - lastBatchNumber)) // batch bookmark + batch start + batch end
 
-		// we don't write the batch end at the start of the stream when we're sending data to the executor
-		if mode == ExecutorOperationMode {
-			entryCount--
-		}
+	batchStart := batchNumber != lastBatchNumber
+
+	// we might have a series of empty batches to account for, so we need to know the gap
+	batchGap := batchNumber - lastBatchNumber
+
+	if batchNumber != lastBatchNumber {
+		// we will add in a batch bookmark and a batch start entry
+		entryCount += 2
+
+		// a gap of 1 is normal but if greater than we need to account for the empty batches which will each
+		// have a batch bookmark, batch start and batch end
+		entryCount += int(3 * (batchGap - 1))
 	}
 
-	if mode == ExecutorOperationMode && forceBatchEnd {
-		// we will write the batch end at the end of the stream here
+	if isBatchEnd {
 		entryCount++
 	}
 
@@ -227,57 +228,72 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	index := 0
 
 	// BATCH BOOKMARK
-	if batchNumber != lastBatchNumber {
-		for i := 0; i < int(batchNumber-lastBatchNumber); i++ {
-			workingBatch := lastBatchNumber + uint64(i)
-			nextWorkingBatch := workingBatch + 1
+	if batchStart {
+		// if we have a gap of more than 1 batch then we need to write in the batch start and ends for these empty batches
+		if batchGap > 1 {
+			for i := 1; i < int(batchGap); i++ {
+				workingBatch := lastBatchNumber + uint64(i)
 
-			// handle any gers that need to be written before closing the batch down
-			for _, ger := range gers {
-				if ger.BatchNumber == workingBatch {
-					entries[index] = &ger
-					index++
+				// bookmark for new batch
+				batchBookmark := srv.CreateBatchBookmarkEntryProto(workingBatch)
+				entries[index] = batchBookmark
+				index++
+
+				// new batch starting
+				batchType := datastream.BatchType_BATCH_TYPE_REGULAR
+				if batchNumber == 1 {
+					batchType = datastream.BatchType_BATCH_TYPE_INJECTED
 				}
-			}
+				fork, err := reader.GetForkId(workingBatch)
+				if err != nil {
+					return nil, err
+				}
+				batch := srv.CreateBatchStartProto(workingBatch, srv.chainId, fork, batchType)
+				entries[index] = batch
+				index++
 
-			// we only write the batch end if we are in the standard stream mode - executors don't start the stream
-			// bytes with a batch end.  Instead, we will write this at the end of the stream
-			if mode != ExecutorOperationMode {
+				// see if we have any gers to handle
+				for _, ger := range gers {
+					upd := ger.UpdateGER
+					if upd.BatchNumber == workingBatch {
+						gerUpdate := srv.CreateGerUpdateProto(upd.BatchNumber, upd.Timestamp, libcommon.BytesToHash(upd.GlobalExitRoot), libcommon.BytesToAddress(upd.Coinbase), upd.ForkId, upd.ChainId, libcommon.BytesToHash(upd.StateRoot))
+						entries[index] = gerUpdate
+						index++
+					}
+				}
+
+				// seal off the last batch
 				localExitRoot, err := srv.getLocalExitRoot(workingBatch, reader, tx)
 				if err != nil {
 					return nil, err
 				}
-				// seal off the last batch
 				root := lastBlock.Root()
 				end := srv.CreateBatchEndProto(localExitRoot, root, workingBatch)
 				entries[index] = end
 				index++
 			}
-
-			// bookmark for new batch
-			batchBookmark := srv.CreateBatchBookmarkEntryProto(nextWorkingBatch)
-			entries[index] = batchBookmark
-			index++
-
-			// new batch starting
-			batchType := datastream.BatchType_BATCH_TYPE_REGULAR
-			if batchNumber == 1 {
-				batchType = datastream.BatchType_BATCH_TYPE_INJECTED
-			}
-			fork, err := reader.GetForkId(nextWorkingBatch)
-			if err != nil {
-				return nil, err
-			}
-			batch := srv.CreateBatchStartProto(nextWorkingBatch, srv.chainId, fork, batchType)
-			entries[index] = batch
-			index++
 		}
+
+		// now write in the batch start for this batch
+		batchType := datastream.BatchType_BATCH_TYPE_REGULAR
+		if batchNumber == 1 {
+			batchType = datastream.BatchType_BATCH_TYPE_INJECTED
+		}
+		fork, err := reader.GetForkId(batchNumber)
+		if err != nil {
+			return nil, err
+		}
+		batchBookmark := srv.CreateBatchBookmarkEntryProto(batchNumber)
+		entries[index] = batchBookmark
+		index++
+
+		batch := srv.CreateBatchStartProto(batchNumber, srv.chainId, fork, batchType)
+		entries[index] = batch
+		index++
 	}
 
 	deltaTimestamp := block.Time() - lastBlock.Time()
 
-	// todo: temporary for now whilst we aren't handling more than one injected batch as a sequencer
-	// this could go into the DB as a quick lookup to check for injected batches
 	if blockNum == 1 {
 		deltaTimestamp = block.Time()
 		l1InfoTreeMinTimestamps[0] = 0
@@ -354,7 +370,17 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 		index++
 	}
 
-	if forceBatchEnd && mode == ExecutorOperationMode {
+	if isBatchEnd {
+		// see if we have any gers to handle
+		for _, ger := range gers {
+			upd := ger.UpdateGER
+			if upd.BatchNumber == batchNumber {
+				gerUpdate := srv.CreateGerUpdateProto(upd.BatchNumber, upd.Timestamp, libcommon.BytesToHash(upd.GlobalExitRoot), libcommon.BytesToAddress(upd.Coinbase), upd.ForkId, upd.ChainId, libcommon.BytesToHash(upd.StateRoot))
+				entries[index] = gerUpdate
+				index++
+			}
+		}
+
 		localExitRoot, err := srv.getLocalExitRoot(batchNumber, reader, tx)
 		if err != nil {
 			return nil, err
@@ -395,7 +421,6 @@ func (srv *DataStreamServer) getLocalExitRoot(batch uint64, reader *hermez_db.He
 }
 
 func (srv *DataStreamServer) CreateAndBuildStreamEntryBytesProto(
-	mode OperationMode,
 	block *eritypes.Block,
 	reader *hermez_db.HermezDbReader,
 	tx kv.Tx,
@@ -410,7 +435,7 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytesProto(
 		return nil, err
 	}
 
-	entries, err := srv.CreateStreamEntriesProto(mode, block, reader, tx, lastBlock, batchNumber, lastBatchNumber, gersInBetween, l1InfoTreeMinTimestamps, isBatchEnd)
+	entries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNumber, lastBatchNumber, gersInBetween, l1InfoTreeMinTimestamps, isBatchEnd)
 	if err != nil {
 		return nil, err
 	}

@@ -169,7 +169,7 @@ func SpawnStageBatches(
 			if stageProgressBlockNo == 0 {
 				bookmark = types.NewBookmarkProto(0, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
 			} else {
-				bookmark = types.NewBookmarkProto(stageProgressBlockNo+1, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
+				bookmark = types.NewBookmarkProto(stageProgressBlockNo, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
 			}
 			cfg.dsClient.ReadAllEntriesToChannel(bookmark)
 		}()
@@ -256,7 +256,8 @@ LOOP:
 
 			atLeastOneBlockWritten = true
 
-			if l2Block.L2BlockNumber == 0 {
+			// ignore genesis or a repeat of the last block
+			if l2Block.L2BlockNumber == 0 || l2Block.L2BlockNumber == stageProgressBlockNo {
 				continue
 			}
 
