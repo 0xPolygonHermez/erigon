@@ -113,7 +113,7 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("truncate block l1 info tree index error: %v", err)
 	}
 	// only seq
-	if err = hermezDb.TruncateBlockBatches(u.UnwindPoint+1, s.BlockNumber); err != nil {
+	if err = hermezDb.DeleteBlockBatches(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("truncate block batches error: %v", err)
 	}
 	// only seq

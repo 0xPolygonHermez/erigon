@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -11,6 +12,8 @@ import (
 	"bytes"
 	"io"
 
+	"errors"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
 	"github.com/ledgerwatch/erigon/core"
@@ -19,10 +22,9 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
-	"errors"
-	"github.com/ledgerwatch/erigon/zk/constants"
 )
 
 func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
@@ -48,7 +50,7 @@ LOOP:
 				time.Sleep(500 * time.Microsecond)
 				return nil
 			}
-			transactions, err = extractTransactionsFromSlot(slots)
+			transactions, err = extractTransactionsFromSlot(&slots)
 			if err != nil {
 				return err
 			}
@@ -63,6 +65,41 @@ LOOP:
 	}
 
 	return transactions, err
+}
+
+func getLimboTransaction(cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Transaction, error) {
+	var transactions []types.Transaction
+
+	for {
+		// ensure we don't spin forever looking for transactions, attempt for a while then exit up to the caller
+		if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
+			slots, err := cfg.txPool.GetLimboTxRplsByHash(poolTx, txHash)
+			if err != nil {
+				return err
+			}
+
+			if slots != nil {
+				transactions, err = extractTransactionsFromSlot(slots)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		if len(transactions) == 0 {
+			time.Sleep(250 * time.Millisecond)
+		} else {
+			break
+		}
+
+	}
+
+	fmt.Printf("Transactions length %d\n", len(transactions))
+	return transactions, nil
 }
 
 func getNextL1BatchData(batchNumber uint64, forkId uint64, hermezDb *hermez_db.HermezDb) ([]zktx.DecodedBatchL2Data, common.Address, bool, error) {
@@ -111,7 +148,7 @@ func getNextL1BatchData(batchNumber uint64, forkId uint64, hermezDb *hermez_db.H
 	return decodedBlockData, coinbase, isWorkRemaining, err
 }
 
-func extractTransactionsFromSlot(slot types2.TxsRlp) ([]types.Transaction, error) {
+func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, error) {
 	transactions := make([]types.Transaction, 0, len(slot.Txs))
 	reader := bytes.NewReader([]byte{})
 	stream := new(rlp.Stream)

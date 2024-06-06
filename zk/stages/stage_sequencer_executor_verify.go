@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -20,23 +21,26 @@ import (
 )
 
 type SequencerExecutorVerifyCfg struct {
-	db       kv.RwDB
-	verifier *legacy_executor_verifier.LegacyExecutorVerifier
-	txPool   *txpool.TxPool
-	cfgZk    *ethconfig.Zk
+	db          kv.RwDB
+	verifier    *legacy_executor_verifier.LegacyExecutorVerifier
+	txPool      *txpool.TxPool
+	chainConfig *chain.Config
+	cfgZk       *ethconfig.Zk
 }
 
 func StageSequencerExecutorVerifyCfg(
 	db kv.RwDB,
 	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
 	pool *txpool.TxPool,
+	chainConfig *chain.Config,
 	cfgZk *ethconfig.Zk,
 ) SequencerExecutorVerifyCfg {
 	return SequencerExecutorVerifyCfg{
-		db:       db,
-		verifier: verifier,
-		txPool:   pool,
-		cfgZk:    cfgZk,
+		db:          db,
+		verifier:    verifier,
+		txPool:      pool,
+		chainConfig: chainConfig,
+		cfgZk:       cfgZk,
 	}
 }
 
@@ -154,6 +158,9 @@ func SpawnSequencerExecutorVerifyStage(
 				return err
 			}
 
+			limboSendersToPreviousTxMap := make(map[string]int)
+			limboStreamBytesBuilderHelper := newLimboStreamBytesBuilderHelper()
+
 			limboDetails := txpool.NewLimboBatchDetails()
 			limboDetails.Witness = response.Witness
 			limboDetails.L1InfoTreeMinTimestamps = l1InfoTreeMinTimestamps
@@ -171,8 +178,8 @@ func SpawnSequencerExecutorVerifyStage(
 					// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
 					lowestBlock = block
 				}
+
 				for i, transaction := range block.Transactions() {
-					hash := transaction.Hash()
 					var b []byte
 					buffer := bytes.NewBuffer(b)
 					err = transaction.EncodeRLP(buffer)
@@ -180,15 +187,27 @@ func SpawnSequencerExecutorVerifyStage(
 						return err
 					}
 
-					blocksForStreamBytes := []uint64{block.NumberU64()}
-					transactionsToIncludeByIndex := map[int]struct{}{i: struct{}{}}
+					signer := types.MakeSigner(cfg.chainConfig, blockNumber)
+					sender, err := transaction.Sender(*signer)
+					if err != nil {
+						return err
+					}
+					senderMapKey := sender.Hex()
+
+					blocksForStreamBytes, transactionsToIncludeByIndex := limboStreamBytesBuilderHelper.append(senderMapKey, blockNumber, i)
 					streamBytes, err := cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blocksForStreamBytes, hermezDbReader, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
 					if err != nil {
 						return err
 					}
 
-					limboDetails.BadTransactionsHashes = append(limboDetails.BadTransactionsHashes, hash)
-					limboDetails.StreamBytes = append(limboDetails.StreamBytes, streamBytes)
+					previousTxIndex, ok := limboSendersToPreviousTxMap[senderMapKey]
+					if !ok {
+						previousTxIndex = -1
+					}
+
+					hash := transaction.Hash()
+					limboTxCount := limboDetails.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender, previousTxIndex)
+					limboSendersToPreviousTxMap[senderMapKey] = limboTxCount - 1
 
 					log.Info(fmt.Sprintf("[%s] adding transaction to limbo", s.LogPrefix()), "hash", hash)
 				}
@@ -196,7 +215,6 @@ func SpawnSequencerExecutorVerifyStage(
 
 			limboDetails.TimestampLimit = highestBlock.Time()
 			limboDetails.FirstBlockNumber = lowestBlock.NumberU64()
-			limboDetails.Root = highestBlock.Root()
 			cfg.txPool.ProcessLimboBatchDetails(limboDetails)
 
 			u.UnwindTo(lowestBlock.NumberU64()-1, lowestBlock.Hash())
@@ -226,6 +244,7 @@ func SpawnSequencerExecutorVerifyStage(
 			log.Warn("Failed to write witness", "batch", response.BatchNumber, "err", errWitness)
 		}
 
+		cfg.verifier.MarkTopResponseAsProcessed(response.BatchNumber)
 		progress = response.BatchNumber
 	}
 

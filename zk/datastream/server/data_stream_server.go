@@ -197,13 +197,13 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	gers []types.GerUpdateProto,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 	forceBatchEnd bool,
-	transactionsToIncludeByIndex map[int]struct{}, // passing nil here will include all transactions in the blocks
+	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
 ) (*[]DataStreamEntryProto, error) {
 	filteredTransactions := block.Transactions()
 	if transactionsToIncludeByIndex != nil {
-		filteredTransactionsBuilder := eritypes.Transactions{}
-		for i := range transactionsToIncludeByIndex {
-			filteredTransactionsBuilder = append(filteredTransactionsBuilder, filteredTransactions[i])
+		filteredTransactionsBuilder := make(eritypes.Transactions, len(transactionsToIncludeByIndex))
+		for i, txIndexInBlock := range transactionsToIncludeByIndex {
+			filteredTransactionsBuilder[i] = filteredTransactions[txIndexInBlock]
 		}
 
 		filteredTransactions = filteredTransactionsBuilder
@@ -410,7 +410,7 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytesProto(
 	lastBatchNumber uint64,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 	isBatchEnd bool,
-	transactionsToIncludeByIndex map[int]struct{}, // passing nil here will include all transactions in the blocks
+	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
 ) ([]byte, error) {
 	gersInBetween, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
 	if err != nil {

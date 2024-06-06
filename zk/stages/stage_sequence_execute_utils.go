@@ -200,28 +200,32 @@ func prepareForkId(cfg SequenceBlockCfg, lastBatch, executionAt uint64, hermezDb
 	return forkId, nil
 }
 
-func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forkId uint64, coinbase common.Address) (*types.Header, *types.Block, error) {
+func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimestamp, forkId uint64, coinbase common.Address) (*types.Header, *types.Block, error) {
 	parentBlock, err := rawdb.ReadBlockByNumber(tx, previousBlockNumber)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// in the case of normal execution when not in l1 recovery
-	// we want to generate the timestamp based on the current time.  When in recovery
-	// we will pass a real delta which we then need to apply to the previous block timestamp
-	useTimestampOffsetFromParentBlock := deltaTimestamp != math.MaxUint64
+	var newBlockTimestamp uint64
 
-	nextBlockNum := previousBlockNumber + 1
-	newBlockTimestamp := uint64(time.Now().Unix())
-	if useTimestampOffsetFromParentBlock {
-		newBlockTimestamp = parentBlock.Time() + deltaTimestamp
+	if forcedTimestamp != math.MaxUint64 {
+		newBlockTimestamp = forcedTimestamp
+	} else {
+		// in the case of normal execution when not in l1 recovery
+		// we want to generate the timestamp based on the current time.  When in recovery
+		// we will pass a real delta which we then need to apply to the previous block timestamp
+		useTimestampOffsetFromParentBlock := deltaTimestamp != math.MaxUint64
+		newBlockTimestamp = uint64(time.Now().Unix())
+		if useTimestampOffsetFromParentBlock {
+			newBlockTimestamp = parentBlock.Time() + deltaTimestamp
+		}
 	}
 
 	return &types.Header{
 		ParentHash: parentBlock.Hash(),
 		Coinbase:   coinbase,
 		Difficulty: blockDifficulty,
-		Number:     new(big.Int).SetUint64(nextBlockNum),
+		Number:     new(big.Int).SetUint64(previousBlockNumber + 1),
 		GasLimit:   getGasLimit(forkId),
 		Time:       newBlockTimestamp,
 	}, parentBlock, nil
@@ -329,26 +333,27 @@ func doFinishBlockAndUpdateState(
 	receipts types.Receipts,
 	effectiveGases []uint8,
 	l1InfoIndex uint64,
-) error {
+) (*types.Block, error) {
 	thisBlockNumber := header.Number.Uint64()
 
-	if err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, transactions, receipts, effectiveGases); err != nil {
-		return err
+	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, transactions, receipts, effectiveGases)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1InfoIndex); err != nil {
-		return err
+		return nil, err
 	}
 
 	if cfg.accumulator != nil {
 		txs, err := rawdb.RawTransactionsRange(sdb.tx, thisBlockNumber, thisBlockNumber)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), txs, false)
 	}
 
-	return nil
+	return block, nil
 }
 
 type batchChecker interface {

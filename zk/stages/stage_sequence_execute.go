@@ -16,9 +16,9 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/zk"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
@@ -28,7 +28,6 @@ func SpawnSequencingStage(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
 	tx kv.RwTx,
-	toBlock uint64,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
 	initialCycle bool,
@@ -66,8 +65,6 @@ func SpawnSequencingStage(
 
 	getHeader := func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) }
 
-	l1Recovery := cfg.zk.L1SyncStartBlock > 0
-
 	// injected batch
 	if executionAt == 0 {
 		// set the block height for the fork we're running at to ensure contract interactions are correct
@@ -75,7 +72,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		header, parentBlock, err := prepareHeader(tx, executionAt, math.MaxUint64, forkId, cfg.zk.AddressSequencer)
+		header, parentBlock, err := prepareHeader(tx, executionAt, math.MaxUint64, math.MaxUint64, forkId, cfg.zk.AddressSequencer)
 		if err != nil {
 			return err
 		}
@@ -124,6 +121,7 @@ func SpawnSequencingStage(
 	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
 	defer nonEmptyBatchTimer.Stop()
 
+	l1Recovery := cfg.zk.L1SyncStartBlock > 0
 	hasAnyTransactionsInThisBatch := false
 	thisBatch := lastBatch + 1
 	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
@@ -133,6 +131,14 @@ func SpawnSequencingStage(
 	coinbase := cfg.zk.AddressSequencer
 	workRemaining := true
 	decodedBlocksSize := uint64(0)
+	limboHeaderTimestamp, limboTxHash := cfg.txPool.GetLimboTxHash(thisBatch)
+	limboRecovery := limboTxHash != nil
+	isAnyRecovery := l1Recovery || limboRecovery
+
+	// if not limbo set the limboHeaderTimestamp to the "default" value for "prepareHeader" function
+	if !limboRecovery {
+		limboHeaderTimestamp = math.MaxUint64
+	}
 
 	if l1Recovery {
 		if cfg.zk.L1SyncStopBatch > 0 && thisBatch > cfg.zk.L1SyncStopBatch {
@@ -177,8 +183,7 @@ func SpawnSequencingStage(
 
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, thisBatch))
 
-	var blockNumber uint64
-	for blockNumber = executionAt; runLoopBlocks; blockNumber++ {
+	for blockNumber := executionAt; runLoopBlocks; blockNumber++ {
 		if l1Recovery {
 			decodedBlocksIndex := blockNumber - executionAt
 			if decodedBlocksIndex == decodedBlocksSize {
@@ -202,7 +207,7 @@ func SpawnSequencingStage(
 			addedTransactions = []types.Transaction{}
 			addedReceipts = []*types.Receipt{}
 			effectiveGases = []uint8{}
-			header, parentBlock, err = prepareHeader(tx, blockNumber, deltaTimestamp, forkId, coinbase)
+			header, parentBlock, err = prepareHeader(tx, blockNumber, deltaTimestamp, limboHeaderTimestamp, forkId, coinbase)
 			if err != nil {
 				return err
 			}
@@ -224,7 +229,7 @@ func SpawnSequencingStage(
 		if err != nil {
 			return err
 		}
-		if !l1Recovery && overflowOnNewBlock {
+		if !isAnyRecovery && overflowOnNewBlock {
 			break
 		}
 
@@ -256,7 +261,7 @@ func SpawnSequencingStage(
 
 		if !reRunBlockAfterOverflow {
 			// start waiting for a new transaction to arrive
-			if !l1Recovery {
+			if !isAnyRecovery {
 				log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 			}
 
@@ -275,26 +280,37 @@ func SpawnSequencingStage(
 			for {
 				select {
 				case <-logTicker.C:
-					log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
+					if !isAnyRecovery {
+						log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
+					}
 				case <-blockTicker.C:
-					if !l1Recovery {
+					if !isAnyRecovery {
 						break LOOP_TRANSACTIONS
 					}
 				case <-batchTicker.C:
-					if !l1Recovery {
+					if !isAnyRecovery {
 						runLoopBlocks = false
 						break LOOP_TRANSACTIONS
 					}
 				case <-nonEmptyBatchTimer.C:
-					if !l1Recovery && hasAnyTransactionsInThisBatch {
+					if !isAnyRecovery && hasAnyTransactionsInThisBatch {
 						runLoopBlocks = false
 						break LOOP_TRANSACTIONS
 					}
 				default:
-					if !l1Recovery {
+					if limboRecovery {
+						cfg.txPool.LockFlusher()
+						blockTransactions, err = getLimboTransaction(cfg, limboTxHash)
+						if err != nil {
+							cfg.txPool.UnlockFlusher()
+							return err
+						}
+						cfg.txPool.UnlockFlusher()
+					} else if !l1Recovery {
 						cfg.txPool.LockFlusher()
 						blockTransactions, err = getNextPoolTransactions(cfg, executionAt, forkId, yielded)
 						if err != nil {
+							cfg.txPool.UnlockFlusher()
 							return err
 						}
 						cfg.txPool.UnlockFlusher()
@@ -322,7 +338,7 @@ func SpawnSequencingStage(
 							}
 							return err
 						}
-						if !l1Recovery && overflow {
+						if !isAnyRecovery && overflow {
 							log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash(), "txs before overflow", len(addedTransactions))
 							/*
 								There are two cases when overflow could occur.
@@ -363,9 +379,13 @@ func SpawnSequencingStage(
 
 						break LOOP_TRANSACTIONS
 					}
+					if limboRecovery {
+						runLoopBlocks = false
+						break LOOP_TRANSACTIONS
+					}
 				}
 			}
-			if !l1Recovery && overflow {
+			if !isAnyRecovery && overflow {
 				blockNumber-- // in order to trigger reRunBlockAfterOverflow check
 				continue      // lets execute the same block again
 			}
@@ -389,8 +409,15 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		if err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, effectiveGases, infoTreeIndexProgress); err != nil {
+		block, err := doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, effectiveGases, infoTreeIndexProgress)
+		if err != nil {
 			return err
+		}
+
+		if limboRecovery {
+			stateRoot := block.Root()
+			cfg.txPool.UpdateLimboRootByTxHash(limboTxHash, &stateRoot)
+			return fmt.Errorf("[%s] %w: %s", s.LogPrefix(), zk.ErrLimboState, limboTxHash.Hex())
 		}
 
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
@@ -415,70 +442,5 @@ func SpawnSequencingStage(
 		}
 	}
 
-	return nil
-}
-
-func PruneSequenceExecutionStage(s *stagedsync.PruneState, tx kv.RwTx, cfg SequenceBlockCfg, ctx context.Context, initialCycle bool) (err error) {
-	logPrefix := s.LogPrefix()
-	useExternalTx := tx != nil
-	if !useExternalTx {
-		tx, err = cfg.db.BeginRw(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-	}
-
-	logEvery := time.NewTicker(logInterval)
-	defer logEvery.Stop()
-
-	if cfg.historyV3 {
-		cfg.agg.SetTx(tx)
-		if initialCycle {
-			if err = cfg.agg.Prune(ctx, ethconfig.HistoryV3AggregationStep/10); err != nil { // prune part of retired data, before commit
-				return err
-			}
-		} else {
-			if err = cfg.agg.PruneWithTiemout(ctx, 1*time.Second); err != nil { // prune part of retired data, before commit
-				return err
-			}
-		}
-	} else {
-		if cfg.prune.History.Enabled() {
-			if err = rawdb.PruneTableDupSort(tx, kv.AccountChangeSet, logPrefix, cfg.prune.History.PruneTo(s.ForwardProgress), logEvery, ctx); err != nil {
-				return err
-			}
-			if err = rawdb.PruneTableDupSort(tx, kv.StorageChangeSet, logPrefix, cfg.prune.History.PruneTo(s.ForwardProgress), logEvery, ctx); err != nil {
-				return err
-			}
-		}
-
-		if cfg.prune.Receipts.Enabled() {
-			if err = rawdb.PruneTable(tx, kv.Receipts, cfg.prune.Receipts.PruneTo(s.ForwardProgress), ctx, math.MaxInt32); err != nil {
-				return err
-			}
-			if err = rawdb.PruneTable(tx, kv.BorReceipts, cfg.prune.Receipts.PruneTo(s.ForwardProgress), ctx, math.MaxUint32); err != nil {
-				return err
-			}
-			// LogIndex.Prune will read everything what not pruned here
-			if err = rawdb.PruneTable(tx, kv.Log, cfg.prune.Receipts.PruneTo(s.ForwardProgress), ctx, math.MaxInt32); err != nil {
-				return err
-			}
-		}
-		if cfg.prune.CallTraces.Enabled() {
-			if err = rawdb.PruneTableDupSort(tx, kv.CallTraceSet, logPrefix, cfg.prune.CallTraces.PruneTo(s.ForwardProgress), logEvery, ctx); err != nil {
-				return err
-			}
-		}
-	}
-
-	if err = s.Done(tx); err != nil {
-		return err
-	}
-	if !useExternalTx {
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-	}
 	return nil
 }

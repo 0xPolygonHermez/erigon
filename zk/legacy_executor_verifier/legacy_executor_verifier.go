@@ -154,7 +154,7 @@ func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, 
 	return executorErr
 }
 
-// var counter = int32(0)
+var counter = int32(0)
 
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
@@ -261,11 +261,11 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		// debug purposes
-		// if request.BatchNumber == 10 && counter == 0 {
-		// 	// time.Sleep(25 * time.Second)
-		// 	ok = false
-		// 	counter = 1
-		// }
+		if request.BatchNumber == 10 && counter == 0 {
+			// time.Sleep(25 * time.Second)
+			ok = false
+			counter = 1
+		}
 
 		verifierBundle.response = &VerifierResponse{
 			BatchNumber:      request.BatchNumber,
@@ -330,9 +330,14 @@ func (v *LegacyExecutorVerifier) ProcessResultsSequentiallyUnsafe(tx kv.RwTx) ([
 	}
 
 	// leave only non-processed promises
-	v.promises = v.promises[len(results):]
+	// v.promises = v.promises[len(results):]
 
 	return results, nil
+}
+
+func (v *LegacyExecutorVerifier) MarkTopResponseAsProcessed(batchNumber uint64) {
+	v.promises = v.promises[1:]
+	delete(v.addedBatches, batchNumber)
 }
 
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
@@ -436,7 +441,7 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(
 	blocks []uint64,
 	hermezDb *hermez_db.HermezDbReader,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
-	transactionsToIncludeByIndex map[int]struct{}, // passing nil here will include all transactions in the blocks
+	transactionsToIncludeByIndex [][]int, // passing nil here will include all transactions in the blocks
 ) ([]byte, error) {
 	lastBlock, err := rawdb.ReadBlockByNumber(tx, blocks[0]-1)
 	if err != nil {
@@ -459,7 +464,12 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(
 
 		isBatchEnd := idx == len(blocks)-1
 
-		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(server.ExecutorOperationMode, block, hermezDb, tx, lastBlock, batchNumber, previousBatch, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndex)
+		var transactionsToIncludeByIndexInBlock []int = nil
+		if transactionsToIncludeByIndex != nil {
+			transactionsToIncludeByIndexInBlock = transactionsToIncludeByIndex[idx]
+		}
+
+		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(server.ExecutorOperationMode, block, hermezDb, tx, lastBlock, batchNumber, previousBatch, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndexInBlock)
 		if err != nil {
 			return nil, err
 		}

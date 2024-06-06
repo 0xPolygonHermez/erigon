@@ -57,7 +57,7 @@ func Test_Persistency(t *testing.T) {
 		FirstBlockNumber:        14,
 		BatchNumber:             5131,
 		ForkId:                  11,
-		Root:                    common.BytesToHash([]byte{1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 255, 0}),
+		Roots:                   []common.Hash{common.BytesToHash([]byte{1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 255, 0})},
 		BadTransactionsHashes:   []common.Hash{common.HexToHash("FE4CEE305D5DF787F55057A0F37DEB0F5170A1E9BB361CFD1638BBEAFE66EE4B"), common.HexToHash("10FB489D863DBAB249214BE9C128E37A54C3E57F514685191D45DCE8B0778A4F")},
 	})
 	pSource.limbo.limboBatches = append(pSource.limbo.limboBatches, &LimboBatchDetails{
@@ -68,7 +68,7 @@ func Test_Persistency(t *testing.T) {
 		FirstBlockNumber:        114,
 		BatchNumber:             65131,
 		ForkId:                  111,
-		Root:                    common.BytesToHash([]byte{10, 20, 40, 34, 141, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 255, 0}),
+		Roots:                   []common.Hash{common.BytesToHash([]byte{10, 20, 40, 34, 141, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 1, 2, 4, 134, 41, 15, 19, 105, 10, 214, 255, 0})},
 		BadTransactionsHashes:   []common.Hash{common.HexToHash("A8B39BFE352B06575DBA0063170E5094FD12B61384E2276FA3A77C07CE726886"), common.HexToHash("2504231FF7150135925D98A462A331522D9C2F712C85BEBC00B5BEBDF50DD7AA")},
 	})
 
