@@ -257,7 +257,16 @@ LOOP:
 			atLeastOneBlockWritten = true
 
 			// ignore genesis or a repeat of the last block
-			if l2Block.L2BlockNumber == 0 || l2Block.L2BlockNumber == stageProgressBlockNo {
+			if l2Block.L2BlockNumber == 0 {
+				continue
+			}
+			// skip but warn on already processed blocks
+			if l2Block.L2BlockNumber <= stageProgressBlockNo {
+				if l2Block.L2BlockNumber < stageProgressBlockNo {
+					// only warn if the block is very old, we expect the very latest block to be requested
+					// when the stage is fired up for the first time
+					log.Warn(fmt.Sprintf("[%s] Skipping block %d, already processed", logPrefix, l2Block.L2BlockNumber))
+				}
 				continue
 			}
 

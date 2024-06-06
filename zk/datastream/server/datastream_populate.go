@@ -125,27 +125,25 @@ func WriteBlocksToStream(
 			return err
 		}
 
-		nextBatchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber + 1)
+		nextBatchNum, nextBatchExists, err := reader.CheckBatchNoByL2Block(currentBlockNumber + 1)
 		if err != nil {
 			return err
 		}
 
 		// a 0 next batch num here would mean we don't know about the next batch so must be at the end of the batch
-		isBatchEnd := nextBatchNum == 0 || nextBatchNum > batchNum
+		isBatchEnd := !nextBatchExists || nextBatchNum > batchNum
 
 		gersInBetween, err := reader.GetBatchGlobalExitRootsProto(prevBatchNum, batchNum)
 		if err != nil {
 			return err
 		}
 
-		l1InfoMinTimestamps := make(map[uint64]uint64)
-
-		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, l1InfoMinTimestamps, isBatchEnd)
+		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, make(map[uint64]uint64), isBatchEnd)
 		if err != nil {
 			return err
 		}
 
-		for _, entry := range *blockEntries {
+		for _, entry := range blockEntries {
 			entries[index] = entry
 			index++
 		}
