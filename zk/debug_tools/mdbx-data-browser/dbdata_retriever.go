@@ -23,19 +23,19 @@ func newDbDataRetriever(tx kv.Tx) *DbDataRetriever {
 }
 
 // GetBatchByNumber reads batch by number from the database
-func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) (*rpcTypes.Batch, error) {
+func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) (*rpcTypes.Batch, error) {
 	// highest block in batch
-	blockNum, err := z.dbReader.GetHighestBlockInBatch(batchNum)
+	blockNum, err := d.dbReader.GetHighestBlockInBatch(batchNum)
 	if err != nil {
 		return nil, err
 	}
 
-	blockHash, err := rawdb.ReadCanonicalHash(z.tx, blockNum)
+	blockHash, err := rawdb.ReadCanonicalHash(d.tx, blockNum)
 	if err != nil {
 		return nil, err
 	}
 
-	block := rawdb.ReadBlock(z.tx, blockHash, blockNum)
+	block := rawdb.ReadBlock(d.tx, blockHash, blockNum)
 
 	// last block in batch data
 	batch := &rpcTypes.Batch{
@@ -46,7 +46,7 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	// block numbers in batch
-	blocksInBatch, err := z.dbReader.GetL2BlockNosByBatch(batchNum)
+	blocksInBatch, err := d.dbReader.GetL2BlockNosByBatch(batchNum)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	// batch.Transactions = []interface{}{}
 	// handle genesis - not in the hermez tables so requires special treament
 	if batchNum == 0 {
-		blk, err := rawdb.ReadBlockByNumber(z.tx, 0)
+		blk, err := rawdb.ReadBlockByNumber(d.tx, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -65,7 +65,7 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	for _, blkNo := range blocksInBatch {
-		blk, err := rawdb.ReadBlockByNumber(z.tx, blkNo)
+		blk, err := rawdb.ReadBlockByNumber(d.tx, blkNo)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +86,7 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	// global exit root of batch
-	ger, err := z.dbReader.GetBatchGlobalExitRoot(batchNum)
+	ger, err := d.dbReader.GetBatchGlobalExitRoot(batchNum)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	// sequence
-	seq, err := z.dbReader.GetSequenceByBatchNo(batchNum)
+	seq, err := d.dbReader.GetSequenceByBatchNo(batchNum)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	batch.Closed = (seq != nil || batchNum <= 1)
 
 	// verification
-	ver, err := z.dbReader.GetVerificationByBatchNo(batchNum)
+	ver, err := d.dbReader.GetVerificationByBatchNo(batchNum)
 	if err != nil {
 		return nil, err
 	}
@@ -116,14 +116,14 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	// batch l2 data
-	batchL2Data, err := z.dbReader.GetL1BatchData(batchNum)
+	batchL2Data, err := d.dbReader.GetL1BatchData(batchNum)
 	if err != nil {
 		return nil, err
 	}
 	batch.BatchL2Data = batchL2Data
 
 	// L1 info tree (exit roots)
-	l1InfoTree, err := z.dbReader.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
+	l1InfoTree, err := d.dbReader.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -137,14 +137,14 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 }
 
 // GetBlockByNumber reads block based on its block number from the database
-func (z *DbDataRetriever) GetBlockByNumber(blockNum uint64, includeTxs, includeReceipts bool) (*rpcTypes.Block, error) {
-	blockHash, err := rawdb.ReadCanonicalHash(z.tx, blockNum)
+func (d *DbDataRetriever) GetBlockByNumber(blockNum uint64, includeTxs, includeReceipts bool) (*rpcTypes.Block, error) {
+	blockHash, err := rawdb.ReadCanonicalHash(d.tx, blockNum)
 	if err != nil {
 		return nil, err
 	}
 
-	block := rawdb.ReadBlock(z.tx, blockHash, blockNum)
-	receipts := rawdb.ReadReceipts(z.tx, block, block.Body().SendersFromTxs())
+	block := rawdb.ReadBlock(d.tx, blockHash, blockNum)
+	receipts := rawdb.ReadReceipts(d.tx, block, block.Body().SendersFromTxs())
 
 	rpcBlock, err := rpcTypes.NewBlock(block, receipts.ToSlice(), includeTxs, includeReceipts)
 	if err != nil {

@@ -101,8 +101,8 @@ func dumpBatchesByNumbers(cliCtx *cli.Context) error {
 		return fmt.Errorf("failed to serialize batches into the JSON format: %w", err)
 	}
 
-	if err := printResults(string(jsonBatches)); err != nil {
-		return fmt.Errorf("failed to print results: %w", err)
+	if err := outputResults(string(jsonBatches)); err != nil {
+		return fmt.Errorf("failed to output results: %w", err)
 	}
 
 	return nil
@@ -138,8 +138,8 @@ func dumpBlocksByNumbers(cliCtx *cli.Context) error {
 		return fmt.Errorf("failed to serialize blocks into the JSON format: %w", err)
 	}
 
-	if err := printResults(string(jsonBlocks)); err != nil {
-		return fmt.Errorf("failed to print results: %w", err)
+	if err := outputResults(string(jsonBlocks)); err != nil {
+		return fmt.Errorf("failed to output results: %w", err)
 	}
 
 	return nil
@@ -153,8 +153,8 @@ func createDbTx(chainDataDir string, ctx context.Context) (kv.Tx, error) {
 	return db.BeginRo(ctx)
 }
 
-// printResults prints results either to the terminal or to the file
-func printResults(results string) error {
+// outputResults prints results either to the terminal or to the file
+func outputResults(results string) error {
 	// output results to the file
 	if fileOutput {
 		formattedTime := time.Now().Format("02-01-2006 15:04:05")
