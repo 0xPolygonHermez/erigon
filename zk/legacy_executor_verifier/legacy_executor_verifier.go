@@ -154,7 +154,7 @@ func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, 
 	return executorErr
 }
 
-var counter = int32(0)
+// var counter = int32(0)
 
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
@@ -261,10 +261,10 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		// debug purposes
-		if request.BatchNumber == 10 && counter == 0 {
-			ok = false
-			counter = 1
-		}
+		// if request.BatchNumber == 10 && counter == 0 {
+		// 	ok = false
+		// 	counter = 1
+		// }
 
 		verifierBundle.response = &VerifierResponse{
 			BatchNumber:      request.BatchNumber,
