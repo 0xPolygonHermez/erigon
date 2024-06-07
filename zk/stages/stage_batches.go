@@ -200,6 +200,12 @@ func SpawnStageBatches(
 		return fmt.Errorf("failed to get stage exec progress, %w", err)
 	}
 
+	// just exit the stage early if there is more execution work to do
+	if stageExecProgress < lastBlockHeight {
+		log.Info(fmt.Sprintf("[%s] Execution behind, skipping stage", logPrefix))
+		return nil
+	}
+
 	lastHash := emptyHash
 	atLeastOneBlockWritten := false
 	startTime := time.Now()
@@ -256,7 +262,17 @@ LOOP:
 
 			atLeastOneBlockWritten = true
 
+			// ignore genesis or a repeat of the last block
 			if l2Block.L2BlockNumber == 0 {
+				continue
+			}
+			// skip but warn on already processed blocks
+			if l2Block.L2BlockNumber <= stageProgressBlockNo {
+				if l2Block.L2BlockNumber < stageProgressBlockNo {
+					// only warn if the block is very old, we expect the very latest block to be requested
+					// when the stage is fired up for the first time
+					log.Warn(fmt.Sprintf("[%s] Skipping block %d, already processed", logPrefix, l2Block.L2BlockNumber))
+				}
 				continue
 			}
 
@@ -349,9 +365,9 @@ LOOP:
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
 			endLoop = true
 		default:
-			// wait at least one block to be written, before continuing
-			// or if stage_exec is ahead - don't wait here, but rather continue so exec catches up
-			if atLeastOneBlockWritten || stageExecProgress < lastBlockHeight {
+			if atLeastOneBlockWritten {
+				// first check to see if anything has come in from the stream yet, if it has then wait a little longer
+				// because there could be more.
 				// if no blocks available should and time since last block written is > 500ms
 				// consider that we are at the tip and blocks come in the datastream as they are produced
 				// stop the current iteration of the stage

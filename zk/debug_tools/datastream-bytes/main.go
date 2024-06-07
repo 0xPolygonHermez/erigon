@@ -59,7 +59,7 @@ func main() {
 
 			isBatchEnd := idx == len(blocks)-1
 
-			sBytes, err := streamServer.CreateAndBuildStreamEntryBytesProto(server.ExecutorOperationMode, block, hermezDb, tx, lastBlock, uint64(batchNum), uint64(previousBatch), l1InfoTreeMinTimestamps, isBatchEnd, nil)
+			sBytes, err := streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, tx, lastBlock, uint64(batchNum), uint64(previousBatch), l1InfoTreeMinTimestamps, isBatchEnd, nil)
 			if err != nil {
 				return err
 			}

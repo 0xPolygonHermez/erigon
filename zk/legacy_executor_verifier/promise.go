@@ -8,11 +8,11 @@ import (
 var ErrPromiseCancelled = fmt.Errorf("promise cancelled")
 
 type Promise[T any] struct {
+	result    T
+	err       error
 	wg        sync.WaitGroup
 	mutex     sync.Mutex
 	task      func() (T, error) // kept only if err != nil
-	result    T
-	err       error
 	cancelled bool
 }
 

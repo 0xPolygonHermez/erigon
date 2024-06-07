@@ -3,9 +3,11 @@ package stages
 import (
 	"context"
 	"math"
-	"sort"
 
 	"bytes"
+	"errors"
+	"sort"
+
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -287,6 +289,10 @@ func SpawnSequencerExecutorVerifyStage(
 			forkId, err := hermezDb.GetForkId(batch)
 			if err != nil {
 				return err
+			}
+
+			if forkId == 0 {
+				return errors.New("the network cannot have a 0 fork id")
 			}
 
 			cfg.verifier.AddRequestUnsafe(legacy_executor_verifier.NewVerifierRequest(batch, forkId, block.Root(), counters), cfg.cfgZk.SequencerBatchSealTime)
