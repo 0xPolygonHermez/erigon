@@ -1,4 +1,4 @@
-name: Nightly Bridge Tests
+name: Nightly - Bridge Tests
 
 on:
   schedule:
@@ -55,4 +55,4 @@ jobs:
           BRIDGE_API_URL: ${{ matrix.config.bridge_api_url }}
           DRY_RUN: ${{ matrix.config.dry_run }}
         run: |
-          cd zk/tests/bridge && docker-compose up --build
+          cd zk/tests/bridge && docker-compose up --build --exit-code-from bridge-script
