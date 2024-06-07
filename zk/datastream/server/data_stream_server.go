@@ -6,12 +6,12 @@ import (
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
-	eritypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/state"
+	eritypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
+	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
 type BookmarkType byte
@@ -197,11 +197,22 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	gers []types.GerUpdateProto,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 	forceBatchEnd bool,
+	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
 ) (*[]DataStreamEntryProto, error) {
+	filteredTransactions := block.Transactions()
+	if transactionsToIncludeByIndex != nil {
+		filteredTransactionsBuilder := make(eritypes.Transactions, len(transactionsToIncludeByIndex))
+		for i, txIndexInBlock := range transactionsToIncludeByIndex {
+			filteredTransactionsBuilder[i] = filteredTransactions[txIndexInBlock]
+		}
+
+		filteredTransactions = filteredTransactionsBuilder
+	}
+
 	blockNum := block.NumberU64()
 
 	entryCount := 2                         // l2 block bookmark + l2 block
-	entryCount += len(block.Transactions()) // transactions
+	entryCount += len(filteredTransactions) // transactions
 	entryCount += len(gers)
 
 	var err error
@@ -329,7 +340,7 @@ func (srv *DataStreamServer) CreateStreamEntriesProto(
 	entries[index] = l2Block
 	index++
 
-	for _, tx := range block.Transactions() {
+	for _, tx := range filteredTransactions {
 		effectiveGasPricePercentage, err := reader.GetEffectiveGasPricePercentage(tx.Hash())
 		if err != nil {
 			return nil, err
@@ -399,13 +410,14 @@ func (srv *DataStreamServer) CreateAndBuildStreamEntryBytesProto(
 	lastBatchNumber uint64,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 	isBatchEnd bool,
+	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
 ) ([]byte, error) {
 	gersInBetween, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	entries, err := srv.CreateStreamEntriesProto(mode, block, reader, tx, lastBlock, batchNumber, lastBatchNumber, gersInBetween, l1InfoTreeMinTimestamps, isBatchEnd)
+	entries, err := srv.CreateStreamEntriesProto(mode, block, reader, tx, lastBlock, batchNumber, lastBatchNumber, gersInBetween, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndex)
 	if err != nil {
 		return nil, err
 	}

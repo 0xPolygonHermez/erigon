@@ -48,12 +48,6 @@ func unwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.Stage
 	hermezDb := hermez_db.NewHermezDb(tx)
 	fromBatch, err := hermezDb.GetBatchNoByL2Block(u.UnwindPoint)
 
-	unwindState := &stagedsync.UnwindState{UnwindPoint: u.UnwindPoint}
-	stageState := &stagedsync.StageState{BlockNumber: s.BlockNumber}
-	if err = UnwindZkIntermediateHashesStage(unwindState, stageState, tx, ZkInterHashesCfg{}, ctx); err != nil {
-		return err
-	}
-
 	if err := stagedsync.UnwindExecutionStageErigon(u, s, tx, ctx, cfg.toErigonExecuteBlockCfg(), initialCycle); err != nil {
 		return err
 	}
@@ -119,7 +113,7 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("truncate block l1 info tree index error: %v", err)
 	}
 	// only seq
-	if err = hermezDb.TruncateBlockBatches(u.UnwindPoint+1, s.BlockNumber); err != nil {
+	if err = hermezDb.DeleteBlockBatches(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("truncate block batches error: %v", err)
 	}
 	// only seq

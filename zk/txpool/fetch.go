@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/holiman/uint256"
 	"github.com/gateway-fm/cdk-erigon-lib/common/dbg"
 	"github.com/gateway-fm/cdk-erigon-lib/direct"
 	"github.com/gateway-fm/cdk-erigon-lib/gointerfaces/grpcutil"
@@ -31,6 +30,7 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/rlp"
 	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/log/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -490,6 +490,9 @@ func (f *Fetch) handleStateChanges(ctx context.Context, client StateChangesClien
 				}
 			}
 		}
+
+		// transactions are marked as local in order bo by pass the spammer check
+		markAsLocal(&unwindTxs)
 		if err := f.db.View(ctx, func(tx kv.Tx) error {
 			return f.pool.OnNewBlock(ctx, req, unwindTxs, minedTxs, tx)
 		}); err != nil {

@@ -34,6 +34,7 @@ import (
 	erigonchain "github.com/gateway-fm/cdk-erigon-lib/chain"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
+	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -836,6 +837,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.l1Syncer,
 				backend.dataStream,
 			)
+
+			if cfg.Zk.Limbo {
+				limboSubPoolProcessor := txpool.NewLimboSubPoolProcessor(ctx, backend.chainConfig, backend.chainDB, backend.txPool2, verifier)
+				limboSubPoolProcessor.StartWork()
+			}
 
 			// we need to make sure the pool is always aware of the latest block for when
 			// we switch context from being an RPC node to a sequencer

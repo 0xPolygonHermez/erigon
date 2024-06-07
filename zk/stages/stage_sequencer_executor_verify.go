@@ -2,13 +2,14 @@ package stages
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"bytes"
 	"fmt"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -21,23 +22,26 @@ import (
 )
 
 type SequencerExecutorVerifyCfg struct {
-	db       kv.RwDB
-	verifier *legacy_executor_verifier.LegacyExecutorVerifier
-	txPool   *txpool.TxPool
-	cfgZk    *ethconfig.Zk
+	db          kv.RwDB
+	verifier    *legacy_executor_verifier.LegacyExecutorVerifier
+	txPool      *txpool.TxPool
+	chainConfig *chain.Config
+	cfgZk       *ethconfig.Zk
 }
 
 func StageSequencerExecutorVerifyCfg(
 	db kv.RwDB,
 	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
 	pool *txpool.TxPool,
+	chainConfig *chain.Config,
 	cfgZk *ethconfig.Zk,
 ) SequencerExecutorVerifyCfg {
 	return SequencerExecutorVerifyCfg{
-		db:       db,
-		verifier: verifier,
-		txPool:   pool,
-		cfgZk:    cfgZk,
+		db:          db,
+		verifier:    verifier,
+		txPool:      pool,
+		chainConfig: chainConfig,
+		cfgZk:       cfgZk,
 	}
 }
 
@@ -65,6 +69,7 @@ func SpawnSequencerExecutorVerifyStage(
 	}
 
 	hermezDb := hermez_db.NewHermezDb(tx)
+	hermezDbReader := hermez_db.NewHermezDbReader(tx)
 
 	// progress here is at the batch level
 	progress, err := stages.GetStageProgress(tx, stages.SequenceExecutorVerify)
@@ -122,66 +127,104 @@ func SpawnSequencerExecutorVerifyStage(
 
 		// now check that we are indeed in a good state to continue
 		if !response.Valid {
-			log.Info(fmt.Sprintf("[%s] identified an invalid batch, entering limbo", s.LogPrefix()), "batch", response.BatchNumber)
-			// we have an invalid batch, so we need to notify the txpool that these transactions are spurious
-			// and need to go into limbo and then trigger a rewind.  The rewind will put all TX back into the
-			// pool, but as it knows about these limbo transactions it will place them into limbo instead
-			// of queueing them again
-			limboDetails := txpool.LimboBatchDetails{
-				Witness:               response.Witness,
-				BatchNumber:           response.BatchNumber,
-				ExecutorResponse:      response.ExecutorResponse,
-				BadTransactionsHashes: make([]common.Hash, 0),
-				BadTransactionsRLP:    make([][]byte, 0),
-			}
+			if cfg.cfgZk.Limbo {
+				log.Info(fmt.Sprintf("[%s] identified an invalid batch, entering limbo", s.LogPrefix()), "batch", response.BatchNumber)
+				// we have an invalid batch, so we need to notify the txpool that these transactions are spurious
+				// and need to go into limbo and then trigger a rewind.  The rewind will put all TX back into the
+				// pool, but as it knows about these limbo transactions it will place them into limbo instead
+				// of queueing them again
 
-			// now we need to figure out the highest block number in the batch
-			// and grab all the transaction hashes along the way to inform the
-			// pool of hashes to avoid
-			blockNumbers, err := hermezDb.GetL2BlockNosByBatch(response.BatchNumber)
-			if err != nil {
-				return err
-			}
-
-			// sort the block numbers into ascending order
-			sort.Slice(blockNumbers, func(i, j int) bool {
-				return blockNumbers[i] < blockNumbers[j]
-			})
-
-			var lowestBlock *types.Block
-
-			for _, blockNumber := range blockNumbers {
-				block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
+				// now we need to figure out the highest block number in the batch
+				// and grab all the transaction hashes along the way to inform the
+				// pool of hashes to avoid
+				blockNumbers, err := hermezDb.GetL2BlockNosByBatch(response.BatchNumber)
 				if err != nil {
 					return err
 				}
-				if lowestBlock == nil {
-					// capture the first block, then we can set the bad block hash in the unwind to terminate the
-					// stage loop and broadcast the accumulator changes to the txpool before the next stage loop
-					// run
-					lowestBlock = block
+				if len(blockNumbers) == 0 {
+					panic("failing to verify a batch without blocks")
 				}
-				for _, transaction := range block.Transactions() {
-					hash := transaction.Hash()
-					var b []byte
-					buffer := bytes.NewBuffer(b)
-					err = transaction.EncodeRLP(buffer)
+				sort.Slice(blockNumbers, func(i, j int) bool {
+					return blockNumbers[i] < blockNumbers[j]
+				})
+
+				var lowestBlock, highestBlock *types.Block
+				forkId, err := hermezDb.GetForkId(response.BatchNumber)
+				if err != nil {
+					return err
+				}
+
+				l1InfoTreeMinTimestamps := make(map[uint64]uint64)
+				_, err = cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blockNumbers, hermezDbReader, l1InfoTreeMinTimestamps, nil)
+				if err != nil {
+					return err
+				}
+
+				limboSendersToPreviousTxMap := make(map[string]uint32)
+				limboStreamBytesBuilderHelper := newLimboStreamBytesBuilderHelper()
+
+				limboDetails := txpool.NewLimboBatchDetails()
+				limboDetails.Witness = response.Witness
+				limboDetails.L1InfoTreeMinTimestamps = l1InfoTreeMinTimestamps
+				limboDetails.BatchNumber = response.BatchNumber
+				limboDetails.ForkId = forkId
+
+				for _, blockNumber := range blockNumbers {
+					block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
 					if err != nil {
 						return err
 					}
-					limboDetails.BadTransactionsHashes = append(limboDetails.BadTransactionsHashes, hash)
-					limboDetails.BadTransactionsRLP = append(limboDetails.BadTransactionsRLP, buffer.Bytes())
-					log.Info(fmt.Sprintf("[%s] adding transaction to limbo", s.LogPrefix()), "hash", hash)
+					highestBlock = block
+					if lowestBlock == nil {
+						// capture the first block, then we can set the bad block hash in the unwind to terminate the
+						// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
+						lowestBlock = block
+					}
+
+					for i, transaction := range block.Transactions() {
+						var b []byte
+						buffer := bytes.NewBuffer(b)
+						err = transaction.EncodeRLP(buffer)
+						if err != nil {
+							return err
+						}
+
+						signer := types.MakeSigner(cfg.chainConfig, blockNumber)
+						sender, err := transaction.Sender(*signer)
+						if err != nil {
+							return err
+						}
+						senderMapKey := sender.Hex()
+
+						blocksForStreamBytes, transactionsToIncludeByIndex := limboStreamBytesBuilderHelper.append(senderMapKey, blockNumber, i)
+						streamBytes, err := cfg.verifier.GetStreamBytes(response.BatchNumber, tx, blocksForStreamBytes, hermezDbReader, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
+						if err != nil {
+							return err
+						}
+
+						previousTxIndex, ok := limboSendersToPreviousTxMap[senderMapKey]
+						if !ok {
+							previousTxIndex = math.MaxUint32
+						}
+
+						hash := transaction.Hash()
+						limboTxCount := limboDetails.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender, previousTxIndex)
+						limboSendersToPreviousTxMap[senderMapKey] = limboTxCount - 1
+
+						log.Info(fmt.Sprintf("[%s] adding transaction to limbo", s.LogPrefix()), "hash", hash)
+					}
 				}
-			}
 
-			cfg.txPool.NewLimboBatchDetails(limboDetails)
+				limboDetails.TimestampLimit = highestBlock.Time()
+				limboDetails.FirstBlockNumber = lowestBlock.NumberU64()
+				cfg.txPool.ProcessLimboBatchDetails(limboDetails)
 
-			if lowestBlock != nil {
 				u.UnwindTo(lowestBlock.NumberU64()-1, lowestBlock.Hash())
 				cfg.verifier.CancelAllRequestsUnsafe()
+				return nil
+			} else {
+				log.Info(fmt.Sprintf("[%s] identified an invalid batch but limbo is disabled so mark is as valid anyway and continue", s.LogPrefix()), "batch", response.BatchNumber)
 			}
-			return nil
 		}
 
 		// all good so just update the stage progress for now
@@ -206,6 +249,7 @@ func SpawnSequencerExecutorVerifyStage(
 			log.Warn("Failed to write witness", "batch", response.BatchNumber, "err", errWitness)
 		}
 
+		cfg.verifier.MarkTopResponseAsProcessed(response.BatchNumber)
 		progress = response.BatchNumber
 	}
 

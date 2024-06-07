@@ -10,10 +10,10 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/common/fixedgas"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/types"
+	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/log/v3"
-	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 )
 
 /*
@@ -24,14 +24,6 @@ hard compilation fail when rebasing from upstream further down the line.
 const (
 	transactionGasLimit = 30_000_000
 )
-
-type LimboBatchDetails struct {
-	Witness               []byte
-	BatchNumber           uint64
-	BadTransactionsHashes []common.Hash
-	BadTransactionsRLP    [][]byte
-	ExecutorResponse      *executor.ProcessBatchResponseV2
-}
 
 func calcProtocolBaseFee(baseFee uint64) uint64 {
 	return 0
@@ -159,7 +151,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	if p.awaitingBlockHandling.Load() {
+	if p.isDeniedYieldingTransactions() {
 		return false, 0, nil
 	}
 
@@ -265,71 +257,25 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 
 // Discard a metaTx from the best pending pool if it has overflow the zk-counters during execution
 func promoteZk(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint64, discard func(*metaTx, DiscardReason), announcements *types.Announcements) {
+	invalidMts := []*metaTx{}
+
 	for i := 0; i < len(pending.best.ms); i++ {
 		mt := pending.best.ms[i]
 		if mt.overflowZkCountersDuringExecution {
-			pending.Remove(mt)
-			discard(mt, OverflowZkCounters)
+			invalidMts = append(invalidMts, mt)
 		}
+	}
+
+	for _, mt := range invalidMts {
+		pending.Remove(mt)
+		discard(mt, OverflowZkCounters)
 	}
 
 	promote(pending, baseFee, queued, pendingBaseFee, discard, announcements)
 }
 
-func (p *TxPool) NewLimboBatchDetails(details LimboBatchDetails) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	p.limboBatches = append(p.limboBatches, details)
-
-	/*
-		as we know we're about to enter an unwind we need to ensure that all the transactions have been
-		handled after the unwind by the call to OnNewBlock before we can start yielding again.  There
-		is a risk that in the small window of time between this call and the next call to yield
-		by the stage loop a TX with a nonce too high will be yielded and cause an error during execution
-
-		potential dragons here as if the OnNewBlock is never called the call to yield will always return empty
-	*/
-	p.awaitingBlockHandling.Store(true)
-}
-
-func (p *TxPool) GetLimboDetails() []LimboBatchDetails {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	return p.limboBatches
-}
-
-// should be called from within a locked context from the pool
-func (p *TxPool) trimSlotsBasedOnLimbo(slots types.TxSlots) (trimmed types.TxSlots, limbo types.TxSlots) {
-	if len(p.limboBatches) > 0 {
-		// iterate over the unwind transactions removing any that appear in the limbo list
-		for idx, slot := range slots.Txs {
-			if p.isTxKnownToLimbo(slot.IDHash) {
-				limbo.Append(slot, slots.Senders.At(idx), slots.IsLocal[idx])
-			} else {
-				trimmed.Append(slot, slots.Senders.At(idx), slots.IsLocal[idx])
-			}
-		}
-		return trimmed, limbo
-	} else {
-		return slots, types.TxSlots{}
-	}
-}
-
-// should be called from within a locked context from the pool
-func (p *TxPool) isTxKnownToLimbo(hash common.Hash) bool {
-	for _, limbo := range p.limboBatches {
-		for _, txHash := range limbo.BadTransactionsHashes {
-			if txHash == hash {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (p *TxPool) appendLimboTransactions(slots types.TxSlots, blockNum uint64) {
-	for idx, slot := range slots.Txs {
-		mt := newMetaTx(slot, slots.IsLocal[idx], blockNum)
-		p.limbo.Add(mt)
+func markAsLocal(txSlots *types2.TxSlots) {
+	for i := range txSlots.IsLocal {
+		txSlots.IsLocal[i] = true
 	}
 }

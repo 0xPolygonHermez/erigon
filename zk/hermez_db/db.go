@@ -488,18 +488,6 @@ func (db *HermezDb) WriteBlockBatch(l2BlockNo, batchNo uint64) error {
 	return db.tx.Put(BATCH_BLOCKS, Uint64ToBytes(batchNo), v)
 }
 
-func (db *HermezDb) TruncateBlockBatches(fromL2BlockNum, toL2BlockNum uint64) error {
-	for i := fromL2BlockNum; i <= toL2BlockNum; i++ {
-		err := db.tx.Delete(BLOCKBATCHES, Uint64ToBytes(i))
-		if err != nil {
-			return err
-		}
-
-	}
-
-	return nil
-}
-
 func (db *HermezDb) WriteGlobalExitRoot(ger common.Hash) error {
 	return db.tx.Put(GLOBAL_EXIT_ROOTS, ger.Bytes(), []byte{1})
 }
