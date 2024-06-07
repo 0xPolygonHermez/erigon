@@ -6,7 +6,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
+	rpcTypes "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 )
 
 type DbDataRetriever struct {
@@ -23,26 +23,26 @@ func newDbDataRetriever(tx kv.Tx) *DbDataRetriever {
 }
 
 // GetBatchByNumber reads batch by number from the database
-func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) (*types.Batch, error) {
+func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) (*rpcTypes.Batch, error) {
 	// highest block in batch
-	blockNo, err := z.dbReader.GetHighestBlockInBatch(batchNum)
+	blockNum, err := z.dbReader.GetHighestBlockInBatch(batchNum)
 	if err != nil {
 		return nil, err
 	}
 
-	blockHash, err := rawdb.ReadCanonicalHash(z.tx, blockNo)
+	blockHash, err := rawdb.ReadCanonicalHash(z.tx, blockNum)
 	if err != nil {
 		return nil, err
 	}
 
-	block := rawdb.ReadBlock(z.tx, blockHash, blockNo)
+	block := rawdb.ReadBlock(z.tx, blockHash, blockNum)
 
 	// last block in batch data
-	batch := &types.Batch{
-		Number:    types.ArgUint64(batchNum),
+	batch := &rpcTypes.Batch{
+		Number:    rpcTypes.ArgUint64(batchNum),
 		Coinbase:  block.Coinbase(),
 		StateRoot: block.Root(),
-		Timestamp: types.ArgUint64(block.Time()),
+		Timestamp: rpcTypes.ArgUint64(block.Time()),
 	}
 
 	// block numbers in batch
@@ -122,7 +122,7 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 	batch.BatchL2Data = batchL2Data
 
-	// exit roots
+	// L1 info tree (exit roots)
 	l1InfoTree, err := z.dbReader.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
 	if err != nil {
 		return nil, err
@@ -136,6 +136,20 @@ func (z *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	return batch, nil
 }
 
-func (z *DbDataRetriever) GetBlockByNumber(blockNum uint64, includeTxs bool) {
-	// TODO: zkevm_api.go, GetFullBlockByNumber implementation
+// GetBlockByNumber reads block based on its block number from the database
+func (z *DbDataRetriever) GetBlockByNumber(blockNum uint64, includeTxs, includeReceipts bool) (*rpcTypes.Block, error) {
+	blockHash, err := rawdb.ReadCanonicalHash(z.tx, blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	block := rawdb.ReadBlock(z.tx, blockHash, blockNum)
+	receipts := rawdb.ReadReceipts(z.tx, block, block.Body().SendersFromTxs())
+
+	rpcBlock, err := rpcTypes.NewBlock(block, receipts.ToSlice(), includeTxs, includeReceipts)
+	if err != nil {
+		return nil, err
+	}
+
+	return rpcBlock, nil
 }

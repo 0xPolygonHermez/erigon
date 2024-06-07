@@ -34,8 +34,8 @@ var (
 	// commands
 	getBatchByNumberCmd = &cli.Command{
 		Action: dumpBatchesByNumbers,
-		Name:   "get-batch",
-		Usage:  "Gets batch by number",
+		Name:   "output-batches",
+		Usage:  "Outputs batches by numbers",
 		Flags: []cli.Flag{
 			&utils.DataDirFlag,
 			&cli.Uint64SliceFlag{
@@ -50,8 +50,8 @@ var (
 
 	getBlockByNumberCmd = &cli.Command{
 		Action: dumpBlocksByNumbers,
-		Name:   "get-block",
-		Usage:  "Gets block by number",
+		Name:   "output-blocks",
+		Usage:  "Outputs blocks by numbers",
 		Flags: []cli.Flag{
 			&utils.DataDirFlag,
 			&cli.Uint64SliceFlag{
@@ -88,7 +88,7 @@ func dumpBatchesByNumbers(cliCtx *cli.Context) error {
 	r := newDbDataRetriever(tx)
 	batches := make([]*types.Batch, 0, len(batchOrBlockNumbers.Value()))
 	for _, batchNum := range batchOrBlockNumbers.Value() {
-		batch, err := r.GetBatchByNumber(batchNum, true)
+		batch, err := r.GetBatchByNumber(batchNum, verboseOutput)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve the batch %d: %w", batchOrBlockNumbers, err)
 		}
@@ -108,8 +108,40 @@ func dumpBatchesByNumbers(cliCtx *cli.Context) error {
 	return nil
 }
 
+// dumpBlocksByNumbers retrieves batches by given numbers and dumps them either on standard output or to a file
 func dumpBlocksByNumbers(cliCtx *cli.Context) error {
-	// TODO: IMPLEMENT ME
+	if !cliCtx.IsSet(utils.DataDirFlag.Name) {
+		return errors.New("chain data directory is not provided")
+	}
+
+	chainDataDir = cliCtx.String(utils.DataDirFlag.Name)
+
+	tx, err := createDbTx(chainDataDir, cliCtx.Context)
+	if err != nil {
+		return fmt.Errorf("failed to create read-only db transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	r := newDbDataRetriever(tx)
+	blocks := make([]*types.Block, 0, len(batchOrBlockNumbers.Value()))
+	for _, batchNum := range batchOrBlockNumbers.Value() {
+		block, err := r.GetBlockByNumber(batchNum, verboseOutput, verboseOutput)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve the block %d: %w", batchOrBlockNumbers, err)
+		}
+
+		blocks = append(blocks, block)
+	}
+
+	jsonBlocks, err := json.MarshalIndent(blocks, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to serialize blocks into the JSON format: %w", err)
+	}
+
+	if err := printResults(string(jsonBlocks)); err != nil {
+		return fmt.Errorf("failed to print results: %w", err)
+	}
+
 	return nil
 }
 
@@ -123,6 +155,7 @@ func createDbTx(chainDataDir string, ctx context.Context) (kv.Tx, error) {
 
 // printResults prints results either to the terminal or to the file
 func printResults(results string) error {
+	// output results to the file
 	if fileOutput {
 		formattedTime := time.Now().Format("02-01-2006 15:04:05")
 		fileName := fmt.Sprintf("output_%s.json", formattedTime)
@@ -137,6 +170,7 @@ func printResults(results string) error {
 		return err
 	}
 
+	// output results to the standard output
 	fmt.Println(results)
 
 	return nil
