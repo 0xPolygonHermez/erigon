@@ -838,8 +838,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.dataStream,
 			)
 
-			limboSubPoolProcessor := txpool.NewLimboSubPoolProcessor(ctx, backend.chainConfig, backend.chainDB, backend.txPool2, verifier)
-			limboSubPoolProcessor.StartWork()
+			if cfg.Zk.Limbo {
+				limboSubPoolProcessor := txpool.NewLimboSubPoolProcessor(ctx, backend.chainConfig, backend.chainDB, backend.txPool2, verifier)
+				limboSubPoolProcessor.StartWork()
+			}
 
 			// we need to make sure the pool is always aware of the latest block for when
 			// we switch context from being an RPC node to a sequencer
