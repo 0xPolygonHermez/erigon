@@ -89,7 +89,7 @@ func (_this *LimboSubPoolProcessor) run() {
 			if err != nil {
 				idHash := hexutils.BytesToHex(limboTx.Hash[:])
 				invalidTxs = append(invalidTxs, &idHash)
-				log.Info("[Limbo pool processor]", "invalid tx", limboTx.Hash)
+				log.Info("[Limbo pool processor]", "invalid tx", limboTx.Hash, "err", err)
 				continue
 			}
 

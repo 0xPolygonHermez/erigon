@@ -2,13 +2,16 @@ package txpool
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/kv/kvcache"
 	"github.com/gateway-fm/cdk-erigon-lib/types"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/status-im/keycard-go/hexutils"
 )
 
@@ -19,15 +22,19 @@ const (
 	DbKeyBatchesPrefix               = uint8(3)
 	DbKeyAwaitingBlockHandlingPrefix = uint8(4)
 
-	DbKeyBatchesWitnessPrefix          = uint8(1)
-	DbKeyBatchesStreamBytesPrefix      = uint8(2)
-	DbKeyBatchesL1InfoTreePrefix       = uint8(3)
-	DbKeyBatchesTimestampLimitPrefix   = uint8(4)
-	DbKeyBatchesFirstBlockNumberPrefix = uint8(5)
-	DbKeyBatchesBatchNumberPrefix      = uint8(6)
-	DbKeyBatchesForkIdPrefix           = uint8(7)
-	DbKeyBatchesRootPrefix             = uint8(8)
-	DbKeyBatchesBadTransactionsPrefix  = uint8(9)
+	DbKeyBatchesWitnessPrefix          = uint8(5)
+	DbKeyBatchesL1InfoTreePrefix       = uint8(6)
+	DbKeyBatchesTimestampLimitPrefix   = uint8(7)
+	DbKeyBatchesFirstBlockNumberPrefix = uint8(8)
+	DbKeyBatchesBatchNumberPrefix      = uint8(9)
+	DbKeyBatchesForkIdPrefix           = uint8(10)
+
+	DbKeyTxRlpPrefix         = uint8(11)
+	DbKeyTxStreamBytesPrefix = uint8(12)
+	DbKeyTxRootPrefix        = uint8(13)
+	DbKeyTxHashPrefix        = uint8(14)
+	DbKeyTxSenderPrefix      = uint8(15)
+	DbKeyTxPreviousTxPrefix  = uint8(16)
 )
 
 var emptyHash = common.Hash{}
@@ -38,10 +45,10 @@ type LimboBatchTransactionDetails struct {
 	Root        common.Hash
 	Hash        common.Hash
 	Sender      common.Address
-	PreviousTx  int
+	PreviousTx  uint32
 }
 
-func newLimboBatchTransactionDetails(rlp, streamBytes []byte, hash common.Hash, sender common.Address, previousTx int) *LimboBatchTransactionDetails {
+func newLimboBatchTransactionDetails(rlp, streamBytes []byte, hash common.Hash, sender common.Address, previousTx uint32) *LimboBatchTransactionDetails {
 	return &LimboBatchTransactionDetails{
 		Rlp:         rlp,
 		StreamBytes: streamBytes,
@@ -100,7 +107,7 @@ func (_this *Limbo) getFirstTxWithoutRootByBatch(batchNumber uint64) (*LimboBatc
 	return nil, nil
 }
 
-func (_this *Limbo) getLimboTxDetailsByTxHash(txHash *common.Hash) (*LimboBatchDetails, *LimboBatchTransactionDetails, int) {
+func (_this *Limbo) getLimboTxDetailsByTxHash(txHash *common.Hash) (*LimboBatchDetails, *LimboBatchTransactionDetails, uint32) {
 	for _, limboBatch := range _this.limboBatches {
 		limboTx, i := limboBatch.getTxDetailsByHash(txHash)
 		if limboTx != nil {
@@ -108,7 +115,7 @@ func (_this *Limbo) getLimboTxDetailsByTxHash(txHash *common.Hash) (*LimboBatchD
 		}
 	}
 
-	return nil, nil, -1
+	return nil, nil, math.MaxUint32
 }
 
 type LimboBatchDetails struct {
@@ -128,19 +135,25 @@ func NewLimboBatchDetails() *LimboBatchDetails {
 	}
 }
 
-func (_this *LimboBatchDetails) AppendTransaction(rlp, streamBytes []byte, hash common.Hash, sender common.Address, previousTx int) int {
-	_this.Transactions = append(_this.Transactions, newLimboBatchTransactionDetails(rlp, streamBytes, hash, sender, previousTx))
-	return len(_this.Transactions)
+func (_this *LimboBatchDetails) resizeTransactions(newSize int) {
+	for i := len(_this.Transactions); i < newSize; i++ {
+		_this.Transactions = append(_this.Transactions, &LimboBatchTransactionDetails{})
+	}
 }
 
-func (_this *LimboBatchDetails) getTxDetailsByHash(txHash *common.Hash) (*LimboBatchTransactionDetails, int) {
+func (_this *LimboBatchDetails) AppendTransaction(rlp, streamBytes []byte, hash common.Hash, sender common.Address, previousTx uint32) uint32 {
+	_this.Transactions = append(_this.Transactions, newLimboBatchTransactionDetails(rlp, streamBytes, hash, sender, previousTx))
+	return uint32(len(_this.Transactions))
+}
+
+func (_this *LimboBatchDetails) getTxDetailsByHash(txHash *common.Hash) (*LimboBatchTransactionDetails, uint32) {
 	for i, limboTx := range _this.Transactions {
 		if limboTx.Hash == *txHash {
-			return limboTx, i
+			return limboTx, uint32(i)
 		}
 	}
 
-	return nil, -1
+	return nil, math.MaxUint32
 }
 
 func (p *TxPool) GetLimboTxHash(batchNumber uint64) (uint64, *common.Hash) {
@@ -164,10 +177,10 @@ func (p *TxPool) GetLimboTxRplsByHash(tx kv.Tx, txHash *common.Hash) (*types.Txs
 	}
 
 	maxSize := len(limboBatch.Transactions)
-	txIndices := make([]int, 0, maxSize)
+	txIndices := make([]uint32, 0, maxSize)
 
 	for {
-		if txIndex == -1 {
+		if txIndex == math.MaxUint32 {
 			break
 		}
 
@@ -316,209 +329,227 @@ func (p *TxPool) allowYieldingTransactions() {
 }
 
 func (p *TxPool) flushLockedLimbo(tx kv.RwTx) (err error) {
-	// if err := tx.CreateBucket(TablePoolLimbo); err != nil {
-	// 	return err
-	// }
+	if err := tx.CreateBucket(TablePoolLimbo); err != nil {
+		return err
+	}
 
-	// if err := tx.ClearBucket(TablePoolLimbo); err != nil {
-	// 	return err
-	// }
+	if err := tx.ClearBucket(TablePoolLimbo); err != nil {
+		return err
+	}
 
-	// for hash, handled := range p.limbo.invalidTxsMap {
-	// 	hashAsBytes := hexutils.HexToBytes(hash)
-	// 	key := append([]byte{DbKeyInvalidTxPrefix}, hashAsBytes...)
-	// 	tx.Put(TablePoolLimbo, key, []byte{handled})
-	// }
+	for hash, handled := range p.limbo.invalidTxsMap {
+		hashAsBytes := hexutils.HexToBytes(hash)
+		key := append([]byte{DbKeyInvalidTxPrefix}, hashAsBytes...)
+		tx.Put(TablePoolLimbo, key, []byte{handled})
+	}
 
-	// v := make([]byte, 0, 1024)
-	// for _, txSlot := range p.limbo.limboSlots.Txs {
-	// 	v = common.EnsureEnoughSize(v, 20+len(txSlot.Rlp))
+	v := make([]byte, 0, 1024)
+	for _, txSlot := range p.limbo.limboSlots.Txs {
+		v = common.EnsureEnoughSize(v, 20+len(txSlot.Rlp))
 
-	// 	addr, ok := p.senders.senderID2Addr[txSlot.SenderID]
-	// 	if !ok {
-	// 		log.Warn("[txpool] flush: sender address not found by ID", "senderID", txSlot.SenderID)
-	// 		continue
-	// 	}
+		addr, ok := p.senders.senderID2Addr[txSlot.SenderID]
+		if !ok {
+			log.Warn("[txpool] flush: sender address not found by ID", "senderID", txSlot.SenderID)
+			continue
+		}
 
-	// 	copy(v[:20], addr.Bytes())
-	// 	copy(v[20:], txSlot.Rlp)
+		copy(v[:20], addr.Bytes())
+		copy(v[20:], txSlot.Rlp)
 
-	// 	key := append([]byte{DbKeySlotsPrefix}, txSlot.IDHash[:]...)
-	// 	if err := tx.Put(TablePoolLimbo, key, v); err != nil {
-	// 		return err
-	// 	}
-	// }
+		key := append([]byte{DbKeySlotsPrefix}, txSlot.IDHash[:]...)
+		if err := tx.Put(TablePoolLimbo, key, v); err != nil {
+			return err
+		}
+	}
 
-	// keyBytes := make([]byte, 14)
-	// vBytes := make([]byte, 8)
-	// keyBytes[0] = DbKeyBatchesPrefix
+	keyBytes := make([]byte, 14)
+	vBytes := make([]byte, 8)
+	keyBytes[0] = DbKeyBatchesPrefix
 
-	// for i, limboBatch := range p.limbo.limboBatches {
-	// 	binary.LittleEndian.PutUint32(keyBytes[1:5], uint32(i))
+	for i, limboBatch := range p.limbo.limboBatches {
+		binary.LittleEndian.PutUint32(keyBytes[1:5], uint32(i))
 
-	// 	// Witness
-	// 	keyBytes[5] = DbKeyBatchesWitnessPrefix
-	// 	binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
-	// 	if err := tx.Put(TablePoolLimbo, keyBytes, limboBatch.Witness); err != nil {
-	// 		return err
-	// 	}
+		// Witness
+		keyBytes[5] = DbKeyBatchesWitnessPrefix
+		binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
+		if err := tx.Put(TablePoolLimbo, keyBytes, limboBatch.Witness); err != nil {
+			return err
+		}
 
-	// 	// StreamBytes
-	// 	keyBytes[5] = DbKeyBatchesStreamBytesPrefix
-	// 	for j, streamBytes := range limboBatch.StreamBytes {
-	// 		binary.LittleEndian.PutUint64(keyBytes[6:14], uint64(j))
-	// 		if err := tx.Put(TablePoolLimbo, keyBytes, streamBytes); err != nil {
-	// 			return err
-	// 		}
-	// 	}
+		// L1InfoTreeMinTimestamps
+		keyBytes[5] = DbKeyBatchesL1InfoTreePrefix
+		for k, v := range limboBatch.L1InfoTreeMinTimestamps {
+			binary.LittleEndian.PutUint64(keyBytes[6:14], uint64(k))
+			binary.LittleEndian.PutUint64(vBytes[:], v)
+			if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
+				return err
+			}
+		}
 
-	// 	// L1InfoTreeMinTimestamps
-	// 	keyBytes[5] = DbKeyBatchesL1InfoTreePrefix
-	// 	for k, v := range limboBatch.L1InfoTreeMinTimestamps {
-	// 		binary.LittleEndian.PutUint64(keyBytes[6:14], uint64(k))
-	// 		binary.LittleEndian.PutUint64(vBytes[:], v)
-	// 		if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
-	// 			return err
-	// 		}
-	// 	}
+		// TimestampLimit
+		keyBytes[5] = DbKeyBatchesTimestampLimitPrefix
+		binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
+		binary.LittleEndian.PutUint64(vBytes[:], limboBatch.TimestampLimit)
+		if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
+			return err
+		}
 
-	// 	// TimestampLimit
-	// 	keyBytes[5] = DbKeyBatchesTimestampLimitPrefix
-	// 	binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
-	// 	binary.LittleEndian.PutUint64(vBytes[:], limboBatch.TimestampLimit)
-	// 	if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
-	// 		return err
-	// 	}
+		// FirstBlockNumber
+		keyBytes[5] = DbKeyBatchesFirstBlockNumberPrefix
+		binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
+		binary.LittleEndian.PutUint64(vBytes[:], limboBatch.FirstBlockNumber)
+		if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
+			return err
+		}
 
-	// 	// FirstBlockNumber
-	// 	keyBytes[5] = DbKeyBatchesFirstBlockNumberPrefix
-	// 	binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
-	// 	binary.LittleEndian.PutUint64(vBytes[:], limboBatch.FirstBlockNumber)
-	// 	if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
-	// 		return err
-	// 	}
+		// BatchNumber
+		keyBytes[5] = DbKeyBatchesBatchNumberPrefix
+		binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
+		binary.LittleEndian.PutUint64(vBytes[:], limboBatch.BatchNumber)
+		if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
+			return err
+		}
 
-	// 	// BatchNumber
-	// 	keyBytes[5] = DbKeyBatchesBatchNumberPrefix
-	// 	binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
-	// 	binary.LittleEndian.PutUint64(vBytes[:], limboBatch.BatchNumber)
-	// 	if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
-	// 		return err
-	// 	}
+		// BatchNumber
+		keyBytes[5] = DbKeyBatchesForkIdPrefix
+		binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
+		binary.LittleEndian.PutUint64(vBytes[:], limboBatch.ForkId)
+		if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
+			return err
+		}
 
-	// 	// BatchNumber
-	// 	keyBytes[5] = DbKeyBatchesForkIdPrefix
-	// 	binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
-	// 	binary.LittleEndian.PutUint64(vBytes[:], limboBatch.ForkId)
-	// 	if err := tx.Put(TablePoolLimbo, keyBytes, vBytes); err != nil {
-	// 		return err
-	// 	}
+		// Transactions - Rlp
+		for j, limboTx := range limboBatch.Transactions {
+			keyBytes[5] = DbKeyTxRlpPrefix
+			binary.LittleEndian.PutUint64(keyBytes[6:14], uint64(j))
+			if err := tx.Put(TablePoolLimbo, keyBytes, limboTx.Rlp[:]); err != nil {
+				return err
+			}
 
-	// 	// Root
-	// 	keyBytes[5] = DbKeyBatchesRootPrefix
-	// 	for j, hash := range limboBatch.Roots {
-	// 		binary.LittleEndian.PutUint64(keyBytes[6:14], uint64(j))
-	// 		if err := tx.Put(TablePoolLimbo, keyBytes, hash[:]); err != nil {
-	// 			return err
-	// 		}
-	// 	}
+			keyBytes[5] = DbKeyTxStreamBytesPrefix
+			if err := tx.Put(TablePoolLimbo, keyBytes, limboTx.StreamBytes[:]); err != nil {
+				return err
+			}
 
-	// 	// BadTransactionsHashes
-	// 	keyBytes[5] = DbKeyBatchesBadTransactionsPrefix
-	// 	for j, hash := range limboBatch.BadTransactionsHashes {
-	// 		binary.LittleEndian.PutUint64(keyBytes[6:14], uint64(j))
-	// 		if err := tx.Put(TablePoolLimbo, keyBytes, hash[:]); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// }
+			keyBytes[5] = DbKeyTxRootPrefix
+			if err := tx.Put(TablePoolLimbo, keyBytes, limboTx.Root[:]); err != nil {
+				return err
+			}
 
-	// v = []byte{0}
-	// if p.limbo.awaitingBlockHandling.Load() {
-	// 	v[0] = 1
-	// }
-	// if err := tx.Put(TablePoolLimbo, []byte{DbKeyAwaitingBlockHandlingPrefix}, v); err != nil {
-	// 	return err
-	// }
+			keyBytes[5] = DbKeyTxHashPrefix
+			if err := tx.Put(TablePoolLimbo, keyBytes, limboTx.Hash[:]); err != nil {
+				return err
+			}
+
+			keyBytes[5] = DbKeyTxSenderPrefix
+			if err := tx.Put(TablePoolLimbo, keyBytes, limboTx.Sender[:]); err != nil {
+				return err
+			}
+
+			keyBytes[5] = DbKeyTxPreviousTxPrefix
+			v = make([]byte, 4)
+			binary.LittleEndian.PutUint32(v, limboTx.PreviousTx)
+			if err := tx.Put(TablePoolLimbo, keyBytes, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	v = []byte{0}
+	if p.limbo.awaitingBlockHandling.Load() {
+		v[0] = 1
+	}
+	if err := tx.Put(TablePoolLimbo, []byte{DbKeyAwaitingBlockHandlingPrefix}, v); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.CacheView) error {
-	// it, err := tx.Range(TablePoolLimbo, nil, nil)
-	// if err != nil {
-	// 	return err
-	// }
+	it, err := tx.Range(TablePoolLimbo, nil, nil)
+	if err != nil {
+		return err
+	}
 
-	// p.limbo.limboSlots = &types.TxSlots{}
-	// parseCtx := types.NewTxParseContext(p.chainID)
-	// parseCtx.WithSender(false)
+	p.limbo.limboSlots = &types.TxSlots{}
+	parseCtx := types.NewTxParseContext(p.chainID)
+	parseCtx.WithSender(false)
 
-	// for it.HasNext() {
-	// 	k, v, err := it.Next()
-	// 	if err != nil {
-	// 		return err
-	// 	}
+	for it.HasNext() {
+		k, v, err := it.Next()
+		if err != nil {
+			return err
+		}
 
-	// 	switch k[0] {
-	// 	case DbKeyInvalidTxPrefix:
-	// 		hash := hexutils.BytesToHex(k[1:])
-	// 		p.limbo.invalidTxsMap[hash] = v[0]
-	// 	case DbKeySlotsPrefix:
-	// 		addr, txRlp := *(*[20]byte)(v[:20]), v[20:]
-	// 		txn := &types.TxSlot{}
+		switch k[0] {
+		case DbKeyInvalidTxPrefix:
+			hash := hexutils.BytesToHex(k[1:])
+			p.limbo.invalidTxsMap[hash] = v[0]
+		case DbKeySlotsPrefix:
+			addr, txRlp := *(*[20]byte)(v[:20]), v[20:]
+			txn := &types.TxSlot{}
 
-	// 		_, err = parseCtx.ParseTransaction(txRlp, 0, txn, nil, false /* hasEnvelope */, nil)
-	// 		if err != nil {
-	// 			err = fmt.Errorf("err: %w, rlp: %x", err, txRlp)
-	// 			log.Warn("[txpool] fromDB: parseTransaction", "err", err)
-	// 			continue
-	// 		}
+			_, err = parseCtx.ParseTransaction(txRlp, 0, txn, nil, false /* hasEnvelope */, nil)
+			if err != nil {
+				err = fmt.Errorf("err: %w, rlp: %x", err, txRlp)
+				log.Warn("[txpool] fromDB: parseTransaction", "err", err)
+				continue
+			}
 
-	// 		txn.SenderID, txn.Traced = p.senders.getOrCreateID(addr)
-	// 		binary.BigEndian.Uint64(v)
+			txn.SenderID, txn.Traced = p.senders.getOrCreateID(addr)
+			binary.BigEndian.Uint64(v)
 
-	// 		if reason := p.validateTx(txn, true, cacheView); reason != NotSet && reason != Success {
-	// 			return nil
-	// 		}
-	// 		p.limbo.limboSlots.Append(txn, addr[:], true)
-	// 	case DbKeyBatchesPrefix:
-	// 		batchesI := binary.LittleEndian.Uint32(k[1:5])
-	// 		batchesJ := binary.LittleEndian.Uint64(k[6:14])
-	// 		p.limbo.resizeBatches(int(batchesI) + 1)
+			if reason := p.validateTx(txn, true, cacheView); reason != NotSet && reason != Success {
+				return nil
+			}
+			p.limbo.limboSlots.Append(txn, addr[:], true)
+		case DbKeyBatchesPrefix:
+			batchesI := binary.LittleEndian.Uint32(k[1:5])
+			batchesJ := binary.LittleEndian.Uint64(k[6:14])
+			p.limbo.resizeBatches(int(batchesI) + 1)
 
-	// 		switch k[5] {
-	// 		case DbKeyBatchesWitnessPrefix:
-	// 			p.limbo.limboBatches[batchesI].Witness = v
-	// 		case DbKeyBatchesStreamBytesPrefix:
-	// 			p.limbo.limboBatches[batchesI].resizeStreamBytes(int(batchesJ) + 1)
-	// 			p.limbo.limboBatches[batchesI].StreamBytes[batchesJ] = v
-	// 		case DbKeyBatchesL1InfoTreePrefix:
-	// 			p.limbo.limboBatches[batchesI].L1InfoTreeMinTimestamps[batchesJ] = binary.LittleEndian.Uint64(v)
-	// 		case DbKeyBatchesTimestampLimitPrefix:
-	// 			p.limbo.limboBatches[batchesI].TimestampLimit = binary.LittleEndian.Uint64(v)
-	// 		case DbKeyBatchesFirstBlockNumberPrefix:
-	// 			p.limbo.limboBatches[batchesI].FirstBlockNumber = binary.LittleEndian.Uint64(v)
-	// 		case DbKeyBatchesBatchNumberPrefix:
-	// 			p.limbo.limboBatches[batchesI].BatchNumber = binary.LittleEndian.Uint64(v)
-	// 		case DbKeyBatchesForkIdPrefix:
-	// 			p.limbo.limboBatches[batchesI].ForkId = binary.LittleEndian.Uint64(v)
-	// 		case DbKeyBatchesRootPrefix:
-	// 			p.limbo.limboBatches[batchesI].resizeRoots(int(batchesJ) + 1)
-	// 			copy(p.limbo.limboBatches[batchesI].Roots[batchesJ][:], v)
-	// 		case DbKeyBatchesBadTransactionsPrefix:
-	// 			p.limbo.limboBatches[batchesI].resizeBadTransactionsHashes(int(batchesJ) + 1)
-	// 			copy(p.limbo.limboBatches[batchesI].BadTransactionsHashes[batchesJ][:], v)
-	// 		}
-	// 	case DbKeyAwaitingBlockHandlingPrefix:
-	// 		if v[0] == 0 {
-	// 			p.limbo.awaitingBlockHandling.Store(false)
-	// 		} else {
-	// 			p.limbo.awaitingBlockHandling.Store(true)
-	// 		}
-	// 	}
+			switch k[5] {
+			case DbKeyBatchesWitnessPrefix:
+				p.limbo.limboBatches[batchesI].Witness = v
+			case DbKeyBatchesL1InfoTreePrefix:
+				p.limbo.limboBatches[batchesI].L1InfoTreeMinTimestamps[batchesJ] = binary.LittleEndian.Uint64(v)
+			case DbKeyBatchesTimestampLimitPrefix:
+				p.limbo.limboBatches[batchesI].TimestampLimit = binary.LittleEndian.Uint64(v)
+			case DbKeyBatchesFirstBlockNumberPrefix:
+				p.limbo.limboBatches[batchesI].FirstBlockNumber = binary.LittleEndian.Uint64(v)
+			case DbKeyBatchesBatchNumberPrefix:
+				p.limbo.limboBatches[batchesI].BatchNumber = binary.LittleEndian.Uint64(v)
+			case DbKeyBatchesForkIdPrefix:
+				p.limbo.limboBatches[batchesI].ForkId = binary.LittleEndian.Uint64(v)
+			case DbKeyTxRlpPrefix:
+				p.limbo.limboBatches[batchesI].resizeTransactions(int(batchesJ) + 1)
+				p.limbo.limboBatches[batchesI].Transactions[batchesJ].Rlp = v
+			case DbKeyTxStreamBytesPrefix:
+				p.limbo.limboBatches[batchesI].resizeTransactions(int(batchesJ) + 1)
+				p.limbo.limboBatches[batchesI].Transactions[batchesJ].StreamBytes = v
+			case DbKeyTxRootPrefix:
+				p.limbo.limboBatches[batchesI].resizeTransactions(int(batchesJ) + 1)
+				copy(p.limbo.limboBatches[batchesI].Transactions[batchesJ].Root[:], v)
+			case DbKeyTxHashPrefix:
+				p.limbo.limboBatches[batchesI].resizeTransactions(int(batchesJ) + 1)
+				copy(p.limbo.limboBatches[batchesI].Transactions[batchesJ].Hash[:], v)
+			case DbKeyTxSenderPrefix:
+				p.limbo.limboBatches[batchesI].resizeTransactions(int(batchesJ) + 1)
+				copy(p.limbo.limboBatches[batchesI].Transactions[batchesJ].Sender[:], v)
+			case DbKeyTxPreviousTxPrefix:
+				p.limbo.limboBatches[batchesI].resizeTransactions(int(batchesJ) + 1)
+				p.limbo.limboBatches[batchesI].Transactions[batchesJ].PreviousTx = binary.LittleEndian.Uint32(v)
+			}
+		case DbKeyAwaitingBlockHandlingPrefix:
+			if v[0] == 0 {
+				p.limbo.awaitingBlockHandling.Store(false)
+			} else {
+				p.limbo.awaitingBlockHandling.Store(true)
+			}
+		}
 
-	// }
+	}
 
 	return nil
 }

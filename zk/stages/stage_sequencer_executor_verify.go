@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"bytes"
@@ -158,7 +159,7 @@ func SpawnSequencerExecutorVerifyStage(
 				return err
 			}
 
-			limboSendersToPreviousTxMap := make(map[string]int)
+			limboSendersToPreviousTxMap := make(map[string]uint32)
 			limboStreamBytesBuilderHelper := newLimboStreamBytesBuilderHelper()
 
 			limboDetails := txpool.NewLimboBatchDetails()
@@ -202,7 +203,7 @@ func SpawnSequencerExecutorVerifyStage(
 
 					previousTxIndex, ok := limboSendersToPreviousTxMap[senderMapKey]
 					if !ok {
-						previousTxIndex = -1
+						previousTxIndex = math.MaxUint32
 					}
 
 					hash := transaction.Hash()

@@ -262,7 +262,6 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 
 		// debug purposes
 		if request.BatchNumber == 10 && counter == 0 {
-			// time.Sleep(25 * time.Second)
 			ok = false
 			counter = 1
 		}
