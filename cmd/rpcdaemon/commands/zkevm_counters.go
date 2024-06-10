@@ -22,6 +22,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
@@ -458,7 +459,6 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 		collected   vm.Counters
 		receipts    types.Receipts
 	)
-
 	for i, blockNum := range batchBlockNumbers {
 		//get block with senders
 		if block, err = api.ethApi.blockByNumberWithSenders(dbtx, blockNum); err != nil {
@@ -482,41 +482,9 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 			return nil, err
 		}
 		// execute blocks
-		var (
-			execResult *core.ExecutionResult
-			msg        core.Message
-		)
 		for _, tx := range block.Transactions() {
-			txCounters := vm.NewTransactionCounter(tx, smtDepth, false)
-
-			if _, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
+			if execTransaction(tx, batchCounters, smtDepth, ibs, signer, header, rules, chainConfig, blockCtx, receipts); err != nil {
 				return nil, err
-			}
-
-			if msg, err = tx.AsMessage(*signer, header.BaseFee, rules); err != nil {
-				return nil, err
-			}
-			zkConfig := vm.ZkConfig{Config: vm.Config{NoBaseFee: true}, CounterCollector: txCounters.ExecutionCounters()}
-			evm := vm.NewZkEVM(blockCtx, core.NewEVMTxContext(msg), ibs, chainConfig, zkConfig)
-			gp := new(core.GasPool).AddGas(msg.Gas())
-			ibs.Prepare(tx.Hash(), header.Hash(), 0)
-
-			if execResult, err = core.ApplyMessage(evm, msg, gp, true /* refunds */, false /* gasBailout */); err != nil {
-				return nil, err
-			}
-
-			// checks to see if we executed txs correctly
-			receiptForTx := receipts.ReceiptForTx(tx.Hash())
-			if receiptForTx == nil {
-				return nil, fmt.Errorf("receipt not found for tx %s", tx.Hash().String())
-			}
-
-			if execResult == nil {
-				return nil, fmt.Errorf("execResult is nil")
-			}
-
-			if (execResult.Err == nil) != (receiptForTx.Status == 1) {
-				return nil, fmt.Errorf("execResult error and receipt status mismatch")
 			}
 		}
 	}
@@ -526,6 +494,57 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 	}
 
 	return populateBatchCounters(&collected, smtDepth, batchNum, earliestBlockNum, latestBlockNum)
+}
+
+func execTransaction(
+	tx types.Transaction,
+	batchCounters *vm.BatchCounterCollector,
+	smtDepth int,
+	ibs *state.IntraBlockState,
+	signer *types.Signer,
+	header *types.Header,
+	rules *chain.Rules,
+	chainConfig *chain.Config,
+	blockCtx evmtypes.BlockContext,
+	receipts types.Receipts,
+) (err error) {
+	var (
+		msg        core.Message
+		execResult *core.ExecutionResult
+	)
+	txCounters := vm.NewTransactionCounter(tx, smtDepth, false)
+
+	if _, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
+		return err
+	}
+
+	if msg, err = tx.AsMessage(*signer, header.BaseFee, rules); err != nil {
+		return err
+	}
+	zkConfig := vm.ZkConfig{Config: vm.Config{NoBaseFee: true}, CounterCollector: txCounters.ExecutionCounters()}
+	evm := vm.NewZkEVM(blockCtx, core.NewEVMTxContext(msg), ibs, chainConfig, zkConfig)
+	gp := new(core.GasPool).AddGas(msg.Gas())
+	ibs.Prepare(tx.Hash(), header.Hash(), 0)
+
+	if execResult, err = core.ApplyMessage(evm, msg, gp, true /* refunds */, false /* gasBailout */); err != nil {
+		return err
+	}
+
+	// checks to see if we executed txs correctly
+	receiptForTx := receipts.ReceiptForTx(tx.Hash())
+	if receiptForTx == nil {
+		return fmt.Errorf("receipt not found for tx %s", tx.Hash().String())
+	}
+
+	if execResult == nil {
+		return fmt.Errorf("execResult is nil")
+	}
+
+	if (execResult.Err == nil) != (receiptForTx.Status == 1) {
+		return fmt.Errorf("execResult error and receipt status mismatch")
+	}
+
+	return nil
 }
 
 type batchCountersResponse struct {
