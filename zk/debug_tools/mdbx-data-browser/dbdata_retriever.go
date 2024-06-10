@@ -1,6 +1,8 @@
 package mdbxdatabrowser
 
 import (
+	"fmt"
+
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -14,8 +16,8 @@ type DbDataRetriever struct {
 	dbReader state.ReadOnlyHermezDb
 }
 
-// newDbDataRetriever instantiates DbDataRetriever instance
-func newDbDataRetriever(tx kv.Tx) *DbDataRetriever {
+// NewDbDataRetriever instantiates DbDataRetriever instance
+func NewDbDataRetriever(tx kv.Tx) *DbDataRetriever {
 	return &DbDataRetriever{
 		tx:       tx,
 		dbReader: hermez_db.NewHermezDbReader(tx),
@@ -144,8 +146,11 @@ func (d *DbDataRetriever) GetBlockByNumber(blockNum uint64, includeTxs, includeR
 	}
 
 	block := rawdb.ReadBlock(d.tx, blockHash, blockNum)
-	receipts := rawdb.ReadReceipts(d.tx, block, block.Body().SendersFromTxs())
+	if block == nil {
+		return nil, fmt.Errorf("block %d not found", blockNum)
+	}
 
+	receipts := rawdb.ReadReceipts(d.tx, block, block.Body().SendersFromTxs())
 	rpcBlock, err := rpcTypes.NewBlock(block, receipts.ToSlice(), includeTxs, includeReceipts)
 	if err != nil {
 		return nil, err

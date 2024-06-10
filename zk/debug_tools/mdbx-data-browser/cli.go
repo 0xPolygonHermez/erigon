@@ -85,12 +85,12 @@ func dumpBatchesByNumbers(cliCtx *cli.Context) error {
 	}
 	defer tx.Rollback()
 
-	r := newDbDataRetriever(tx)
+	r := NewDbDataRetriever(tx)
 	batches := make([]*types.Batch, 0, len(batchOrBlockNumbers.Value()))
 	for _, batchNum := range batchOrBlockNumbers.Value() {
 		batch, err := r.GetBatchByNumber(batchNum, verboseOutput)
 		if err != nil {
-			return fmt.Errorf("failed to retrieve the batch %d: %w", batchOrBlockNumbers, err)
+			return fmt.Errorf("failed to retrieve the batch %d: %w", batchNum, err)
 		}
 
 		batches = append(batches, batch)
@@ -122,12 +122,12 @@ func dumpBlocksByNumbers(cliCtx *cli.Context) error {
 	}
 	defer tx.Rollback()
 
-	r := newDbDataRetriever(tx)
+	r := NewDbDataRetriever(tx)
 	blocks := make([]*types.Block, 0, len(batchOrBlockNumbers.Value()))
-	for _, batchNum := range batchOrBlockNumbers.Value() {
-		block, err := r.GetBlockByNumber(batchNum, verboseOutput, verboseOutput)
+	for _, blockNum := range batchOrBlockNumbers.Value() {
+		block, err := r.GetBlockByNumber(blockNum, verboseOutput, verboseOutput)
 		if err != nil {
-			return fmt.Errorf("failed to retrieve the block %d: %w", batchOrBlockNumbers, err)
+			return fmt.Errorf("failed to retrieve the block %d: %w", blockNum, err)
 		}
 
 		blocks = append(blocks, block)
