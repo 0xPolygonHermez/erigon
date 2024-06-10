@@ -179,6 +179,9 @@ func (c *StreamClient) ReadEntries(bookmark *types.BookmarkProto, l2BlocksAmount
 // reads entries to the end of the stream
 // at end will wait for new entries to arrive
 func (c *StreamClient) ReadAllEntriesToChannel(bookmark *types.BookmarkProto) error {
+	c.streaming.Store(true)
+	defer c.streaming.Store(false)
+
 	// if connection is lost, try to reconnect
 	// this occurs when all 5 attempts failed on previous run
 	if c.conn == nil {
@@ -254,6 +257,7 @@ func (c *StreamClient) afterStartCommand() error {
 // sends the parsed FullL2Blocks with transactions to a channel
 func (c *StreamClient) readAllFullL2BlocksToChannel() error {
 	var err error
+
 LOOP:
 	for {
 		select {
@@ -308,12 +312,10 @@ LOOP:
 		}
 
 		c.lastWrittenTime.Store(time.Now().UnixNano())
-		c.streaming.Store(true)
 		log.Trace("writing block to channel", "blockNumber", fullBlock.L2BlockNumber, "batchNumber", fullBlock.BatchNumber)
 		c.l2BlockChan <- *fullBlock
 	}
 
-	c.streaming.Store(false)
 	return err
 }
 
@@ -336,11 +338,9 @@ func (c *StreamClient) tryReConnect() error {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		c.streaming.Store(true)
 		return nil
 	}
 
-	c.streaming.Store(false)
 	return err
 }
 
