@@ -38,6 +38,10 @@ jobs:
             ${{ runner.os }}-buildx-
 
       - name: Build and run benchmarks
+        env: 
+          PROFILE_NAME: ${{ matrix.profile_name }}
+          NODE_URL: ${{ matrix.l2_ep }}
+          FUNDED_KEY: ${{ secrets[matrix.l2_pk_secret_name] }}
         run: |
           #!/bin/bash
           cd eth-bench
@@ -45,13 +49,13 @@ jobs:
           cat <<EOF > ./tmp_profiles.json
           {
             "profiles": {
-              "${{ matrix.profile_name }}": {
+              "$PROFILE_NAME": {
                 "description": "Nightly Tests",
-                "node_url": "${{ matrix.l2_ep }}",
+                "node_url": "$NODE_URL",
                 "l1_ep": "${{ matrix.l1_ep }}",
                 "bridge_addr": "${{ matrix.bridge_addr }}",
                 "bridge_ep": "${{ matrix.bridge_ep }}",
-                "funded_key": "${{ secrets[matrix.l2_pk_secret_name] }}",
+                "funded_key": "$FUNDED_KEY",
                 "l1_funded_key": "${{ matrix.secrets[matrix.l1_pk_secret_name] }}"
               }
             }
