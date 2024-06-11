@@ -1,4 +1,4 @@
-name: Nightly - ETH Bench
+name: Nightly - ETH Bench (Bridge)
 
 on:
   schedule:
@@ -12,9 +12,13 @@ jobs:
       matrix:
         include:
           - profile_name: "network5"
+            l1_ep: "https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/sepolia"
             l2_ep: "http://34.175.214.161:8500"
+            bridge_ep: "http://34.175.214.161:8085"
+            l1_pk_secret_name: "L1_SEPOLIA_FUNDED_PRIVATE_KEY"
             l2_pk_secret_name: "NETWORK5_PRIVATE_KEY"
-            
+            bridge_addr: "0xb566BE17B22404BD46F389030ec5592F8ffAde12"
+
     steps:
       - name: Checkout current repository
         uses: actions/checkout@v3
@@ -44,7 +48,11 @@ jobs:
               "${{ matrix.profile_name }}": {
                 "description": "Nightly Tests",
                 "node_url": "${{ matrix.l2_ep }}",
+                "l1_ep": "${{ matrix.l1_ep }}",
+                "bridge_addr": "${{ matrix.bridge_addr }}",
+                "bridge_ep": "${{ matrix.bridge_ep }}",
                 "funded_key": "${{ secrets[matrix.l2_pk_secret_name] }}",
+                "l1_funded_key": "${{ secrets[matrix.l1_pk_secret_name] }}"
               }
             }
           }
@@ -52,11 +60,21 @@ jobs:
 
           export PROFILE=${{ matrix.profile_name }}
 
-          docker compose build
-          docker compose up --abort-on-container-exit --exit-code-from benchmark
-          EXIT_CODE=$?
-          docker compose down
+          docker build -t eth-bench-temp-${{ matrix.profile_name}}
 
+          docker run -it --rm \
+            --volume "$(pwd):/app" \
+            --volume "$(pwd)/profiles.json:/app/profiles.json" \
+            --volume "$(pwd)/logs:/app/logs" \
+            --env PYTHONUNBUFFERED=1 \
+            --env PROFILE=${PROFILE} \
+            --network bench-net \
+            --workdir /app \
+            eth-bench-temp-${{ matrix.profile_name}} \
+            python bench.py -p "$PROFILE" -c 1 -t 1 --all --recover
+
+          EXIT_CODE=$?
+          
           echo "Benchmark exit code for profile ${PROFILE}: $EXIT_CODE"
           exit $EXIT_CODE
 
