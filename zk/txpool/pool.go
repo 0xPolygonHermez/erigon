@@ -435,10 +435,14 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 	if err := p.senders.onNewBlock(stateChanges, unwindTxs, minedTxs); err != nil {
 		return err
 	}
-	_, unwindTxs, err = p.validateTxs(&unwindTxs, cacheView)
-	if err != nil {
-		return err
-	}
+
+	// No point to validate transactions that have already been executed.
+	// It is clear that some of them will not pass the validation, because a unwound tx may depend on another unwound transaction. In this case the depended tx will be discarded
+	// Let's all of them pass so they can stay in the queue subpool.
+	// _, unwindTxs, err = p.validateTxs(&unwindTxs, cacheView)
+	// if err != nil {
+	// 	return err
+	// }
 
 	if assert.Enable {
 		for _, txn := range unwindTxs.Txs {
@@ -1048,7 +1052,7 @@ func addTxs(blockNum uint64, cacheView kvcache.CacheView, senders *sendersBatch,
 func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges *remote.StateChangeBatch,
 	senders *sendersBatch, newTxs types.TxSlots, pendingBaseFee uint64, blockGasLimit uint64,
 	pending *PendingPool, baseFee, queued *SubPool,
-	byNonce *BySenderAndNonce, byHash map[string]*metaTx, sendersWithChangedStateBeforeLimboTrim map[uint64]struct{}, add func(*metaTx, *types.Announcements) DiscardReason, discard func(*metaTx, DiscardReason)) (types.Announcements, error) {
+	byNonce *BySenderAndNonce, byHash map[string]*metaTx, sendersWithChangedStateBeforeLimboTrim *LimboSendersWithChangedState, add func(*metaTx, *types.Announcements) DiscardReason, discard func(*metaTx, DiscardReason)) (types.Announcements, error) {
 	protocolBaseFee := calcProtocolBaseFee(pendingBaseFee)
 	if assert.Enable {
 		for _, txn := range newTxs.Txs {
@@ -1070,13 +1074,13 @@ func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges
 	announcements := types.Announcements{}
 	for i, txn := range newTxs.Txs {
 		if _, ok := byHash[string(txn.IDHash[:])]; ok {
-			delete(sendersWithChangedStateBeforeLimboTrim, txn.SenderID)
+			sendersWithChangedStateBeforeLimboTrim.decrement(txn.SenderID)
 			continue
 		}
 		mt := newMetaTx(txn, newTxs.IsLocal[i], blockNum)
 		if reason := add(mt, &announcements); reason != NotSet {
 			discard(mt, reason)
-			delete(sendersWithChangedStateBeforeLimboTrim, txn.SenderID)
+			sendersWithChangedStateBeforeLimboTrim.decrement(txn.SenderID)
 			continue
 		}
 		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
@@ -1092,7 +1096,7 @@ func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges
 				addr := gointerfaces.ConvertH160toAddress(change.Address)
 				id, ok := senders.getID(addr)
 				if !ok {
-					delete(sendersWithChangedStateBeforeLimboTrim, id)
+					sendersWithChangedStateBeforeLimboTrim.decrement(id)
 					continue
 				}
 				sendersWithChangedState[id] = struct{}{}
@@ -1100,8 +1104,10 @@ func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges
 		}
 	}
 
-	for senderId := range sendersWithChangedStateBeforeLimboTrim {
-		sendersWithChangedState[senderId] = struct{}{}
+	for senderId, counter := range sendersWithChangedStateBeforeLimboTrim.Storage {
+		if counter > 0 {
+			sendersWithChangedState[senderId] = struct{}{}
+		}
 	}
 
 	for senderID := range sendersWithChangedState {

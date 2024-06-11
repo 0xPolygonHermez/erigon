@@ -16,6 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
+	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
@@ -74,13 +75,14 @@ func finaliseBlock(
 	parentBlock *types.Block,
 	forkId uint64,
 	batch uint64,
+	accumulator *shards.Accumulator,
 	ger common.Hash,
 	l1BlockHash common.Hash,
 	transactions []types.Transaction,
 	receipts types.Receipts,
 	effectiveGases []uint8,
 ) (*types.Block, error) {
-	stateWriter := state.NewPlainStateWriter(sdb.tx, sdb.tx, newHeader.Number.Uint64())
+	stateWriter := state.NewPlainStateWriter(sdb.tx, sdb.tx, newHeader.Number.Uint64()).SetAccumulator(accumulator)
 	chainReader := stagedsync.ChainReader{
 		Cfg: *cfg.chainConfig,
 		Db:  sdb.tx,

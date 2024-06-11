@@ -39,6 +39,33 @@ const (
 
 var emptyHash = common.Hash{}
 
+type LimboSendersWithChangedState struct {
+	Storage map[uint64]int32
+}
+
+func NewLimboSendersWithChangedState() *LimboSendersWithChangedState {
+	return &LimboSendersWithChangedState{
+		Storage: make(map[uint64]int32),
+	}
+}
+
+func (_this *LimboSendersWithChangedState) increment(senderId uint64) {
+	value, found := _this.Storage[senderId]
+	if !found {
+		value = 0
+	}
+	_this.Storage[senderId] = value + 1
+
+}
+
+func (_this *LimboSendersWithChangedState) decrement(senderId uint64) {
+	value, found := _this.Storage[senderId]
+	if found {
+		_this.Storage[senderId] = value - 1
+	}
+
+}
+
 type LimboBatchTransactionDetails struct {
 	Rlp         []byte
 	StreamBytes []byte
@@ -554,11 +581,11 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 	return nil
 }
 
-func prepareSendersWithChangedState(txs *types.TxSlots) map[uint64]struct{} {
-	sendersWithChangedState := map[uint64]struct{}{}
+func prepareSendersWithChangedState(txs *types.TxSlots) *LimboSendersWithChangedState {
+	sendersWithChangedState := NewLimboSendersWithChangedState()
 
 	for _, txn := range txs.Txs {
-		sendersWithChangedState[txn.SenderID] = struct{}{}
+		sendersWithChangedState.increment(txn.SenderID)
 	}
 
 	return sendersWithChangedState

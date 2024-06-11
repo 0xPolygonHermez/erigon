@@ -337,7 +337,11 @@ func doFinishBlockAndUpdateState(
 ) (*types.Block, error) {
 	thisBlockNumber := header.Number.Uint64()
 
-	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, transactions, receipts, effectiveGases)
+	if cfg.accumulator != nil {
+		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
+	}
+
+	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, cfg.accumulator, ger, l1BlockHash, transactions, receipts, effectiveGases)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +355,7 @@ func doFinishBlockAndUpdateState(
 		if err != nil {
 			return nil, err
 		}
-		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), txs, false)
+		cfg.accumulator.ChangeTransactions(txs)
 	}
 
 	return block, nil

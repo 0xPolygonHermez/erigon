@@ -199,6 +199,10 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 			time.Sleep(time.Second)
 		}
 
+		if len(blocks) == 0 {
+			return verifierBundle, fmt.Errorf("still not blocks in this batch")
+		}
+
 		tx, err := v.db.BeginRo(innerCtx)
 		if err != nil {
 			return verifierBundle, err
@@ -261,7 +265,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		}
 
 		// debug purposes
-		// if request.BatchNumber == 10 && counter == 0 {
+		// if request.BatchNumber == 2 && counter == 0 {
 		// 	ok = false
 		// 	counter = 1
 		// }
