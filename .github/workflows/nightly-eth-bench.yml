@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        includes:
+        include:
           - profile_name: "network5"
             l1_ep: "https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/sepolia"
             l2_ep: "http://34.175.214.161:8500"
@@ -38,10 +38,6 @@ jobs:
             ${{ runner.os }}-buildx-
 
       - name: Build and run benchmarks
-        env: 
-          PROFILE_NAME: ${{ matrix.profile_name }}
-          NODE_URL: ${{ matrix.l2_ep }}
-          FUNDED_KEY: ${{ secrets[matrix.l2_pk_secret_name] }}
         run: |
           #!/bin/bash
           cd eth-bench
@@ -49,20 +45,18 @@ jobs:
           cat <<EOF > ./tmp_profiles.json
           {
             "profiles": {
-              "$PROFILE_NAME": {
+              "${{ matrix.profile_name }}": {
                 "description": "Nightly Tests",
-                "node_url": "$NODE_URL",
+                "node_url": "${{ matrix.l2_ep }}",
                 "l1_ep": "${{ matrix.l1_ep }}",
                 "bridge_addr": "${{ matrix.bridge_addr }}",
                 "bridge_ep": "${{ matrix.bridge_ep }}",
-                "funded_key": "$FUNDED_KEY",
-                "l1_funded_key": "${{ matrix.secrets[matrix.l1_pk_secret_name] }}"
+                "funded_key": "${{ secrets[matrix.l2_pk_secret_name] }}",
+                "l1_funded_key": "${{ secrets[matrix.l1_pk_secret_name] }}"
               }
             }
           }
           EOF
-
-          cat ./tmp_profiles.json
 
           export PROFILE=${{ matrix.profile }}
 
