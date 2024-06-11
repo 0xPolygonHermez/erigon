@@ -62,6 +62,8 @@ jobs:
           }
           EOF
 
+          cat ./tmp_profiles.json
+
           export PROFILE=${{ matrix.profile }}
 
           docker compose build
