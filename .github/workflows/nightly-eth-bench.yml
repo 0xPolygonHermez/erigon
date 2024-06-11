@@ -72,7 +72,6 @@ jobs:
             eth-bench-temp-${{ matrix.profile_name}} \
             python bench.py -p "$PROFILE" -c 5 -t 12 --all --recover
 
-
           docker run --rm \
             --volume "$(pwd):/app" \
             --volume "$(pwd)/profiles.json:/app/profiles.json" \
