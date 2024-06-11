@@ -58,7 +58,7 @@ jobs:
           }
           EOF
 
-          export PROFILE=${{ matrix.profile }}
+          export PROFILE=${{ matrix.profile_name }}
 
           docker compose build
           docker compose up --abort-on-container-exit --exit-code-from benchmark
@@ -72,5 +72,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: benchmark-log-${{ matrix.profile }}
-          path: ./eth-bench/bench_${{ matrix.profile }}.log
+          name: benchmark-log-${{ matrix.profile_name }}
+          path: ./eth-bench/bench_${{ matrix.profile_name }}.log
