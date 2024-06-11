@@ -60,7 +60,7 @@ jobs:
 
           export PROFILE=${{ matrix.profile_name }}
 
-          docker build -t eth-bench-temp-${{ matrix.profile_name}}
+          docker build . -t eth-bench-temp-${{ matrix.profile_name}}
 
           docker run -it --rm \
             --volume "$(pwd):/app" \
