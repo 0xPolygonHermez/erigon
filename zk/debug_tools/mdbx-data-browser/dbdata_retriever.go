@@ -37,14 +37,17 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 		return nil, err
 	}
 
-	block := rawdb.ReadBlock(d.tx, blockHash, blockNum)
+	latestBlockInBatch := rawdb.ReadBlock(d.tx, blockHash, blockNum)
+	if latestBlockInBatch == nil {
+		return nil, fmt.Errorf("block %d not found", blockNum)
+	}
 
 	// last block in batch data
 	batch := &rpcTypes.Batch{
 		Number:    rpcTypes.ArgUint64(batchNum),
-		Coinbase:  block.Coinbase(),
-		StateRoot: block.Root(),
-		Timestamp: rpcTypes.ArgUint64(block.Time()),
+		Coinbase:  latestBlockInBatch.Coinbase(),
+		StateRoot: latestBlockInBatch.Root(),
+		Timestamp: rpcTypes.ArgUint64(latestBlockInBatch.Time()),
 	}
 
 	// block numbers in batch
@@ -54,35 +57,32 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	// collect blocks in batch
-	// TODO: REMOVE
-	// batch.Blocks = []interface{}{}
-	// batch.Transactions = []interface{}{}
 	// handle genesis - not in the hermez tables so requires special treament
 	if batchNum == 0 {
-		blk, err := rawdb.ReadBlockByNumber(d.tx, 0)
+		genesisBlock, err := rawdb.ReadBlockByNumber(d.tx, 0)
 		if err != nil {
 			return nil, err
 		}
-		batch.Blocks = append(batch.Blocks, blk.Hash())
+		batch.Blocks = append(batch.Blocks, genesisBlock.Hash())
 	}
 
-	for _, blkNo := range blocksInBatch {
-		blk, err := rawdb.ReadBlockByNumber(d.tx, blkNo)
+	for _, blockNum := range blocksInBatch {
+		block, err := rawdb.ReadBlockByNumber(d.tx, blockNum)
 		if err != nil {
 			return nil, err
 		}
 
 		if !verboseOutput {
-			batch.Blocks = append(batch.Blocks, blk.Hash())
+			batch.Blocks = append(batch.Blocks, block.Hash())
 		} else {
-			batch.Blocks = append(batch.Blocks, blk)
+			batch.Blocks = append(batch.Blocks, block)
 		}
 
-		for _, tx := range blk.Transactions() {
+		for _, tx := range block.Transactions() {
 			if !verboseOutput {
-				batch.Transactions = append(batch.Transactions, tx)
-			} else {
 				batch.Transactions = append(batch.Transactions, tx.Hash())
+			} else {
+				batch.Transactions = append(batch.Transactions, tx)
 			}
 		}
 	}
