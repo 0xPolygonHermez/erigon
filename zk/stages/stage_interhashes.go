@@ -129,8 +129,6 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb)
 
-	//eridb.OpenBatch(quit)
-
 	if cfg.zk.IncrementTreeAlways {
 		// increment only behaviour
 		log.Debug(fmt.Sprintf("[%s] IncrementTreeAlways true - incrementing tree", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
