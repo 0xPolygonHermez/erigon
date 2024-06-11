@@ -13,7 +13,6 @@ jobs:
           include:
             - name: "Integration 5"
               rpc_url: "http://34.175.214.161:8500"
-              private_key: "${{ secrets.NETWORK5_PRIVATE_KEY }}"
               eth_address: "0x41BB6960a5156aC29d6e9E04273837AD19d6691A"
               log_file: "/tmp/rpc-tests.d/evm-rpc-tests.log"
               work_dir: "/tmp/rpc-tests.d"
@@ -31,7 +30,7 @@ jobs:
       - name: Run Docker Compose
         env:
           RPC_URL: ${{ matrix.rpc_url }}
-          PRIVATE_KEY: ${{ matrix.private_key }}
+          PRIVATE_KEY: ${{ secrets.NETWORK5_PRIVATE_KEY }}
           ETH_ADDRESS: ${{ matrix.eth_address }}
           LOG_FILE: ${{ matrix.log_file }}
           WORK_DIR: ${{ matrix.work_dir }}
