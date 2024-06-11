@@ -198,34 +198,43 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 			   \/
 			*/
 			dataHex := hex.EncodeToString(d)
-			msInt := mSize.Uint64() * 2
 
-			words := []string{}
-			for i := 0; i < len(dataHex); i += 64 {
-				end := i + 64
-				if end > len(dataHex) {
-					end = len(dataHex)
+			if len(dataHex) > 0 {
+				msInt := mSize.Uint64()
+
+				words := []string{}
+				for i := 0; i < len(dataHex); i += 64 {
+					end := i + 64
+					if end > len(dataHex) {
+						end = len(dataHex)
+					}
+					word := dataHex[i:end]
+					words = append(words, word)
 				}
-				word := dataHex[i:end]
-				words = append(words, word)
-			}
 
-			lastWordIndex := len(words) - 1
-			lastWord := words[lastWordIndex]
-
-			if len(lastWord) > 0 && lastWord[0] == '0' {
-				lastWord = strings.TrimPrefix(lastWord, "0")
-				if uint64(len(lastWord)) < msInt {
-					log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", mSize.Uint64()
-					lastWord = appendOneZero(lastWord)
+				var lastWord string
+				lastWordIndex := 0
+				if len(words) > 0 {
+					lastWordIndex = len(words) - 1
+					lastWord = words[lastWordIndex]
+				} else {
+					log.Warn("Words is empty", "block", blockNo, "data", dataHex, "size", msInt)
 				}
-			}
-			words[lastWordIndex] = lastWord
-			dataHex = strings.Join(words, "")
-			var err error
-			d, err = hex.DecodeString(dataHex)
-			if err != nil {
-				return nil, err
+
+				if len(lastWord) > 0 && lastWord[0] == '0' && lastWord[1] != '0' {
+					tempLastWord := lastWord[1:]
+					if uint64(len(tempLastWord)) < msInt*2 {
+						log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", msInt)
+						lastWord = tempLastWord + "0"
+					}
+				}
+				words[lastWordIndex] = lastWord
+				dataHex = strings.Join(words, "")
+				var err error
+				d, err = hex.DecodeString(dataHex)
+				if err != nil {
+					return nil, err
+				}
 			}
 			/*
 			  \  /
