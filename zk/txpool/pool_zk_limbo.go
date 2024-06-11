@@ -371,16 +371,11 @@ func (p *TxPool) flushLockedLimbo(tx kv.RwTx) (err error) {
 	}
 
 	v := make([]byte, 0, 1024)
-	for _, txSlot := range p.limbo.limboSlots.Txs {
+	for i, txSlot := range p.limbo.limboSlots.Txs {
 		v = common.EnsureEnoughSize(v, 20+len(txSlot.Rlp))
+		sender := p.limbo.limboSlots.Senders.At(i)
 
-		addr, ok := p.senders.senderID2Addr[txSlot.SenderID]
-		if !ok {
-			log.Warn("[txpool] flush: sender address not found by ID", "senderID", txSlot.SenderID)
-			continue
-		}
-
-		copy(v[:20], addr.Bytes())
+		copy(v[:20], sender)
 		copy(v[20:], txSlot.Rlp)
 
 		key := append([]byte{DbKeySlotsPrefix}, txSlot.IDHash[:]...)

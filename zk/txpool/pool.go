@@ -515,7 +515,6 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 	}
 	p.finalizeLimboOnNewBlock(limboTxs)
 	if isAfterLimbo {
-		// always store false here as we've finally handled the new block
 		p.allowYieldingTransactions()
 	}
 
