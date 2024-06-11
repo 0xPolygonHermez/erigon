@@ -51,7 +51,7 @@ jobs:
                 "l1_ep": "${{ matrix.l1_ep }}",
                 "bridge_addr": "${{ matrix.bridge_addr }}",
                 "bridge_ep": "${{ matrix.bridge_ep }}",
-                "funded_key": "${{ secrets[matrix.l2_pk_secret_name] }}"
+                "funded_key": "${{ secrets[matrix.l2_pk_secret_name] }}",
                 "l1_funded_key": "${{ matrix.secrets[matrix.l1_pk_secret_name] }}"
               }
             }
