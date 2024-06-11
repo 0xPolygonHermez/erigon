@@ -41,8 +41,30 @@ jobs:
 
       - name: Build and run benchmarks
         run: |
+          #!/bin/bash
           cd eth-bench
-          ./run_benchmarks.sh ${{ matrix.profile }} ${{ env.RPC_URL }} ${{ env.PRIVATE_KEY }}
+          
+          cat <<EOF > ./tmp_profiles.json
+          {
+            "profiles": {
+              "${{ matrix.profile }}": {
+                "description": "Nightly Tests",
+                "node_url": "${{ env.RPC_URL }}",
+                "funded_key": "${{ env.PRIVATE_KEY }}"
+              }
+            }
+          }
+          EOF
+
+          export PROFILE=${{ matrix.profile }}
+
+          docker compose build
+          docker compose up --abort-on-container-exit --exit-code-from benchmark
+          EXIT_CODE=$?
+          docker compose down
+
+          echo "Benchmark exit code for profile ${PROFILE}: $EXIT_CODE"
+          exit $EXIT_CODE
 
       - name: Upload benchmark log
         if: always()
