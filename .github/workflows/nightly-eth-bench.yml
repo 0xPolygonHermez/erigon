@@ -10,15 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        profile: 
-          includes:
-            - profile_name: "network5"
-              l1_ep: "https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/sepolia"
-              l2_ep: "http://34.175.214.161:8500"
-              bridge_ep: "http://34.175.214.161:8085"
-              l1_pk_secret_name: "L1_SEPOLIA_PRIVATE_KEY"
-              l2_pk_secret_name: "NETWORK5_PRIVATE_KEY"
-              bridge_addr: "0xb566BE17B22404BD46F389030ec5592F8ffAde12"
+        includes:
+          - profile_name: "network5"
+            l1_ep: "https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/sepolia"
+            l2_ep: "http://34.175.214.161:8500"
+            bridge_ep: "http://34.175.214.161:8085"
+            l1_pk_secret_name: "L1_SEPOLIA_PRIVATE_KEY"
+            l2_pk_secret_name: "NETWORK5_PRIVATE_KEY"
+            bridge_addr: "0xb566BE17B22404BD46F389030ec5592F8ffAde12"
 
     steps:
       - name: Checkout current repository
