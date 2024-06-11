@@ -68,7 +68,6 @@ jobs:
             --volume "$(pwd)/logs:/app/logs" \
             --env PYTHONUNBUFFERED=1 \
             --env PROFILE=${PROFILE} \
-            --network bench-net \
             --workdir /app \
             eth-bench-temp-${{ matrix.profile_name}} \
             python bench.py -p "$PROFILE" -c 5 -t 12 --all --recover
