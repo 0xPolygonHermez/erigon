@@ -10,7 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        profile: [network5]
+        profile: 
+          includes:
+            - profile_name: "network5"
+              l1_ep: "l1_rpc_url"
+              l2_ep: "http://34.175.214.161:8500"
+              bridge_ep: "http://34.175.214.161:8085"
+              l1_pk_secret_name: "L1_SEPOLIA_PRIVATE_KEY"
+              l2_pk_secret_name: "NETWORK5_PRIVATE_KEY"
+              bridge_addr: "0xb566BE17B22404BD46F389030ec5592F8ffAde12"
 
     steps:
       - name: Checkout current repository
@@ -30,15 +38,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Set PROFILE_UPPER environment variable
-        run: |
-          echo "PROFILE_UPPER=$(echo ${{ matrix.profile }} | tr '[:lower:]' '[:upper:]')" >> $GITHUB_ENV
-
-      - name: Set RPC_URL and PRIVATE_KEY environment variables
-        run: |
-          echo "RPC_URL=${{ secrets[format('{0}_RPC_URL', env.PROFILE_UPPER)] }}" >> $GITHUB_ENV
-          echo "PRIVATE_KEY=${{ secrets[format('{0}_PRIVATE_KEY', env.PROFILE_UPPER)] }}" >> $GITHUB_ENV
-
       - name: Build and run benchmarks
         run: |
           #!/bin/bash
@@ -47,10 +46,14 @@ jobs:
           cat <<EOF > ./tmp_profiles.json
           {
             "profiles": {
-              "${{ matrix.profile }}": {
+              "${{ matrix.profile_name }}": {
                 "description": "Nightly Tests",
-                "node_url": "${{ env.RPC_URL }}",
-                "funded_key": "${{ env.PRIVATE_KEY }}"
+                "node_url": "${{ matrix.l2_ep }}",
+                "l1_ep": "${{ matrix.l1_ep }}",
+                "bridge_addr": "${{ matrix.bridge_addr }}",
+                "bridge_ep": "${{ matrix.bridge_ep }}",
+                "funded_key": "${{ secrets[matrix.l2_pk_secret_name] }}"
+                "l1_funded_key": "${{ matrix.secrets[matrix.l1_pk_secret_name] }}"
               }
             }
           }
