@@ -11,6 +11,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/log/v3"
+	"strings"
 )
 
 func opCallDataLoad_zkevmIncompatible(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
@@ -196,43 +197,35 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 			  \  /
 			   \/
 			*/
-
 			dataHex := hex.EncodeToString(d)
+			msInt := mSize.Uint64() * 2
 
-			bugPossible := false
-
-			// if the first part of datahex < 16 (mSize < 32), remove leading zero
-			if len(dataHex) > 0 && dataHex[0] == '0' && dataHex[1] != '0' && mSize.Uint64() < 32 {
-				bugPossible = true
-				log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", mSize.Uint64())
+			words := []string{}
+			for i := 0; i < len(dataHex); i += 64 {
+				end := i + 64
+				if end > len(dataHex) {
+					end = len(dataHex)
+				}
+				word := dataHex[i:end]
+				words = append(words, word)
 			}
 
-			if bugPossible {
-				dataHex = dataHex[1:]
+			lastWordIndex := len(words) - 1
+			lastWord := words[lastWordIndex]
 
-				// pad the hex out
-				dataHex = appendZerosHex(dataHex, 64)
-
-				msInt := mSize.Uint64()
-
-				// conditional padding to match C++ bug
-				if int(msInt*2) > len(dataHex) {
-					dataHex = prependZerosHex(dataHex, int(msInt*2))
+			if len(lastWord) > 0 && lastWord[0] == '0' {
+				lastWord = strings.TrimPrefix(lastWord, "0")
+				if uint64(len(lastWord)) < msInt {
+					log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", mSize.Uint64()
+					lastWord = appendOneZero(lastWord)
 				}
-
-				if len(dataHex) > int(msInt*2) {
-					dataHex = dataHex[:msInt*2]
-				}
-
-				d, _ = hex.DecodeString(dataHex)
-			} else {
-				// erigon behaviour
-				// [zkEvm] fill 0 at the end
-				dataLen := len(d)
-				lenMod32 := dataLen & 31
-				if lenMod32 != 0 {
-					d = append(d, make([]byte, 32-lenMod32)...)
-				}
+			}
+			words[lastWordIndex] = lastWord
+			dataHex = strings.Join(words, "")
+			var err error
+			d, err = hex.DecodeString(dataHex)
+			if err != nil {
+				return nil, err
 			}
 			/*
 			  \  /
@@ -275,6 +268,10 @@ func appendZerosHex(s string, length int) string {
 		s = s + "0"
 	}
 	return s
+}
+
+func appendOneZero(s string) string {
+	return s + "0"
 }
 
 func opCreate_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
