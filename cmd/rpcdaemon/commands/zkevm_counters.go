@@ -471,7 +471,13 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 		}
 
 		isLatestBlock := i == len(batchBlockNumbers)-1 && latestbatch
-		if stateReader, err = rpchelper.CreateStateReaderFromBlockNumber(ctx, dbtx, blockNum-1, isLatestBlock, 0, api.ethApi.stateCache, api.ethApi.historyV3(dbtx), chainConfig.ChainName); err != nil {
+
+		canBlockNumber := blockNum - 1
+		if blockNum == 0 {
+			canBlockNumber = 0
+		}
+
+		if stateReader, err = rpchelper.CreateStateReaderFromBlockNumber(ctx, dbtx, canBlockNumber, isLatestBlock, 0, api.ethApi.stateCache, api.ethApi.historyV3(dbtx), chainConfig.ChainName); err != nil {
 			return nil, err
 		}
 
