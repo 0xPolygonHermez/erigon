@@ -38,7 +38,7 @@ func TestDbDataRetriever_GetBatchByNumber(t *testing.T) {
 	batch, err := dbReader.GetBatchByNumber(batchNum, true)
 	require.NoError(t, err)
 
-	require.Equal(t, batchNum, batch.Number)
+	require.Equal(t, batchNum, uint64(batch.Number))
 	require.Len(t, expectedBlockHashes, int(blocksInBatch))
 	for _, blockGeneric := range batch.Blocks {
 		block, ok := blockGeneric.(*types.Block)
