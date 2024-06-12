@@ -101,10 +101,8 @@ jobs:
           kurtosis service logs cdk-v1 cdk-erigon-sequencer-001 --all > cdk-erigon-sequencer-001.log
 
       - name: Upload logs
-        working-directory: ./kurtosis-cdk
         if: failure()
         uses: actions/upload-artifact@v3
         with:
           name: logs_${{ github.run_id }}
-          path: |
-            ci_logs
+          path: ./kurtosis-cdk/ci_logs
