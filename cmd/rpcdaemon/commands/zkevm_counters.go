@@ -454,11 +454,13 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 	batchCounters := vm.NewBatchCounterCollector(smtDepth, uint16(forkId), false)
 
 	var (
-		block       *types.Block
-		stateReader state.StateReader
-		collected   vm.Counters
-		receipts    types.Receipts
+		block                      *types.Block
+		stateReader                state.StateReader
+		collected                  vm.Counters
+		receipts                   types.Receipts
+		blockGasUsed, totalGasUsed uint64
 	)
+
 	for i, blockNum := range batchBlockNumbers {
 		//get block with senders
 		if block, err = api.ethApi.blockByNumberWithSenders(dbtx, blockNum); err != nil {
@@ -469,7 +471,7 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 		}
 
 		isLatestBlock := i == len(batchBlockNumbers)-1 && latestbatch
-		if stateReader, err = rpchelper.CreateStateReaderFromBlockNumber(ctx, dbtx, blockNum, isLatestBlock, 0, api.ethApi.stateCache, api.ethApi.historyV3(dbtx), chainConfig.ChainName); err != nil {
+		if stateReader, err = rpchelper.CreateStateReaderFromBlockNumber(ctx, dbtx, blockNum-1, isLatestBlock, 0, api.ethApi.stateCache, api.ethApi.historyV3(dbtx), chainConfig.ChainName); err != nil {
 			return nil, err
 		}
 
@@ -482,18 +484,22 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 			return nil, err
 		}
 		// execute blocks
+		var txGasUsed uint64
 		for _, tx := range block.Transactions() {
-			if execTransaction(tx, batchCounters, smtDepth, ibs, signer, header, rules, chainConfig, blockCtx, receipts); err != nil {
+			if txGasUsed, err = execTransaction(tx, batchCounters, smtDepth, ibs, signer, header, rules, chainConfig, blockCtx, receipts); err != nil {
 				return nil, err
 			}
+			blockGasUsed += txGasUsed
 		}
+
+		totalGasUsed += blockGasUsed
 	}
 
 	if collected, err = batchCounters.CombineCollectors(); err != nil {
 		return nil, err
 	}
 
-	return populateBatchCounters(&collected, smtDepth, batchNum, earliestBlockNum, latestBlockNum)
+	return populateBatchCounters(&collected, smtDepth, batchNum, earliestBlockNum, latestBlockNum, totalGasUsed)
 }
 
 func execTransaction(
@@ -507,7 +513,7 @@ func execTransaction(
 	chainConfig *chain.Config,
 	blockCtx evmtypes.BlockContext,
 	receipts types.Receipts,
-) (err error) {
+) (gasUsed uint64, err error) {
 	var (
 		msg        core.Message
 		execResult *core.ExecutionResult
@@ -515,11 +521,11 @@ func execTransaction(
 	txCounters := vm.NewTransactionCounter(tx, smtDepth, false)
 
 	if _, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
-		return err
+		return 0, err
 	}
 
 	if msg, err = tx.AsMessage(*signer, header.BaseFee, rules); err != nil {
-		return err
+		return 0, err
 	}
 	zkConfig := vm.ZkConfig{Config: vm.Config{NoBaseFee: true}, CounterCollector: txCounters.ExecutionCounters()}
 	evm := vm.NewZkEVM(blockCtx, core.NewEVMTxContext(msg), ibs, chainConfig, zkConfig)
@@ -527,24 +533,24 @@ func execTransaction(
 	ibs.Prepare(tx.Hash(), header.Hash(), 0)
 
 	if execResult, err = core.ApplyMessage(evm, msg, gp, true /* refunds */, false /* gasBailout */); err != nil {
-		return err
+		return 0, err
 	}
 
 	// checks to see if we executed txs correctly
 	receiptForTx := receipts.ReceiptForTx(tx.Hash())
 	if receiptForTx == nil {
-		return fmt.Errorf("receipt not found for tx %s", tx.Hash().String())
+		return 0, fmt.Errorf("receipt not found for tx %s", tx.Hash().String())
 	}
 
 	if execResult == nil {
-		return fmt.Errorf("execResult is nil")
+		return 0, fmt.Errorf("execResult is nil")
 	}
 
 	if (execResult.Err == nil) != (receiptForTx.Status == 1) {
-		return fmt.Errorf("execResult error and receipt status mismatch")
+		return 0, fmt.Errorf("execResult error and receipt status mismatch")
 	}
 
-	return nil
+	return execResult.UsedGas, nil
 }
 
 type batchCountersResponse struct {
@@ -556,7 +562,7 @@ type batchCountersResponse struct {
 	CoutnersLimits combinecCounters `json:"countersLimits"`
 }
 
-func populateBatchCounters(collected *vm.Counters, smtDepth int, batchNum, blockFrom, blockTo uint64) (jsonRes json.RawMessage, err error) {
+func populateBatchCounters(collected *vm.Counters, smtDepth int, batchNum, blockFrom, blockTo, totalGasUsed uint64) (jsonRes json.RawMessage, err error) {
 
 	res := batchCountersResponse{
 		SmtDepth:    smtDepth,
@@ -564,6 +570,7 @@ func populateBatchCounters(collected *vm.Counters, smtDepth int, batchNum, block
 		BlockFrom:   blockFrom,
 		BlockTo:     blockTo,
 		CountersUsed: combinecCounters{
+			Gas:              totalGasUsed,
 			KeccakHashes:     collected.GetKeccakHashes().Used(),
 			Poseidonhashes:   collected.GetPoseidonHashes().Used(),
 			PoseidonPaddings: collected.GetPoseidonPaddings().Used(),
