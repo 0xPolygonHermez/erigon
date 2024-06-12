@@ -124,15 +124,17 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 	batch.BatchL2Data = batchL2Data
 
-	// L1 info tree (exit roots)
-	l1InfoTree, err := d.dbReader.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
-	if err != nil {
-		return nil, err
-	}
+	if batch.GlobalExitRoot != rpcTypes.ZeroHash {
+		// L1 info tree (exit roots)
+		l1InfoTree, err := d.dbReader.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
+		if err != nil {
+			return nil, err
+		}
 
-	if l1InfoTree != nil {
-		batch.MainnetExitRoot = l1InfoTree.MainnetExitRoot
-		batch.RollupExitRoot = l1InfoTree.RollupExitRoot
+		if l1InfoTree != nil {
+			batch.MainnetExitRoot = l1InfoTree.MainnetExitRoot
+			batch.RollupExitRoot = l1InfoTree.RollupExitRoot
+		}
 	}
 
 	return batch, nil
