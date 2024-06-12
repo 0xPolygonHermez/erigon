@@ -1,4 +1,4 @@
-package mdbxdatabrowser
+package main
 
 import (
 	"context"
