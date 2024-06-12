@@ -149,7 +149,7 @@ func dumpBlocksByNumbers(cliCtx *cli.Context) error {
 
 // createDbTx creates a read-only database transaction, that allows querying it.
 func createDbTx(chainDataDir string, ctx context.Context) (kv.Tx, func(), error) {
-	db := mdbx.MustOpenRo(chainDataDir)
+	db := mdbx.MustOpen(chainDataDir)
 	dbTx, err := db.BeginRo(ctx)
 	cleanupFn := func() {
 		dbTx.Rollback()
