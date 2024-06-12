@@ -11,6 +11,8 @@ import (
 	"bytes"
 	"io"
 
+	"errors"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
 	"github.com/ledgerwatch/erigon/core"
@@ -19,10 +21,9 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
-	"errors"
-	"github.com/ledgerwatch/erigon/zk/constants"
 )
 
 func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
@@ -146,7 +147,7 @@ func attemptAddTransaction(
 	l1Recovery bool,
 	forkId uint64,
 ) (*types.Receipt, bool, error) {
-	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
+	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
 	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
 	if err != nil {
 		return nil, false, err

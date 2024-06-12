@@ -143,7 +143,7 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 	smtDepth := smt.GetDepth()
 
 	batchCounters := vm.NewBatchCounterCollector(smtDepth, uint16(forkId), false)
-	txCounters := vm.NewTransactionCounter(tx, smtDepth, false)
+	txCounters := vm.NewTransactionCounter(tx, smtDepth, uint16(forkId), false)
 
 	_, err = batchCounters.AddNewTransactionCounters(txCounters)
 	if err != nil {
@@ -347,7 +347,7 @@ func (api *ZkEvmAPIImpl) TraceTransactionCounters(ctx context.Context, hash comm
 		return err
 	}
 
-	txCounters := vm.NewTransactionCounter(txn, int(smtDepth), false)
+	txCounters := vm.NewTransactionCounter(txn, int(smtDepth), uint16(forkId), false)
 	batchCounters := vm.NewBatchCounterCollector(int(smtDepth), uint16(forkId), false)
 	if _, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
 		stream.WriteNil()
