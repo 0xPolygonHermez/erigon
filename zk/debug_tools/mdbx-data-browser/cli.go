@@ -23,12 +23,14 @@ var (
 		Usage: "If verbose output is enabled, it prints all the details about blocks and transactions in the batches, " +
 			"otherwise just its hashes",
 		Destination: &verboseOutput,
+		Value:       false,
 	}
 
 	fileOutputFlag = &cli.BoolFlag{
 		Name:        "file-output",
 		Usage:       "If file output is enabled, all the results are persisted within a file",
 		Destination: &fileOutput,
+		Value:       false,
 	}
 
 	// commands
@@ -66,7 +68,7 @@ var (
 
 	// parameters
 	chainDataDir        string
-	batchOrBlockNumbers *cli.Uint64Slice
+	batchOrBlockNumbers *cli.Uint64Slice = cli.NewUint64Slice()
 	verboseOutput       bool
 	fileOutput          bool
 )
@@ -79,11 +81,11 @@ func dumpBatchesByNumbers(cliCtx *cli.Context) error {
 
 	chainDataDir = cliCtx.String(utils.DataDirFlag.Name)
 
-	tx, err := createDbTx(chainDataDir, cliCtx.Context)
+	tx, cleanup, err := createDbTx(chainDataDir, cliCtx.Context)
 	if err != nil {
 		return fmt.Errorf("failed to create read-only db transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer cleanup()
 
 	r := NewDbDataRetriever(tx)
 	batches := make([]*types.Batch, 0, len(batchOrBlockNumbers.Value()))
@@ -116,11 +118,11 @@ func dumpBlocksByNumbers(cliCtx *cli.Context) error {
 
 	chainDataDir = cliCtx.String(utils.DataDirFlag.Name)
 
-	tx, err := createDbTx(chainDataDir, cliCtx.Context)
+	tx, cleanup, err := createDbTx(chainDataDir, cliCtx.Context)
 	if err != nil {
 		return fmt.Errorf("failed to create read-only db transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer cleanup()
 
 	r := NewDbDataRetriever(tx)
 	blocks := make([]*types.Block, 0, len(batchOrBlockNumbers.Value()))
@@ -146,11 +148,15 @@ func dumpBlocksByNumbers(cliCtx *cli.Context) error {
 }
 
 // createDbTx creates a read-only database transaction, that allows querying it.
-func createDbTx(chainDataDir string, ctx context.Context) (kv.Tx, error) {
+func createDbTx(chainDataDir string, ctx context.Context) (kv.Tx, func(), error) {
 	db := mdbx.MustOpenRo(chainDataDir)
-	defer db.Close()
+	dbTx, err := db.BeginRo(ctx)
+	cleanupFn := func() {
+		dbTx.Rollback()
+		db.Close()
+	}
 
-	return db.BeginRo(ctx)
+	return dbTx, cleanupFn, err
 }
 
 // outputResults prints results either to the terminal or to the file
