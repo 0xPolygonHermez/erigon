@@ -15,7 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
-func Test_DbDataRetriever_GetBatchByNumber(t *testing.T) {
+func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
 	const (
 		batchNum      = uint64(5)
 		blocksInBatch = uint64(6)
@@ -49,7 +49,7 @@ func Test_DbDataRetriever_GetBatchByNumber(t *testing.T) {
 	}
 }
 
-func Test_DbDataRetriever_GetBlockByNumber(t *testing.T) {
+func TestDbDataRetrieverGetBlockByNumber(t *testing.T) {
 	t.Run("querying an existing block", func(t *testing.T) {
 		// arrange
 		_, dbTx := memdb.NewTestTx(t)

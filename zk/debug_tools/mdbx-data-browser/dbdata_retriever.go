@@ -7,6 +7,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
+	coreTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	rpcTypes "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 )
@@ -26,7 +27,77 @@ func NewDbDataRetriever(tx kv.Tx) *DbDataRetriever {
 
 // GetBatchByNumber reads batch by number from the database
 func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) (*rpcTypes.Batch, error) {
-	// highest block in batch
+	// Get highest block in batch
+	latestBlockInBatch, err := d.getHighestBlockInBatch(batchNum)
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize batch
+	batch := &rpcTypes.Batch{
+		Number:    rpcTypes.ArgUint64(batchNum),
+		Coinbase:  latestBlockInBatch.Coinbase(),
+		StateRoot: latestBlockInBatch.Root(),
+		Timestamp: rpcTypes.ArgUint64(latestBlockInBatch.Time()),
+	}
+
+	// Collect blocks in batch
+	if err := d.collectBlocksInBatch(batch, batchNum, verboseOutput); err != nil {
+		return nil, err
+	}
+
+	// Get global exit root
+	ger, err := d.dbReader.GetBatchGlobalExitRoot(batchNum)
+	if err != nil {
+		return nil, err
+	}
+	if ger != nil {
+		batch.GlobalExitRoot = ger.GlobalExitRoot
+	}
+
+	// Get sequence
+	seq, err := d.dbReader.GetSequenceByBatchNo(batchNum)
+	if err != nil {
+		return nil, err
+	}
+	if seq != nil {
+		batch.SendSequencesTxHash = &seq.L1TxHash
+	}
+	batch.Closed = (seq != nil || batchNum <= 1)
+
+	// Get verification
+	ver, err := d.dbReader.GetVerificationByBatchNo(batchNum)
+	if err != nil {
+		return nil, err
+	}
+	if ver != nil {
+		batch.VerifyBatchTxHash = &ver.L1TxHash
+	}
+
+	// Get batch L2 data
+	batchL2Data, err := d.dbReader.GetL1BatchData(batchNum)
+	if err != nil {
+		return nil, err
+	}
+	batch.BatchL2Data = batchL2Data
+
+	// Set L1 info tree if needed
+	if batch.GlobalExitRoot != rpcTypes.ZeroHash {
+		l1InfoTree, err := d.dbReader.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
+		if err != nil {
+			return nil, err
+		}
+		if l1InfoTree != nil {
+			batch.MainnetExitRoot = l1InfoTree.MainnetExitRoot
+			batch.RollupExitRoot = l1InfoTree.RollupExitRoot
+		}
+	}
+
+	return batch, nil
+}
+
+// getHighestBlockInBatch reads the block with the highest block number from the batch
+func (d *DbDataRetriever) getHighestBlockInBatch(batchNum uint64) (*coreTypes.Block, error) {
 	blockNum, err := d.dbReader.GetHighestBlockInBatch(batchNum)
 	if err != nil {
 		return nil, err
@@ -41,27 +112,20 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	if latestBlockInBatch == nil {
 		return nil, fmt.Errorf("block %d not found", blockNum)
 	}
+	return latestBlockInBatch, nil
+}
 
-	// last block in batch data
-	batch := &rpcTypes.Batch{
-		Number:    rpcTypes.ArgUint64(batchNum),
-		Coinbase:  latestBlockInBatch.Coinbase(),
-		StateRoot: latestBlockInBatch.Root(),
-		Timestamp: rpcTypes.ArgUint64(latestBlockInBatch.Time()),
-	}
-
-	// block numbers in batch
+// collectBlocksInBatch retrieve blocks from the batch
+func (d *DbDataRetriever) collectBlocksInBatch(batch *rpcTypes.Batch, batchNum uint64, verboseOutput bool) error {
 	blocksInBatch, err := d.dbReader.GetL2BlockNosByBatch(batchNum)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// collect blocks in batch
-	// handle genesis - not in the hermez tables so requires special treament
 	if batchNum == 0 {
 		genesisBlock, err := rawdb.ReadBlockByNumber(d.tx, 0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		batch.Blocks = append(batch.Blocks, genesisBlock.Hash())
 	}
@@ -69,7 +133,7 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	for _, blockNum := range blocksInBatch {
 		block, err := rawdb.ReadBlockByNumber(d.tx, blockNum)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if !verboseOutput {
@@ -86,58 +150,7 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 			}
 		}
 	}
-
-	// global exit root of batch
-	ger, err := d.dbReader.GetBatchGlobalExitRoot(batchNum)
-	if err != nil {
-		return nil, err
-	}
-	if ger != nil {
-		batch.GlobalExitRoot = ger.GlobalExitRoot
-	}
-
-	// sequence
-	seq, err := d.dbReader.GetSequenceByBatchNo(batchNum)
-	if err != nil {
-		return nil, err
-	}
-	if seq != nil {
-		batch.SendSequencesTxHash = &seq.L1TxHash
-	}
-
-	// sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed
-	batch.Closed = (seq != nil || batchNum <= 1)
-
-	// verification
-	ver, err := d.dbReader.GetVerificationByBatchNo(batchNum)
-	if err != nil {
-		return nil, err
-	}
-	if ver != nil {
-		batch.VerifyBatchTxHash = &ver.L1TxHash
-	}
-
-	// batch l2 data
-	batchL2Data, err := d.dbReader.GetL1BatchData(batchNum)
-	if err != nil {
-		return nil, err
-	}
-	batch.BatchL2Data = batchL2Data
-
-	if batch.GlobalExitRoot != rpcTypes.ZeroHash {
-		// L1 info tree (exit roots)
-		l1InfoTree, err := d.dbReader.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
-		if err != nil {
-			return nil, err
-		}
-
-		if l1InfoTree != nil {
-			batch.MainnetExitRoot = l1InfoTree.MainnetExitRoot
-			batch.RollupExitRoot = l1InfoTree.RollupExitRoot
-		}
-	}
-
-	return batch, nil
+	return nil
 }
 
 // GetBlockByNumber reads block based on its block number from the database
