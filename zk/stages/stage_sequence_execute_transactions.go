@@ -2,7 +2,6 @@ package stages
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -100,7 +99,6 @@ func getLimboTransaction(cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Tra
 
 	}
 
-	fmt.Printf("Transactions length %d\n", len(transactions))
 	return transactions, nil
 }
 

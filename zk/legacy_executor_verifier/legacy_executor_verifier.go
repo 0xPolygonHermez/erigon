@@ -154,8 +154,6 @@ func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, 
 	return executorErr
 }
 
-// var counter = int32(0)
-
 // Unsafe is not thread-safe so it MUST be invoked only from a single thread
 func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequencerBatchSealTime time.Duration) *Promise[*VerifierBundle] {
 	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
@@ -263,12 +261,6 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 				log.Error("[Verifier] Error", "err", executorErr)
 			}
 		}
-
-		// debug purposes
-		// if request.BatchNumber == 2 && counter == 0 {
-		// 	ok = false
-		// 	counter = 1
-		// }
 
 		verifierBundle.response = &VerifierResponse{
 			BatchNumber:      request.BatchNumber,
