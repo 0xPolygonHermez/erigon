@@ -33,7 +33,7 @@ jobs:
           #!/bin/bash
           cd bridge
           mkdir tmp
-          cat <<EOF > ./tmp/test.json
+          cat <<EOF > ./tmp/test.toml
           TestAddrPrivate= "${{ secrets[matrix.l1_pk_secret_name] }}"
           [ConnectionConfig]
           L1NodeURL="${{ matrix.l1_ep }}"
