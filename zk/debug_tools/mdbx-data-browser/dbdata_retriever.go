@@ -117,39 +117,66 @@ func (d *DbDataRetriever) getHighestBlockInBatch(batchNum uint64) (*coreTypes.Bl
 
 // collectBlocksInBatch retrieve blocks from the batch
 func (d *DbDataRetriever) collectBlocksInBatch(batch *rpcTypes.Batch, batchNum uint64, verboseOutput bool) error {
+	// Get block numbers in the batch
 	blocksInBatch, err := d.dbReader.GetL2BlockNosByBatch(batchNum)
 	if err != nil {
 		return err
 	}
 
+	// Handle genesis block separately
 	if batchNum == 0 {
-		genesisBlock, err := rawdb.ReadBlockByNumber(d.tx, 0)
-		if err != nil {
+		if err := d.addGenesisBlock(batch, verboseOutput); err != nil {
 			return err
 		}
+	}
+
+	// Collect blocks and their transactions
+	for _, blockNum := range blocksInBatch {
+		if err := d.addBlockToBatch(batch, blockNum, verboseOutput); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// addGenesisBlock adds the genesis block to the batch
+func (d *DbDataRetriever) addGenesisBlock(batch *rpcTypes.Batch, verboseOutput bool) error {
+	genesisBlock, err := rawdb.ReadBlockByNumber(d.tx, 0)
+	if err != nil {
+		return err
+	}
+
+	if verboseOutput {
+		batch.Blocks = append(batch.Blocks, genesisBlock)
+	} else {
 		batch.Blocks = append(batch.Blocks, genesisBlock.Hash())
 	}
 
-	for _, blockNum := range blocksInBatch {
-		block, err := rawdb.ReadBlockByNumber(d.tx, blockNum)
-		if err != nil {
-			return err
-		}
+	return nil
+}
 
-		if !verboseOutput {
-			batch.Blocks = append(batch.Blocks, block.Hash())
+// addBlockToBatch adds a block and its transactions to the batch
+func (d *DbDataRetriever) addBlockToBatch(batch *rpcTypes.Batch, blockNum uint64, verboseOutput bool) error {
+	block, err := rawdb.ReadBlockByNumber(d.tx, blockNum)
+	if err != nil {
+		return err
+	}
+
+	if verboseOutput {
+		batch.Blocks = append(batch.Blocks, block)
+	} else {
+		batch.Blocks = append(batch.Blocks, block.Hash())
+	}
+
+	for _, tx := range block.Transactions() {
+		if verboseOutput {
+			batch.Transactions = append(batch.Transactions, tx)
 		} else {
-			batch.Blocks = append(batch.Blocks, block)
-		}
-
-		for _, tx := range block.Transactions() {
-			if !verboseOutput {
-				batch.Transactions = append(batch.Transactions, tx.Hash())
-			} else {
-				batch.Transactions = append(batch.Transactions, tx)
-			}
+			batch.Transactions = append(batch.Transactions, tx.Hash())
 		}
 	}
+
 	return nil
 }
 
