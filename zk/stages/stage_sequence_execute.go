@@ -345,7 +345,6 @@ func SpawnSequencingStage(
 							effectiveGas = l1EffectiveGases[i]
 						} else {
 							effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
-							effectiveGases = append(effectiveGases, effectiveGas)
 						}
 						effectiveGases = append(effectiveGases, effectiveGas)
 
@@ -441,9 +440,14 @@ func SpawnSequencingStage(
 		if limboRecovery {
 			stateRoot := block.Root()
 			cfg.txPool.UpdateLimboRootByTxHash(limboTxHash, &stateRoot)
-			return fmt.Errorf("[%s] %w: %s", s.LogPrefix(), zk.ErrLimboState, limboTxHash.Hex())
+			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, limboTxHash.Hex(), stateRoot.Hex())
+		} else {
+			log.Debug(fmt.Sprintf("[%s] state root at block %d = %s", s.LogPrefix(), thisBlockNumber, block.Root().Hex()))
 		}
 
+		for _, tx := range addedTransactions {
+			log.Debug(fmt.Sprintf("[%s] Finish block %d with %s transaction", logPrefix, thisBlockNumber, tx.Hash().Hex()))
+		}
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
 	}
 
