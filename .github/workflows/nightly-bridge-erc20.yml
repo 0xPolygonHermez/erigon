@@ -5,8 +5,8 @@ on:
     - cron: '0 1 * * *' # run at 1am to stagger tests
   workflow_dispatch:
 
-    jobs:
-  benchmark:
+jobs:
+  build-and-run:
     runs-on: ubuntu-latest
     strategy:
       matrix:
