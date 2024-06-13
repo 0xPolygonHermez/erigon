@@ -175,6 +175,14 @@ func newStageDb(tx kv.RwTx) *stageDb {
 	return sdb
 }
 
+type nextBatchL1Data struct {
+	DecodedData     []zktx.DecodedBatchL2Data
+	Coinbase        common.Address
+	L1InfoRoot      common.Hash
+	IsWorkRemaining bool
+	LimitTimestamp  uint64
+}
+
 func prepareForkId(cfg SequenceBlockCfg, lastBatch, executionAt uint64, hermezDb *hermez_db.HermezDb) (uint64, error) {
 	var forkId uint64 = 0
 	var err error
@@ -370,12 +378,20 @@ func checkForBadBatch(
 	hermezDb batchChecker,
 	latestTimestamp uint64,
 	highestAllowedInfoTreeIndex uint64,
+	limitTimestamp uint64,
 	decodedBlocks []zktx.DecodedBatchL2Data,
 ) (bool, error) {
 	timestamp := latestTimestamp
 
 	for _, decodedBlock := range decodedBlocks {
 		timestamp += uint64(decodedBlock.DeltaTimestamp)
+
+		// now check the limit timestamp we can't have used l1 info tree index from the future
+		if timestamp > limitTimestamp {
+			log.Error("batch went above the limit timestamp", "batch", batchNo, "timestamp", timestamp, "limit_timestamp", limitTimestamp)
+			return true, nil
+		}
+
 		if decodedBlock.L1InfoTreeIndex > 0 {
 			// first check if we have knowledge of this index or not
 			l1Info, err := hermezDb.GetL1InfoTreeUpdate(uint64(decodedBlock.L1InfoTreeIndex))
@@ -391,12 +407,6 @@ func checkForBadBatch(
 			// we have an invalid batch if the block timestamp is lower than the l1 info min timestamp value
 			if timestamp < l1Info.Timestamp {
 				log.Error("batch used info tree index with timestamp lower than allowed", "batch", batchNo, "index", decodedBlock.L1InfoTreeIndex, "timestamp", timestamp, "min_timestamp", l1Info.Timestamp)
-				return true, nil
-			}
-
-			// now check the limit timestamp we can't have used l1 info tree index from the future
-			if l1Info.Timestamp > timestamp {
-				log.Error("batch used info tree index with timestamp higher than allowed", "batch", batchNo, "index", decodedBlock.L1InfoTreeIndex, "timestamp", timestamp, "max_timestamp", l1Info.Timestamp)
 				return true, nil
 			}
 
