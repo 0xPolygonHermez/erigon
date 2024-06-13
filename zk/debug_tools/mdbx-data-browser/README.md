@@ -65,11 +65,11 @@ In case `file-output` flag is provided, results are printed to a JSON file (othe
 #### `output-batches` Command
 
 ```sh
-./mdbx-data-browser output-batches --bn 1,2,3 [--verbose] [--file-output]
+./mdbx-data-browser output-batches --datadir mdbx.dat --bn 1,2,3 [--verbose] [--file-output]
 ```
 
 #### `output-blocks` Command
 
 ```sh
-./mdbx-data-browser output-blocks --bn 100,101,102 [--verbose] [--file-output]
+./mdbx-data-browser output-blocks --datadir mdbx.dat --bn 100,101,102 [--verbose] [--file-output]
 ```
