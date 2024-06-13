@@ -21,19 +21,17 @@ jobs:
             
     steps:
       - name: Clone bridge repository
-        uses: actions/checkout@v3
-        with:
-          repository: git@github.com:0xPolygonHermez/zkevm-bridge-service.git
-          ref: feature/cdk263-test_bridge_real_network 
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+        run:  git clone --recurse-submodules -j8 https://github.com/0xPolygonHermez/zkevm-bridge-service.git -b feature/cdk263-test_bridge_real_network  bridge
+        
       - name: Build docker image
         run: |
+          cd bridge
           make build-docker-e2e-real_network
 
       - name: Run test ERC20 Bridge
         run: |
           #!/bin/bash
+          cd bridge
           mkdir config
           cat <<EOF > ./tmp_profiles.json
           TestAddrPrivate= "${{ secrets[matrix.l1_pk_secret_name] }}"
