@@ -125,7 +125,7 @@ func (d *DbDataRetriever) collectBlocksInBatch(batch *rpcTypes.Batch, batchNum u
 
 	// Handle genesis block separately
 	if batchNum == 0 {
-		if err := d.addGenesisBlock(batch, verboseOutput); err != nil {
+		if err := d.addBlockToBatch(batch, 0, verboseOutput); err != nil {
 			return err
 		}
 	}
@@ -135,22 +135,6 @@ func (d *DbDataRetriever) collectBlocksInBatch(batch *rpcTypes.Batch, batchNum u
 		if err := d.addBlockToBatch(batch, blockNum, verboseOutput); err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-// addGenesisBlock adds the genesis block to the batch
-func (d *DbDataRetriever) addGenesisBlock(batch *rpcTypes.Batch, verboseOutput bool) error {
-	genesisBlock, err := rawdb.ReadBlockByNumber(d.tx, 0)
-	if err != nil {
-		return err
-	}
-
-	if verboseOutput {
-		batch.Blocks = append(batch.Blocks, genesisBlock)
-	} else {
-		batch.Blocks = append(batch.Blocks, genesisBlock.Hash())
 	}
 
 	return nil

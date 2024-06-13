@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -173,7 +174,17 @@ func outputResults(results string) error {
 		defer file.Close()
 
 		_, err = file.Write([]byte(results))
-		return err
+		if err != nil {
+			return err
+		}
+
+		path, err := filepath.Abs(file.Name())
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("results are written to the '%s'", path)
+		return nil
 	}
 
 	// output results to the standard output
