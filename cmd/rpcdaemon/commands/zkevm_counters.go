@@ -351,7 +351,6 @@ func (api *ZkEvmAPIImpl) TraceTransactionCounters(ctx context.Context, hash comm
 		return err
 	}
 
-
 	txCounters := vm.NewTransactionCounter(txn, int(smtDepth), uint16(forkId), false)
 	batchCounters := vm.NewBatchCounterCollector(int(smtDepth), uint16(forkId), false)
 	if _, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
@@ -493,7 +492,7 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 		// execute blocks
 		var txGasUsed uint64
 		for _, tx := range block.Transactions() {
-			if txGasUsed, err = execTransaction(tx, batchCounters, smtDepth, ibs, signer, header, rules, chainConfig, blockCtx, receipts); err != nil {
+			if txGasUsed, err = execTransaction(tx, batchCounters, smtDepth, ibs, signer, header, rules, chainConfig, blockCtx, receipts, uint16(forkId)); err != nil {
 				return nil, err
 			}
 			blockGasUsed += txGasUsed
@@ -520,12 +519,13 @@ func execTransaction(
 	chainConfig *chain.Config,
 	blockCtx evmtypes.BlockContext,
 	receipts types.Receipts,
+	forkId uint16,
 ) (gasUsed uint64, err error) {
 	var (
 		msg        core.Message
 		execResult *core.ExecutionResult
 	)
-	txCounters := vm.NewTransactionCounter(tx, smtDepth, false)
+	txCounters := vm.NewTransactionCounter(tx, smtDepth, forkId, false)
 
 	if _, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
 		return 0, err
