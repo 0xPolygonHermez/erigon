@@ -425,7 +425,7 @@ func SpawnSequencingStage(
 		// batch information
 		if !cfg.zk.HasExecutors() {
 			srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-			if err = server.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, srv, cfg.stream, blockNumber, blockNumber, logPrefix); err != nil {
+			if err = server.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, srv, cfg.stream, thisBlockNumber, thisBlockNumber, logPrefix); err != nil {
 				return err
 			}
 		}
