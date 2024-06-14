@@ -44,6 +44,7 @@ const BATCH_BLOCKS = "batch_blocks"                                    // batch 
 const SMT_DEPTHS = "smt_depths"                                        // block number -> smt depth
 const L1_INFO_LEAVES = "l1_info_leaves"                                // l1 info tree index -> l1 info tree leaf
 const L1_INFO_ROOTS = "l1_info_roots"                                  // root hash -> l1 info tree index
+const INVALID_BATCHES = "invalid_batches"                              // batch number -> true
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -98,6 +99,7 @@ func CreateHermezBuckets(tx kv.RwTx) error {
 		SMT_DEPTHS,
 		L1_INFO_LEAVES,
 		L1_INFO_ROOTS,
+		INVALID_BATCHES,
 	}
 	for _, t := range tables {
 		if err := tx.CreateBucket(t); err != nil {
@@ -905,8 +907,6 @@ func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, bool, error) {
 			log.Debug(fmt.Sprintf("[HermezDbReader] Got block num %d for forkId %d", blockNum, forkId))
 			found = true
 			break
-		} else {
-			continue
 		}
 	}
 
@@ -918,13 +918,13 @@ func (db *HermezDb) DeleteForkIdBlock(fromBlockNo, toBlockNo uint64) error {
 }
 
 func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
-	tempBlockNum, _, err := db.GetForkIdBlock(forkId)
+	tempBlockNum, found, err := db.GetForkIdBlock(forkId)
 	if err != nil {
 		log.Error(fmt.Sprintf("[HermezDb] Error getting forkIdBlock: %v", err))
 		return err
 	}
-	if tempBlockNum != 0 {
-		log.Error(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum))
+	if found {
+		log.Debug(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum))
 		return nil
 	}
 	return db.tx.Put(FORKID_BLOCK, Uint64ToBytes(forkId), Uint64ToBytes(blockNum))
@@ -1403,4 +1403,16 @@ func (db *HermezDbReader) GetForkIdByBlockNum(blockNum uint64) (uint64, error) {
 	}
 
 	return forkId, nil
+}
+
+func (db *HermezDb) WriteInvalidBatch(batchNo uint64) error {
+	return db.tx.Put(INVALID_BATCHES, Uint64ToBytes(batchNo), []byte{1})
+}
+
+func (db *HermezDbReader) GetInvalidBatch(batchNo uint64) (bool, error) {
+	v, err := db.tx.GetOne(INVALID_BATCHES, Uint64ToBytes(batchNo))
+	if err != nil {
+		return false, err
+	}
+	return len(v) > 0, nil
 }
