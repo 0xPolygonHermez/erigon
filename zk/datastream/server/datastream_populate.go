@@ -9,10 +9,10 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/log/v3"
-	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 )
 
 const GenesisForkId = 0 // genesis fork is always 0 in the datastream
@@ -110,35 +110,7 @@ func WriteBlocksToStream(
 			}
 		}
 
-		block, err := rawdb.ReadBlockByNumber(tx, currentBlockNumber)
-		if err != nil {
-			return err
-		}
-
-		batchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber)
-		if err != nil {
-			return err
-		}
-
-		prevBatchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber - 1)
-		if err != nil {
-			return err
-		}
-
-		nextBatchNum, nextBatchExists, err := reader.CheckBatchNoByL2Block(currentBlockNumber + 1)
-		if err != nil {
-			return err
-		}
-
-		// a 0 next batch num here would mean we don't know about the next batch so must be at the end of the batch
-		isBatchEnd := !nextBatchExists || nextBatchNum > batchNum
-
-		gersInBetween, err := reader.GetBatchGlobalExitRootsProto(prevBatchNum, batchNum)
-		if err != nil {
-			return err
-		}
-
-		blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, make(map[uint64]uint64), isBatchEnd)
+		block, blockEntries, err := createBlockStreamEntries(tx, reader, srv, lastBlock, currentBlockNumber)
 		if err != nil {
 			return err
 		}
@@ -170,6 +142,49 @@ func WriteBlocksToStream(
 	}
 
 	return nil
+}
+
+func createBlockStreamEntries(
+	tx kv.Tx,
+	reader *hermez_db.HermezDbReader,
+	srv *DataStreamServer,
+	lastBlock *eritypes.Block,
+	blockNumber uint64,
+) (*eritypes.Block, []DataStreamEntryProto, error) {
+	block, err := rawdb.ReadBlockByNumber(tx, blockNumber)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	batchNum, err := reader.GetBatchNoByL2Block(blockNumber)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	prevBatchNum, err := reader.GetBatchNoByL2Block(blockNumber - 1)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	nextBatchNum, nextBatchExists, err := reader.CheckBatchNoByL2Block(blockNumber + 1)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// a 0 next batch num here would mean we don't know about the next batch so must be at the end of the batch
+	isBatchEnd := !nextBatchExists || nextBatchNum > batchNum
+
+	gersInBetween, err := reader.GetBatchGlobalExitRootsProto(prevBatchNum, batchNum)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, make(map[uint64]uint64), isBatchEnd)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return block, blockEntries, nil
 }
 
 func WriteGenesisToStream(

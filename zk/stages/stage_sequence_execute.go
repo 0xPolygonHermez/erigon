@@ -421,6 +421,15 @@ func SpawnSequencingStage(
 			return err
 		}
 
+		// if we do not have an executors in the zk config then we can populate the stream immediately with the latest
+		// batch information
+		if !cfg.zk.HasExecutors() {
+			srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
+			if err = server.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, srv, cfg.stream, blockNumber, blockNumber, logPrefix); err != nil {
+				return err
+			}
+		}
+
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
 	}
 
@@ -433,15 +442,6 @@ func SpawnSequencingStage(
 	err = sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap())
 	if err != nil {
 		return err
-	}
-
-	// if we do not have an executors in the zk config then we can populate the stream immediately with the latest
-	// batch information
-	if !cfg.zk.HasExecutors() {
-		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-		if err = server.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, srv, cfg.stream, executionAt+1, blockNumber, logPrefix); err != nil {
-			return err
-		}
 	}
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
