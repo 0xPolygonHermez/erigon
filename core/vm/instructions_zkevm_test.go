@@ -14,7 +14,57 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm/stack"
 	"github.com/ledgerwatch/erigon/params"
 	"encoding/hex"
+	"encoding/json"
+	"os"
+	"github.com/status-im/keycard-go/hexutils"
 )
+
+type JSONScenario struct {
+	BugResult      string `json:"bugResult"`
+	DataLength     int    `json:"dataLength"`
+	DataString     string `json:"dataString"`
+	ExpectedResult string `json:"expectedResult"`
+	Size           int    `json:"size"`
+}
+
+func TestApplyHexPadBugFromJSON(t *testing.T) {
+	file, err := os.ReadFile("./testdata/bug_scenarios.json")
+	if err != nil {
+		t.Fatalf("Failed to read scenarios.json: %v", err)
+	}
+
+	var scenarios []JSONScenario
+	err = json.Unmarshal(file, &scenarios)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal JSON: %v", err)
+	}
+
+	for i, scenario := range scenarios {
+		t.Run(fmt.Sprintf("Scenario-%d", i), func(t *testing.T) {
+			d := common.FromHex(scenario.DataString)
+			result, bug, err := applyHexPadBug(d, uint64(scenario.Size), 0)
+			if err != nil {
+				t.Fatalf("Error in applyHexPadBug: %v", err)
+			}
+
+			resultHex := hexutils.BytesToHex(result)
+
+			expectedBug := scenario.BugResult != scenario.ExpectedResult
+			if expectedBug {
+				if bug != expectedBug {
+					t.Errorf("Expected bug result %t but got %t", expectedBug, bug)
+				}
+				if resultHex != scenario.BugResult {
+					t.Errorf("Expected %s but got %s", scenario.BugResult, resultHex)
+				}
+			} else {
+				if resultHex != scenario.ExpectedResult {
+					t.Errorf("Expected %s but got %s", scenario.ExpectedResult, resultHex)
+				}
+			}
+		})
+	}
+}
 
 func TestApplyHexPadBug(t *testing.T) {
 	type testScenario struct {

@@ -179,6 +179,10 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 		}
 		blockNo := interpreter.VM.evm.Context().BlockNumber
 
+		if blockNo == 3177498 {
+			log.Info("blockno")
+		}
+
 		// [hack] APPLY BUG ONLY ABOVE FORKID9
 		if forkBlock == 0 || blockNo < forkBlock {
 			// [zkEvm] fill 0 at the end
@@ -232,44 +236,71 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 }
 
 func applyHexPadBug(d []byte, msInt, blockNo uint64) ([]byte, bool, error) {
-	dataHex := hex.EncodeToString(d)
 	bug := false
-	l := len(dataHex)
 
-	// for the bug to be present the data must have length, be indivisible by the mSize, or shorter/longer than 64
-	if l > 0 && (uint64(l)%(msInt*2) != 0 || l != 64) {
-		words := []string{}
-		for i := 0; i < l; i += 64 {
-			end := i + 64
-			if end > l {
-				end = l
-			}
-			word := dataHex[i:end]
-			words = append(words, word)
-		}
-
-		var lastWord string
-		lastWordIndex := 0
-		if len(words) > 0 {
-			lastWordIndex = len(words) - 1
-			lastWord = words[lastWordIndex]
-		} else {
-			log.Warn("Words is empty", "block", blockNo, "data", dataHex, "size", msInt)
-		}
-
-		if len(lastWord) > 0 && lastWord[0] == '0' && lastWord[1] != '0' && len(lastWord) != 64 {
-			tempLastWord := lastWord[1:]
-			if uint64(len(tempLastWord)) < msInt*2 {
-				log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", msInt)
-				lastWord = tempLastWord + "0"
-				bug = true
-			}
-		}
-		words[lastWordIndex] = lastWord
-		dataHex = strings.Join(words, "")
+	if len(d) == 32 {
+		return d[:msInt], bug, nil
 	}
-	d, err := hex.DecodeString(dataHex)
+
+	msInt = min(msInt, 32)
+	dataHex := hexToStr(d)
+
+	if len(dataHex)%2 != 0 {
+		bug = true
+	}
+	if msInt*2 > uint64(len(dataHex)) {
+		dataHex = prependZeros(dataHex, msInt*2)
+		bug = true
+	}
+	outputStr := takeFirstN(dataHex, int(msInt*2))
+
+	if bug {
+		log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", msInt)
+	}
+
+	d, err := hexToBytes(outputStr)
 	return d, bug, err
+}
+
+func min(a, b uint64) uint64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func hexToBytes(hexStr string) ([]byte, error) {
+	hexStr = strings.ReplaceAll(hexStr, " ", "")
+
+	if len(hexStr)%2 != 0 {
+		hexStr = "0" + hexStr
+	}
+
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes, nil
+}
+
+func hexToStr(d []byte) string {
+	integer := new(big.Int).SetBytes(d)
+	return integer.Text(16)
+}
+
+func takeFirstN(data string, n int) string {
+	if len(data) < n {
+		return data
+	}
+	return data[:n]
+}
+
+func prependZeros(data string, size uint64) string {
+	for uint64(len(data)) < size {
+		data = "0" + data
+	}
+	return data
 }
 
 func opCreate_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
