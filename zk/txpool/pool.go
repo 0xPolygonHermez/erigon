@@ -1088,7 +1088,7 @@ func addTxsOnNewBlock(blockNum uint64, cacheView kvcache.CacheView, stateChanges
 	for _, changesList := range stateChanges.ChangeBatch {
 		for _, change := range changesList.Changes {
 			switch change.Action {
-			case remote.Action_UPSERT, remote.Action_UPSERT_CODE:
+			case remote.Action_UPSERT, remote.Action_UPSERT_CODE, remote.Action_REMOVE:
 				if change.Incarnation > 0 {
 					continue
 				}
