@@ -245,7 +245,7 @@ func SpawnSequencingStage(
 			}
 		}
 
-		overflowOnNewBlock, err := batchCounters.StartNewBlock()
+		overflowOnNewBlock, err := batchCounters.StartNewBlock(infoTreeIndex != 0)
 		if err != nil {
 			return err
 		}
