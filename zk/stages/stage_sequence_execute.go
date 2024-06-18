@@ -286,7 +286,7 @@ func SpawnSequencingStage(
 			defer logTicker.Stop()
 			blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
 			defer blockTicker.Stop()
-			overflow := false
+			reRunBlock := false
 
 			// start to wait for transactions to come in from the pool and attempt to add them to the current batch.  Once we detect a counter
 			// overflow we revert the IBS back to the previous snapshot and don't add the transaction/receipt to the collection that will
@@ -332,7 +332,6 @@ func SpawnSequencingStage(
 					}
 
 					for i, transaction := range blockTransactions {
-						var receipt *types.Receipt
 						var effectiveGas uint8
 
 						if l1Recovery {
@@ -340,10 +339,13 @@ func SpawnSequencingStage(
 						} else {
 							effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
 						}
-						effectiveGases = append(effectiveGases, effectiveGas)
 
-						receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId)
+						receipt, overflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId)
 						if err != nil {
+							if limboRecovery {
+								panic("limbo transaction has already been executed once so they must not fail while re-executing")
+							}
+
 							// if we are in recovery just log the error as a warning.  If the data is on the L1 then we should consider it as confirmed.
 							// The executor/prover would simply skip a TX with an invalid nonce for example so we don't need to worry about that here.
 							if l1Recovery {
@@ -353,35 +355,48 @@ func SpawnSequencingStage(
 								)
 								continue
 							}
-							return err
+
+							i++ // leave current tx in yielded set
+							reRunBlock = true
 						}
-						if !isAnyRecovery && overflow {
-							log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash(), "txs before overflow", len(addedTransactions))
-							/*
-								There are two cases when overflow could occur.
-								1. The block DOES not contains any transactions.
-									In this case it means that a single tx overflow entire zk-counters.
-									In this case we mark it so. Once marked it will be discarded from the tx-pool async (once the tx-pool process the creation of a new batch)
-									NB: The tx SHOULD not be removed from yielded set, because if removed, it will be picked again on next block
-								2. The block contains transactions.
-									In this case, we just have to remove the transaction that overflowed the zk-counters and all transactions after it, from the yielded set.
-									This removal will ensure that these transaction could be added in the next block(s)
-							*/
-							if len(addedTransactions) == 0 {
-								cfg.txPool.MarkForDiscardFromPendingBest(transaction.Hash())
-								log.Trace(fmt.Sprintf("single transaction %s overflow counters", transaction.Hash()))
-							} else {
-								txSize := len(blockTransactions)
-								for ; i < txSize; i++ {
-									yielded.Remove(transaction.Hash())
-								}
+						if !reRunBlock && overflow {
+							if limboRecovery {
+								panic("limbo transaction has already been executed once so they must not overflow counters while re-executing")
 							}
 
+							if !l1Recovery {
+								log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", thisBatch, "tx-hash", transaction.Hash(), "has any transactions in this batch", hasAnyTransactionsInThisBatch)
+								/*
+									There are two cases when overflow could occur.
+									1. The block DOES not contains any transactions.
+										In this case it means that a single tx overflow entire zk-counters.
+										In this case we mark it so. Once marked it will be discarded from the tx-pool async (once the tx-pool process the creation of a new batch)
+										NB: The tx SHOULD not be removed from yielded set, because if removed, it will be picked again on next block. That's why there is i++. It ensures that removing from yielded will start after the problematic tx
+									2. The block contains transactions.
+										In this case, we just have to remove the transaction that overflowed the zk-counters and all transactions after it, from the yielded set.
+										This removal will ensure that these transaction could be added in the next block(s)
+								*/
+								if !hasAnyTransactionsInThisBatch {
+									i++ // leave current tx in yielded set
+									cfg.txPool.MarkForDiscardFromPendingBest(transaction.Hash())
+									log.Trace(fmt.Sprintf("single transaction %s overflow counters", transaction.Hash()))
+								}
+
+								reRunBlock = true
+							}
+						}
+
+						if reRunBlock {
+							txSize := len(blockTransactions)
+							for ; i < txSize; i++ {
+								yielded.Remove(transaction.Hash())
+							}
 							break LOOP_TRANSACTIONS
 						}
 
 						addedTransactions = append(addedTransactions, transaction)
 						addedReceipts = append(addedReceipts, receipt)
+						effectiveGases = append(effectiveGases, effectiveGas)
 
 						hasAnyTransactionsInThisBatch = true
 						nonEmptyBatchTimer.Reset(cfg.zk.SequencerNonEmptyBatchSealTime)
@@ -396,13 +411,14 @@ func SpawnSequencingStage(
 
 						break LOOP_TRANSACTIONS
 					}
+
 					if limboRecovery {
 						runLoopBlocks = false
 						break LOOP_TRANSACTIONS
 					}
 				}
 			}
-			if !isAnyRecovery && overflow {
+			if reRunBlock {
 				blockNumber-- // in order to trigger reRunBlockAfterOverflow check
 				continue      // lets execute the same block again
 			}
