@@ -202,7 +202,8 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 			   \/
 			*/
 			var err error
-			d, _, err = applyHexPadBug(d, mSize.Uint64(), blockNo)
+
+			d, err = applyHexPadBug(d, mSize.Uint64(), blockNo)
 			if err != nil {
 				return nil, err
 			}
@@ -235,31 +236,38 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 	}
 }
 
-func applyHexPadBug(d []byte, msInt, blockNo uint64) ([]byte, bool, error) {
-	bug := false
-
-	if len(d) == 32 {
-		return d[:msInt], bug, nil
-	}
-
+func applyHexPadBug(d []byte, msInt, blockNo uint64) ([]byte, error) {
 	msInt = min(msInt, 32)
-	dataHex := hexToStr(d)
 
-	if len(dataHex)%2 != 0 {
-		bug = true
+	var dLastWord []byte
+	if len(d) < 64 {
+		dLastWord = d
+		d = []byte{}
+	} else {
+		dLastWord = getLastWordBytes(d)
+		d = d[:len(d)-len(dLastWord)]
 	}
+
+	dataHex := hex.EncodeToString(dLastWord)
+
+	for found := true; found; dataHex, found = strings.CutPrefix(dataHex, "0") {
+	}
+
+	// pad to 32
+	dataHex = appendZeros(dataHex, 32)
+
 	if msInt*2 > uint64(len(dataHex)) {
 		dataHex = prependZeros(dataHex, msInt*2)
-		bug = true
 	}
 	outputStr := takeFirstN(dataHex, int(msInt*2))
 
-	if bug {
-		log.Warn("Possible bug detected in log data", "block", blockNo, "data", dataHex, "size", msInt)
+	str, err := hex.DecodeString(outputStr)
+	if err != nil {
+		return nil, err
 	}
+	d = append(d, str...)
 
-	d, err := hexToBytes(outputStr)
-	return d, bug, err
+	return d, nil
 }
 
 func min(a, b uint64) uint64 {
@@ -269,31 +277,16 @@ func min(a, b uint64) uint64 {
 	return b
 }
 
-func hexToBytes(hexStr string) ([]byte, error) {
-	hexStr = strings.ReplaceAll(hexStr, " ", "")
+func getLastWordBytes(data []byte) []byte {
+	wordLength := 32
+	dataLength := len(data)
 
-	if len(hexStr)%2 != 0 {
-		hexStr = "0" + hexStr
+	remainderLength := dataLength % wordLength
+	if remainderLength == 0 {
+		return data[dataLength-wordLength:]
 	}
 
-	bytes, err := hex.DecodeString(hexStr)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes, nil
-}
-
-func hexToStr(d []byte) string {
-	integer := new(big.Int).SetBytes(d)
-	return integer.Text(16)
-}
-
-func takeFirstN(data string, n int) string {
-	if len(data) < n {
-		return data
-	}
-	return data[:n]
+	return data[dataLength-remainderLength:]
 }
 
 func prependZeros(data string, size uint64) string {
@@ -301,6 +294,20 @@ func prependZeros(data string, size uint64) string {
 		data = "0" + data
 	}
 	return data
+}
+
+func appendZeros(data string, len int) string {
+	for i := 0; i < len; i++ {
+		data += "0"
+	}
+	return data
+}
+
+func takeFirstN(data string, n int) string {
+	if len(data) < n {
+		return data
+	}
+	return data[:n]
 }
 
 func opCreate_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
