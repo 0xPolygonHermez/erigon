@@ -32,7 +32,6 @@ const (
 	forkId7BlockGasLimit    = 18446744073709551615 // 0xffffffffffffffff
 	forkId8BlockGasLimit    = 1125899906842624     // 0x4000000000000
 	HIGHEST_KNOWN_FORK      = 9
-	newBlockTimeout         = 500
 )
 
 type ErigonDb interface {
@@ -239,6 +238,11 @@ LOOP:
 				if err = hermezDb.WriteInvalidBatch(batchStart.Number); err != nil {
 					return err
 				}
+				// we need to write the fork here as well because the batch will never get processed as it is invalid
+				// but, we need it re-populate our own stream
+				if err = hermezDb.WriteForkId(batchStart.Number, batchStart.ForkId); err != nil {
+					return err
+				}
 			}
 			_ = batchStart
 		case l2Block := <-l2BlockChan:
@@ -379,7 +383,7 @@ LOOP:
 				// stop the current iteration of the stage
 				lastWrittenTs := lastWrittenTimeAtomic.Load()
 				timePassedAfterlastBlock := time.Since(time.Unix(0, lastWrittenTs))
-				if streamingAtomic.Load() && timePassedAfterlastBlock.Milliseconds() > newBlockTimeout {
+				if streamingAtomic.Load() && timePassedAfterlastBlock > cfg.zkCfg.DatastreamNewBlockTimeout {
 					log.Info(fmt.Sprintf("[%s] No new blocks in %d miliseconds. Ending the stage.", logPrefix, timePassedAfterlastBlock.Milliseconds()), "lastBlockHeight", lastBlockHeight)
 					endLoop = true
 				}
