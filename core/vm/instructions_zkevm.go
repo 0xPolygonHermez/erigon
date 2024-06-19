@@ -10,8 +10,6 @@ import (
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
-	"github.com/ledgerwatch/log/v3"
-	"strings"
 )
 
 func opCallDataLoad_zkevmIncompatible(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
@@ -179,10 +177,6 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 		}
 		blockNo := interpreter.VM.evm.Context().BlockNumber
 
-		if blockNo == 3177498 {
-			log.Info("blockno")
-		}
-
 		// [hack] APPLY BUG ONLY ABOVE FORKID9
 		if forkBlock == 0 || blockNo < forkBlock {
 			// [zkEvm] fill 0 at the end
@@ -203,7 +197,7 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 			*/
 			var err error
 
-			d, err = applyHexPadBug(d, mSize.Uint64(), blockNo)
+			d, err = applyHexPadBug(d, int(mSize.Uint64()), blockNo)
 			if err != nil {
 				return nil, err
 			}
@@ -236,36 +230,38 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 	}
 }
 
-func applyHexPadBug(d []byte, msInt, blockNo uint64) ([]byte, error) {
-	msInt = min(msInt, 32)
+func applyHexPadBug(d []byte, msInt int, blockNo uint64) ([]byte, error) {
+	fullMs := msInt
 
 	var dLastWord []byte
-	if len(d) < 64 {
-		dLastWord = d
+	if len(d) <= 32 {
+		dLastWord = append(d, make([]byte, 32-len(d))...)
 		d = []byte{}
 	} else {
-		dLastWord = getLastWordBytes(d)
+		dLastWord, msInt = getLastWordBytes(d, fullMs)
 		d = d[:len(d)-len(dLastWord)]
 	}
 
 	dataHex := hex.EncodeToString(dLastWord)
 
-	for found := true; found; dataHex, found = strings.CutPrefix(dataHex, "0") {
+	dataHex = appendZeros(dataHex, 64)
+
+	for len(dataHex) > 0 && dataHex[0] == '0' {
+		dataHex = dataHex[1:]
 	}
 
-	// pad to 32
-	dataHex = appendZeros(dataHex, 32)
-
-	if msInt*2 > uint64(len(dataHex)) {
+	if len(dataHex) < msInt*2 {
 		dataHex = prependZeros(dataHex, msInt*2)
 	}
-	outputStr := takeFirstN(dataHex, int(msInt*2))
+	outputStr := takeFirstN(dataHex, msInt*2)
 
-	str, err := hex.DecodeString(outputStr)
+	op, err := hex.DecodeString(outputStr)
 	if err != nil {
 		return nil, err
 	}
-	d = append(d, str...)
+	d = append(d, op...)
+
+	d = d[:fullMs]
 
 	return d, nil
 }
@@ -277,28 +273,25 @@ func min(a, b uint64) uint64 {
 	return b
 }
 
-func getLastWordBytes(data []byte) []byte {
+func getLastWordBytes(data []byte, originalMsInt int) ([]byte, int) {
 	wordLength := 32
 	dataLength := len(data)
 
 	remainderLength := dataLength % wordLength
 	if remainderLength == 0 {
-		return data[dataLength-wordLength:]
+		return data[dataLength-wordLength:], 32
 	}
 
-	return data[dataLength-remainderLength:]
+	toRemove := dataLength / wordLength
+
+	msInt := originalMsInt - (toRemove * wordLength)
+
+	return data[dataLength-remainderLength:], msInt
 }
 
-func prependZeros(data string, size uint64) string {
-	for uint64(len(data)) < size {
+func prependZeros(data string, size int) string {
+	for len(data) < size {
 		data = "0" + data
-	}
-	return data
-}
-
-func appendZeros(data string, len int) string {
-	for i := 0; i < len; i++ {
-		data += "0"
 	}
 	return data
 }
@@ -308,6 +301,13 @@ func takeFirstN(data string, n int) string {
 		return data
 	}
 	return data[:n]
+}
+
+func appendZeros(dataHex string, targetLength int) string {
+	for len(dataHex) < targetLength {
+		dataHex += "0"
+	}
+	return dataHex
 }
 
 func opCreate_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
