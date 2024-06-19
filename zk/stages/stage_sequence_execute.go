@@ -21,6 +21,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/erigon/zk/l1_data"
 )
 
 var SpecialZeroIndexHash = common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757")
@@ -124,7 +125,7 @@ func SpawnSequencingStage(
 	lastStartedBn := executionAt - 1
 	yielded := mapset.NewSet[[32]byte]()
 
-	nextBatchData := &nextBatchL1Data{
+	nextBatchData := l1_data.DecodedL1Data{
 		Coinbase:        cfg.zk.AddressSequencer,
 		IsWorkRemaining: true,
 	}
@@ -147,7 +148,7 @@ func SpawnSequencingStage(
 		}
 
 		// let's check if we have any L1 data to recover
-		nextBatchData, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
+		nextBatchData, err = l1_data.BreakDownL1DataByBatch(thisBatch, forkId, sdb.hermezDb.HermezDbReader)
 		if err != nil {
 			return err
 		}
