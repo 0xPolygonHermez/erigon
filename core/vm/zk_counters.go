@@ -148,7 +148,7 @@ type CounterCollector struct {
 	transaction types.Transaction
 }
 
-func calculateSmtLevels(smtMaxLevel int, minValue int) int {
+func calculateSmtLevels(smtMaxLevel int, minValue int, mcpReduction float64) int {
 	binary := big.NewInt(0)
 	base := big.NewInt(2)
 	power := big.NewInt(int64(smtMaxLevel))
@@ -161,6 +161,9 @@ func calculateSmtLevels(smtMaxLevel int, minValue int) int {
 	if binaryLength < minValue {
 		binaryLength = minValue
 	}
+
+	binaryLength = int(math.Floor(float64(binaryLength) * mcpReduction))
+
 	return binaryLength
 }
 
@@ -529,8 +532,8 @@ func (cc *CounterCollector) SHRarith() {
 }
 
 func (cc *CounterCollector) SHLarith() {
-	cc.Deduct(S, 100)
-	cc.Deduct(B, 4)
+	cc.Deduct(S, 40)
+	cc.Deduct(B, 2)
 	cc.Deduct(A, 2)
 }
 

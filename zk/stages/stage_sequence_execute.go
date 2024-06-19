@@ -127,7 +127,7 @@ func SpawnSequencingStage(
 
 	hasAnyTransactionsInThisBatch := false
 	thisBatch := lastBatch + 1
-	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
+	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
 	runLoopBlocks := true
 	lastStartedBn := executionAt - 1
 	yielded := mapset.NewSet[[32]byte]()
@@ -245,7 +245,12 @@ func SpawnSequencingStage(
 			}
 		}
 
-		overflowOnNewBlock, err := batchCounters.StartNewBlock(infoTreeIndex != 0)
+		l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+		if err != nil {
+			return err
+		}
+
+		overflowOnNewBlock, err := batchCounters.StartNewBlock(l1InfoIndex != 0)
 		if err != nil {
 			return err
 		}
@@ -424,7 +429,12 @@ func SpawnSequencingStage(
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
 	}
 
-	counters, err := batchCounters.CombineCollectors()
+	l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+	if err != nil {
+		return err
+	}
+
+	counters, err := batchCounters.CombineCollectors(l1InfoIndex != 0)
 	if err != nil {
 		return err
 	}

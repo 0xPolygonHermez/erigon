@@ -275,7 +275,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 		}
 	}
 
-	batchCollector := vm.NewBatchCounterCollector(test.SmtDepths[0], uint16(test.ForkId), false)
+	batchCollector := vm.NewBatchCounterCollector(test.SmtDepths[0], uint16(test.ForkId), 0.6, false)
 
 	blockStarted := false
 	for i, block := range decodedBlocks {
@@ -285,7 +285,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 			blockContext := core.NewEVMBlockContext(header, blockHashFunc, engine, &sequencer, big.NewInt(0))
 
 			if !blockStarted {
-				overflow, err := batchCollector.StartNewBlock()
+				overflow, err := batchCollector.StartNewBlock(false)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -294,7 +294,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 				}
 				blockStarted = true
 			}
-			txCounters := vm.NewTransactionCounter(transaction, test.SmtDepths[i], false)
+			txCounters := vm.NewTransactionCounter(transaction, test.SmtDepths[i], 0.6, false)
 			overflow, err := batchCollector.AddNewTransactionCounters(txCounters)
 			if err != nil {
 				t.Fatal(err)
@@ -334,7 +334,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 		}
 	}
 
-	combined, err := batchCollector.CombineCollectors()
+	combined, err := batchCollector.CombineCollectors(false)
 	if err != nil {
 		t.Fatal(err)
 	}

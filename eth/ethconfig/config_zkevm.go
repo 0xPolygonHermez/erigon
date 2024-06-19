@@ -60,9 +60,10 @@ type Zk struct {
 	DebugStep      uint64
 	DebugStepAfter uint64
 
-	PoolManagerUrl         string
-	DisableVirtualCounters bool
-	ExecutorPayloadOutput  string
+	PoolManagerUrl              string
+	DisableVirtualCounters      bool
+	VirtualCountersSmtReduction float64
+	ExecutorPayloadOutput       string
 }
 
 var DefaultZkConfig = &Zk{}

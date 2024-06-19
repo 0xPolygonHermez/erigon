@@ -20,9 +20,9 @@ type BatchCounterCollector struct {
 	unlimitedCounters       bool
 }
 
-func NewBatchCounterCollector(smtMaxLevel int, forkId uint16, unlimitedCounters bool) *BatchCounterCollector {
-	smtLevels := calculateSmtLevels(smtMaxLevel, 0)
-	smtLevelsForTransaction := calculateSmtLevels(smtMaxLevel, 32)
+func NewBatchCounterCollector(smtMaxLevel int, forkId uint16, mcpReduction float64, unlimitedCounters bool) *BatchCounterCollector {
+	smtLevels := calculateSmtLevels(smtMaxLevel, 0, mcpReduction)
+	smtLevelsForTransaction := calculateSmtLevels(smtMaxLevel, 32, mcpReduction)
 	return &BatchCounterCollector{
 		transactions:            []*TransactionCounter{},
 		smtLevels:               smtLevels,
@@ -69,7 +69,7 @@ func (bcc *BatchCounterCollector) AddNewTransactionCounters(txCounters *Transact
 
 	bcc.transactions = append(bcc.transactions, txCounters)
 
-	return bcc.CheckForOverflow()
+	return bcc.CheckForOverflow(false) //no need to calculate the merkle proof here
 }
 
 func (bcc *BatchCounterCollector) ClearTransactionCounters() {
