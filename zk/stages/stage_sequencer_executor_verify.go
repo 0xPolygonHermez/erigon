@@ -226,7 +226,7 @@ func SpawnSequencerExecutorVerifyStage(
 				return nil
 			} else {
 				log.Info(fmt.Sprintf("[%s] identified an invalid batch but limbo is disabled so mark is as valid anyway and continue", s.LogPrefix()), "batch", response.BatchNumber)
-				panic(fmt.Errorf("identified an invalid batch with numbe %d", response.BatchNumber))
+				panic(fmt.Errorf("identified an invalid batch with number %d", response.BatchNumber))
 			}
 		}
 
