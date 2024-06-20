@@ -35,6 +35,7 @@ type Zk struct {
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
+	DatastreamNewBlockTimeout              time.Duration
 	ExecutorMaxConcurrentRequests          int
 	Limbo                                  bool
 	AllowFreeTransactions                  bool
@@ -47,6 +48,8 @@ type Zk struct {
 	MaxGasPrice                            uint64
 	GasPriceFactor                         float64
 	DAUrl                                  string
+	DataStreamHost                         string
+	DataStreamPort                         uint
 
 	RebuildTreeAfter    uint64
 	IncrementTreeAlways bool

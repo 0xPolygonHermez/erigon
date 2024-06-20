@@ -32,7 +32,6 @@ const (
 	forkId7BlockGasLimit    = 18446744073709551615 // 0xffffffffffffffff
 	forkId8BlockGasLimit    = 1125899906842624     // 0x4000000000000
 	HIGHEST_KNOWN_FORK      = 9
-	newBlockTimeout         = 500
 )
 
 type ErigonDb interface {
@@ -233,8 +232,18 @@ LOOP:
 		case <-stopChan:
 			break LOOP
 		case batchStart := <-batchStartChan:
-			// do nothing for now.  We have a channel read race so handle fork/batch related changes in the handling
-			// of the l2 block below
+			// check if the batch is invalid so that we can replicate this over in the stream
+			// when we re-populate it
+			if batchStart.BatchType == types.BatchTypeInvalid {
+				if err = hermezDb.WriteInvalidBatch(batchStart.Number); err != nil {
+					return err
+				}
+				// we need to write the fork here as well because the batch will never get processed as it is invalid
+				// but, we need it re-populate our own stream
+				if err = hermezDb.WriteForkId(batchStart.Number, batchStart.ForkId); err != nil {
+					return err
+				}
+			}
 			_ = batchStart
 		case l2Block := <-l2BlockChan:
 			if cfg.zkCfg.SyncLimit > 0 && l2Block.L2BlockNumber >= cfg.zkCfg.SyncLimit {
@@ -374,7 +383,7 @@ LOOP:
 				// stop the current iteration of the stage
 				lastWrittenTs := lastWrittenTimeAtomic.Load()
 				timePassedAfterlastBlock := time.Since(time.Unix(0, lastWrittenTs))
-				if streamingAtomic.Load() && timePassedAfterlastBlock.Milliseconds() > newBlockTimeout {
+				if streamingAtomic.Load() && timePassedAfterlastBlock > cfg.zkCfg.DatastreamNewBlockTimeout {
 					log.Info(fmt.Sprintf("[%s] No new blocks in %d miliseconds. Ending the stage.", logPrefix, timePassedAfterlastBlock.Milliseconds()), "lastBlockHeight", lastBlockHeight)
 					endLoop = true
 				}
@@ -851,6 +860,10 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block,
 
 	if err := hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId)); err != nil {
 		return fmt.Errorf("write block batch error: %v", err)
+	}
+
+	if err := hermezDb.WriteForkIdBlockOnce(uint64(l2Block.ForkId), l2Block.L2BlockNumber); err != nil {
+		return fmt.Errorf("write fork id block error: %v", err)
 	}
 
 	if err := hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber); err != nil {
