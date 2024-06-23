@@ -2,6 +2,7 @@ package txpool
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	mapset "github.com/deckarep/golang-set/v2"
@@ -256,6 +257,22 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 			break
 		}
 	}
+}
+
+func (p *TxPool) StartIfNotStarted(ctx context.Context, tx kv.Tx) error {
+	if !p.started.Load() {
+		coreTx, err := p.coreDB().BeginRo(ctx)
+		if err != nil {
+			return err
+		}
+		defer coreTx.Rollback()
+
+		if err := p.fromDB(ctx, tx, coreTx); err != nil {
+			return fmt.Errorf("loading txs from DB: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func markAsLocal(txSlots *types2.TxSlots) {

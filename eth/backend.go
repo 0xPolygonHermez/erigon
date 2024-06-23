@@ -869,6 +869,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			// we switch context from being an RPC node to a sequencer
 			backend.txPool2.ForceUpdateLatestBlock(executionProgress)
 
+			// we need to start the pool before stage loop itself
+			// the pool holds the info about how execution stage should work - as regular or as limbo recovery
+			if err := backend.txPool2.StartIfNotStarted(ctx, tx); err != nil {
+				return nil, err
+			}
+
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,
 				ethermanClients,

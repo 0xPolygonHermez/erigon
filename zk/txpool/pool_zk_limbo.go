@@ -532,9 +532,9 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 			txn.SenderID, txn.Traced = p.senders.getOrCreateID(addr)
 			binary.BigEndian.Uint64(v)
 
-			if reason := p.validateTx(txn, true, cacheView, addr); reason != NotSet && reason != Success {
-				return nil
-			}
+			// if reason := p.validateTx(txn, true, cacheView, addr); reason != NotSet && reason != Success {
+			// 	return nil
+			// }
 			p.limbo.limboSlots.Append(txn, addr[:], true)
 		case DbKeyBatchesPrefix:
 			batchesI := binary.LittleEndian.Uint32(k[1:5])
@@ -579,6 +579,8 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 			} else {
 				p.limbo.awaitingBlockHandling.Store(true)
 			}
+		default:
+			panic("Invalid key")
 		}
 
 	}
