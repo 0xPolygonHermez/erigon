@@ -106,7 +106,7 @@ func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum ui
 				Coinbase:   decoded.Coinbase,
 				Difficulty: new(big.Int).SetUint64(0),
 				Number:     new(big.Int).SetUint64(nextNum),
-				GasLimit:   zkUtils.GetExecutionGasLimit(fork),
+				GasLimit:   zkUtils.GetBlockGasLimitForFork(fork),
 				Time:       timestamp,
 			}
 

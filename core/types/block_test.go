@@ -37,6 +37,7 @@ import (
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 // from bcValidBlockTest.json, "SimpleTx"
@@ -371,7 +372,7 @@ func TestAuRaHeaderEncoding(t *testing.T) {
 		ReceiptHash: libcommon.HexToHash("0x324f54860e214ea896ea7a05bda30f85541be3157de77a9059a04fdb1e86badd"),
 		Difficulty:  difficulty,
 		Number:      big.NewInt(24679923),
-		GasLimit:    30_000_000,
+		GasLimit:    utils.PreForkId7BlockGasLimit,
 		GasUsed:     3_074_345,
 		Time:        1666343339,
 		Extra:       common.FromHex("0x1234"),
@@ -396,7 +397,7 @@ func TestWithdrawalsEncoding(t *testing.T) {
 		Root:       libcommon.HexToHash("0x351780124dae86b84998c6d4fe9a88acfb41b4856b4f2c56767b51a4e2f94dd4"),
 		Difficulty: libcommon.Big0,
 		Number:     big.NewInt(20_000_000),
-		GasLimit:   30_000_000,
+		GasLimit:   utils.PreForkId7BlockGasLimit,
 		GasUsed:    3_074_345,
 		Time:       1666343339,
 		Extra:      make([]byte, 0),

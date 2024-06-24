@@ -754,7 +754,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block,
 	txCollection := ethTypes.Transactions(txs)
 	txHash := ethTypes.DeriveSha(txCollection)
 
-	gasLimit := utils.GetExecutionGasLimit(l2Block.ForkId)
+	gasLimit := utils.GetBlockGasLimitForFork(l2Block.ForkId)
 
 	h, err := eriDb.WriteHeader(bn, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit)
 	if err != nil {
