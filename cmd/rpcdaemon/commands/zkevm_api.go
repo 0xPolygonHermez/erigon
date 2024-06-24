@@ -574,7 +574,7 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 		return nil, err
 	}
 
-	return generator.GetWitnessByRange(tx, ctx, blockNr, endBlockNr, debug, fullWitness)
+	return generator.GetWitnessByBlockRange(tx, ctx, blockNr, endBlockNr, debug, fullWitness)
 }
 
 type WitnessMode string

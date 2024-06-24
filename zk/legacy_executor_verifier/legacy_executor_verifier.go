@@ -76,7 +76,7 @@ type ILegacyExecutor interface {
 }
 
 type WitnessGenerator interface {
-	GetWitnessByRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
+	GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
 }
 
 type LegacyExecutorVerifier struct {
@@ -215,7 +215,7 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 			return verifierBundle, err
 		}
 
-		witness, err := v.witnessGenerator.GetWitnessByRange(tx, ctx, blocks[0], blocks[len(blocks)-1], false, v.cfg.WitnessFull)
+		witness, err := v.witnessGenerator.GetWitnessByBlockRange(tx, ctx, blocks[0], blocks[len(blocks)-1], false, v.cfg.WitnessFull)
 		if err != nil {
 			return nil, err
 		}
