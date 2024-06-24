@@ -26,6 +26,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 )
 
 func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
