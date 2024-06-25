@@ -491,6 +491,11 @@ var (
 		Usage: "The timeout for the executor request",
 		Value: 60 * time.Second,
 	}
+	DatastreamNewBlockTimeout = cli.DurationFlag{
+		Name:  "zkevm.datastream-new-block-timeout",
+		Usage: "The timeout for the executor request",
+		Value: 500 * time.Millisecond,
+	}
 	ExecutorMaxConcurrentRequests = cli.IntFlag{
 		Name:  "zkevm.executor-max-concurrent-requests",
 		Usage: "The maximum number of concurrent requests to the executor",
@@ -515,6 +520,11 @@ var (
 		Name:  "zkevm.data-stream-host",
 		Usage: "Define the host used for the zkevm data stream",
 		Value: "",
+	}
+	Limbo = cli.BoolFlag{
+		Name:  "zkevm.limbo",
+		Usage: "Enable limbo processing on batches that failed verification",
+		Value: false,
 	}
 	AllowFreeTransactions = cli.BoolFlag{
 		Name:  "zkevm.allow-free-transactions",
