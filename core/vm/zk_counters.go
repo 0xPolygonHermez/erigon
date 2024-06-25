@@ -693,6 +693,7 @@ func (cc *CounterCollector) processContractCall(smtLevels int, bytecodeLength in
 		if isCreate {
 			cc.Deduct(S, 40)
 			cc.Deduct(K, 1)
+			cc.maskAddress()
 		} else if isCreate2 {
 			cc.Deduct(S, 40)
 			cc.divArith()
@@ -1674,7 +1675,7 @@ func (cc *CounterCollector) opSha3(pc *uint64, interpreter *EVMInterpreter, scop
 	size := int(scope.Stack.PeekAt(2).Uint64())
 	cc.opCode(scope)
 	cc.Deduct(S, 40)
-	cc.Deduct(K, int(math.Ceil(float64(size+1)/130)))
+	cc.Deduct(K, int(math.Ceil(float64(size+1)/136)))
 	cc.saveMem(size)
 	cc.multiCall(cc.divArith, 2)
 	cc.mulArith()
