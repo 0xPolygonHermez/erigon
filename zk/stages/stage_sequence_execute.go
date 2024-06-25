@@ -21,6 +21,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/erigon/zk/l1_data"
+	"github.com/ledgerwatch/erigon/zk/datastream/server"
 )
 
 var SpecialZeroIndexHash = common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757")
@@ -86,6 +88,12 @@ func SpawnSequencingStage(
 			return err
 		}
 
+		// write the batch directly to the stream
+		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
+		if err = server.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, srv, cfg.stream, 1, 1, logPrefix); err != nil {
+			return err
+		}
+
 		if freshTx {
 			if err = tx.Commit(); err != nil {
 				return err
@@ -124,7 +132,7 @@ func SpawnSequencingStage(
 	lastStartedBn := executionAt - 1
 	yielded := mapset.NewSet[[32]byte]()
 
-	nextBatchData := &nextBatchL1Data{
+	nextBatchData := l1_data.DecodedL1Data{
 		Coinbase:        cfg.zk.AddressSequencer,
 		IsWorkRemaining: true,
 	}
@@ -147,7 +155,7 @@ func SpawnSequencingStage(
 		}
 
 		// let's check if we have any L1 data to recover
-		nextBatchData, err = getNextL1BatchData(thisBatch, forkId, sdb.hermezDb)
+		nextBatchData, err = l1_data.BreakDownL1DataByBatch(thisBatch, forkId, sdb.hermezDb.HermezDbReader)
 		if err != nil {
 			return err
 		}
