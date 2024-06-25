@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"github.com/ledgerwatch/erigon/zk/utils"
 )
+
+const forkId7BlockGasLimit = 18446744073709551615
 
 func TestBinaryStringToInt64(t *testing.T) {
 	testCases := []struct {
@@ -19,8 +20,8 @@ func TestBinaryStringToInt64(t *testing.T) {
 		{"110011", 51},
 		{"0", 0},
 		{"11111111", 255},
-		{"1111111111111111111111111111111111111111111111111111111111111111", utils.ForkId7BlockGasLimit}, // max uint64 value
-		{"10000000000000000000000000000000000000000000000000000000000000000", 0},                         // overflow scenario
+		{"1111111111111111111111111111111111111111111111111111111111111111", forkId7BlockGasLimit}, // max uint64 value
+		{"10000000000000000000000000000000000000000000000000000000000000000", 0},                   // overflow scenario
 	}
 
 	for _, tc := range testCases {
