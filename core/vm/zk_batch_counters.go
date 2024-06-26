@@ -169,6 +169,7 @@ func (bcc *BatchCounterCollector) CombineCollectors(verifyMerkleProof bool) (Cou
 	changeL2BlockCounter := NewCounterCollector(bcc.smtLevelsForTransaction, bcc.forkId)
 	changeL2BlockCounter.processChangeL2Block(verifyMerkleProof)
 	changeBlockCounters := NewCounterCollector(bcc.smtLevelsForTransaction, bcc.forkId)
+	changeBlockCounters.decodeChangeL2BlockTx()
 
 	// handling changeL2Block counters for each block in the batch - simulating a call to decodeChangeL2BlockTx from the js
 	for i := 0; i < bcc.blockCount; i++ {
