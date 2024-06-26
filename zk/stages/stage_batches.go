@@ -197,16 +197,16 @@ func SpawnStageBatches(
 		return fmt.Errorf("failed to get last fork id, %w", err)
 	}
 
-	// stageExecProgress, err := stages.GetStageProgress(tx, stages.Execution)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to get stage exec progress, %w", err)
-	// }
+	stageExecProgress, err := stages.GetStageProgress(tx, stages.Execution)
+	if err != nil {
+		return fmt.Errorf("failed to get stage exec progress, %w", err)
+	}
 
 	// just exit the stage early if there is more execution work to do
-	// if stageExecProgress < lastBlockHeight {
-	// 	log.Info(fmt.Sprintf("[%s] Execution behind, skipping stage", logPrefix))
-	// 	return nil
-	// }
+	if stageExecProgress < lastBlockHeight {
+		log.Info(fmt.Sprintf("[%s] Execution behind, skipping stage", logPrefix))
+		return nil
+	}
 
 	lastHash := emptyHash
 	atLeastOneBlockWritten := false
