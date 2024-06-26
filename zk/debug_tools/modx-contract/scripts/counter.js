@@ -8,11 +8,10 @@ try {
    // Wait for the deployment transaction to be mined
    const deployResult = await contract.waitForDeployment();
 
-   console.log(deployResult)
    console.log(`Counter contract deployed to: ${await contract.getAddress()}`);
 
    const result = await contract.increment();
-   console.log(result);
+   console.log('Increment method call transaction: ', result.hash);
  } catch (error) {
    console.error(error);
    process.exit(1);
