@@ -2,7 +2,7 @@ name: Nightly - ETH Bench
 
 on:
   schedule:
-    - cron: '30 1 * * *' # run at 1:30am to stagger tests (take around 15m to pass)
+    - cron: '0 2 * * *' # run at 2am to stagger tests (take around 15m to pass)
   workflow_dispatch:
 
 jobs:
