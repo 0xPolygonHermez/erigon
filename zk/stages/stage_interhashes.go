@@ -129,10 +129,9 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb)
 
-	eridb.OpenBatch(quit)
-
 	if cfg.zk.IncrementTreeAlways {
 		// increment only behaviour
+		eridb.OpenBatch(quit)
 		log.Debug(fmt.Sprintf("[%s] IncrementTreeAlways true - incrementing tree", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
 		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
 			return trie.EmptyRoot, err
@@ -140,21 +139,17 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	} else {
 		// default behaviour
 		if s.BlockNumber == 0 || shouldRegenerate {
-			if !cfg.zk.SmtRegenerateInMemory {
-				// commit the batch to prevent using mapmutation (i.e. don't use RAM)
-				err = eridb.CommitBatch()
-				if err != nil {
-					return trie.EmptyRoot, err
-				}
+			if cfg.zk.SmtRegenerateInMemory {
+				log.Info(fmt.Sprintf("[%s] SMT using mapmutation", logPrefix))
+				eridb.OpenBatch(quit)
+			} else {
+				log.Info(fmt.Sprintf("[%s] SMT not using mapmutation", logPrefix))
 			}
 			if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt, to); err != nil {
 				return trie.EmptyRoot, err
 			}
-			if !cfg.zk.SmtRegenerateInMemory {
-				// re-open the batch for subsequent operations
-				eridb.OpenBatch(quit)
-			}
 		} else {
+			eridb.OpenBatch(quit)
 			if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
 				return trie.EmptyRoot, err
 			}
@@ -178,7 +173,9 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		headerHash = syncHeadHeader.Hash()
 
 		if root != expectedRootHash {
-			eridb.RollbackBatch()
+			if cfg.zk.SmtRegenerateInMemory {
+				eridb.RollbackBatch()
+			}
 			panic(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
 
 			if cfg.badBlockHalt {
