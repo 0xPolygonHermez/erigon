@@ -58,6 +58,8 @@ In case `file-output` flag is provided, results are printed to a JSON file (othe
   - `verbose`: See [verbose](#verbose) flag.
   - `file-output`: See [file-output](#file-output) flag.
 
+**Note:** In case, `output-blocks` is ran with `verbose` flag provided, it is necessary to provide the proper chain id to the `params/chainspecs/mainnet.json`. This is the case, because CDK Erigon (for now) uses hardcoded data to recover transaction senders, and chain id information is read from the mentioned file.
+
 ### Example Usage
 
 **Pre-requisite:** Navigate to the `zk/debug_tools/mdbx-data-browser` folder and run `go build -o mdbx-data-browser`
