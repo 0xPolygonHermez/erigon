@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"encoding/binary"
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -12,9 +13,8 @@ import (
 
 	"errors"
 
-	"encoding/binary"
-
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -26,7 +26,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
-	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 )
 
 func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
@@ -185,9 +184,9 @@ func attemptAddTransaction(
 	transaction types.Transaction,
 	effectiveGasPrice uint8,
 	l1Recovery bool,
-	forkId uint64,
+	forkId, l1InfoIndex uint64,
 ) (*types.Receipt, bool, error) {
-	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
+	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
 	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
 	if err != nil {
 		return nil, false, err
@@ -239,7 +238,7 @@ func attemptAddTransaction(
 	}
 
 	// now that we have executed we can check again for an overflow
-	overflow, err = batchCounters.CheckForOverflow()
+	overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0)
 
 	return receipt, overflow, err
 }
