@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"io"
 
-	"encoding/binary"
 	"errors"
 
 	mapset "github.com/deckarep/golang-set/v2"
