@@ -2,7 +2,7 @@ name: Nightly - Bridge ERC20 L2->L1
 
 on:
   schedule:
-    - cron: '30 0 * * *'  # run at 12:30am
+    - cron: '45 0 * * *'  # run at 12:45am
   workflow_dispatch:
 
 jobs:
