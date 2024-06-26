@@ -140,8 +140,19 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	} else {
 		// default behaviour
 		if s.BlockNumber == 0 || shouldRegenerate {
+			if !cfg.zk.SmtRegenerateInMemory {
+				// commit the batch to prevent using mapmutation (i.e. don't use RAM)
+				err = eridb.CommitBatch()
+				if err != nil {
+					return trie.EmptyRoot, err
+				}
+			}
 			if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt, to); err != nil {
 				return trie.EmptyRoot, err
+			}
+			if !cfg.zk.SmtRegenerateInMemory {
+				// re-open the batch for subsequent operations
+				eridb.OpenBatch(quit)
 			}
 		} else {
 			if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
