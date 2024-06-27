@@ -28,10 +28,11 @@ import (
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/syncer"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
+	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	zktx "github.com/ledgerwatch/erigon/zk/tx"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -357,7 +358,12 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	if seq != nil {
 		batch.SendSequencesTxHash = &seq.L1TxHash
 	}
-	batch.Closed = seq != nil || bn == 0 || bn == 1 // sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed
+	_, found, err := hermezDb.GetLowestBlockInBatch(bn + 1)
+	if err != nil {
+		return nil, err
+	}
+	// sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed, if next batch has blocks, bn must be closed
+	batch.Closed = seq != nil || bn == 0 || bn == 1 || found
 
 	// verification
 	ver, err := hermezDb.GetVerificationByBatchNo(bn)
@@ -368,7 +374,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.VerifyBatchTxHash = &ver.L1TxHash
 	}
 
-	// exit roots
+	// exit roots (mer, rer)
 	infoTreeUpdate, err := hermezDb.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
 	if err != nil {
 		return nil, err
@@ -377,6 +383,13 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.MainnetExitRoot = infoTreeUpdate.MainnetExitRoot
 		batch.RollupExitRoot = infoTreeUpdate.RollupExitRoot
 	}
+
+	// local exit root
+	localExitRoot, err := utils.GetBatchLocalExitRoot(bn, hermezDb, tx)
+	if err != nil {
+		return nil, err
+	}
+	batch.LocalExitRoot = localExitRoot
 
 	// batch l2 data - must build on the fly
 	forkId, err := hermezDb.GetForkId(bn)
@@ -424,8 +437,6 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	//	return nil, err
 	//}
 	//batch.AccInputHash = oaih
-
-	//batch.LocalExitRoot = ver.LocalExitRoot
 
 	return populateBatchDetails(batch)
 }
