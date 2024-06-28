@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -16,11 +15,9 @@ import (
 
 const GenesisForkId = 0 // genesis fork is always 0 in the datastream
 
-func WriteBlocksToStream(
+func (srv *DataStreamServer) WriteBlocksToStream(
 	tx kv.Tx,
 	reader *hermez_db.HermezDbReader,
-	srv *DataStreamServer,
-	stream *datastreamer.StreamServer,
 	from, to uint64,
 	logPrefix string,
 ) error {
@@ -40,7 +37,7 @@ func WriteBlocksToStream(
 
 	logTicker := time.NewTicker(10 * time.Second)
 	var lastBlock *eritypes.Block
-	if err = stream.StartAtomicOp(); err != nil {
+	if err = srv.stream.StartAtomicOp(); err != nil {
 		return err
 	}
 	totalToWrite := to - (from - 1)
@@ -64,7 +61,7 @@ func WriteBlocksToStream(
 			}
 		}
 
-		block, blockEntries, err := srv.createBlockStreamEntries(tx, reader, lastBlock, currentBlockNumber)
+		block, blockEntries, err := srv.createBlockStreamEntriesWithBatchCheck(tx, reader, lastBlock, currentBlockNumber)
 		if err != nil {
 			return err
 		}
@@ -91,14 +88,14 @@ func WriteBlocksToStream(
 		return err
 	}
 
-	if err = stream.CommitAtomicOp(); err != nil {
+	if err = srv.stream.CommitAtomicOp(); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (srv *DataStreamServer) createBlockStreamEntries(
+func (srv *DataStreamServer) createBlockStreamEntriesWithBatchCheck(
 	tx kv.Tx,
 	reader *hermez_db.HermezDbReader,
 	lastBlock *eritypes.Block,
@@ -144,7 +141,6 @@ func (srv *DataStreamServer) WriteGenesisToStream(
 	genesis *eritypes.Block,
 	reader *hermez_db.HermezDbReader,
 	tx kv.Tx,
-	stream *datastreamer.StreamServer,
 ) error {
 	batchNo, err := reader.GetBatchNoByL2Block(0)
 	if err != nil {
@@ -156,7 +152,7 @@ func (srv *DataStreamServer) WriteGenesisToStream(
 		return err
 	}
 
-	err = stream.StartAtomicOp()
+	err = srv.stream.StartAtomicOp()
 	if err != nil {
 		return err
 	}
@@ -177,7 +173,7 @@ func (srv *DataStreamServer) WriteGenesisToStream(
 		return err
 	}
 
-	err = stream.CommitAtomicOp()
+	err = srv.stream.CommitAtomicOp()
 	if err != nil {
 		return err
 	}

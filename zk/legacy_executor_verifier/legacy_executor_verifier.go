@@ -377,7 +377,7 @@ func (v *LegacyExecutorVerifier) WriteBatchToStream(batchNumber uint64, hdb *her
 		return err
 	}
 
-	if err := server.WriteBlocksToStream(roTx, hdb, v.streamServer, v.stream, blks[0], blks[len(blks)-1], "verifier"); err != nil {
+	if err := v.streamServer.WriteBlocksToStream(roTx, hdb, blks[0], blks[len(blks)-1], "verifier"); err != nil {
 		return err
 	}
 	return nil

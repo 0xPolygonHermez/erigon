@@ -120,13 +120,13 @@ func CatchupDatastream(logPrefix string, tx kv.RwTx, stream *datastreamer.Stream
 			if err != nil {
 				return 0, err
 			}
-			if err = srv.WriteGenesisToStream(genesis, reader, tx, stream); err != nil {
+			if err = srv.WriteGenesisToStream(genesis, reader, tx); err != nil {
 				return 0, err
 			}
 		}
 	}
 
-	if err = server.WriteBlocksToStream(tx, reader, srv, stream, previousProgress+1, finalBlockNumber, logPrefix); err != nil {
+	if err = srv.WriteBlocksToStream(tx, reader, previousProgress+1, finalBlockNumber, logPrefix); err != nil {
 		return 0, err
 	}
 
