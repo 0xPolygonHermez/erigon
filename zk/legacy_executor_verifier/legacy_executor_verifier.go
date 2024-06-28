@@ -463,7 +463,7 @@ func (v *LegacyExecutorVerifier) GetStreamBytes(
 		if transactionsToIncludeByIndex != nil {
 			transactionsToIncludeByIndexInBlock = transactionsToIncludeByIndex[idx]
 		}
-		sBytes, err = v.streamServer.CreateAndBuildStreamEntryBytesProto(block, hermezDb, tx, lastBlock, batchNumber, previousBatch, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndexInBlock)
+		sBytes, err = server.CreateAndBuildStreamEntryBytesProto(v.streamServer.GetChainId(), block, hermezDb, tx, lastBlock, batchNumber, previousBatch, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndexInBlock)
 		if err != nil {
 			return nil, err
 		}
