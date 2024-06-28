@@ -2,16 +2,19 @@ package stages
 
 import (
 	"context"
+	"encoding/binary"
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
-	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 
 	"bytes"
 	"io"
 
+	"errors"
+
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -19,11 +22,10 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
-	"errors"
-	"github.com/ledgerwatch/erigon/zk/constants"
-	"encoding/binary"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
@@ -41,7 +43,7 @@ LOOP:
 		}
 		if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
 			slots := types2.TxsRlp{}
-			_, count, err = cfg.txPool.YieldBest(yieldSize, &slots, poolTx, executionAt, getGasLimit(forkId), alreadyYielded)
+			_, count, err = cfg.txPool.YieldBest(yieldSize, &slots, poolTx, executionAt, utils.GetBlockGasLimitForFork(forkId), alreadyYielded)
 			if err != nil {
 				return err
 			}
@@ -49,7 +51,7 @@ LOOP:
 				time.Sleep(500 * time.Microsecond)
 				return nil
 			}
-			transactions, err = extractTransactionsFromSlot(slots)
+			transactions, err = extractTransactionsFromSlot(&slots)
 			if err != nil {
 				return err
 			}
@@ -66,16 +68,42 @@ LOOP:
 	return transactions, err
 }
 
-type nextBatchL1Data struct {
-	DecodedData     []zktx.DecodedBatchL2Data
-	Coinbase        common.Address
-	L1InfoRoot      common.Hash
-	IsWorkRemaining bool
-	LimitTimestamp  uint64
+func getLimboTransaction(cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Transaction, error) {
+	var transactions []types.Transaction
+
+	for {
+		// ensure we don't spin forever looking for transactions, attempt for a while then exit up to the caller
+		if err := cfg.txPoolDb.View(context.Background(), func(poolTx kv.Tx) error {
+			slots, err := cfg.txPool.GetLimboTxRplsByHash(poolTx, txHash)
+			if err != nil {
+				return err
+			}
+
+			if slots != nil {
+				transactions, err = extractTransactionsFromSlot(slots)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		if len(transactions) == 0 {
+			time.Sleep(250 * time.Millisecond)
+		} else {
+			break
+		}
+
+	}
+
+	return transactions, nil
 }
 
-func getNextL1BatchData(batchNumber uint64, forkId uint64, hermezDb *hermez_db.HermezDb) (nextBatchL1Data, error) {
-	nextData := nextBatchL1Data{}
+func getNextL1BatchData(batchNumber uint64, forkId uint64, hermezDb *hermez_db.HermezDb) (*nextBatchL1Data, error) {
+	nextData := &nextBatchL1Data{}
 	// we expect that the batch we're going to load in next should be in the db already because of the l1 block sync
 	// stage, if it is not there we need to panic as we're in a bad state
 	batchL2Data, err := hermezDb.GetL1BatchData(batchNumber)
@@ -124,7 +152,7 @@ func getNextL1BatchData(batchNumber uint64, forkId uint64, hermezDb *hermez_db.H
 	return nextData, err
 }
 
-func extractTransactionsFromSlot(slot types2.TxsRlp) ([]types.Transaction, error) {
+func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, error) {
 	transactions := make([]types.Transaction, 0, len(slot.Txs))
 	reader := bytes.NewReader([]byte{})
 	stream := new(rlp.Stream)
@@ -156,9 +184,9 @@ func attemptAddTransaction(
 	transaction types.Transaction,
 	effectiveGasPrice uint8,
 	l1Recovery bool,
-	forkId uint64,
+	forkId, l1InfoIndex uint64,
 ) (*types.Receipt, bool, error) {
-	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
+	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
 	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
 	if err != nil {
 		return nil, false, err
@@ -210,7 +238,7 @@ func attemptAddTransaction(
 	}
 
 	// now that we have executed we can check again for an overflow
-	overflow, err = batchCounters.CheckForOverflow()
+	overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0)
 
 	return receipt, overflow, err
 }

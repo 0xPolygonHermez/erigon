@@ -179,7 +179,7 @@ func createBlockStreamEntries(
 		return nil, nil, err
 	}
 
-	blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, make(map[uint64]uint64), isBatchEnd)
+	blockEntries, err := srv.CreateStreamEntriesProto(block, reader, tx, lastBlock, batchNum, prevBatchNum, gersInBetween, make(map[uint64]uint64), isBatchEnd, nil)
 	if err != nil {
 		return nil, nil, err
 	}

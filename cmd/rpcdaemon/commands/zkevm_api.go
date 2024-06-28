@@ -30,6 +30,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -51,7 +53,7 @@ type ZkEvmAPI interface {
 	// GetBroadcastURI(ctx context.Context) (string, error)
 	GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error)
 	GetBlockRangeWitness(ctx context.Context, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error)
-	GetBatchWitness(ctx context.Context, batchNumber uint64, mode *WitnessMode) (hexutility.Bytes, error)
+	GetBatchWitness(ctx context.Context, batchNumber uint64, mode *WitnessMode) (interface{}, error)
 	GetProverInput(ctx context.Context, batchNumber uint64, mode *WitnessMode, debug *bool) (*legacy_executor_verifier.RpcPayload, error)
 	GetLatestGlobalExitRoot(ctx context.Context) (common.Hash, error)
 	GetExitRootsByGER(ctx context.Context, globalExitRoot common.Hash) (*ZkExitRoots, error)
@@ -69,6 +71,7 @@ type ZkEvmAPIImpl struct {
 	ReturnDataLimit int
 	config          *ethconfig.Config
 	l1Syncer        *syncer.L1Syncer
+	l2SequencerUrl  string
 }
 
 // NewEthAPI returns ZkEvmAPIImpl instance
@@ -78,6 +81,7 @@ func NewZkEvmAPI(
 	returnDataLimit int,
 	zkConfig *ethconfig.Config,
 	l1Syncer *syncer.L1Syncer,
+	l2SequencerUrl string,
 ) *ZkEvmAPIImpl {
 	return &ZkEvmAPIImpl{
 		ethApi:          base,
@@ -85,6 +89,7 @@ func NewZkEvmAPI(
 		ReturnDataLimit: returnDataLimit,
 		config:          zkConfig,
 		l1Syncer:        l1Syncer,
+		l2SequencerUrl:  l2SequencerUrl,
 	}
 }
 
@@ -278,12 +283,15 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	// collect blocks in batch
 	batch.Blocks = []interface{}{}
 	batch.Transactions = []interface{}{}
+	var batchBlocks []*eritypes.Block
+	var batchTxs []eritypes.Transaction
 	// handle genesis - not in the hermez tables so requires special treament
 	if batchNumber == 0 {
 		blk, err := api.ethApi.BaseAPI.blockByNumberWithSenders(tx, 0)
 		if err != nil {
 			return nil, err
 		}
+		batchBlocks = append(batchBlocks, blk)
 		batch.Blocks = append(batch.Blocks, blk.Hash())
 		// no txs in genesis
 	}
@@ -292,19 +300,53 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		if err != nil {
 			return nil, err
 		}
+		batchBlocks = append(batchBlocks, blk)
 		batch.Blocks = append(batch.Blocks, blk.Hash())
 		for _, btx := range blk.Transactions() {
+			batchTxs = append(batchTxs, btx)
 			batch.Transactions = append(batch.Transactions, btx.Hash())
 		}
 	}
 
+	//for consistency with leagacy node, return nil if no transactions
+	if len(batch.Transactions) == 0 {
+		batch.Transactions = nil
+	}
+
 	// global exit root of batch
-	ger, err := hermezDb.GetBatchGlobalExitRoot(bn)
+	batchGer, foundBatchGerNumber, err := hermezDb.GetLastBatchGlobalExitRoot(bn)
 	if err != nil {
 		return nil, err
 	}
+
+	// get last block in batch
+	lastBlockInbatch, err := hermezDb.GetHighestBlockInBatch(bn)
+	if err != nil {
+		return nil, err
+	}
+
+	// get latest found ger by block
+	latestBlockHer, blockNum, err := hermezDb.GetLastBlockGlobalExitRoot(lastBlockInbatch)
+	if err != nil {
+		return nil, err
+	}
+
+	//get latest block ger batch number
+	latestBlockGerBatchNumber, err := hermezDb.GetBatchNoByL2Block(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	var ger *common.Hash
+	if batchGer != nil {
+		ger = &batchGer.GlobalExitRoot
+	}
+	if foundBatchGerNumber < latestBlockGerBatchNumber {
+		ger = &latestBlockHer
+	}
+
 	if ger != nil {
-		batch.GlobalExitRoot = ger.GlobalExitRoot
+		batch.GlobalExitRoot = *ger
 	}
 
 	// sequence
@@ -326,13 +368,6 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.VerifyBatchTxHash = &ver.L1TxHash
 	}
 
-	// batch l2 data
-	batchL2Data, err := hermezDb.GetL1BatchData(bn)
-	if err != nil {
-		return nil, err
-	}
-	batch.BatchL2Data = batchL2Data
-
 	// exit roots
 	infoTreeUpdate, err := hermezDb.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
 	if err != nil {
@@ -342,6 +377,46 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.MainnetExitRoot = infoTreeUpdate.MainnetExitRoot
 		batch.RollupExitRoot = infoTreeUpdate.RollupExitRoot
 	}
+
+	// batch l2 data - must build on the fly
+	forkId, err := hermezDb.GetForkId(bn)
+	if err != nil {
+		return nil, err
+	}
+
+	// last batch last block for deltaTimestamp calc
+	lastBlockNoInPreviousBatch := batchBlocks[0].NumberU64() - 1
+	lastBlockInPreviousBatch, err := rawdb.ReadBlockByNumber(tx, lastBlockNoInPreviousBatch)
+	if err != nil {
+		return nil, err
+	}
+
+	var batchL2Data []byte
+	for i := 0; i < len(batchBlocks); i++ {
+		var dTs uint32
+		if i == 0 {
+			dTs = uint32(batchBlocks[i].Time() - lastBlockInPreviousBatch.Time())
+		} else {
+			dTs = uint32(batchBlocks[i].Time() - batchBlocks[i-1].Time())
+		}
+		iti, err := hermezDb.GetBlockL1InfoTreeIndex(batchBlocks[i].NumberU64())
+
+		egTx := make(map[common.Hash]uint8)
+		for _, txn := range batchBlocks[i].Transactions() {
+			eg, err := hermezDb.GetEffectiveGasPricePercentage(txn.Hash())
+			if err != nil {
+				return nil, err
+			}
+			egTx[txn.Hash()] = eg
+		}
+
+		bl2d, err := zktx.GenerateBlockBatchL2Data(uint16(forkId), dTs, uint32(iti), batchBlocks[i].Transactions(), egTx)
+		if err != nil {
+			return nil, err
+		}
+		batchL2Data = append(batchL2Data, bl2d...)
+	}
+	batch.BatchL2Data = batchL2Data
 
 	// currently gives 'error execution reverted' when calling the L1
 	//oaih, err := api.l1Syncer.GetOldAccInputHash(ctx, &api.config.AddressRollup, ApiRollupId, bn+1)
@@ -500,6 +575,45 @@ func (api *ZkEvmAPIImpl) GetBlockRangeWitness(ctx context.Context, startBlockNrO
 	return api.getBlockRangeWitness(ctx, api.db, startBlockNrOrHash, endBlockNrOrHash, dbg, checkedMode)
 }
 
+func (api *ZkEvmAPIImpl) getBatchWitness(ctx context.Context, tx kv.Tx, batchNum uint64, debug bool, mode WitnessMode) (hexutility.Bytes, error) {
+	if api.ethApi.historyV3(tx) {
+		return nil, fmt.Errorf("not supported by Erigon3")
+	}
+
+	generator, fullWitness, err := api.buildGenerator(tx, mode)
+	if err != nil {
+		return nil, err
+	}
+
+	return generator.GetWitnessByBatch(tx, ctx, batchNum, debug, fullWitness)
+
+}
+
+func (api *ZkEvmAPIImpl) buildGenerator(tx kv.Tx, witnessMode WitnessMode) (*witness.Generator, bool, error) {
+	chainConfig, err := api.ethApi.chainConfig(tx)
+	if err != nil {
+		return nil, false, err
+	}
+
+	generator := witness.NewGenerator(
+		api.ethApi.dirs,
+		api.ethApi.historyV3(tx),
+		api.ethApi._agg,
+		api.ethApi._blockReader,
+		chainConfig,
+		api.ethApi._engine,
+	)
+
+	fullWitness := false
+	if witnessMode == WitnessModeNone {
+		fullWitness = api.config.WitnessFull
+	} else if witnessMode == WitnessModeFull {
+		fullWitness = true
+	}
+
+	return generator, fullWitness, nil
+}
+
 // Get witness for a range of blocks [startBlockNrOrHash, endBlockNrOrHash] (inclusive)
 func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, debug bool, witnessMode WitnessMode) (hexutility.Bytes, error) {
 	tx, err := db.BeginRo(ctx)
@@ -526,28 +640,12 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 		return nil, fmt.Errorf("start block number must be less than or equal to end block number, start=%d end=%d", blockNr, endBlockNr)
 	}
 
-	chainConfig, err := api.ethApi.chainConfig(tx)
+	generator, fullWitness, err := api.buildGenerator(tx, witnessMode)
 	if err != nil {
 		return nil, err
 	}
 
-	generator := witness.NewGenerator(
-		api.ethApi.dirs,
-		api.ethApi.historyV3(tx),
-		api.ethApi._agg,
-		api.ethApi._blockReader,
-		chainConfig,
-		api.ethApi._engine,
-	)
-
-	fullWitness := false
-	if witnessMode == WitnessModeNone {
-		fullWitness = api.config.WitnessFull
-	} else if witnessMode == WitnessModeFull {
-		fullWitness = true
-	}
-
-	return generator.GenerateWitness(tx, ctx, blockNr, endBlockNr, debug, fullWitness)
+	return generator.GetWitnessByBlockRange(tx, ctx, blockNr, endBlockNr, debug, fullWitness)
 }
 
 type WitnessMode string
@@ -558,19 +656,31 @@ const (
 	WitnessModeTrimmed WitnessMode = "trimmed"
 )
 
-func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64, mode *WitnessMode) (hexutility.Bytes, error) {
+func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64, mode *WitnessMode) (interface{}, error) {
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	hermezDb := hermez_db.NewHermezDbReader(tx)
+	badBatch, err := hermezDb.GetInvalidBatch(batchNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	if badBatch && !sequencer.IsSequencer() {
+		// we won't have the details in our db if the batch is marked as invalid so we need to check this
+		// here
+		return api.sendGetBatchWitness(api.l2SequencerUrl, batchNumber, mode)
+	}
+
 	checkedMode := WitnessModeNone
 	if mode != nil && *mode != WitnessModeFull && *mode != WitnessModeTrimmed {
 		return nil, errors.New("invalid mode, must be full or trimmed")
 	} else if mode != nil {
 		checkedMode = *mode
 	}
-
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
 
 	// we only want to check the cache if no special run mode has been supplied.  If a run mode is supplied
 	// we need to always regenerate the witness from scratch
@@ -585,19 +695,7 @@ func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64
 		}
 	}
 
-	blocks, err := getAllBlocksInBatchNumber(tx, batchNumber)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(blocks) == 0 {
-		return nil, errors.New("batch not found")
-	}
-
-	startBlock := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blocks[0]))
-	endBlock := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blocks[len(blocks)-1]))
-	return api.getBlockRangeWitness(ctx, api.db, startBlock, endBlock, false, checkedMode)
+	return api.getBatchWitness(ctx, tx, batchNumber, false, checkedMode)
 }
 
 func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64, mode *WitnessMode, debug *bool) (*legacy_executor_verifier.RpcPayload, error) {
@@ -673,6 +771,15 @@ func (api *ZkEvmAPIImpl) GetLatestGlobalExitRoot(ctx context.Context) (common.Ha
 	}
 
 	return ger, nil
+}
+
+func (api *ZkEvmAPIImpl) sendGetBatchWitness(rpcUrl string, batchNumber uint64, mode *WitnessMode) (json.RawMessage, error) {
+	res, err := client.JSONRPCCall(rpcUrl, "zkevm_getBatchWitness", batchNumber, mode)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.Result, nil
 }
 
 func getLastBlockInBatchNumber(tx kv.Tx, batchNumber uint64) (uint64, error) {
