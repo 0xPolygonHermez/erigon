@@ -476,6 +476,13 @@ func SpawnSequencingStage(
 			log.Debug(fmt.Sprintf("[%s] Finish block %d with %s transaction", logPrefix, thisBlockNumber, tx.Hash().Hex()))
 		}
 
+		if !cfg.zk.HasExecutors() {
+			srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
+			if err = server.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, srv, cfg.stream, thisBlockNumber, thisBlockNumber, logPrefix); err != nil {
+				return err
+			}
+		}
+
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
 	}
 
