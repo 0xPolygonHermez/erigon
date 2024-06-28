@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -31,6 +32,10 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	latestBlockInBatch, err := d.getHighestBlockInBatch(batchNum)
 	if err != nil {
 		return nil, err
+	}
+
+	if latestBlockInBatch == nil {
+		return nil, errors.New("failed to retrieve the latest block in batch")
 	}
 
 	// Initialize batch
@@ -98,6 +103,15 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 
 // getHighestBlockInBatch reads the block with the highest block number from the batch
 func (d *DbDataRetriever) getHighestBlockInBatch(batchNum uint64) (*coreTypes.Block, error) {
+	_, found, err := d.dbReader.GetLowestBlockInBatch(batchNum)
+	if err != nil {
+		return nil, err
+	}
+
+	if !found {
+		return nil, nil
+	}
+
 	blockNum, err := d.dbReader.GetHighestBlockInBatch(batchNum)
 	if err != nil {
 		return nil, err

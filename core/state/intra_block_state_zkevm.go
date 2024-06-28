@@ -36,6 +36,7 @@ type ReadOnlyHermezDb interface {
 	GetReusedL1InfoTreeIndex(blockNum uint64) (bool, error)
 	GetSequenceByBatchNo(batchNo uint64) (*zktypes.L1BatchInfo, error)
 	GetHighestBlockInBatch(batchNo uint64) (uint64, error)
+	GetLowestBlockInBatch(batchNo uint64) (uint64, bool, error)
 	GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error)
 	GetBatchGlobalExitRoot(batchNum uint64) (*dstypes.GerUpdate, error)
 	GetVerificationByBatchNo(batchNo uint64) (*zktypes.L1BatchInfo, error)
