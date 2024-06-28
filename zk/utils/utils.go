@@ -153,6 +153,7 @@ func GetBatchLocalExitRootFromSCStorage(batchNo uint64, db *hermez_db.HermezDbRe
 			stateReader := state.NewPlainState(tx, blockNo, nil)
 			rawLer, err := stateReader.ReadAccountStorage(state.GER_MANAGER_ADDRESS, 1, &state.GLOBAL_EXIT_ROOT_POS_1)
 			if err != nil {
+				stateReader.Close()
 				return libcommon.Hash{}, err
 			}
 			stateReader.Close()

@@ -253,14 +253,23 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batchNumber = rpc.BlockNumber(highestBatchNo)
 	}
 
-	bn := uint64(batchNumber.Int64())
+	batchNo := uint64(batchNumber.Int64())
 
 	batch := &types.Batch{
-		Number: types.ArgUint64(bn),
+		Number: types.ArgUint64(batchNo),
+	}
+
+	// mimic zkevm node null response if we don't have the batch
+	_, found, err := hermezDb.GetLowestBlockInBatch(batchNo)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
 	}
 
 	// highest block in batch
-	blockNo, err := hermezDb.GetHighestBlockInBatch(bn)
+	blockNo, err := hermezDb.GetHighestBlockInBatch(batchNo)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +285,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	batch.Timestamp = types.ArgUint64(block.Time())
 
 	// block numbers in batch
-	blocksInBatch, err := hermezDb.GetL2BlockNosByBatch(bn)
+	blocksInBatch, err := hermezDb.GetL2BlockNosByBatch(batchNo)
 	if err != nil {
 		return nil, err
 	}
@@ -309,19 +318,19 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		}
 	}
 
-	//for consistency with leagacy node, return nil if no transactions
+	// for consistency with legacy node, return nil if no transactions
 	if len(batch.Transactions) == 0 {
 		batch.Transactions = nil
 	}
 
 	// global exit root of batch
-	batchGer, foundBatchGerNumber, err := hermezDb.GetLastBatchGlobalExitRoot(bn)
+	batchGer, foundBatchGerNumber, err := hermezDb.GetLastBatchGlobalExitRoot(batchNo)
 	if err != nil {
 		return nil, err
 	}
 
 	// get last block in batch
-	lastBlockInbatch, err := hermezDb.GetHighestBlockInBatch(bn)
+	lastBlockInbatch, err := hermezDb.GetHighestBlockInBatch(batchNo)
 	if err != nil {
 		return nil, err
 	}
@@ -351,22 +360,22 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 
 	// sequence
-	seq, err := hermezDb.GetSequenceByBatchNo(bn)
+	seq, err := hermezDb.GetSequenceByBatchNo(batchNo)
 	if err != nil {
 		return nil, err
 	}
 	if seq != nil {
 		batch.SendSequencesTxHash = &seq.L1TxHash
 	}
-	_, found, err := hermezDb.GetLowestBlockInBatch(bn + 1)
+	_, found, err = hermezDb.GetLowestBlockInBatch(batchNo + 1)
 	if err != nil {
 		return nil, err
 	}
 	// sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed, if next batch has blocks, bn must be closed
-	batch.Closed = seq != nil || bn == 0 || bn == 1 || found
+	batch.Closed = seq != nil || batchNo == 0 || batchNo == 1 || found
 
 	// verification
-	ver, err := hermezDb.GetVerificationByBatchNo(bn)
+	ver, err := hermezDb.GetVerificationByBatchNo(batchNo)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +383,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.VerifyBatchTxHash = &ver.L1TxHash
 	}
 
-	// exit roots (mer, rer)
+	// exit roots (MainnetExitRoot, RollupExitRoot)
 	infoTreeUpdate, err := hermezDb.GetL1InfoTreeUpdateByGer(batch.GlobalExitRoot)
 	if err != nil {
 		return nil, err
@@ -385,14 +394,14 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 
 	// local exit root
-	localExitRoot, err := utils.GetBatchLocalExitRoot(bn, hermezDb, tx)
+	localExitRoot, err := utils.GetBatchLocalExitRoot(batchNo, hermezDb, tx)
 	if err != nil {
 		return nil, err
 	}
 	batch.LocalExitRoot = localExitRoot
 
 	// batch l2 data - must build on the fly
-	forkId, err := hermezDb.GetForkId(bn)
+	forkId, err := hermezDb.GetForkId(batchNo)
 	if err != nil {
 		return nil, err
 	}
