@@ -290,7 +290,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 			blockContext := core.NewEVMBlockContext(header, blockHashFunc, engine, &sequencer, big.NewInt(0))
 
 			if !blockStarted {
-				overflow, err := batchCollector.StartNewBlock(false)
+				overflow, err := batchCollector.StartNewBlock(nil, false)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -300,7 +300,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 				blockStarted = true
 			}
 			txCounters := vm.NewTransactionCounter(transaction, test.SmtDepths[i], uint16(test.ForkId), 0.6, false)
-			overflow, err := batchCollector.AddNewTransactionCounters(txCounters)
+			overflow, err := batchCollector.AddNewTransactionCounters(nil, txCounters)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -339,7 +339,7 @@ func runTest(t *testing.T, test vector, err error, fileName string, idx int) {
 		}
 	}
 
-	combined, err := batchCollector.CombineCollectors(verifyMerkleProof)
+	combined, err := batchCollector.CombineCollectors(nil, verifyMerkleProof)
 	if err != nil {
 		t.Fatal(err)
 	}
