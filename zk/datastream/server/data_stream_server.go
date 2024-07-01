@@ -500,7 +500,7 @@ func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
 		if err != nil {
 			return err
 		}
-		if entry.Type == datastreamer.EntryType(3) {
+		if entry.Type == datastreamer.EntryType(datastream.EntryType_ENTRY_TYPE_L2_BLOCK) {
 			break
 		}
 		entryNum -= 1

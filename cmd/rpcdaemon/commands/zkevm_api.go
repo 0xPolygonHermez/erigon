@@ -286,6 +286,7 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 			return nil, err
 		}
 
+		// todo: max - take out shared logic with getBatchByNumber
 		// collect blocks in batch
 		var batchBlocks []*eritypes.Block
 		var batchTxs []eritypes.Transaction

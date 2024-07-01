@@ -38,6 +38,22 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 			if v == 0 {
 				panic(fmt.Sprintf("Flag not set: %s", flagName))
 			}
+		case []string:
+			if len(v) == 0 {
+				panic(fmt.Sprintf("Flag not set: %s", flagName))
+			}
+		case libcommon.Address:
+			if v == (libcommon.Address{}) {
+				panic(fmt.Sprintf("Flag not set: %s", flagName))
+			}
+		case time.Duration:
+			if v == 0 {
+				panic(fmt.Sprintf("Flag not set: %s", flagName))
+			}
+		case bool:
+			// nothing to check
+		default:
+			panic(fmt.Sprintf("Unsupported type for flag check: %T", value))
 		}
 	}
 
