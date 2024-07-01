@@ -150,7 +150,7 @@ func (srv *DataStreamServer) UnwindIfNecessary(logPrefix string, reader DbReader
 				return fmt.Errorf("datastream must unwind to prev batch, but it would corrupt the datastream: prevBatchNum: %d, abtchNum: %d, blockNum: %d", prevBatchNum, batchNum, blockNum)
 			}
 
-			if err := srv.UnwindToBatch(batchNum); err != nil {
+			if err := srv.UnwindToBatchStart(batchNum); err != nil {
 				return err
 			}
 		} else {

@@ -367,7 +367,7 @@ func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
 // must be done on offline server
 // finds the position of the endBlock entry for the given number
 // and unwinds the datastream file to it
-func (srv *DataStreamServer) UnwindToBatch(batchNumber uint64) error {
+func (srv *DataStreamServer) UnwindToBatchStart(batchNumber uint64) error {
 	// check if server is online
 
 	// find blockend entry
