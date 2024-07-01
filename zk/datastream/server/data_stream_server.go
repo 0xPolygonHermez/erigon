@@ -2,13 +2,32 @@ package server
 
 import (
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
+	zktypes "github.com/ledgerwatch/erigon/zk/types"
+
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
+
+type DbReader interface {
+	GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber uint64) ([]types.GerUpdateProto, error)
+	GetForkId(batchNumber uint64) (uint64, error)
+	GetBlockGlobalExitRoot(blockNumber uint64) (libcommon.Hash, error)
+	GetBlockL1BlockHash(blockNumber uint64) (libcommon.Hash, error)
+	GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, error)
+	GetL1InfoTreeUpdate(index uint64) (*zktypes.L1InfoTreeUpdate, error)
+	GetBlockInfoRoot(blockNumber uint64) (libcommon.Hash, error)
+	GetIntermediateTxStateRoot(blockNumber uint64, txHash libcommon.Hash) (libcommon.Hash, error)
+	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
+	GetHighestBlockInBatch(batchNumber uint64) (uint64, error)
+	GetInvalidBatch(batchNumber uint64) (bool, error)
+	GetBatchNoByL2Block(blockNumber uint64) (uint64, error)
+	CheckBatchNoByL2Block(l2BlockNo uint64) (uint64, bool, error)
+}
 
 type BookmarkType byte
 
@@ -94,17 +113,23 @@ func (srv *DataStreamServer) CommitEntriesToStreamProto(entries []DataStreamEntr
 
 func createBlockWithBatchCheckStreamEntriesProto(
 	chainId uint64,
-	block *eritypes.Block,
-	reader *hermez_db.HermezDbReader,
+	reader DbReader,
 	tx kv.Tx,
+	block,
 	lastBlock *eritypes.Block,
-	batchNumber uint64,
+	batchNumber,
 	lastBatchNumber uint64,
-	gers []types.GerUpdateProto,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 	isBatchEnd bool,
 	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
 ) ([]DataStreamEntryProto, error) {
+	var err error
+
+	gers, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
+	if err != nil {
+		return nil, err
+	}
+
 	// we might have a series of empty batches to account for, so we need to know the gap
 	batchGap := batchNumber - lastBatchNumber
 	isBatchStart := batchGap > 0
@@ -117,8 +142,6 @@ func createBlockWithBatchCheckStreamEntriesProto(
 	entryCount := 2                         // l2 block bookmark + l2 block
 	entryCount += len(filteredTransactions) // transactions
 	entryCount += len(gers)
-
-	var err error
 
 	if isBatchStart {
 		// we will add in a batch bookmark and a batch start entry
@@ -164,7 +187,7 @@ func createBlockWithBatchCheckStreamEntriesProto(
 
 	if isBatchEnd {
 		var batchEndEntries []DataStreamEntryProto
-		if batchEndEntries, err = addBatchEndEntriesProto(reader, tx, batchNumber, lastBatchNumber, batchGap, block.Root(), gers); err != nil {
+		if batchEndEntries, err = addBatchEndEntriesProto(reader, tx, batchNumber, lastBatchNumber, block.Root(), gers); err != nil {
 			return nil, err
 		}
 		entries.AddMany(batchEndEntries)
@@ -174,7 +197,7 @@ func createBlockWithBatchCheckStreamEntriesProto(
 }
 
 func createFullBlockStreamEntriesProto(
-	reader *hermez_db.HermezDbReader,
+	reader DbReader,
 	tx kv.Tx,
 	block *eritypes.Block,
 	filteredTransactions eritypes.Transactions,
@@ -234,7 +257,7 @@ func createFullBlockStreamEntriesProto(
 }
 
 func createTransactionEntryProto(
-	reader *hermez_db.HermezDbReader,
+	reader DbReader,
 	tx eritypes.Transaction,
 	blockNum uint64,
 	isEtrog bool,
@@ -274,12 +297,7 @@ func CreateAndBuildStreamEntryBytesProto(
 	isBatchEnd bool,
 	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
 ) ([]byte, error) {
-	gersInBetween, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
-	if err != nil {
-		return nil, err
-	}
-
-	entries, err := createBlockWithBatchCheckStreamEntriesProto(chainId, block, reader, tx, lastBlock, batchNumber, lastBatchNumber, gersInBetween, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndex)
+	entries, err := createBlockWithBatchCheckStreamEntriesProto(chainId, reader, tx, block, lastBlock, batchNumber, lastBatchNumber, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -327,8 +345,8 @@ func (srv *DataStreamServer) GetHighestBlockNumber() (uint64, error) {
 }
 
 // must be done on offline server
-// finds the position of the endBlock entry for the given number
-// and unwinds the datastream file to it
+// finds the position of the block bookmark entry and deletes from it onward
+// blockNumber 10 would return the stream to before block 10 bookmark
 func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
 	// check if server is online
 
@@ -343,17 +361,25 @@ func (srv *DataStreamServer) UnwindToBlock(blockNumber uint64) error {
 		return err
 	}
 
-	//find end block entry to delete from it onward
-	for {
-		entry, err := srv.stream.GetEntry(entryNum)
-		if err != nil {
-			return err
-		}
-		if entry.Type == datastreamer.EntryType(3) {
-			break
-		}
-		entryNum -= 1
+	return srv.stream.TruncateFile(entryNum)
+}
+
+// must be done on offline server
+// finds the position of the endBlock entry for the given number
+// and unwinds the datastream file to it
+func (srv *DataStreamServer) UnwindToBatch(batchNumber uint64) error {
+	// check if server is online
+
+	// find blockend entry
+	bookmark := types.NewBookmarkProto(batchNumber, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
+	marshalled, err := bookmark.Marshal()
+	if err != nil {
+		return err
+	}
+	entryNum, err := srv.stream.GetBookmark(marshalled)
+	if err != nil {
+		return err
 	}
 
-	return srv.stream.TruncateFile(entryNum + 1)
+	return srv.stream.TruncateFile(entryNum)
 }

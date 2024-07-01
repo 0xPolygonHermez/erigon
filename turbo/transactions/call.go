@@ -259,7 +259,7 @@ func NewReusableCaller(
 	batchCounters := vm.NewBatchCounterCollector(smtDepth, uint16(forkId), VirtualCountersSmtReduction, false)
 	txCounters := vm.NewTransactionCounter(transaction, smtDepth, uint16(forkId), VirtualCountersSmtReduction, false)
 
-	_, err = batchCounters.AddNewTransactionCounters(txCounters)
+	_, err = batchCounters.AddNewTransactionCounters(nil, txCounters)
 	if err != nil {
 		return nil, err
 	}

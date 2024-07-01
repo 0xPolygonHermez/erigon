@@ -10,7 +10,6 @@ import (
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
 func newBatchBookmarkEntryProto(batchNo uint64) *types.BookmarkProto {
@@ -130,7 +129,7 @@ func newGerUpdateProto(
 }
 
 func createBatchStartEntriesProto(
-	reader *hermez_db.HermezDbReader,
+	reader DbReader,
 	tx kv.Tx,
 	batchNumber, lastBatchNumber, batchGap, chainId uint64,
 	root libcommon.Hash,
@@ -178,9 +177,9 @@ func createBatchStartEntriesProto(
 }
 
 func addBatchEndEntriesProto(
-	reader *hermez_db.HermezDbReader,
+	reader DbReader,
 	tx kv.Tx,
-	batchNumber, lastBatchNumber, batchGap uint64,
+	batchNumber, lastBatchNumber uint64,
 	root libcommon.Hash,
 	gers []types.GerUpdateProto,
 ) ([]DataStreamEntryProto, error) {
@@ -204,7 +203,7 @@ func addBatchEndEntriesProto(
 	return entries, nil
 }
 
-func getBatchTypeAndFork(batchNumber uint64, reader *hermez_db.HermezDbReader) (datastream.BatchType, uint64, error) {
+func getBatchTypeAndFork(batchNumber uint64, reader DbReader) (datastream.BatchType, uint64, error) {
 	var batchType datastream.BatchType
 	invalidBatch, err := reader.GetInvalidBatch(batchNumber)
 	if err != nil {
@@ -221,7 +220,7 @@ func getBatchTypeAndFork(batchNumber uint64, reader *hermez_db.HermezDbReader) (
 	return batchType, fork, err
 }
 
-func addBatchStartEntries(reader *hermez_db.HermezDbReader, batchNum, chainId uint64) ([]DataStreamEntryProto, error) {
+func addBatchStartEntries(reader DbReader, batchNum, chainId uint64) ([]DataStreamEntryProto, error) {
 	entries := make([]DataStreamEntryProto, 2)
 	entries[0] = newBatchBookmarkEntryProto(batchNum)
 	batchType, fork, err := getBatchTypeAndFork(batchNum, reader)
@@ -233,7 +232,7 @@ func addBatchStartEntries(reader *hermez_db.HermezDbReader, batchNum, chainId ui
 	return entries, nil
 }
 
-func getLocalExitRoot(batch uint64, reader *hermez_db.HermezDbReader, tx kv.Tx) (libcommon.Hash, error) {
+func getLocalExitRoot(batch uint64, reader DbReader, tx kv.Tx) (libcommon.Hash, error) {
 	// now to fetch the LER for the batch - based on the last block of the batch
 	var localExitRoot libcommon.Hash
 	if batch > 0 {

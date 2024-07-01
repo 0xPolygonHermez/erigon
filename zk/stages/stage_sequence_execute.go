@@ -61,6 +61,11 @@ func SpawnSequencingStage(
 		return err
 	}
 
+	isLastBatchFinished, err := sdb.hermezDb.GetIsBatchFullyProcessed(lastBatch)
+	if err != nil {
+		return err
+	}
+
 	forkId, err := prepareForkId(cfg, lastBatch, executionAt, sdb.hermezDb)
 	if err != nil {
 		return err
@@ -90,6 +95,10 @@ func SpawnSequencingStage(
 		// write the batch directly to the stream
 		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
 		if err = srv.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, 1, 1, logPrefix); err != nil {
+			return err
+		}
+
+		if err = sdb.hermezDb.WriteIsBatchFullyProcessed(1); err != nil {
 			return err
 		}
 
@@ -125,7 +134,26 @@ func SpawnSequencingStage(
 
 	l1Recovery := cfg.zk.L1SyncStartBlock > 0
 	hasAnyTransactionsInThisBatch := false
-	thisBatch := lastBatch + 1
+
+	thisBatch := lastBatch
+	// if last batch finished - start a new one
+	if isLastBatchFinished {
+		thisBatch++
+	}
+
+	var intermediateUsedCounters *vm.Counters
+	if !isLastBatchFinished {
+		intermediateCountersMap, found, err := sdb.hermezDb.GetBatchCounters(lastBatch)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("intermediate counters not found for batch %d", lastBatch)
+		}
+
+		intermediateUsedCounters = vm.NewCountersFromUsedMap(intermediateCountersMap)
+	}
+
 	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
 	runLoopBlocks := true
 	lastStartedBn := executionAt - 1
@@ -146,7 +174,7 @@ func SpawnSequencingStage(
 		limboHeaderTimestamp = math.MaxUint64
 	}
 
-	if l1Recovery {
+	if l1Recovery && isLastBatchFinished {
 		if cfg.zk.L1SyncStopBatch > 0 && thisBatch > cfg.zk.L1SyncStopBatch {
 			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
 			time.Sleep(1 * time.Second)
@@ -207,8 +235,14 @@ func SpawnSequencingStage(
 		}
 	}
 
-	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, thisBatch))
+	if isLastBatchFinished {
+		log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, thisBatch))
+	} else {
+		log.Info(fmt.Sprintf("[%s] Continuing unfinished batch %d from block %d", logPrefix, thisBatch, executionAt))
+	}
 
+	var block *types.Block
+	var thisBlockNumber uint64
 	for blockNumber := executionAt; runLoopBlocks; blockNumber++ {
 		if l1Recovery {
 			decodedBlocksIndex := blockNumber - executionAt
@@ -256,7 +290,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		overflowOnNewBlock, err := batchCounters.StartNewBlock(l1InfoIndex != 0)
+		overflowOnNewBlock, err := batchCounters.StartNewBlock(intermediateUsedCounters, l1InfoIndex != 0)
 		if err != nil {
 			return err
 		}
@@ -264,7 +298,7 @@ func SpawnSequencingStage(
 			break
 		}
 
-		thisBlockNumber := header.Number.Uint64()
+		thisBlockNumber = header.Number.Uint64()
 
 		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(sdb, &decodedBlock, l1Recovery, header.Time)
 		if err != nil {
@@ -357,7 +391,7 @@ func SpawnSequencingStage(
 							effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
 						}
 
-						receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex)
+						receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex, intermediateUsedCounters)
 						if err != nil {
 							if limboRecovery {
 								panic("limbo transaction has already been executed once so they must not fail while re-executing")
@@ -442,7 +476,7 @@ func SpawnSequencingStage(
 		} else {
 			for idx, transaction := range addedTransactions {
 				effectiveGas := effectiveGases[idx]
-				receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, false, forkId, l1InfoIndex)
+				receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, false, forkId, l1InfoIndex, intermediateUsedCounters)
 				if err != nil {
 					return err
 				}
@@ -459,7 +493,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		block, err := doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, effectiveGases, infoTreeIndexProgress)
+		block, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, effectiveGases, infoTreeIndexProgress)
 		if err != nil {
 			return err
 		}
@@ -476,14 +510,38 @@ func SpawnSequencingStage(
 			log.Debug(fmt.Sprintf("[%s] Finish block %d with %s transaction", logPrefix, thisBlockNumber, tx.Hash().Hex()))
 		}
 
+		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
+
 		if !cfg.zk.HasExecutors() {
-			srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-			if err = srv.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, thisBlockNumber, thisBlockNumber, logPrefix); err != nil {
+			// save counters midbatch
+			// here they shouldn't add more to counters other than what they already have
+			// because it would be later added twice
+			counters := batchCounters.CombineCollectorsNoChanges(intermediateUsedCounters, l1InfoIndex != 0)
+
+			err = sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap())
+			if err != nil {
 				return err
 			}
-		}
 
-		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
+			if err = tx.Commit(); err != nil {
+				return err
+			}
+			tx, err = cfg.db.BeginRw(ctx)
+			if err != nil {
+				return err
+			}
+			// TODO: This creates stacked up deferrals
+			defer tx.Rollback()
+			sdb.SetNewTx(tx)
+
+			srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
+
+			if err = srv.WriteBlockToStream(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, thisBlockNumber); err != nil {
+				return err
+			}
+
+			lastBatch = thisBatch
+		}
 	}
 
 	l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
@@ -491,23 +549,30 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	counters, err := batchCounters.CombineCollectors(l1InfoIndex != 0)
+	counters, err := batchCounters.CombineCollectors(intermediateUsedCounters, l1InfoIndex != 0)
 	if err != nil {
 		return err
 	}
 
 	log.Info("counters consumed", "counts", counters.UsedAsString())
-	err = sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap())
-	if err != nil {
+	if err = sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap()); err != nil {
+		return err
+	}
+
+	if err = sdb.hermezDb.WriteIsBatchFullyProcessed(thisBatch); err != nil {
 		return err
 	}
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
 
-	if freshTx {
-		if err = tx.Commit(); err != nil {
-			return err
-		}
+	srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
+
+	if err = srv.WriteBatchEnd(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, block.Root()); err != nil {
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
 	}
 
 	return nil

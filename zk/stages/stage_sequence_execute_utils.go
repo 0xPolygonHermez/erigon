@@ -35,8 +35,8 @@ import (
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
-	"github.com/ledgerwatch/log/v3"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
 )
 
 const (
@@ -174,6 +174,14 @@ func newStageDb(tx kv.RwTx) *stageDb {
 	sdb.smt = smtNs.NewSMT(sdb.eridb)
 
 	return sdb
+}
+
+func (sdb *stageDb) SetNewTx(tx kv.RwTx) {
+	sdb.tx = tx
+	sdb.hermezDb = hermez_db.NewHermezDb(tx)
+	sdb.eridb = db2.NewEriDb(tx)
+	sdb.stateReader = state.NewPlainStateReader(tx)
+	sdb.smt = smtNs.NewSMT(sdb.eridb)
 }
 
 type nextBatchL1Data struct {

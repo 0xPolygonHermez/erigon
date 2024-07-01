@@ -61,7 +61,7 @@ func (bcc *BatchCounterCollector) Clone() *BatchCounterCollector {
 // here we check the batchL2Data length and ensure that it doesn't cause an overflow.  This will be re-calculated
 // every time a new transaction is added as it needs to take into account all the transactions in a batch.
 // The function will return false in the case of an error or an overflow of counters
-func (bcc *BatchCounterCollector) AddNewTransactionCounters(txCounters *TransactionCounter) (bool, error) {
+func (bcc *BatchCounterCollector) AddNewTransactionCounters(externalCounters *Counters, txCounters *TransactionCounter) (bool, error) {
 	err := txCounters.CalculateRlp()
 	if err != nil {
 		return true, err
@@ -69,7 +69,7 @@ func (bcc *BatchCounterCollector) AddNewTransactionCounters(txCounters *Transact
 
 	bcc.transactions = append(bcc.transactions, txCounters)
 
-	return bcc.CheckForOverflow(false) //no need to calculate the merkle proof here
+	return bcc.CheckForOverflow(externalCounters, false) //no need to calculate the merkle proof here
 }
 
 func (bcc *BatchCounterCollector) ClearTransactionCounters() {
@@ -79,9 +79,9 @@ func (bcc *BatchCounterCollector) ClearTransactionCounters() {
 // StartNewBlock adds in the counters to simulate a changeL2Block transaction.  As these transactions don't really exist
 // in a context that isn't the prover we just want to mark down that we have started one.  If adding one causes an overflow we
 // return true
-func (bcc *BatchCounterCollector) StartNewBlock(verifyMerkleProof bool) (bool, error) {
+func (bcc *BatchCounterCollector) StartNewBlock(externalCounters *Counters, verifyMerkleProof bool) (bool, error) {
 	bcc.blockCount++
-	return bcc.CheckForOverflow(verifyMerkleProof)
+	return bcc.CheckForOverflow(externalCounters, verifyMerkleProof)
 }
 
 func (bcc *BatchCounterCollector) processBatchLevelData() error {
@@ -118,8 +118,8 @@ func (bcc *BatchCounterCollector) processBatchLevelData() error {
 }
 
 // CheckForOverflow returns true in the case that any counter has less than 0 remaining
-func (bcc *BatchCounterCollector) CheckForOverflow(verifyMerkleProof bool) (bool, error) {
-	combined, err := bcc.CombineCollectors(verifyMerkleProof)
+func (bcc *BatchCounterCollector) CheckForOverflow(externalCounters *Counters, verifyMerkleProof bool) (bool, error) {
+	combined, err := bcc.CombineCollectors(externalCounters, verifyMerkleProof)
 	if err != nil {
 		return false, err
 	}
@@ -156,9 +156,18 @@ func (bcc *BatchCounterCollector) NewCounters() Counters {
 
 // CombineCollectors takes the batch level data from all transactions and combines these counters with each transactions'
 // rlp level counters and execution level counters
-func (bcc *BatchCounterCollector) CombineCollectors(verifyMerkleProof bool) (Counters, error) {
+func (bcc *BatchCounterCollector) CombineCollectors(externalUsedCounters *Counters, verifyMerkleProof bool) (Counters, error) {
 	// combine all the counters we have so far
+
+	// if we have external coutners use them, otherwise create new
+	// this is used when sequencer starts mid batch and we need the already comulated counters
 	combined := bcc.NewCounters()
+	if externalUsedCounters != nil {
+		for k, v := range *externalUsedCounters {
+			combined[k].used = v.used
+			combined[k].remaining -= v.used
+		}
+	}
 
 	if err := bcc.processBatchLevelData(); err != nil {
 		return nil, err
@@ -207,4 +216,43 @@ func (bcc *BatchCounterCollector) CombineCollectors(verifyMerkleProof bool) (Cou
 	}
 
 	return combined, nil
+}
+
+// CombineCollectors takes the batch level data from all transactions and combines these counters with each transactions'
+// rlp level counters and execution level counters
+func (bcc *BatchCounterCollector) CombineCollectorsNoChanges(externalUsedCounters *Counters, verifyMerkleProof bool) Counters {
+	// combine all the counters we have so far
+
+	// if we have external coutners use them, otherwise create new
+	// this is used when sequencer starts mid batch and we need the already comulated counters
+	combined := bcc.NewCounters()
+	if externalUsedCounters != nil {
+		for k, v := range *externalUsedCounters {
+			combined[k].used = v.used
+			combined[k].remaining -= v.used
+		}
+	}
+	if bcc.l2DataCollector != nil {
+		for k, v := range bcc.l2DataCollector.Counters() {
+			combined[k].used += v.used
+			combined[k].remaining -= v.used
+		}
+	}
+
+	for _, tx := range bcc.transactions {
+		for k, v := range tx.rlpCounters.counters {
+			combined[k].used += v.used
+			combined[k].remaining -= v.used
+		}
+		for k, v := range tx.executionCounters.counters {
+			combined[k].used += v.used
+			combined[k].remaining -= v.used
+		}
+		for k, v := range tx.processingCounters.counters {
+			combined[k].used += v.used
+			combined[k].remaining -= v.used
+		}
+	}
+
+	return combined
 }
