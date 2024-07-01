@@ -230,12 +230,6 @@ func (api *ZkEvmAPIImpl) VerifiedBatchNumber(ctx context.Context) (hexutil.Uint6
 	return hexutil.Uint64(highestVerifiedBatchNo), nil
 }
 
-type BatchDataSlim struct {
-	Number      uint64 `json:"number"`
-	BatchL2Data []byte `json:"batchL2Data,omitempty"`
-	Empty       bool   `json:"empty"`
-}
-
 // GetBatchDataByNumbers returns the batch data for the given batch numbers
 func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers []rpc.BlockNumber) (json.RawMessage, error) {
 	tx, err := api.db.BeginRo(ctx)
@@ -246,10 +240,10 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 
-	bds := make([]*BatchDataSlim, 0, len(batchNumbers))
+	bds := make([]*types.BatchDataSlim, 0, len(batchNumbers))
 
 	for _, batchNumber := range batchNumbers {
-		bd := &BatchDataSlim{
+		bd := &types.BatchDataSlim{
 			Number: uint64(batchNumber.Int64()),
 			Empty:  false,
 		}
@@ -352,7 +346,7 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 		bds = append(bds, bd)
 	}
 
-	return json.Marshal(bds)
+	return populateBatchDataSlimDetails(bds)
 }
 
 // GetBatchByNumber returns a batch from the current canonical chain. If number is nil, the
@@ -1129,4 +1123,19 @@ func populateBatchDetails(batch *types.Batch) (json.RawMessage, error) {
 	}
 
 	return json.Marshal(jBatch)
+}
+
+func populateBatchDataSlimDetails(batches []*types.BatchDataSlim) (json.RawMessage, error) {
+	jBatches := make([]map[string]interface{}, 0, len(batches))
+	for _, b := range batches {
+		jBatch := map[string]interface{}{}
+		jBatch["number"] = b.Number
+		jBatch["empty"] = b.Empty
+		if !b.Empty {
+			jBatch["batchL2Data"] = b.BatchL2Data
+		}
+		jBatches = append(jBatches, jBatch)
+	}
+
+	return json.Marshal(jBatches)
 }
