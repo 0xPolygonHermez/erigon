@@ -10,6 +10,7 @@ import (
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -264,7 +265,7 @@ func (srv *DataStreamServer) WriteGenesisToStream(
 	l2Block := newL2BlockProto(genesis, genesis.Hash().Bytes(), batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{})
 	batchStart := newBatchStartProto(batchNo, srv.chainId, GenesisForkId, datastream.BatchType_BATCH_TYPE_REGULAR)
 
-	ler, err := getLocalExitRoot(0, reader, tx)
+	ler, err := utils.GetBatchLocalExitRoot(0, reader, tx)
 	if err != nil {
 		return err
 	}
