@@ -28,10 +28,10 @@ import (
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/syncer"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	zktx "github.com/ledgerwatch/erigon/zk/tx"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -206,6 +206,10 @@ func (api *ZkEvmAPIImpl) VirtualBatchNumber(ctx context.Context) (hexutil.Uint64
 	latestSequencedBatch, err := hermezDb.GetLatestSequence()
 	if err != nil {
 		return hexutil.Uint64(0), err
+	}
+
+	if latestSequencedBatch == nil {
+		return hexutil.Uint64(0), nil
 	}
 
 	// todo: what if this number is the same as the last verified batch number?  do we return 0?
