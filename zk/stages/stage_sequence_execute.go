@@ -174,7 +174,7 @@ func SpawnSequencingStage(
 		limboHeaderTimestamp = math.MaxUint64
 	}
 
-	if l1Recovery && isLastBatchFinished {
+	if l1Recovery {
 		if cfg.zk.L1SyncStopBatch > 0 && thisBatch > cfg.zk.L1SyncStopBatch {
 			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
 			time.Sleep(1 * time.Second)
