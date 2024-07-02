@@ -185,10 +185,9 @@ func attemptAddTransaction(
 	effectiveGasPrice uint8,
 	l1Recovery bool,
 	forkId, l1InfoIndex uint64,
-	intermediateUsedCounters *vm.Counters,
 ) (*types.Receipt, bool, error) {
 	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
-	overflow, err := batchCounters.AddNewTransactionCounters(intermediateUsedCounters, txCounters)
+	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
 	if err != nil {
 		return nil, false, err
 	}
@@ -239,7 +238,7 @@ func attemptAddTransaction(
 	}
 
 	// now that we have executed we can check again for an overflow
-	overflow, err = batchCounters.CheckForOverflow(intermediateUsedCounters, l1InfoIndex != 0)
+	overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0)
 
 	return receipt, overflow, err
 }
