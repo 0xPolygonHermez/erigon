@@ -161,7 +161,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	if !sequencer.IsSequencer() {
 		checkFlag(utils.L2RpcUrlFlag.Name, cfg.L2RpcUrl)
 		checkFlag(utils.L2DataStreamerUrlFlag.Name, cfg.L2DataStreamerUrl)
-		checkFlag(utils.L2DataStreamerTimeout.Name, cfg.L2DataStreamerTimeout)
 	} else {
 		checkFlag(utils.SequencerInitialForkId.Name, cfg.SequencerInitialForkId)
 		checkFlag(utils.ExecutorUrls.Name, cfg.ExecutorUrls)
