@@ -244,16 +244,24 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 			Empty:  false,
 		}
 
+		highestBlock, err := rawdb.ReadLastBlockSynced(tx)
+		if err != nil {
+			return nil, err
+		}
+		highestBatchNo, err := hermezDb.GetBatchNoByL2Block(highestBlock.NumberU64())
+		if err != nil {
+			return nil, err
+		}
+
+		// return null if we're not at this block height yet
+		if batchNumber > rpc.BlockNumber(highestBatchNo) {
+			bd.Empty = true
+			bds = append(bds, bd)
+			continue
+		}
+
 		// looks weird but we're using the rpc.BlockNumber type to represent the batch number, LatestBlockNumber represents latest batch
 		if batchNumber == rpc.LatestBlockNumber {
-			highestBlock, err := rawdb.ReadLastBlockSynced(tx)
-			if err != nil {
-				return nil, err
-			}
-			highestBatchNo, err := hermezDb.GetBatchNoByL2Block(highestBlock.NumberU64())
-			if err != nil {
-				return nil, err
-			}
 			batchNumber = rpc.BlockNumber(highestBatchNo)
 		}
 
@@ -355,16 +363,22 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	defer tx.Rollback()
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 
+	highestBlock, err := rawdb.ReadLastBlockSynced(tx)
+	if err != nil {
+		return nil, err
+	}
+	highestBatchNo, err := hermezDb.GetBatchNoByL2Block(highestBlock.NumberU64())
+	if err != nil {
+		return nil, err
+	}
+
+	// return null if we're not at this block height yet
+	if batchNumber > rpc.BlockNumber(highestBatchNo) {
+		return nil, nil
+	}
+
 	// looks weird but we're using the rpc.BlockNumber type to represent the batch number, LatestBlockNumber represents latest batch
 	if batchNumber == rpc.LatestBlockNumber {
-		highestBlock, err := rawdb.ReadLastBlockSynced(tx)
-		if err != nil {
-			return nil, err
-		}
-		highestBatchNo, err := hermezDb.GetBatchNoByL2Block(highestBlock.NumberU64())
-		if err != nil {
-			return nil, err
-		}
 		batchNumber = rpc.BlockNumber(highestBatchNo)
 	}
 
@@ -433,7 +447,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		}
 	}
 
-	if *fullTx {
+	if fullTx != nil && *fullTx {
 		batchBlocksJson := make([]interface{}, 0, len(blocksInBatch))
 		batchTransactionsJson := make([]interface{}, 0, len(batchTxs))
 		for _, blk := range batchBlocks {
