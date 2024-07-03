@@ -241,6 +241,11 @@ func SpawnSequencingStage(
 		log.Info(fmt.Sprintf("[%s] Continuing unfinished batch %d from block %d", logPrefix, thisBatch, executionAt))
 	}
 
+	blockDataSizeChecker := NewBlockDataChecker()
+
+	prevHeader := rawdb.ReadHeaderByNumber(tx, executionAt)
+	batchDataOverflow := false
+
 	var block *types.Block
 	var thisBlockNumber uint64
 	for blockNumber := executionAt; runLoopBlocks; blockNumber++ {
@@ -257,6 +262,11 @@ func SpawnSequencingStage(
 			blockTransactions = decodedBlock.Transactions
 		}
 
+		l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+		if err != nil {
+			return err
+		}
+
 		log.Info(fmt.Sprintf("[%s] Starting block %d...", logPrefix, blockNumber+1))
 
 		reRunBlockAfterOverflow := blockNumber == lastStartedBn
@@ -271,6 +281,12 @@ func SpawnSequencingStage(
 			if err != nil {
 				return err
 			}
+
+			// run this only once the first time, do not add it on rerun
+			if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(uint16(forkId), uint32(prevHeader.Time-header.Time), uint32(l1InfoIndex)); batchDataOverflow {
+				log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Stopping.", logPrefix), "blockNumber", blockNumber)
+				break
+			}
 		} else {
 			batchCounters = clonedBatchCounters
 
@@ -283,11 +299,6 @@ func SpawnSequencingStage(
 				GasLimit:   header.GasLimit,
 				Time:       header.Time,
 			}
-		}
-
-		l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
-		if err != nil {
-			return err
 		}
 
 		overflowOnNewBlock, err := batchCounters.StartNewBlock(l1InfoIndex != 0)
@@ -391,26 +402,38 @@ func SpawnSequencingStage(
 							effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
 						}
 
-						receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex)
-						if err != nil {
-							if limboRecovery {
-								panic("limbo transaction has already been executed once so they must not fail while re-executing")
-							}
-
-							// if we are in recovery just log the error as a warning.  If the data is on the L1 then we should consider it as confirmed.
-							// The executor/prover would simply skip a TX with an invalid nonce for example so we don't need to worry about that here.
-							if l1Recovery {
-								log.Warn(fmt.Sprintf("[%s] error adding transaction to batch during recovery: %v", logPrefix, err),
-									"hash", transaction.Hash(),
-									"to", transaction.GetTo(),
-								)
-								continue
-							}
-
-							i++ // leave current tx in yielded set
-							reRunBlock = true
+						// run this only once the first time, do not add it on rerun
+						if batchDataOverflow, err = blockDataSizeChecker.AddTransactionData(transaction, uint16(forkId), effectiveGas); err != nil {
+							return err
 						}
-						if !reRunBlock && overflow {
+
+						if !batchDataOverflow {
+							receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex)
+							if err != nil {
+								if limboRecovery {
+									panic("limbo transaction has already been executed once so they must not fail while re-executing")
+								}
+
+								// if we are in recovery just log the error as a warning.  If the data is on the L1 then we should consider it as confirmed.
+								// The executor/prover would simply skip a TX with an invalid nonce for example so we don't need to worry about that here.
+								if l1Recovery {
+									log.Warn(fmt.Sprintf("[%s] error adding transaction to batch during recovery: %v", logPrefix, err),
+										"hash", transaction.Hash(),
+										"to", transaction.GetTo(),
+									)
+									continue
+								}
+
+								i++ // leave current tx in yielded set
+								reRunBlock = true
+							}
+						} else {
+							log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Not adding last transaction", logPrefix), "txHash", transaction.Hash())
+						}
+
+						anyOverflow := overflow || batchDataOverflow
+
+						if !reRunBlock && anyOverflow {
 							if limboRecovery {
 								panic("limbo transaction has already been executed once so they must not overflow counters while re-executing")
 							}
