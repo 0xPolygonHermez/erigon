@@ -696,7 +696,7 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 	number := baseBlock.NumberU64()
 	hermezReader := hermez_db.NewHermezDbReader(tx)
 
-	sendersFixed := true
+	sendersFixed := false
 	var senders []common.Address
 	var signer *eritypes.Signer
 	if sendersFixed {
