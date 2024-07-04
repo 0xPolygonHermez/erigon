@@ -187,7 +187,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.DatastreamVersionFlag,
 	&utils.RebuildTreeAfterFlag,
 	&utils.IncrementTreeAlways,
-	&utils.SmtRegenerateInMemory,
+	&utils.MaxNumberOfBlocksOnStageLoopRun,
 	&utils.SequencerInitialForkId,
 	&utils.SequencerBlockSealTime,
 	&utils.SequencerBatchSealTime,

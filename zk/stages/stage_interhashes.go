@@ -126,33 +126,26 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	}
 
 	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > cfg.zk.RebuildTreeAfter
+	shouldIncrementBecauseOfAFlag := cfg.zk.IncrementTreeAlways
+	shouldIncrementBecauseOfStageLoopExecutionLimit := cfg.zk.MaxNumberOfBlocksOnStageLoopRun > 0
+	shouldIncrementBecauseOfExecutionConditions := s.BlockNumber > 0 && !shouldRegenerate
+	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfStageLoopExecutionLimit || shouldIncrementBecauseOfExecutionConditions
+
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb)
 
-	if cfg.zk.IncrementTreeAlways {
-		// increment only behaviour
-		eridb.OpenBatch(quit)
-		log.Debug(fmt.Sprintf("[%s] IncrementTreeAlways true - incrementing tree", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
+	eridb.OpenBatch(quit)
+
+	if shouldIncrement {
+		if shouldIncrementBecauseOfAFlag {
+			log.Debug(fmt.Sprintf("[%s] IncrementTreeAlways true - incrementing tree", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
+		}
 		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
 			return trie.EmptyRoot, err
 		}
 	} else {
-		// default behaviour
-		if s.BlockNumber == 0 || shouldRegenerate {
-			if cfg.zk.SmtRegenerateInMemory {
-				log.Info(fmt.Sprintf("[%s] SMT using mapmutation", logPrefix))
-				eridb.OpenBatch(quit)
-			} else {
-				log.Info(fmt.Sprintf("[%s] SMT not using mapmutation", logPrefix))
-			}
-			if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt, to); err != nil {
-				return trie.EmptyRoot, err
-			}
-		} else {
-			eridb.OpenBatch(quit)
-			if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
-				return trie.EmptyRoot, err
-			}
+		if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt, to); err != nil {
+			return trie.EmptyRoot, err
 		}
 	}
 
@@ -173,9 +166,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		headerHash = syncHeadHeader.Hash()
 
 		if root != expectedRootHash {
-			if cfg.zk.SmtRegenerateInMemory {
-				eridb.RollbackBatch()
-			}
+			eridb.RollbackBatch()
 			panic(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
 
 			if cfg.badBlockHalt {

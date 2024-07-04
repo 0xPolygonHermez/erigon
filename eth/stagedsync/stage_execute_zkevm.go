@@ -97,6 +97,9 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	if err != nil {
 		return err
 	}
+	if to-s.BlockNumber > cfg.zk.MaxNumberOfBlocksOnStageLoopRun {
+		to = s.BlockNumber + cfg.zk.MaxNumberOfBlocksOnStageLoopRun
+	}
 
 	if !quiet {
 		log.Info(fmt.Sprintf("[%s] Blocks execution", s.LogPrefix()), "from", s.BlockNumber, "to", to)

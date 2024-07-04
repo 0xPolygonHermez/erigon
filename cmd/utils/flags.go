@@ -448,7 +448,7 @@ var (
 	}
 	RebuildTreeAfterFlag = cli.Uint64Flag{
 		Name:  "zkevm.rebuild-tree-after",
-		Usage: "Rebuild the state tree after this many blocks behind",
+		Usage: "Rebuild the state tree after this many blocks behind (This is ignored if zkevm.increment-tree-always is set)",
 		Value: 10000,
 	}
 	IncrementTreeAlways = cli.BoolFlag{
@@ -456,10 +456,10 @@ var (
 		Usage: "Increment the state tree, never rebuild",
 		Value: false,
 	}
-	SmtRegenerateInMemory = cli.BoolFlag{
-		Name:  "zkevm.smt-regenerate-in-memory",
-		Usage: "Regenerate the SMT in memory (requires a lot of RAM for most chains)",
-		Value: false,
+	MaxNumberOfBlocksOnStageLoopRun = cli.Uint64Flag{
+		Name:  "zkevm.max-number-of-blocks-on-stage-loop-run",
+		Usage: "Maximum number of blocks that will be processed on a single state loop run. The lower this value is the less RAM is required. Set it to 0 to be as fast as possible",
+		Value: 250000,
 	}
 	SequencerInitialForkId = cli.Uint64Flag{
 		Name:  "zkevm.sequencer-initial-fork-id",

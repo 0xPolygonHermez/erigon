@@ -107,7 +107,7 @@ In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag
 - Falling behind the network significantly will cause a SMT rebuild - which will take some time for longer chains
 
 Initial SMT build performance can be increased if machine has enough RAM:
-- `zkevm.smt-regenerate-in-memory` - setting this to true will use RAM to build the SMT rather than disk which is faster, but requires enough RAM (OOM kill potential)
+- `zkevm.max-number-of-blocks-on-stage-loop-run` - setting this to 0 will use RAM to build the SMT rather than disk which is faster, but requires enough RAM (OOM kill potential)
 
 ***
 
