@@ -628,12 +628,11 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 	batch.BatchL2Data = batchL2Data
 
-	// currently gives 'error execution reverted' when calling the L1
-	//oaih, err := api.l1Syncer.GetOldAccInputHash(ctx, &api.config.AddressRollup, ApiRollupId, bn+1)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//batch.AccInputHash = oaih
+	oldAccInputHash, err := api.l1Syncer.GetOldAccInputHash(ctx, &api.config.AddressRollup, ApiRollupId, batchNo)
+	if err != nil {
+		return nil, err
+	}
+	batch.AccInputHash = oldAccInputHash
 
 	return populateBatchDetails(batch)
 }
