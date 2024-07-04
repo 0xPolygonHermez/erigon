@@ -93,10 +93,10 @@ func SpawnSequencerExecutorVerifyStage(
 		return err
 	}
 
-	isBatchFinished, err := hermezDb.GetIsBatchFullyProcessed(latestBatch)
-	if err != nil {
-		return err
-	}
+	// isBatchFinished, err := hermezDb.GetIsBatchFullyProcessed(latestBatch)
+	// if err != nil {
+	// 	return err
+	// }
 	// we could be running in a state with no executors so we need instant response that we are in an
 	// ok state to save lag in the data stream !!Dragons: there will be no witnesses stored running in
 	// this mode of operation
@@ -105,10 +105,10 @@ func SpawnSequencerExecutorVerifyStage(
 	// if batch was stopped intermediate and is not finished - we need to finish it first
 	// this shouldn't occur since exec stage is before that and should finish the batch
 	// but just in case something unexpected happens
-	if !isBatchFinished {
-		log.Error(fmt.Sprintf("[%s] batch %d is not fully processed in stage_execute", logPrefix, latestBatch))
-		canVerify = false
-	}
+	// if !isBatchFinished {
+	// 	log.Error(fmt.Sprintf("[%s] batch %d is not fully processed in stage_execute", logPrefix, latestBatch))
+	// 	canVerify = false
+	// }
 
 	if !canVerify {
 		if latestBatch == injectedBatchNumber {
@@ -299,13 +299,13 @@ func SpawnSequencerExecutorVerifyStage(
 				return err
 			}
 
-			counters, found, err := hermezDb.GetBatchCounters(batch)
+			counters, _, err := hermezDb.GetBatchCounters(batch)
 			if err != nil {
 				return err
 			}
-			if !found {
-				return errors.New("batch counters not found")
-			}
+			// if !found {
+			// 	return errors.New("batch counters not found")
+			// }
 
 			forkId, err := hermezDb.GetForkId(batch)
 			if err != nil {

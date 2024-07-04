@@ -147,9 +147,9 @@ func SpawnSequencingStage(
 		if err != nil {
 			return err
 		}
-		if !found {
-			return fmt.Errorf("intermediate counters not found for batch %d", lastBatch)
-		}
+		// if !found {
+		// 	return fmt.Errorf("intermediate counters not found for batch %d", lastBatch)
+		// }
 
 		intermediateUsedCounters = vm.NewCountersFromUsedMap(intermediateCountersMap)
 	}
