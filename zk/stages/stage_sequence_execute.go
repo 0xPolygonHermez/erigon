@@ -143,7 +143,7 @@ func SpawnSequencingStage(
 
 	var intermediateUsedCounters *vm.Counters
 	if !isLastBatchFinished {
-		intermediateCountersMap, found, err := sdb.hermezDb.GetBatchCounters(lastBatch)
+		intermediateCountersMap, _, err := sdb.hermezDb.GetBatchCounters(lastBatch)
 		if err != nil {
 			return err
 		}
