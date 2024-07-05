@@ -68,6 +68,8 @@ func SpawnSequencingStage(
 		return err
 	}
 
+	hasExecutorForThisBatch := isLastBatchFinished && cfg.zk.HasExecutors()
+
 	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb)
 	if err != nil {
 		return err
@@ -100,7 +102,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		if err = sdb.hermezDb.WriteIsBatchFullyProcessed(1); err != nil {
+		if err = sdb.hermezDb.WriteIsBatchFullyProcessed(injectedBatchBatchNumber); err != nil {
 			return err
 		}
 
@@ -231,6 +233,11 @@ func SpawnSequencingStage(
 			}
 			if err = sdb.hermezDb.WriteForkId(thisBatch, forkId); err != nil {
 				return err
+			}
+			if freshTx {
+				if err = tx.Commit(); err != nil {
+					return err
+				}
 			}
 			return nil
 		}
@@ -536,7 +543,7 @@ func SpawnSequencingStage(
 
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(addedTransactions)))
 
-		if !cfg.zk.HasExecutors() {
+		if !hasExecutorForThisBatch {
 			// save counters midbatch
 			// here they shouldn't add more to counters other than what they already have
 			// because it would be later added twice
@@ -601,12 +608,16 @@ func SpawnSequencingStage(
 
 	srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
 
-	if err = srv.WriteBatchEnd(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, block.Root()); err != nil {
-		return err
+	if !hasExecutorForThisBatch {
+		if err = srv.WriteBatchEnd(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, block.Root()); err != nil {
+			return err
+		}
 	}
 
-	if err = tx.Commit(); err != nil {
-		return err
+	if freshTx {
+		if err = tx.Commit(); err != nil {
+			return err
+		}
 	}
 
 	return nil
