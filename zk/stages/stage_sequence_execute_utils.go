@@ -358,7 +358,6 @@ func doFinishBlockAndUpdateState(
 	ibs *state.IntraBlockState,
 	header *types.Header,
 	parentBlock *types.Block,
-	forkId uint64,
 	batchBuilder *BatchBuilder,
 	ger common.Hash,
 	l1BlockHash common.Hash,
@@ -370,7 +369,7 @@ func doFinishBlockAndUpdateState(
 		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
 	}
 
-	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, batchBuilder, cfg.accumulator, ger, l1BlockHash)
+	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, batchBuilder, cfg.accumulator, ger, l1BlockHash)
 	if err != nil {
 		return nil, err
 	}
@@ -388,6 +387,49 @@ func doFinishBlockAndUpdateState(
 	}
 
 	return block, nil
+}
+
+func doFinishBadBatch(sdb *stageDb, batchBuilder *BatchBuilder) error {
+	if err := sdb.hermezDb.WriteInvalidBatch(batchBuilder.thisBatch); err != nil {
+		return err
+	}
+	if err := stages.SaveStageProgress(sdb.tx, stages.HighestSeenBatchNumber, batchBuilder.thisBatch); err != nil {
+		return err
+	}
+	if err := sdb.hermezDb.WriteForkId(batchBuilder.thisBatch, batchBuilder.forkId); err != nil {
+		return err
+	}
+	return nil
+}
+
+func doFinishBatch(sdb *stageDb, lastStartedBn uint64, batchBuilder *BatchBuilder) error {
+	l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+	if err != nil {
+		return err
+	}
+
+	counters, err := batchBuilder.batchCounters.CombineCollectors(l1InfoIndex != 0)
+	if err != nil {
+		return err
+	}
+
+	log.Info("counters consumed", "counts", counters.UsedAsString())
+	err = sdb.hermezDb.WriteBatchCounters(batchBuilder.thisBatch, counters.UsedAsMap())
+	if err != nil {
+		return err
+	}
+
+	// Local Exit Root (ler): read s/c storage every batch to store the LER for the highest block in the batch
+	ler, err := utils.GetBatchLocalExitRootFromSCStorage(batchBuilder.thisBatch, sdb.hermezDb.HermezDbReader, sdb.tx)
+	if err != nil {
+		return err
+	}
+	// write ler to hermezdb
+	if err = sdb.hermezDb.WriteLocalExitRootForBatchNo(batchBuilder.thisBatch, ler); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type batchChecker interface {
@@ -487,6 +529,7 @@ func (bdc *BlockDataChecker) AddTransactionData(transaction types.Transaction, f
 // structs for building batches/blocks
 type BatchBuilder struct {
 	thisBatch                     uint64
+	forkId                        uint64
 	batchCounters                 *vm.BatchCounterCollector
 	clonedBatchCounters           *vm.BatchCounterCollector
 	hasAnyTransactionsInThisBatch bool
@@ -496,6 +539,7 @@ type BatchBuilder struct {
 func newBatchBuilder(thisBatch uint64, smtDepth int, forkId uint64, l1Recovery bool, cfg *SequenceBlockCfg) *BatchBuilder {
 	return &BatchBuilder{
 		thisBatch:                     thisBatch,
+		forkId:                        forkId,
 		batchCounters:                 vm.NewBatchCounterCollector(smtDepth, uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery)),
 		clonedBatchCounters:           nil,
 		hasAnyTransactionsInThisBatch: false,

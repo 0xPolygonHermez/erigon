@@ -73,7 +73,7 @@ func processInjectedInitialBatch(
 	batchBuilder.onStartNewBlock()
 	batchBuilder.onSuccessfullyAddedTransaction(*txn, receipt, effectiveGas)
 
-	_, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, batchBuilder, injected.LastGlobalExitRoot, injected.L1ParentHash, 0)
+	_, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, batchBuilder, injected.LastGlobalExitRoot, injected.L1ParentHash, 0)
 	return err
 }
 

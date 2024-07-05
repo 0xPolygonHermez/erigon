@@ -151,7 +151,7 @@ func SpawnSequencingStage(
 		}
 
 		// let's check if we have any L1 data to recover
-		nextBatchData, err = l1_data.BreakDownL1DataByBatch(batchBuilder.thisBatch, forkId, sdb.hermezDb.HermezDbReader)
+		nextBatchData, err = l1_data.BreakDownL1DataByBatch(batchBuilder.thisBatch, batchBuilder.forkId, sdb.hermezDb.HermezDbReader)
 		if err != nil {
 			return err
 		}
@@ -191,16 +191,7 @@ func SpawnSequencingStage(
 		if badBatch {
 			log.Info(fmt.Sprintf("[%s] Skipping bad batch %d...", logPrefix, batchBuilder.thisBatch))
 			// store the fact that this batch was invalid during recovery - will be used for the stream later
-			if err = sdb.hermezDb.WriteInvalidBatch(batchBuilder.thisBatch); err != nil {
-				return err
-			}
-			if err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, batchBuilder.thisBatch); err != nil {
-				return err
-			}
-			if err = sdb.hermezDb.WriteForkId(batchBuilder.thisBatch, forkId); err != nil {
-				return err
-			}
-			return nil
+			return doFinishBadBatch(sdb, batchBuilder)
 		}
 	}
 
@@ -232,14 +223,14 @@ func SpawnSequencingStage(
 
 		if !reRunBlockAfterOverflow {
 			batchBuilder.onStartNewBlock()
-			header, parentBlock, err = prepareHeader(tx, blockNumber, deltaTimestamp, limboHeaderTimestamp, forkId, nextBatchData.Coinbase)
+			header, parentBlock, err = prepareHeader(tx, blockNumber, deltaTimestamp, limboHeaderTimestamp, batchBuilder.forkId, nextBatchData.Coinbase)
 			if err != nil {
 				return err
 			}
 
 			// run this only once the first time, do not add it on rerun
 			prevHeader := rawdb.ReadHeaderByNumber(tx, executionAt)
-			if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(uint16(forkId), uint32(prevHeader.Time-header.Time), uint32(l1InfoIndex)); batchDataOverflow {
+			if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(uint16(batchBuilder.forkId), uint32(prevHeader.Time-header.Time), uint32(l1InfoIndex)); batchDataOverflow {
 				log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Stopping.", logPrefix), "blockNumber", blockNumber)
 				break
 			}
@@ -324,21 +315,15 @@ func SpawnSequencingStage(
 					}
 				default:
 					if limboRecovery {
-						cfg.txPool.LockFlusher()
 						blockTransactions, err = getLimboTransaction(cfg, limboTxHash)
 						if err != nil {
-							cfg.txPool.UnlockFlusher()
 							return err
 						}
-						cfg.txPool.UnlockFlusher()
 					} else if !l1Recovery {
-						cfg.txPool.LockFlusher()
-						blockTransactions, err = getNextPoolTransactions(cfg, executionAt, forkId, yielded)
+						blockTransactions, err = getNextPoolTransactions(cfg, executionAt, batchBuilder.forkId, yielded)
 						if err != nil {
-							cfg.txPool.UnlockFlusher()
 							return err
 						}
-						cfg.txPool.UnlockFlusher()
 					}
 
 					for i, transaction := range blockTransactions {
@@ -353,7 +338,7 @@ func SpawnSequencingStage(
 
 						if !isAnyRecovery {
 							// run this only once the first time, do not add it on rerun
-							if batchDataOverflow, err = blockDataSizeChecker.AddTransactionData(transaction, uint16(forkId), effectiveGas); err != nil {
+							if batchDataOverflow, err = blockDataSizeChecker.AddTransactionData(transaction, uint16(batchBuilder.forkId), effectiveGas); err != nil {
 								return err
 							}
 							if batchDataOverflow {
@@ -362,7 +347,7 @@ func SpawnSequencingStage(
 							}
 						}
 
-						receipt, zkCountersOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchBuilder.batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex)
+						receipt, zkCountersOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchBuilder.batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, batchBuilder.forkId, l1InfoIndex)
 						if err != nil {
 							if limboRecovery {
 								panic("limbo transaction has already been executed once so they must not fail while re-executing")
@@ -447,7 +432,7 @@ func SpawnSequencingStage(
 			blockBuilder := batchBuilder.latestBlockBuilder
 			for idx, transaction := range blockBuilder.addedTransactions {
 				effectiveGas := blockBuilder.effectiveGases[idx]
-				receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchBuilder.batchCounters, &blockContext, header, transaction, effectiveGas, false, forkId, l1InfoIndex)
+				receipt, innerOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchBuilder.batchCounters, &blockContext, header, transaction, effectiveGas, false, batchBuilder.forkId, l1InfoIndex)
 				if err != nil {
 					return err
 				}
@@ -464,7 +449,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		block, err := doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, batchBuilder, ger, l1BlockHash, infoTreeIndexProgress)
+		block, err := doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, batchBuilder, ger, l1BlockHash, infoTreeIndexProgress)
 		if err != nil {
 			return err
 		}
@@ -483,29 +468,7 @@ func SpawnSequencingStage(
 		log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, thisBlockNumber, len(batchBuilder.latestBlockBuilder.addedTransactions)))
 	}
 
-	l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
-	if err != nil {
-		return err
-	}
-
-	counters, err := batchBuilder.batchCounters.CombineCollectors(l1InfoIndex != 0)
-	if err != nil {
-		return err
-	}
-
-	log.Info("counters consumed", "counts", counters.UsedAsString())
-	err = sdb.hermezDb.WriteBatchCounters(batchBuilder.thisBatch, counters.UsedAsMap())
-	if err != nil {
-		return err
-	}
-
-	// Local Exit Root (ler): read s/c storage every batch to store the LER for the highest block in the batch
-	ler, err := utils.GetBatchLocalExitRootFromSCStorage(batchBuilder.thisBatch, sdb.hermezDb.HermezDbReader, tx)
-	if err != nil {
-		return err
-	}
-	// write ler to hermezdb
-	if err = sdb.hermezDb.WriteLocalExitRootForBatchNo(batchBuilder.thisBatch, ler); err != nil {
+	if err := doFinishBatch(sdb, lastStartedBn, batchBuilder); err != nil {
 		return err
 	}
 

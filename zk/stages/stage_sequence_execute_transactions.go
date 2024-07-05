@@ -33,6 +33,9 @@ func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, a
 	var err error
 	var count int
 	killer := time.NewTicker(50 * time.Millisecond)
+
+	cfg.txPool.LockFlusher()
+	defer cfg.txPool.UnlockFlusher()
 LOOP:
 	for {
 		// ensure we don't spin forever looking for transactions, attempt for a while then exit up to the caller
@@ -70,6 +73,9 @@ LOOP:
 
 func getLimboTransaction(cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Transaction, error) {
 	var transactions []types.Transaction
+
+	cfg.txPool.LockFlusher()
+	defer cfg.txPool.UnlockFlusher()
 
 	for {
 		// ensure we don't spin forever looking for transactions, attempt for a while then exit up to the caller

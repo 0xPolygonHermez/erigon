@@ -74,7 +74,6 @@ func finaliseBlock(
 	ibs *state.IntraBlockState,
 	newHeader *types.Header,
 	parentBlock *types.Block,
-	forkId uint64,
 	batchBuilder *BatchBuilder,
 	accumulator *shards.Accumulator,
 	ger common.Hash,
@@ -147,7 +146,7 @@ func finaliseBlock(
 	finalHeader := finalBlock.HeaderNoCopy()
 	finalHeader.Root = newRoot
 	finalHeader.Coinbase = cfg.zk.AddressSequencer
-	finalHeader.GasLimit = utils.GetBlockGasLimitForFork(forkId)
+	finalHeader.GasLimit = utils.GetBlockGasLimitForFork(batchBuilder.forkId)
 	finalHeader.ReceiptHash = types.DeriveSha(latestBlockBuilder.getReceipts())
 	finalHeader.Bloom = types.CreateBloom(latestBlockBuilder.getReceipts())
 	newNum := finalBlock.Number()
@@ -177,7 +176,7 @@ func finaliseBlock(
 		return nil, err
 	}
 
-	if err = sdb.hermezDb.WriteForkId(batchBuilder.thisBatch, forkId); err != nil {
+	if err = sdb.hermezDb.WriteForkId(batchBuilder.thisBatch, batchBuilder.forkId); err != nil {
 		return nil, err
 	}
 
