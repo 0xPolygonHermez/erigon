@@ -54,7 +54,6 @@ func SpawnSequencerExecutorVerifyStage(
 	tx kv.RwTx,
 	ctx context.Context,
 	cfg SequencerExecutorVerifyCfg,
-	initialCycle bool,
 	quiet bool,
 ) error {
 	logPrefix := s.LogPrefix()
@@ -335,7 +334,6 @@ func UnwindSequencerExecutorVerifyStage(
 	tx kv.RwTx,
 	ctx context.Context,
 	cfg SequencerExecutorVerifyCfg,
-	initialCycle bool,
 ) (err error) {
 	/*
 		The "Unwinder" keeps stage's progress in blocks.
@@ -374,7 +372,6 @@ func PruneSequencerExecutorVerifyStage(
 	tx kv.RwTx,
 	cfg SequencerExecutorVerifyCfg,
 	ctx context.Context,
-	initialCycle bool,
 ) error {
 	return nil
 }

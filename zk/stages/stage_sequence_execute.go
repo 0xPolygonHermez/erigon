@@ -33,7 +33,6 @@ func SpawnSequencingStage(
 	tx kv.RwTx,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
-	initialCycle bool,
 	quiet bool,
 ) (err error) {
 	logPrefix := s.LogPrefix()
