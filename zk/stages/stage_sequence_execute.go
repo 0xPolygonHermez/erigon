@@ -557,16 +557,16 @@ func SpawnSequencingStage(
 				return err
 			}
 
-			if err = tx.Commit(); err != nil {
-				return err
-			}
-			tx, err = cfg.db.BeginRw(ctx)
-			if err != nil {
-				return err
-			}
-			// TODO: This creates stacked up deferrals
-			defer tx.Rollback()
-			sdb.SetTx(tx)
+			// if err = tx.Commit(); err != nil {
+			// 	return err
+			// }
+			// tx, err = cfg.db.BeginRw(ctx)
+			// if err != nil {
+			// 	return err
+			// }
+			// // TODO: This creates stacked up deferrals
+			// defer tx.Rollback()
+			// sdb.SetTx(tx)
 
 			lastBatch = thisBatch
 		}
