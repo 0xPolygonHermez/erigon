@@ -555,7 +555,6 @@ func SpawnSequencingStage(
 			}
 
 			srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-
 			if err = srv.WriteBlockToStream(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, thisBlockNumber); err != nil {
 				return err
 			}
@@ -569,7 +568,7 @@ func SpawnSequencingStage(
 			}
 			// TODO: This creates stacked up deferrals
 			defer tx.Rollback()
-			sdb.SetNewTx(tx)
+			sdb.SetTx(tx)
 
 			lastBatch = thisBatch
 		}
@@ -606,9 +605,8 @@ func SpawnSequencingStage(
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
 
-	srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-
 	if !hasExecutorForThisBatch {
+		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
 		if err = srv.WriteBatchEnd(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, block.Root()); err != nil {
 			return err
 		}
