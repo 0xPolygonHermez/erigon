@@ -151,7 +151,7 @@ func StageLoopStep(ctx context.Context, chainConfig *chain.Config, db kv.RwDB, s
 	}
 	canRunCycleInOneTransaction := !initialCycle
 
-	// canRunCycleInOneTransaction = false // we need to commit when sequencer each run
+	canRunCycleInOneTransaction = false // we need to commit when sequencer each run
 
 	var tx kv.RwTx // on this variable will run sync cycle.
 	if canRunCycleInOneTransaction {
