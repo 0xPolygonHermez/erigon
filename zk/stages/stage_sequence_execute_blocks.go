@@ -20,8 +20,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
-	"github.com/ledgerwatch/secp256k1"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/secp256k1"
 )
 
 func handleStateForNewBlockStarting(
@@ -75,13 +75,13 @@ func finaliseBlock(
 	newHeader *types.Header,
 	parentBlock *types.Block,
 	forkId uint64,
-	batch uint64,
+	batchBuilder *BatchBuilder,
 	accumulator *shards.Accumulator,
 	ger common.Hash,
 	l1BlockHash common.Hash,
-	transactions []types.Transaction,
-	receipts types.Receipts,
-	effectiveGases []uint8,
+	// transactions []types.Transaction,
+	// receipts types.Receipts,
+	// effectiveGases []uint8,
 ) (*types.Block, error) {
 	stateWriter := state.NewPlainStateWriter(sdb.tx, sdb.tx, newHeader.Number.Uint64()).SetAccumulator(accumulator)
 	chainReader := stagedsync.ChainReader{
@@ -94,8 +94,9 @@ func finaliseBlock(
 		excessDataGas = parentBlock.ExcessDataGas()
 	}
 
+	latestBlockBuilder := batchBuilder.latestBlockBuilder
 	txInfos := []blockinfo.ExecutedTxInfo{}
-	for i, tx := range transactions {
+	for i, tx := range latestBlockBuilder.addedTransactions {
 		var from common.Address
 		var err error
 		sender, ok := tx.GetSender()
@@ -110,8 +111,8 @@ func finaliseBlock(
 		}
 		txInfos = append(txInfos, blockinfo.ExecutedTxInfo{
 			Tx:                tx,
-			EffectiveGasPrice: effectiveGases[i],
-			Receipt:           receipts[i],
+			EffectiveGasPrice: latestBlockBuilder.effectiveGases[i],
+			Receipt:           latestBlockBuilder.addedReceipts[i],
 			Signer:            &from,
 		})
 	}
@@ -123,12 +124,12 @@ func finaliseBlock(
 		cfg.engine,
 		sdb.stateReader,
 		newHeader,
-		transactions,
+		latestBlockBuilder.addedTransactions,
 		[]*types.Header{}, // no uncles
 		stateWriter,
 		cfg.chainConfig,
 		ibs,
-		receipts,
+		latestBlockBuilder.addedReceipts,
 		nil, // no withdrawals
 		chainReader,
 		true,
@@ -147,8 +148,8 @@ func finaliseBlock(
 	finalHeader.Root = newRoot
 	finalHeader.Coinbase = cfg.zk.AddressSequencer
 	finalHeader.GasLimit = utils.GetBlockGasLimitForFork(forkId)
-	finalHeader.ReceiptHash = types.DeriveSha(receipts)
-	finalHeader.Bloom = types.CreateBloom(receipts)
+	finalHeader.ReceiptHash = types.DeriveSha(latestBlockBuilder.getReceipts())
+	finalHeader.Bloom = types.CreateBloom(latestBlockBuilder.getReceipts())
 	newNum := finalBlock.Number()
 
 	err = rawdb.WriteHeader_zkEvm(sdb.tx, finalHeader)
@@ -176,7 +177,7 @@ func finaliseBlock(
 		return nil, err
 	}
 
-	if err = sdb.hermezDb.WriteForkId(batch, forkId); err != nil {
+	if err = sdb.hermezDb.WriteForkId(batchBuilder.thisBatch, forkId); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +187,7 @@ func finaliseBlock(
 	}
 
 	// now add in the zk batch to block references
-	if err := sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batch); err != nil {
+	if err := sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batchBuilder.thisBatch); err != nil {
 		return nil, fmt.Errorf("write block batch error: %v", err)
 	}
 

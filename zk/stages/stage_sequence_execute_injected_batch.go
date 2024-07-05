@@ -66,11 +66,14 @@ func processInjectedInitialBatch(
 		return err
 	}
 
-	txns := types.Transactions{*txn}
-	receipts := types.Receipts{receipt}
-	effectiveGases := []uint8{effectiveGas}
+	// txns := types.Transactions{*txn}
+	// receipts := types.Receipts{receipt}
+	// effectiveGases := []uint8{effectiveGas}
+	var batchBuilder *BatchBuilder = newBatchBuilder(injectedBatchNumber, sdb.smt.GetDepth(), forkId, false, &cfg)
+	batchBuilder.onStartNewBlock()
+	batchBuilder.onSuccessfullyAddedTransaction(*txn, receipt, effectiveGas)
 
-	_, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, injectedBatchNumber, injected.LastGlobalExitRoot, injected.L1ParentHash, txns, receipts, effectiveGases, 0)
+	_, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, batchBuilder, injected.LastGlobalExitRoot, injected.L1ParentHash, 0)
 	return err
 }
 

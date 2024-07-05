@@ -29,10 +29,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gballet/go-verkle"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 	rlp2 "github.com/gateway-fm/cdk-erigon-lib/rlp"
+	"github.com/gballet/go-verkle"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/hexutil"
@@ -104,6 +104,17 @@ type Header struct {
 	Verkle        bool
 	VerkleProof   []byte
 	VerkleKeyVals []verkle.KeyValuePair
+}
+
+func (_this *Header) CloneForSequencer() *Header {
+	return &Header{
+		ParentHash: _this.ParentHash,
+		Coinbase:   _this.Coinbase,
+		Difficulty: _this.Difficulty,
+		Number:     _this.Number,
+		GasLimit:   _this.GasLimit,
+		Time:       _this.Time,
+	}
 }
 
 // ParentExcessDataGas is a helper that returns the excess data gas value of the parent block.  It

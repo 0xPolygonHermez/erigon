@@ -12,6 +12,8 @@ import (
 
 	"math/big"
 
+	"fmt"
+
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -36,7 +38,6 @@ import (
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
-	"fmt"
 )
 
 const (
@@ -358,12 +359,9 @@ func doFinishBlockAndUpdateState(
 	header *types.Header,
 	parentBlock *types.Block,
 	forkId uint64,
-	thisBatch uint64,
+	batchBuilder *BatchBuilder,
 	ger common.Hash,
 	l1BlockHash common.Hash,
-	transactions []types.Transaction,
-	receipts types.Receipts,
-	effectiveGases []uint8,
 	l1InfoIndex uint64,
 ) (*types.Block, error) {
 	thisBlockNumber := header.Number.Uint64()
@@ -372,12 +370,12 @@ func doFinishBlockAndUpdateState(
 		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
 	}
 
-	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, cfg.accumulator, ger, l1BlockHash, transactions, receipts, effectiveGases)
+	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, batchBuilder, cfg.accumulator, ger, l1BlockHash)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1InfoIndex); err != nil {
+	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, batchBuilder.thisBatch, l1InfoIndex); err != nil {
 		return nil, err
 	}
 
@@ -484,4 +482,61 @@ func (bdc *BlockDataChecker) AddTransactionData(transaction types.Transaction, f
 
 	bdc.bytes = append(bdc.bytes, encoded...)
 	return false, nil
+}
+
+// structs for building batches/blocks
+type BatchBuilder struct {
+	thisBatch                     uint64
+	batchCounters                 *vm.BatchCounterCollector
+	clonedBatchCounters           *vm.BatchCounterCollector
+	hasAnyTransactionsInThisBatch bool
+	latestBlockBuilder            *BlockBuilder
+}
+
+func newBatchBuilder(thisBatch uint64, smtDepth int, forkId uint64, l1Recovery bool, cfg *SequenceBlockCfg) *BatchBuilder {
+	return &BatchBuilder{
+		thisBatch:                     thisBatch,
+		batchCounters:                 vm.NewBatchCounterCollector(smtDepth, uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery)),
+		clonedBatchCounters:           nil,
+		hasAnyTransactionsInThisBatch: false,
+		latestBlockBuilder:            nil,
+	}
+}
+
+func (_this *BatchBuilder) onStartNewBlock() {
+	_this.clonedBatchCounters = _this.batchCounters.Clone()
+	_this.latestBlockBuilder = newBlockBuilding()
+}
+
+func (_this *BatchBuilder) onRebuildBlock() {
+	_this.batchCounters = _this.clonedBatchCounters
+}
+
+func (_this *BatchBuilder) onSuccessfullyAddedTransaction(transaction types.Transaction, receipt *types.Receipt, effectiveGas uint8) {
+	_this.latestBlockBuilder.onSuccessfullyAddedTransaction(transaction, receipt, effectiveGas)
+	_this.hasAnyTransactionsInThisBatch = true
+}
+
+type BlockBuilder struct {
+	addedTransactions []types.Transaction
+	addedReceipts     []*types.Receipt
+	effectiveGases    []uint8
+}
+
+func newBlockBuilding() *BlockBuilder {
+	return &BlockBuilder{
+		addedTransactions: []types.Transaction{},
+		addedReceipts:     []*types.Receipt{},
+		effectiveGases:    []uint8{},
+	}
+}
+
+func (_this *BlockBuilder) onSuccessfullyAddedTransaction(transaction types.Transaction, receipt *types.Receipt, effectiveGas uint8) {
+	_this.addedTransactions = append(_this.addedTransactions, transaction)
+	_this.addedReceipts = append(_this.addedReceipts, receipt)
+	_this.effectiveGases = append(_this.effectiveGases, effectiveGas)
+}
+
+func (_this *BlockBuilder) getReceipts() types.Receipts {
+	return _this.addedReceipts
 }
