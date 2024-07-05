@@ -125,6 +125,9 @@ func SpawnSequencingStage(
 	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
 	defer nonEmptyBatchTimer.Stop()
 
+	blockDataSizeChecker := NewBlockDataChecker()
+	batchDataOverflow := false
+
 	hasAnyTransactionsInThisBatch := false
 	thisBatch := lastBatch + 1
 	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
@@ -208,11 +211,6 @@ func SpawnSequencingStage(
 		}
 	}
 
-	blockDataSizeChecker := NewBlockDataChecker()
-
-	prevHeader := rawdb.ReadHeaderByNumber(tx, executionAt)
-	batchDataOverflow := false
-
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, thisBatch))
 
 	for blockNumber := executionAt; runLoopBlocks; blockNumber++ {
@@ -250,6 +248,7 @@ func SpawnSequencingStage(
 			}
 
 			// run this only once the first time, do not add it on rerun
+			prevHeader := rawdb.ReadHeaderByNumber(tx, executionAt)
 			if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(uint16(forkId), uint32(prevHeader.Time-header.Time), uint32(l1InfoIndex)); batchDataOverflow {
 				log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Stopping.", logPrefix), "blockNumber", blockNumber)
 				break
@@ -268,11 +267,11 @@ func SpawnSequencingStage(
 			}
 		}
 
-		overflowOnNewBlock, err := batchCounters.StartNewBlock(l1InfoIndex != 0)
+		zkCountersOverflowOnNewBlock, err := batchCounters.StartNewBlock(l1InfoIndex != 0)
 		if err != nil {
 			return err
 		}
-		if !isAnyRecovery && overflowOnNewBlock {
+		if !isAnyRecovery && zkCountersOverflowOnNewBlock {
 			break
 		}
 
@@ -315,7 +314,7 @@ func SpawnSequencingStage(
 			blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
 			defer blockTicker.Stop()
 			reRunBlock := false
-			overflow := false
+			zkCountersOverflow := false
 			// start to wait for transactions to come in from the pool and attempt to add them to the current batch.  Once we detect a counter
 			// overflow we revert the IBS back to the previous snapshot and don't add the transaction/receipt to the collection that will
 			// end up in the finalised block
@@ -359,8 +358,8 @@ func SpawnSequencingStage(
 						cfg.txPool.UnlockFlusher()
 					}
 
-					var receipt *types.Receipt
 					for i, transaction := range blockTransactions {
+						var receipt *types.Receipt
 						var effectiveGas uint8
 
 						if l1Recovery {
@@ -369,37 +368,39 @@ func SpawnSequencingStage(
 							effectiveGas = DeriveEffectiveGasPrice(cfg, transaction)
 						}
 
-						// run this only once the first time, do not add it on rerun
-						if batchDataOverflow, err = blockDataSizeChecker.AddTransactionData(transaction, uint16(forkId), effectiveGas); err != nil {
-							return err
-						}
-
-						if !batchDataOverflow {
-							receipt, overflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex)
-							if err != nil {
-								if limboRecovery {
-									panic("limbo transaction has already been executed once so they must not fail while re-executing")
-								}
-
-								// if we are in recovery just log the error as a warning.  If the data is on the L1 then we should consider it as confirmed.
-								// The executor/prover would simply skip a TX with an invalid nonce for example so we don't need to worry about that here.
-								if l1Recovery {
-									log.Warn(fmt.Sprintf("[%s] error adding transaction to batch during recovery: %v", logPrefix, err),
-										"hash", transaction.Hash(),
-										"to", transaction.GetTo(),
-									)
-									continue
-								}
-
-								i++ // leave current tx in yielded set
-								reRunBlock = true
+						if !isAnyRecovery {
+							// run this only once the first time, do not add it on rerun
+							if batchDataOverflow, err = blockDataSizeChecker.AddTransactionData(transaction, uint16(forkId), effectiveGas); err != nil {
+								return err
 							}
-						} else {
-							log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Not adding last transaction", logPrefix), "txHash", transaction.Hash())
+							if batchDataOverflow {
+								log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Not adding last transaction", logPrefix), "txHash", transaction.Hash())
+								goto OVERFLOW_CHECK
+							}
 						}
 
-						anyOverflow := overflow || batchDataOverflow
+						receipt, zkCountersOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex)
+						if err != nil {
+							if limboRecovery {
+								panic("limbo transaction has already been executed once so they must not fail while re-executing")
+							}
 
+							// if we are in recovery just log the error as a warning.  If the data is on the L1 then we should consider it as confirmed.
+							// The executor/prover would simply skip a TX with an invalid nonce for example so we don't need to worry about that here.
+							if l1Recovery {
+								log.Warn(fmt.Sprintf("[%s] error adding transaction to batch during recovery: %v", logPrefix, err),
+									"hash", transaction.Hash(),
+									"to", transaction.GetTo(),
+								)
+								continue
+							}
+
+							i++ // leave current tx in yielded set
+							reRunBlock = true
+						}
+
+					OVERFLOW_CHECK:
+						anyOverflow := zkCountersOverflow || batchDataOverflow
 						if !reRunBlock && anyOverflow {
 							if limboRecovery {
 								panic("limbo transaction has already been executed once so they must not overflow counters while re-executing")
