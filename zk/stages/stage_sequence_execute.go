@@ -68,14 +68,14 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	hasExecutorForThisBatch := isLastBatchFinished && cfg.zk.HasExecutors()
-
 	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb)
 	if err != nil {
 		return err
 	}
 
 	getHeader := func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) }
+	hasExecutorForThisBatch := isLastBatchFinished && cfg.zk.HasExecutors()
+	datastreamServer := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
 
 	// injected batch
 	if executionAt == 0 {
@@ -97,8 +97,7 @@ func SpawnSequencingStage(
 		}
 
 		// write the batch directly to the stream
-		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-		if err = srv.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, 1, 1, logPrefix); err != nil {
+		if err = datastreamServer.WriteBlocksToStream(tx, sdb.hermezDb.HermezDbReader, injectedBatchBlockNumber, injectedBatchBlockNumber, logPrefix); err != nil {
 			return err
 		}
 
@@ -554,8 +553,7 @@ func SpawnSequencingStage(
 				return err
 			}
 
-			srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-			if err = srv.WriteBlockToStream(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, thisBlockNumber); err != nil {
+			if err = datastreamServer.WriteBlockToStream(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, thisBlockNumber); err != nil {
 				return err
 			}
 
@@ -606,8 +604,7 @@ func SpawnSequencingStage(
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
 
 	if !hasExecutorForThisBatch {
-		srv := server.NewDataStreamServer(cfg.stream, cfg.chainConfig.ChainID.Uint64())
-		if err = srv.WriteBatchEnd(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, block.Root()); err != nil {
+		if err = datastreamServer.WriteBatchEnd(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, block.Root()); err != nil {
 			return err
 		}
 	}
