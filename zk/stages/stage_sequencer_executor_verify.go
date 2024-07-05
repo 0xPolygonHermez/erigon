@@ -138,6 +138,11 @@ func SpawnSequencerExecutorVerifyStage(
 		// ensure that the first response is the next batch based on the current stage progress
 		// otherwise just return early until we get it
 		if response.BatchNumber != progress+1 {
+			if freshTx {
+				if err = tx.Commit(); err != nil {
+					return err
+				}
+			}
 			return nil
 		}
 
