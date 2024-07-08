@@ -237,6 +237,7 @@ func attemptAddTransaction(
 		return nil, false, err
 	}
 
+	batchCounters.UpdateProcessingCountersCache(txCounters)
 	// now that we have executed we can check again for an overflow
 	overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0)
 
