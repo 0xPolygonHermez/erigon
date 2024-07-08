@@ -8,6 +8,7 @@ on:
 jobs:
   test-node:
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       matrix:
         include:
@@ -34,4 +35,3 @@ jobs:
 
       - name: Run tests
         run: ./check_node -rpcURL=${{ matrix.rpc }} -nodeName=${{ matrix.name }}
-        continue-on-error: true
