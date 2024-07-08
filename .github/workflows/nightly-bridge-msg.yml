@@ -1,4 +1,4 @@
-name: Nightly - BridgeMessage L2->L1
+name: Nightly - BridgeMessage
 
 on:
   schedule:
