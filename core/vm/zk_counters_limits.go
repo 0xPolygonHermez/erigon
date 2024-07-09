@@ -6,6 +6,9 @@ import (
 	zk_consts "github.com/ledgerwatch/erigon/zk/constants"
 )
 
+const stepDeduction = 200
+const safetyPercentage float64 = 0.05
+
 var (
 	defaultTotalSteps  = 1 << 23
 	forkId10TotalSteps = 1 << 24
@@ -77,14 +80,14 @@ func getCounterLimits(forkId uint16) *Counters {
 	totalSteps := getTotalSteps(forkId)
 
 	counterLimits := counterLimits{
-		totalSteps: totalSteps,
-		arith:      totalSteps >> 5,
-		binary:     totalSteps >> 4,
-		memAlign:   totalSteps >> 5,
-		keccaks:    int(math.Floor(float64(totalSteps)/155286) * 44),
-		padding:    int(math.Floor(float64(totalSteps) / 56)),
-		poseidon:   int(math.Floor(float64(totalSteps) / 30)),
-		sha256:     int(math.Floor(float64(totalSteps-1)/31488)) * 7,
+		totalSteps: applyDeduction(totalSteps, safetyPercentage),
+		arith:      applyDeduction(totalSteps>>5, safetyPercentage),
+		binary:     applyDeduction(totalSteps>>4, safetyPercentage),
+		memAlign:   applyDeduction(totalSteps>>5, safetyPercentage),
+		keccaks:    applyDeduction(int(math.Floor(float64(totalSteps)/155286)*44), safetyPercentage),
+		padding:    applyDeduction(int(math.Floor(float64(totalSteps)/56)), safetyPercentage),
+		poseidon:   applyDeduction(int(math.Floor(float64(totalSteps)/30)), safetyPercentage),
+		sha256:     applyDeduction(int(math.Floor(float64(totalSteps-1)/31488))*7, safetyPercentage),
 	}
 
 	return createCountrsByLimits(counterLimits)
@@ -102,5 +105,15 @@ func getTotalSteps(forkId uint16) int {
 		totalSteps = defaultTotalSteps
 	}
 
+	// we need to remove some steps as these will always be used during batch execution
+	totalSteps -= stepDeduction
+
 	return totalSteps
+}
+
+func applyDeduction(input int, deduction float64) int {
+	asFloat := float64(input)
+	reduction := asFloat * deduction
+	newValue := asFloat - reduction
+	return int(math.Ceil(newValue))
 }
