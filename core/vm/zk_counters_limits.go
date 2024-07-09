@@ -7,7 +7,7 @@ import (
 )
 
 const stepDeduction = 200
-const safetyPercentage float64 = 0.05
+const baseSafetyPercentage float64 = 0.05
 
 var (
 	defaultTotalSteps  = 1 << 23
@@ -23,6 +23,11 @@ var (
 		padding:    math.MaxInt32,
 		poseidon:   math.MaxInt32,
 		sha256:     math.MaxInt32,
+	}
+
+	safetyPercentages = map[uint16]float64{
+		uint16(zk_consts.ForkID10): 0.025,
+		uint16(zk_consts.ForkID11): 0.0125,
 	}
 )
 
@@ -80,14 +85,14 @@ func getCounterLimits(forkId uint16) *Counters {
 	totalSteps := getTotalSteps(forkId)
 
 	counterLimits := counterLimits{
-		totalSteps: applyDeduction(totalSteps, safetyPercentage),
-		arith:      applyDeduction(totalSteps>>5, safetyPercentage),
-		binary:     applyDeduction(totalSteps>>4, safetyPercentage),
-		memAlign:   applyDeduction(totalSteps>>5, safetyPercentage),
-		keccaks:    applyDeduction(int(math.Floor(float64(totalSteps)/155286)*44), safetyPercentage),
-		padding:    applyDeduction(int(math.Floor(float64(totalSteps)/56)), safetyPercentage),
-		poseidon:   applyDeduction(int(math.Floor(float64(totalSteps)/30)), safetyPercentage),
-		sha256:     applyDeduction(int(math.Floor(float64(totalSteps-1)/31488))*7, safetyPercentage),
+		totalSteps: applyDeduction(forkId, totalSteps),
+		arith:      applyDeduction(forkId, totalSteps>>5),
+		binary:     applyDeduction(forkId, totalSteps>>4),
+		memAlign:   applyDeduction(forkId, totalSteps>>5),
+		keccaks:    applyDeduction(forkId, int(math.Floor(float64(totalSteps)/155286)*44)),
+		padding:    applyDeduction(forkId, int(math.Floor(float64(totalSteps)/56))),
+		poseidon:   applyDeduction(forkId, int(math.Floor(float64(totalSteps)/30))),
+		sha256:     applyDeduction(forkId, int(math.Floor(float64(totalSteps-1)/31488))*7),
 	}
 
 	return createCountrsByLimits(counterLimits)
@@ -111,7 +116,11 @@ func getTotalSteps(forkId uint16) int {
 	return totalSteps
 }
 
-func applyDeduction(input int, deduction float64) int {
+func applyDeduction(fork uint16, input int) int {
+	deduction, found := safetyPercentages[fork]
+	if !found {
+		deduction = baseSafetyPercentage
+	}
 	asFloat := float64(input)
 	reduction := asFloat * deduction
 	newValue := asFloat - reduction
