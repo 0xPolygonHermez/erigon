@@ -170,6 +170,8 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	var toRemove []*metaTx
 	count := 0
 
+	p.pending.EnforceBestInvariants()
+
 	for i := 0; count < int(n) && i < len(best.ms); i++ {
 		// if we wouldn't have enough gas for a standard transaction then quit out early
 		if availableGas < fixedgas.TxGas {

@@ -212,18 +212,17 @@ func (r DiscardReason) String() string {
 
 // metaTx holds transaction and some metadata
 type metaTx struct {
-	Tx                                *types.TxSlot
-	minFeeCap                         uint256.Int
-	nonceDistance                     uint64 // how far their nonces are from the state's nonce for the sender
-	cumulativeBalanceDistance         uint64 // how far their cumulativeRequiredBalance are from the state's balance for the sender
-	minTip                            uint64
-	bestIndex                         int
-	worstIndex                        int
-	timestamp                         uint64 // when it was added to pool
-	subPool                           SubPoolMarker
-	currentSubPool                    SubPoolType
-	alreadyYielded                    bool
-	overflowZkCountersDuringExecution bool
+	Tx                        *types.TxSlot
+	minFeeCap                 uint256.Int
+	nonceDistance             uint64 // how far their nonces are from the state's nonce for the sender
+	cumulativeBalanceDistance uint64 // how far their cumulativeRequiredBalance are from the state's balance for the sender
+	minTip                    uint64
+	bestIndex                 int
+	worstIndex                int
+	timestamp                 uint64 // when it was added to pool
+	subPool                   SubPoolMarker
+	currentSubPool            SubPoolType
+	alreadyYielded            bool
 }
 
 func newMetaTx(slot *types.TxSlot, isLocal bool, timestmap uint64) *metaTx {
@@ -1044,7 +1043,6 @@ func (p *TxPool) addTxs(blockNum uint64, cacheView kvcache.CacheView, senders *s
 	}
 
 	promote(pending, baseFee, queued, pendingBaseFee, discard, &announcements)
-	pending.EnforceBestInvariants()
 
 	return announcements, discardReasons, nil
 }
@@ -2113,10 +2111,11 @@ func (b *BySenderAndNonce) replaceOrInsert(mt *metaTx) *metaTx {
 // It's more expensive to maintain "slice sort" invariant, but it allow do cheap copy of
 // pending.best slice for mining (because we consider txs and metaTx are immutable)
 type PendingPool struct {
-	best  *bestSlice
-	worst *WorstQueue
-	limit int
-	t     SubPoolType
+	sorted bool // means `PendingPool.best` is sorted or not
+	best   *bestSlice
+	worst  *WorstQueue
+	limit  int
+	t      SubPoolType
 }
 
 func NewPendingSubPool(t SubPoolType, limit int) *PendingPool {
@@ -2153,7 +2152,10 @@ func (p *PendingPool) EnforceWorstInvariants() {
 	heap.Init(p.worst)
 }
 func (p *PendingPool) EnforceBestInvariants() {
-	sort.Sort(p.best)
+	if !p.sorted {
+		sort.Sort(p.best)
+		p.sorted = true
+	}
 }
 
 func (p *PendingPool) Best() *metaTx { //nolint
@@ -2187,6 +2189,9 @@ func (p *PendingPool) Remove(i *metaTx) {
 	if i.bestIndex >= 0 {
 		p.best.UnsafeRemove(i)
 	}
+	if i.bestIndex != p.best.Len()-1 {
+		p.sorted = false
+	}
 	i.currentSubPool = 0
 }
 
@@ -2197,6 +2202,7 @@ func (p *PendingPool) Add(i *metaTx) {
 	i.currentSubPool = p.t
 	heap.Push(p.worst, i)
 	p.best.UnsafeAdd(i)
+	p.sorted = false
 }
 func (p *PendingPool) DebugPrint(prefix string) {
 	for i, it := range p.best.ms {
