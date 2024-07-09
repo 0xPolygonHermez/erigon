@@ -1191,6 +1191,9 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 		}
 
 		p.discardLocked(found, ReplacedByHigherTip)
+	} else if p.pending.IsFull() {
+		// new transaction will be denied if pending pool is full unless it will replace an old transaction
+		return PendingPoolOverflow
 	}
 
 	p.byHash[string(mt.Tx.IDHash[:])] = mt
@@ -2180,8 +2183,8 @@ func (p *PendingPool) PopWorst() *metaTx { //nolint
 func (p *PendingPool) Updated(mt *metaTx) {
 	heap.Fix(p.worst, mt.worstIndex)
 }
-func (p *PendingPool) Len() int { return len(p.best.ms) }
-
+func (p *PendingPool) Len() int     { return len(p.best.ms) }
+func (p *PendingPool) IsFull() bool { return p.Len() >= p.limit }
 func (p *PendingPool) Remove(i *metaTx) {
 	if i.worstIndex >= 0 {
 		heap.Remove(p.worst, i.worstIndex)
