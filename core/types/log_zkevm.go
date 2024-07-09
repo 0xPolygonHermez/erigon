@@ -70,7 +70,7 @@ func applyHexPadBug(d []byte, msInt int) []byte {
 
 	dataHex = appendZeros(dataHex, 64)
 
-	for dataHex[0] == '0' {
+	for len(dataHex) > 0 && dataHex[0] == '0' {
 		dataHex = dataHex[1:]
 	}
 
