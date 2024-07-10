@@ -26,6 +26,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
 )
 
 func getNextPoolTransactions(cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
@@ -185,13 +186,31 @@ func attemptAddTransaction(
 	effectiveGasPrice uint8,
 	l1Recovery bool,
 	forkId, l1InfoIndex uint64,
+	blockDataSizeChecker *BlockDataChecker,
 ) (*types.Receipt, bool, error) {
+	var batchDataOverflow, overflow bool
+	var err error
+
 	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
-	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
-	if err != nil {
+	if overflow, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
 		return nil, false, err
 	}
-	if overflow && !l1Recovery {
+
+	// run this only once the first time, do not add it on rerun
+	if blockDataSizeChecker != nil {
+		batchDataOverflow, err = blockDataSizeChecker.AddTransactionData(transaction, uint16(forkId), effectiveGasPrice)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+
+	if batchDataOverflow {
+		log.Info("BatchL2Data limit reached. Not adding last transaction", "txHash", transaction.Hash())
+	}
+
+	anyOverflow := overflow || batchDataOverflow
+
+	if anyOverflow && !l1Recovery {
 		return nil, true, nil
 	}
 
@@ -202,8 +221,11 @@ func attemptAddTransaction(
 
 	// TODO: possibly inject zero tracer here!
 
+	snapshot := ibs.Snapshot()
 	ibs.Prepare(transaction.Hash(), common.Hash{}, 0)
 	evm := vm.NewZkEVM(*blockContext, evmtypes.TxContext{}, ibs, cfg.chainConfig, *cfg.zkVmConfig)
+
+	gasUsed := header.GasUsed
 
 	receipt, execResult, err := core.ApplyTransaction_zkevm(
 		cfg.chainConfig,
@@ -214,8 +236,9 @@ func attemptAddTransaction(
 		noop,
 		header,
 		transaction,
-		&header.GasUsed,
+		&gasUsed,
 		effectiveGasPrice,
+		false,
 	)
 
 	if err != nil {
@@ -226,19 +249,30 @@ func attemptAddTransaction(
 		receipt.Status = 1
 	}
 
+	if err = txCounters.ProcessTx(ibs, execResult.ReturnData); err != nil {
+		return nil, false, err
+	}
+
+	// now that we have executed we can check again for an overflow
+	if overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0); err != nil {
+		return nil, false, err
+	}
+
+	if overflow {
+		ibs.RevertToSnapshot(snapshot)
+		return nil, true, err
+	}
+
+	// add the gas only if not reverted. This should not be moved above the overflow check
+	header.GasUsed = gasUsed
+
 	// we need to keep hold of the effective percentage used
 	// todo [zkevm] for now we're hard coding to the max value but we need to calc this properly
 	if err = sdb.hermezDb.WriteEffectiveGasPricePercentage(transaction.Hash(), effectiveGasPrice); err != nil {
 		return nil, false, err
 	}
 
-	err = txCounters.ProcessTx(ibs, execResult.ReturnData)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// now that we have executed we can check again for an overflow
-	overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0)
+	ibs.FinalizeTx(evm.ChainRules(), noop)
 
 	return receipt, overflow, err
 }
