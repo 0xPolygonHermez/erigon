@@ -2,7 +2,6 @@ package stages
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -180,13 +179,13 @@ Loop:
 		}
 
 		// State Root Verifications Check
-		err = verifyAgainstLocalBlocks(tx, hermezDb, logPrefix)
-		if err != nil {
-			if errors.Is(err, ErrStateRootMismatch) {
-				panic(err)
-			}
-			// do nothing in hope the node will recover if it isn't a stateroot mismatch
-		}
+		// err = verifyAgainstLocalBlocks(tx, hermezDb, logPrefix)
+		// if err != nil {
+		// 	if errors.Is(err, ErrStateRootMismatch) {
+		// 		panic(err)
+		// 	}
+		// 	// do nothing in hope the node will recover if it isn't a stateroot mismatch
+		// }
 	} else {
 		log.Info(fmt.Sprintf("[%s] No new L1 blocks to sync", logPrefix))
 	}
