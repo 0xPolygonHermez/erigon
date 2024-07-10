@@ -100,10 +100,6 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		if err = sdb.hermezDb.DeleteIsBatchPartiallyProcessed(injectedBatchBatchNumber); err != nil {
-			return err
-		}
-
 		if freshTx {
 			if err = tx.Commit(); err != nil {
 				return err
