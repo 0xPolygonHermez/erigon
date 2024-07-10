@@ -31,7 +31,12 @@ jobs:
           go-version: '1.20'
 
       - name: Run tests
+        id: run-tests
         run: go run ./zk/debug_tools/env-checker -rpcURL=${{ matrix.rpc }} -nodeName=${{ matrix.name }}
+
+      - name: Save result
+        if: ${{ always() }}
+        run: echo "result=${{ job.status }}" >> $GITHUB_ENV
 
   check-results:
     needs: test-node
@@ -39,9 +44,7 @@ jobs:
     steps:
       - name: Check results
         run: |
-          for job in ${{ matrix.include }}; do
-            if [[ ${{ job.outcome }} == 'failure' ]]; then
-              echo "Job failed: $job"
-              exit 1
-            fi
-          done
+          if [[ "${{ needs.test-node.outputs.result }}" == "failure" ]]; then
+            echo "Job failed: ${{ matrix.name }}"
+            exit 1
+          fi
