@@ -154,7 +154,7 @@ LOOP:
 				if err != nil {
 					return err
 				}
-				log.Trace("New L1 Index",
+				log.Debug("New L1 Index",
 					"index", latestUpdate.Index,
 					"root", newRoot.String(),
 					"mainnet", latestUpdate.MainnetExitRoot.String(),
