@@ -99,7 +99,10 @@ LOOP:
 		if l1.BlockNumber != l2.BlockNumber {
 			return l1.BlockNumber < l2.BlockNumber
 		}
-		return l1.TxIndex < l2.TxIndex
+		if l1.TxIndex != l2.TxIndex {
+			return l1.TxIndex < l2.TxIndex
+		}
+		return l1.Index < l2.Index
 	})
 
 	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
