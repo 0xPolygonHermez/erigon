@@ -83,6 +83,7 @@ func finaliseBlock(
 	receipts types.Receipts,
 	execResults []*core.ExecutionResult,
 	effectiveGases []uint8,
+	l1Recovery bool,
 ) (*types.Block, error) {
 	stateWriter := state.NewPlainStateWriter(sdb.tx, sdb.tx, newHeader.Number.Uint64()).SetAccumulator(accumulator)
 	chainReader := stagedsync.ChainReader{
@@ -122,8 +123,10 @@ func finaliseBlock(
 		return nil, err
 	}
 
-	for i, receipt := range receipts {
-		core.ProcessReceiptForBlockExecution(receipt, sdb.hermezDb.HermezDbReader, cfg.chainConfig, newHeader.Number.Uint64(), newHeader, transactions[i])
+	if l1Recovery {
+		for i, receipt := range receipts {
+			core.ProcessReceiptForBlockExecution(receipt, sdb.hermezDb.HermezDbReader, cfg.chainConfig, newHeader.Number.Uint64(), newHeader, transactions[i])
+		}
 	}
 
 	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecutionWithHistoryWrite(
