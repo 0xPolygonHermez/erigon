@@ -91,7 +91,7 @@ func SpawnSequencingStage(
 		getHashFn := core.GetHashFn(header, getHeader)
 		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &cfg.zk.AddressSequencer, parentBlock.ExcessDataGas())
 
-		if err = processInjectedInitialBatch(ctx, cfg, s, sdb, forkId, header, parentBlock, &blockContext); err != nil {
+		if err = processInjectedInitialBatch(ctx, cfg, s, sdb, forkId, header, parentBlock, &blockContext, l1Recovery); err != nil {
 			return err
 		}
 
@@ -277,6 +277,8 @@ func SpawnSequencingStage(
 		addedTransactions := []types.Transaction{}
 		addedReceipts := []*types.Receipt{}
 		effectiveGases = []uint8{}
+		addedExecutionResults := []*core.ExecutionResult{}
+
 		header, parentBlock, err = prepareHeader(tx, blockNumber-1, deltaTimestamp, limboHeaderTimestamp, forkId, nextBatchData.Coinbase)
 		if err != nil {
 			return err
@@ -388,7 +390,7 @@ func SpawnSequencingStage(
 					}
 
 					backupDataSizeChecker := *blockDataSizeChecker
-					if receipt, anyOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex, &backupDataSizeChecker); err != nil {
+					if receipt, execResult, anyOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex, &backupDataSizeChecker); err != nil {
 						if limboRecovery {
 							panic("limbo transaction has already been executed once so they must not fail while re-executing")
 						}
@@ -435,6 +437,7 @@ func SpawnSequencingStage(
 						yielded.Remove(txHash)
 						addedTransactions = append(addedTransactions, transaction)
 						addedReceipts = append(addedReceipts, receipt)
+						addedExecutionResults = append(addedExecutionResults, execResult)
 						effectiveGases = append(effectiveGases, effectiveGas)
 
 						hasAnyTransactionsInThisBatch = true
@@ -464,7 +467,7 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		block, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, effectiveGases, infoTreeIndexProgress)
+		block, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, ger, l1BlockHash, addedTransactions, addedReceipts, addedExecutionResults, effectiveGases, infoTreeIndexProgress, l1Recovery)
 		if err != nil {
 			return err
 		}
