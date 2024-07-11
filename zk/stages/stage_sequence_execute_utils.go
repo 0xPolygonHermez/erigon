@@ -18,6 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
+	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -365,6 +366,7 @@ func doFinishBlockAndUpdateState(
 	l1BlockHash common.Hash,
 	transactions []types.Transaction,
 	receipts types.Receipts,
+	execResults []*core.ExecutionResult,
 	effectiveGases []uint8,
 	l1InfoIndex uint64,
 ) (*types.Block, error) {
@@ -374,7 +376,7 @@ func doFinishBlockAndUpdateState(
 		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
 	}
 
-	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, cfg.accumulator, ger, l1BlockHash, transactions, receipts, effectiveGases)
+	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, cfg.accumulator, ger, l1BlockHash, transactions, receipts, execResults, effectiveGases)
 	if err != nil {
 		return nil, err
 	}
