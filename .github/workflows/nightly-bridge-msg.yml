@@ -1,4 +1,4 @@
-name: Nightly - Bridge ERC20 L2->L1
+name: Nightly - BridgeMessage
 
 on:
   schedule:
@@ -21,7 +21,7 @@ jobs:
             
     steps:
       - name: Clone bridge repository
-        run:  git clone --recurse-submodules -j8 https://github.com/0xPolygonHermez/zkevm-bridge-service.git -b feature/test_bridge_messages_real_network-v2  bridge
+        run:  git clone --recurse-submodules -j8 https://github.com/0xPolygonHermez/zkevm-bridge-service.git -b  develop  bridge
         
       - name: Build docker image
         run: |
@@ -44,5 +44,5 @@ jobs:
           L1BridgeAddr="${{ matrix.bridge_addr }}"
           L2BridgeAddr="${{ matrix.bridge_addr }}"
           EOF
-          docker run  --volume "./tmp/:/config/" --env BRIDGE_TEST_CONFIG_FILE=/config/test.toml bridge-e2e-realnetwork-erc20
+          docker run  --volume "./tmp/:/config/" --env BRIDGE_TEST_CONFIG_FILE=/config/test.toml bridge-e2e-realnetwork-msg
         
