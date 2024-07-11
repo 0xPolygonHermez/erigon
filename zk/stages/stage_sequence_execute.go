@@ -378,6 +378,7 @@ func SpawnSequencingStage(
 				}
 
 				var receipt *types.Receipt
+				var execResult *core.ExecutionResult
 				for i, transaction := range blockTransactions {
 					txHash := transaction.Hash()
 
