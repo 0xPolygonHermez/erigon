@@ -124,6 +124,7 @@ func createBlockWithBatchCheckStreamEntriesProto(
 	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
 ) ([]DataStreamEntryProto, error) {
 	var err error
+	var startEntriesProto, blockEntriesProto, endEntriesProto []DataStreamEntryProto
 
 	gers, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
 	if err != nil {
@@ -139,33 +140,12 @@ func createBlockWithBatchCheckStreamEntriesProto(
 
 	blockNum := block.NumberU64()
 
-	entryCount := 2                         // l2 block bookmark + l2 block
-	entryCount += len(filteredTransactions) // transactions
-	entryCount += len(gers)
-
-	if isBatchStart {
-		// we will add in a batch bookmark and a batch start entry
-		entryCount += 2
-
-		// a gap of 1 is normal but if greater than we need to account for the empty batches which will each
-		// have a batch bookmark, batch start and batch end
-		entryCount += int(3 * (batchGap - 1))
-	}
-
-	if isBatchEnd {
-		entryCount++
-	}
-
-	entries := NewDataStreamEntries(entryCount)
-
 	// batch start
 	// BATCH BOOKMARK
 	if isBatchStart {
-		var entriesProto []DataStreamEntryProto
-		if entriesProto, err = createBatchStartEntriesProto(reader, tx, batchNumber, lastBatchNumber, batchGap, chainId, block.Root(), gers); err != nil {
+		if startEntriesProto, err = createBatchStartEntriesProto(reader, tx, batchNumber, lastBatchNumber, batchGap, chainId, block.Root(), gers); err != nil {
 			return nil, err
 		}
-		entries.AddMany(entriesProto)
 	}
 
 	forkId, err := reader.GetForkId(batchNumber)
@@ -183,15 +163,18 @@ func createBlockWithBatchCheckStreamEntriesProto(
 	if err != nil {
 		return nil, err
 	}
-	entries.AddMany(blockEntries.Entries())
+	blockEntriesProto = blockEntries.Entries()
 
 	if isBatchEnd {
-		var batchEndEntries []DataStreamEntryProto
-		if batchEndEntries, err = addBatchEndEntriesProto(reader, tx, batchNumber, lastBatchNumber, block.Root(), gers); err != nil {
+		if endEntriesProto, err = addBatchEndEntriesProto(reader, tx, batchNumber, lastBatchNumber, block.Root(), gers); err != nil {
 			return nil, err
 		}
-		entries.AddMany(batchEndEntries)
 	}
+
+	entries := NewDataStreamEntries(len(startEntriesProto) + len(blockEntriesProto) + len(endEntriesProto))
+	entries.AddMany(startEntriesProto)
+	entries.AddMany(blockEntriesProto)
+	entries.AddMany(endEntriesProto)
 
 	return entries.Entries(), nil
 }
@@ -342,6 +325,35 @@ func (srv *DataStreamServer) GetHighestBlockNumber() (uint64, error) {
 	}
 
 	return l2Block.L2BlockNumber, nil
+}
+
+func (srv *DataStreamServer) GetHighestBatchNumber() (uint64, error) {
+	header := srv.stream.GetHeader()
+
+	if header.TotalEntries == 0 {
+		return 0, nil
+	}
+
+	entryNum := header.TotalEntries - 1
+	var err error
+	var entry datastreamer.FileEntry
+	for {
+		entry, err = srv.stream.GetEntry(entryNum)
+		if err != nil {
+			return 0, err
+		}
+		if entry.Type == datastreamer.EntryType(1) {
+			break
+		}
+		entryNum -= 1
+	}
+
+	batch, err := types.UnmarshalBatchStart(entry.Data)
+	if err != nil {
+		return 0, err
+	}
+
+	return batch.Number, nil
 }
 
 // must be done on offline server
