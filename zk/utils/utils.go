@@ -3,14 +3,14 @@ package utils
 import (
 	"fmt"
 
+	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/log/v3"
-	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
-	"github.com/ledgerwatch/erigon/core/state"
 )
 
 // if current sync is before verified batch - short circuit to verified batch, otherwise to enx of next batch
@@ -140,7 +140,11 @@ func GetBatchLocalExitRoot(batchNo uint64, db *hermez_db.HermezDbReader, tx kv.T
 	return GetBatchLocalExitRootFromSCStorage(batchNo, db, tx)
 }
 
-func GetBatchLocalExitRootFromSCStorage(batchNo uint64, db *hermez_db.HermezDbReader, tx kv.Tx) (libcommon.Hash, error) {
+type DbReader interface {
+	GetHighestBlockInBatch(batchNo uint64) (uint64, error)
+}
+
+func GetBatchLocalExitRootFromSCStorage(batchNo uint64, db DbReader, tx kv.Tx) (libcommon.Hash, error) {
 	var localExitRoot libcommon.Hash
 
 	if batchNo > 0 {

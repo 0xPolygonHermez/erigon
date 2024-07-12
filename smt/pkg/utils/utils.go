@@ -10,9 +10,9 @@ import (
 
 	"sort"
 
-	poseidon "github.com/gateway-fm/vectorized-poseidon-gold/src/vectorizedposeidongold"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/length"
+	poseidon "github.com/gateway-fm/vectorized-poseidon-gold/src/vectorizedposeidongold"
 )
 
 const (
@@ -602,19 +602,20 @@ func Key(ethAddr string, c int) (NodeKey, error) {
 	return Hash(key1.ToUintArray(), key1Capacity)
 }
 
-func KeyBig(k *big.Int, c int) ([4]uint64, error) {
+func KeyBig(k *big.Int, c int) (*NodeKey, error) {
 	if k == nil {
-		return [4]uint64{}, errors.New("nil key")
+		return nil, errors.New("nil key")
 	}
 	add := ScalarToArrayBig(k)
 
 	key1 := NodeValue8{add[0], add[1], add[2], add[3], add[4], add[5], big.NewInt(int64(c)), big.NewInt(0)}
 	key1Capacity, err := StringToH4(HASH_POSEIDON_ALL_ZEROES)
 	if err != nil {
-		return NodeKey{}, err
+		return nil, err
 	}
 
-	return Hash(key1.ToUintArray(), key1Capacity)
+	hk0, err := Hash(key1.ToUintArray(), key1Capacity)
+	return &NodeKey{hk0[0], hk0[1], hk0[2], hk0[3]}, err
 }
 
 func StrValToBigInt(v string) (*big.Int, bool) {

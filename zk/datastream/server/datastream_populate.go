@@ -172,7 +172,8 @@ func (srv *DataStreamServer) WriteBatchEnd(
 	reader DbReader,
 	batchNumber,
 	lastBatchNumber uint64,
-	stateRoot common.Hash,
+	stateRoot *common.Hash,
+	localExitRoot *common.Hash,
 ) (err error) {
 	gers, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
 	if err != nil {
@@ -183,7 +184,7 @@ func (srv *DataStreamServer) WriteBatchEnd(
 		return err
 	}
 
-	batchEndEntries, err := addBatchEndEntriesProto(reader, tx, batchNumber, lastBatchNumber, stateRoot, gers)
+	batchEndEntries, err := addBatchEndEntriesProto(tx, batchNumber, lastBatchNumber, stateRoot, gers, localExitRoot)
 	if err != nil {
 		return err
 	}
