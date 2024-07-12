@@ -274,7 +274,9 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 		case header := <-headersQueue:
 			headersMap[header.Number.Uint64()] = header
 		default:
-			loop = false
+			if len(headersQueue) == 0 {
+				loop = false
+			}
 		}
 	}
 
