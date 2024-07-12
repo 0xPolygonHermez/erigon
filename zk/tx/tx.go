@@ -397,6 +397,10 @@ func GenerateBlockBatchL2Data(forkId uint16, deltaTimestamp uint32, l1InfoTreeIn
 	return result, nil
 }
 
+var (
+	START_BLOCK_BATCH_L2_DATA_SIZE = uint64(65) // change this if GenerateStartBlockBatchL2Data changes
+)
+
 func GenerateStartBlockBatchL2Data(deltaTimestamp uint32, l1InfoTreeIndex uint32) []byte {
 	var result []byte
 

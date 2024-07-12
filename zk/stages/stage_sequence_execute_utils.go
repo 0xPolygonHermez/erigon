@@ -33,6 +33,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/tx"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
@@ -467,7 +468,7 @@ func NewBlockDataChecker() *BlockDataChecker {
 // adds bytes amounting to the block data and checks if the limit is reached
 // if the limit is reached, the data is not added, so this can be reused again for next check
 func (bdc *BlockDataChecker) AddBlockStartData(deltaTimestamp, l1InfoTreeIndex uint32) bool {
-	blockStartBytesAmount := uint64(65) // tx.GenerateStartBlockBatchL2Data(deltaTimestamp, l1InfoTreeIndex) returns 65 long byte array
+	blockStartBytesAmount := tx.START_BLOCK_BATCH_L2_DATA_SIZE // tx.GenerateStartBlockBatchL2Data(deltaTimestamp, l1InfoTreeIndex) returns 65 long byte array
 	// add in the changeL2Block transaction
 	if bdc.counter+blockStartBytesAmount > bdc.limit {
 		return true
