@@ -224,18 +224,20 @@ func (s *L1Syncer) GetOldAccInputHash(ctx context.Context, addr *common.Address,
 }
 
 func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error) {
-	// more thread causes error on remote rpc server
-	headers := make([]*ethTypes.Header, 0)
+	logsSize := len(logs)
+
+	headersQueue := make(chan *ethTypes.Header, logsSize)
+	defer close(headersQueue)
 
 	// queue up all the logs
-	logQueue := make(chan ethTypes.Log, len(logs))
+	logQueue := make(chan *ethTypes.Log, logsSize)
 	defer close(logQueue)
-	for i := 0; i < len(logs); i++ {
-		logQueue <- logs[i]
+	for i := 0; i < logsSize; i++ {
+		logQueue <- &logs[i]
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(len(logs))
+	wg.Add(logsSize)
 
 	process := func(em IEtherman) {
 		ctx := context.Background()
@@ -252,7 +254,7 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 				logQueue <- l
 				continue
 			}
-			headers = append(headers, header)
+			headersQueue <- header
 			wg.Done()
 		}
 	}
@@ -267,8 +269,13 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	wg.Wait()
 
 	headersMap := map[uint64]*ethTypes.Header{}
-	for i := 0; i < len(headers); i++ {
-		headersMap[headers[i].Number.Uint64()] = headers[i]
+	for loop := true; loop; {
+		select {
+		case header := <-headersQueue:
+			headersMap[header.Number.Uint64()] = header
+		default:
+			loop = false
+		}
 	}
 
 	return headersMap, nil
