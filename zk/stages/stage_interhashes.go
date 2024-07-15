@@ -145,7 +145,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			} else {
 				log.Info(fmt.Sprintf("[%s] SMT not using mapmutation", logPrefix))
 			}
-			if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt, to); err != nil {
+			if root, err = regenerateIntermediateHashes(ctx, logPrefix, tx, eridb, smt, to); err != nil {
 				return trie.EmptyRoot, err
 			}
 		} else {
@@ -256,7 +256,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	return nil
 }
 
-func regenerateIntermediateHashes(logPrefix string, db kv.RwTx, eridb *db2.EriDb, smtIn *smt.SMT, toBlock uint64) (common.Hash, error) {
+func regenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.RwTx, eridb *db2.EriDb, smtIn *smt.SMT, toBlock uint64) (common.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 
@@ -340,7 +340,7 @@ func regenerateIntermediateHashes(logPrefix string, db kv.RwTx, eridb *db2.EriDb
 	log.Info(fmt.Sprintf("[%s] Collecting account data finished in %v", logPrefix, dataCollectTime))
 
 	// generate tree
-	if _, err := smtIn.GenerateFromKVBulk(logPrefix, keys); err != nil {
+	if _, err := smtIn.GenerateFromKVBulk(ctx, logPrefix, keys); err != nil {
 		return trie.EmptyRoot, err
 	}
 

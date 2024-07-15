@@ -1,7 +1,9 @@
 package smt
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
@@ -28,21 +30,12 @@ import (
 // this makes it so the left part of a node can be deleted once it's right part is inserted
 // this is because the left part is at its final spot
 // when deleting nodes, go down to the leaf and create and save hashes in the SMT
-func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4]uint64, error) {
+func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys []utils.NodeKey) ([4]uint64, error) {
 	s.clearUpMutex.Lock()
 	defer s.clearUpMutex.Unlock()
 
 	log.Info(fmt.Sprintf("[%s] Building temp binary tree started", logPrefix))
 
-	// get nodeKeys and sort them bitwise
-	// nodeKeys := []utils.NodeKey{}
-	// for k := range kvMap {
-	// 	v := kvMap[k]
-	// 	if v.IsZero() {
-	// 		continue
-	// 	}
-	// 	nodeKeys = append(nodeKeys, k)
-	// }
 	totalKeysCount := len(nodeKeys)
 
 	log.Info(fmt.Sprintf("[%s] Total values to insert: %d", logPrefix, totalKeysCount))
@@ -71,10 +64,30 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4
 
 	maxReachedLevel := 0
 
+	deletesWorker := utils.NewWorker(ctx, "smt_save_finished", 1000)
+
+	// start a worker to delete finished parts of the tree and return values to save to the db
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		deletesWorker.DoWork()
+		wg.Done()
+	}()
+
 	tempTreeBuildStart := time.Now()
+	leafValueMap := sync.Map{}
+	// leafValueMap := make(map[utils.NodeKey]utils.NodeValue8)
+
+	var err error
 	for _, k := range nodeKeys {
 		// split the key
 		keys := k.GetPath()
+		v, err := s.Db.GetAccountValue(k)
+		if err != nil {
+			return [4]uint64{}, err
+		}
+		leafValueMap.Store(k, v)
+
 		// find last node
 		siblings, level := rootNode.findLastNode(keys)
 
@@ -139,24 +152,26 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4
 				rKey: keys[level+level2+1:],
 			}
 
+			nodeToDelFrom := siblings[len(siblings)-1]
+			pathToDeleteFrom := make([]int, level+level2+1, 256)
+			copy(pathToDeleteFrom, keys[:level+level2])
+			pathToDeleteFrom[level+level2] = 0
+
+			jobResult := utils.NewCalcAndPrepareJobResult(s.Db)
 			//hash, save and delete left leaf
-			deleteFunc := func() error {
-				nodeToDelFrom := siblings[len(siblings)-1]
-				pathToDeleteFrom := make([]int, level+level2+1)
-				copy(pathToDeleteFrom, keys[:level+level2])
-				pathToDeleteFrom[level+level2] = 0
-				_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s)
+			deleteFunc := func() utils.JobResult {
+				_, leftHash, err := nodeToDelFrom.node0.deleteTreeNoSave(pathToDeleteFrom, &leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
 				if err != nil {
-					return err
+					jobResult.Err = err
+					return jobResult
 				}
 
 				nodeToDelFrom.leftHash = leftHash
 				nodeToDelFrom.node0 = nil
 
-				return nil
+				return jobResult
 			}
-			deleteFunc()
-			// deletesQueue.AddJob(utils.Job{Action: deleteFunc})
+			deletesWorker.AddJob(deleteFunc)
 
 			if maxReachedLevel < level+level2+1 {
 				maxReachedLevel = level + level2 + 1
@@ -204,22 +219,29 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4
 
 				//hash, save and delete left leaf
 				if upperNode.node0 != nil {
-					deleteFunc := func() error {
-						nodeToDelFrom := upperNode
-						pathToDeleteFrom := make([]int, level+1)
-						copy(pathToDeleteFrom, keys[:level])
-						pathToDeleteFrom[level] = 0
-						_, leftHash, err := nodeToDelFrom.node0.deleteTree(pathToDeleteFrom, s)
+					nodeToDelFrom := upperNode
+					pathToDeleteFrom := make([]int, level+1, 256)
+					copy(pathToDeleteFrom, keys[:level])
+					pathToDeleteFrom[level] = 0
+
+					jobResult := utils.NewCalcAndPrepareJobResult(s.Db)
+
+					// get all leaf keys so we can then get all needed values and pass them
+					// this is needed because w can't read from the db in another routine
+					deleteFunc := func() utils.JobResult {
+						_, leftHash, err := nodeToDelFrom.node0.deleteTreeNoSave(pathToDeleteFrom, &leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
+
 						if err != nil {
-							return err
+							jobResult.Err = err
+							return jobResult
 						}
 						nodeToDelFrom.leftHash = leftHash
 						nodeToDelFrom.node0 = nil
-						return nil
+						return jobResult
 					}
-					deleteFunc()
+					// deleteFunc()
 
-					// deletesQueue.AddJob(utils.Job{Action: deleteFunc})
+					deletesWorker.AddJob(deleteFunc)
 				}
 			}
 
@@ -228,9 +250,24 @@ func (s *SMT) GenerateFromKVBulk(logPrefix string, nodeKeys []utils.NodeKey) ([4
 			}
 		}
 
+		select {
+		case result := <-deletesWorker.GetJobResultsChannel():
+			if result.GetError() != nil {
+				return [4]uint64{}, result.GetError()
+			}
+
+			if err := result.Save(); err != nil {
+				return [4]uint64{}, err
+			}
+		default:
+		}
+
 		insertedKeysCount++
 		progressChan <- uint64(totalKeysCount) + insertedKeysCount
 	}
+	deletesWorker.Stop()
+
+	wg.Wait()
 
 	s.updateDepth(maxReachedLevel)
 
@@ -320,6 +357,76 @@ func (n *SmtNode) findLastNode(keys []int) ([]*SmtNode, int) {
 	return siblings, level
 }
 
+func (n *SmtNode) deleteTreeNoSave(keyPath []int, leafValueMap *sync.Map, kvMapOfValuesToSave map[[4]uint64]utils.NodeValue12, kvMapOfLeafValuesToSave map[[4]uint64][4]uint64) ([]utils.NodeKey, [4]uint64, error) {
+	deletedKeys := []utils.NodeKey{}
+
+	if n.isLeaf() {
+		fullKey := append(keyPath, n.rKey...)
+		k, err := utils.NodeKeyFromPath(fullKey)
+		if err != nil {
+			return nil, [4]uint64{}, err
+		}
+
+		v, ok := leafValueMap.LoadAndDelete(k)
+		if !ok {
+			return nil, [4]uint64{}, fmt.Errorf("value not found for key %v", k)
+		}
+		accoutnValue := v.(utils.NodeValue8)
+
+		newKey := utils.RemoveKeyBits(k, len(keyPath))
+		//hash and save leaf
+		newValH, newValHV, newLeafHash, newLeafHashV, err := createNewLeafNoSave(newKey, &accoutnValue)
+		if err != nil {
+			return nil, [4]uint64{}, err
+		}
+		kvMapOfValuesToSave[newValH] = newValHV
+		kvMapOfValuesToSave[newLeafHash] = newLeafHashV
+		kvMapOfLeafValuesToSave[newLeafHash] = k
+
+		return deletedKeys, newLeafHash, nil
+	}
+
+	var totalHash utils.NodeValue8
+
+	if n.node0 != nil {
+		if !utils.IsArrayUint64Empty(n.leftHash[:]) {
+			return nil, [4]uint64{}, fmt.Errorf("node has previously deleted left part")
+		}
+		localKeyPath := append(keyPath, 0)
+		_, leftHash, err := n.node0.deleteTreeNoSave(localKeyPath, leafValueMap, kvMapOfValuesToSave, kvMapOfLeafValuesToSave)
+		if err != nil {
+			return nil, [4]uint64{}, err
+		}
+
+		n.leftHash = leftHash
+		// deletedKeys = append(deletedKeys, keysFromBelow...)
+		n.node0 = nil
+	}
+
+	if n.node1 != nil {
+		localKeyPath := append(keyPath, 1)
+		_, rightHash, err := n.node1.deleteTreeNoSave(localKeyPath, leafValueMap, kvMapOfValuesToSave, kvMapOfLeafValuesToSave)
+		if err != nil {
+			return nil, [4]uint64{}, err
+		}
+		totalHash.SetHalfValue(rightHash, 1)
+
+		// deletedKeys = append(deletedKeys, keysFromBelow...)
+		n.node1 = nil
+	}
+
+	totalHash.SetHalfValue(n.leftHash, 0)
+
+	newRoot, v, err := hashCalcAndPrepareForSave(totalHash.ToUintArray(), utils.BranchCapacity)
+	if err != nil {
+		return nil, [4]uint64{}, err
+	}
+
+	kvMapOfValuesToSave[newRoot] = v
+
+	return deletedKeys, newRoot, nil
+}
+
 func (n *SmtNode) deleteTree(keyPath []int, s *SMT) ([]utils.NodeKey, [4]uint64, error) {
 	deletedKeys := []utils.NodeKey{}
 
@@ -392,12 +499,27 @@ func (s *SMT) createNewLeaf(k, rkey utils.NodeKey, v utils.NodeValue8) ([4]uint6
 	}
 
 	newLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(rkey, newValH), utils.LeafCapacity)
-
-	s.Db.InsertHashKey(newLeafHash, k)
-
 	if err != nil {
+		return [4]uint64{}, err
+	}
+	if err := s.Db.InsertHashKey(newLeafHash, k); err != nil {
 		return [4]uint64{}, err
 	}
 
 	return newLeafHash, nil
+}
+
+func createNewLeafNoSave(rkey utils.NodeKey, v *utils.NodeValue8) (newValH [4]uint64, newValHV utils.NodeValue12, newLeafHash [4]uint64, newLeafHashV utils.NodeValue12, err error) {
+	//hash and save leaf
+	newValH, newValHV, err = hashCalcAndPrepareForSave(v.ToUintArray(), utils.BranchCapacity)
+	if err != nil {
+		return [4]uint64{}, utils.NodeValue12{}, [4]uint64{}, utils.NodeValue12{}, err
+	}
+
+	newLeafHash, newLeafHashV, err = hashCalcAndPrepareForSave(utils.ConcatArrays4(rkey, newValH), utils.LeafCapacity)
+	if err != nil {
+		return [4]uint64{}, utils.NodeValue12{}, [4]uint64{}, utils.NodeValue12{}, err
+	}
+
+	return newValH, newValHV, newLeafHash, newLeafHashV, nil
 }
