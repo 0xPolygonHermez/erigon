@@ -5,6 +5,7 @@ import (
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
@@ -15,6 +16,7 @@ import (
 )
 
 type DbReader interface {
+	GetLocalExitRootForBatchNo(batchNo uint64) (common.Hash, error)
 	GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber uint64) ([]types.GerUpdateProto, error)
 	GetForkId(batchNumber uint64) (uint64, error)
 	GetBlockGlobalExitRoot(blockNumber uint64) (libcommon.Hash, error)
