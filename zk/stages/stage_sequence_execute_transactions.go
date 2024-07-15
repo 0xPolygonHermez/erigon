@@ -189,24 +189,23 @@ func attemptAddTransaction(
 	var err error
 
 	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
-	if overflow, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
-		return nil, nil, false, err
-	}
+	overflow, err = batchCounters.AddNewTransactionCounters(txCounters)
 
 	// run this only once the first time, do not add it on rerun
 	if blockDataSizeChecker != nil {
-		batchDataOverflow, err = blockDataSizeChecker.AddTransactionData(transaction, uint16(forkId), effectiveGasPrice)
+		txL2Data, err := txCounters.GetL2DataCache()
 		if err != nil {
 			return nil, nil, false, err
 		}
+		batchDataOverflow = blockDataSizeChecker.AddTransactionData(txL2Data)
+		if batchDataOverflow {
+			log.Info("BatchL2Data limit reached. Not adding last transaction", "txHash", transaction.Hash())
+		}
 	}
-
-	if batchDataOverflow {
-		log.Info("BatchL2Data limit reached. Not adding last transaction", "txHash", transaction.Hash())
+	if err != nil {
+		return nil, nil, false, err
 	}
-
 	anyOverflow := overflow || batchDataOverflow
-
 	if anyOverflow && !l1Recovery {
 		return nil, nil, true, nil
 	}
