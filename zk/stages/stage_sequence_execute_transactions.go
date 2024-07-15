@@ -184,9 +184,16 @@ func attemptAddTransaction(
 	l1Recovery bool,
 	forkId, l1InfoIndex uint64,
 	blockDataSizeChecker *BlockDataChecker,
-) (*types.Receipt, *core.ExecutionResult, bool, error) {
+) (receipt *types.Receipt, execResult *core.ExecutionResult, overflow bool, err error) {
+	batchCounters.CacheCounters()
+	defer func() {
+		if err != nil {
+			batchCounters.ResetCounters()
+		}
+	}()
+
 	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
-	overflow, err := batchCounters.AddNewTransactionCounters(txCounters)
+	overflow, err = batchCounters.AddNewTransactionCounters(txCounters)
 
 	// run this only once the first time, do not add it on rerun
 	var batchDataOverflow bool
@@ -218,7 +225,7 @@ func attemptAddTransaction(
 	ibs.Prepare(transaction.Hash(), common.Hash{}, 0)
 	evm := vm.NewZkEVM(*blockContext, evmtypes.TxContext{}, ibs, cfg.chainConfig, *cfg.zkVmConfig)
 
-	receipt, execResult, err := core.ApplyTransaction_zkevm(
+	receipt, execResult, err = core.ApplyTransaction_zkevm(
 		cfg.chainConfig,
 		cfg.engine,
 		evm,

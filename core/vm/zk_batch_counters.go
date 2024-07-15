@@ -22,6 +22,10 @@ type BatchCounterCollector struct {
 	rlpCombinedCounters        Counters
 	executionCombinedCounters  Counters
 	processingCombinedCounters Counters
+
+	rlpCombinedCountersCache        Counters
+	executionCombinedCountersCache  Counters
+	processingCombinedCountersCache Counters
 }
 
 func NewBatchCounterCollector(smtMaxLevel int, forkId uint16, mcpReduction float64, unlimitedCounters bool, addonCounters *Counters) *BatchCounterCollector {
@@ -284,4 +288,16 @@ func (bcc *BatchCounterCollector) UpdateProcessingCountersCache(txCounters *Tran
 	for k, v := range txCounters.processingCounters.counters {
 		bcc.processingCombinedCounters[k].used += v.used
 	}
+}
+
+func (bcc *BatchCounterCollector) CacheCounters() {
+	bcc.rlpCombinedCountersCache = bcc.rlpCombinedCounters.Clone()
+	bcc.executionCombinedCountersCache = bcc.executionCombinedCounters.Clone()
+	bcc.processingCombinedCountersCache = bcc.processingCombinedCounters.Clone()
+}
+
+func (bcc *BatchCounterCollector) ResetCounters() {
+	bcc.rlpCombinedCounters = bcc.rlpCombinedCountersCache.Clone()
+	bcc.executionCombinedCounters = bcc.executionCombinedCountersCache.Clone()
+	bcc.processingCombinedCounters = bcc.processingCombinedCountersCache.Clone()
 }
