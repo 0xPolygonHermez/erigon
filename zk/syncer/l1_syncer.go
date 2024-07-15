@@ -226,9 +226,6 @@ func (s *L1Syncer) GetOldAccInputHash(ctx context.Context, addr *common.Address,
 func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error) {
 	logsSize := len(logs)
 
-	headersQueue := make(chan *ethTypes.Header, logsSize)
-	defer close(headersQueue)
-
 	// queue up all the logs
 	logQueue := make(chan *ethTypes.Log, logsSize)
 	defer close(logQueue)
@@ -238,6 +235,8 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 
 	var wg sync.WaitGroup
 	wg.Add(logsSize)
+
+	headersQueue := make(chan *ethTypes.Header, logsSize)
 
 	process := func(em IEtherman) {
 		ctx := context.Background()
@@ -267,17 +266,11 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	}
 
 	wg.Wait()
+	close(headersQueue)
 
 	headersMap := map[uint64]*ethTypes.Header{}
-	for loop := true; loop; {
-		select {
-		case header := <-headersQueue:
-			headersMap[header.Number.Uint64()] = header
-		default:
-			if len(headersQueue) == 0 {
-				loop = false
-			}
-		}
+	for header := range headersQueue {
+		headersMap[header.Number.Uint64()] = header
 	}
 
 	return headersMap, nil
