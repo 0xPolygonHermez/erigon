@@ -203,6 +203,11 @@ func NodeValue8FromBigInt(value *big.Int) (*NodeValue8, error) {
 	return NodeValue8FromBigIntArray(x)
 }
 
+func NodeValue8ToBigInt(value *NodeValue8) *big.Int {
+	x := BigIntArrayFromNodeValue8(value)
+	return ArrayBigToScalar(x)
+}
+
 func NodeValue8FromBigIntArray(arr []*big.Int) (*NodeValue8, error) {
 	if len(arr) != 8 {
 		return &NodeValue8{}, fmt.Errorf("invalid array length")

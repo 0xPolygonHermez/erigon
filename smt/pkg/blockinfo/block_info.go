@@ -122,37 +122,37 @@ func (b *BlockInfoTree) GenerateBlockHeader(oldBlockHash *common.Hash, coinbase 
 	keys[0] = key
 	vals[0] = val
 
-	if key, val, err = generateCoinbase(b.smt, coinbase); err != nil {
+	if key, val, err = generateCoinbase(coinbase); err != nil {
 		return nil, nil, err
 	}
 	keys[1] = key
 	vals[1] = val
 
-	if key, val, err = generateBlockNumber(b.smt, blockNumber); err != nil {
+	if key, val, err = generateBlockNumber(blockNumber); err != nil {
 		return nil, nil, err
 	}
 	keys[2] = key
 	vals[2] = val
 
-	if key, val, err = generateGasLimit(b.smt, gasLimit); err != nil {
+	if key, val, err = generateGasLimit(gasLimit); err != nil {
 		return nil, nil, err
 	}
 	keys[3] = key
 	vals[3] = val
 
-	if key, val, err = generateTimestamp(b.smt, timestamp); err != nil {
+	if key, val, err = generateTimestamp(timestamp); err != nil {
 		return nil, nil, err
 	}
 	keys[4] = key
 	vals[4] = val
 
-	if key, val, err = generateGer(b.smt, ger); err != nil {
+	if key, val, err = generateGer(ger); err != nil {
 		return nil, nil, err
 	}
 	keys[5] = key
 	vals[5] = val
 
-	if key, val, err = generateL1BlockHash(b.smt, l1BlochHash); err != nil {
+	if key, val, err = generateL1BlockHash(l1BlochHash); err != nil {
 		return nil, nil, err
 	}
 	keys[6] = key
@@ -171,7 +171,7 @@ func generateL2BlockHash(blockHash *common.Hash) (key *utils.NodeKey, value *uti
 	return key, value, nil
 }
 
-func generateCoinbase(smt *smt.SMT, coinbase *common.Address) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
+func generateCoinbase(coinbase *common.Address) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
 	if key, err = KeyBlockHeaderParams(big.NewInt(IndexBlockHeaderParamCoinbase)); err != nil {
 		return nil, nil, err
 	}
@@ -183,7 +183,7 @@ func generateCoinbase(smt *smt.SMT, coinbase *common.Address) (key *utils.NodeKe
 	return key, value, nil
 }
 
-func generateGasLimit(smt *smt.SMT, gasLimit uint64) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
+func generateGasLimit(gasLimit uint64) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
 	if key, err = KeyBlockHeaderParams(big.NewInt(IndexBlockHeaderParamGasLimit)); err != nil {
 		return nil, nil, err
 	}
@@ -194,7 +194,7 @@ func generateGasLimit(smt *smt.SMT, gasLimit uint64) (key *utils.NodeKey, value 
 	return key, value, nil
 }
 
-func generateBlockNumber(smt *smt.SMT, blockNumber uint64) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
+func generateBlockNumber(blockNumber uint64) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
 	if key, err = KeyBlockHeaderParams(big.NewInt(IndexBlockHeaderParamNumber)); err != nil {
 		return nil, nil, err
 	}
@@ -205,7 +205,7 @@ func generateBlockNumber(smt *smt.SMT, blockNumber uint64) (key *utils.NodeKey, 
 	return key, value, nil
 }
 
-func generateTimestamp(smt *smt.SMT, timestamp uint64) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
+func generateTimestamp(timestamp uint64) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
 	if key, err = KeyBlockHeaderParams(big.NewInt(IndexBlockHeaderParamTimestamp)); err != nil {
 		return nil, nil, err
 	}
@@ -217,7 +217,7 @@ func generateTimestamp(smt *smt.SMT, timestamp uint64) (key *utils.NodeKey, valu
 	return key, value, nil
 }
 
-func generateGer(smt *smt.SMT, ger *common.Hash) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
+func generateGer(ger *common.Hash) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
 	if key, err = KeyBlockHeaderParams(big.NewInt(IndexBlockHeaderParamGer)); err != nil {
 		return nil, nil, err
 	}
@@ -229,7 +229,7 @@ func generateGer(smt *smt.SMT, ger *common.Hash) (key *utils.NodeKey, value *uti
 	return key, value, nil
 }
 
-func generateL1BlockHash(smt *smt.SMT, blockHash *common.Hash) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
+func generateL1BlockHash(blockHash *common.Hash) (key *utils.NodeKey, value *utils.NodeValue8, err error) {
 	if key, err = KeyBlockHeaderParams(big.NewInt(IndexBlockHeaderParamBlockHashL1)); err != nil {
 		return nil, nil, err
 	}
