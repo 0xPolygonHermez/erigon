@@ -283,7 +283,7 @@ func SpawnSequencingStage(
 		}
 
 		// run this only once the first time, do not add it on rerun
-		if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(uint16(forkId), uint32(prevHeader.Time-header.Time), uint32(l1InfoIndex)); batchDataOverflow {
+		if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(uint32(prevHeader.Time-header.Time), uint32(l1InfoIndex)); batchDataOverflow {
 			log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Stopping.", logPrefix), "blockNumber", blockNumber)
 			break
 		}
@@ -497,7 +497,7 @@ func SpawnSequencingStage(
 				return err
 			}
 
-			if err = cfg.datastreamServer.WriteBlockToStream(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, thisBlockNumber); err != nil {
+			if err = cfg.datastreamServer.WriteBlockToStream(logPrefix, tx, sdb.hermezDb, thisBatch, lastBatch, blockNumber); err != nil {
 				return err
 			}
 
