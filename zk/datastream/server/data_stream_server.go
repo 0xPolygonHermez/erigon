@@ -4,6 +4,7 @@ import (
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
@@ -14,6 +15,7 @@ import (
 )
 
 type DbReader interface {
+	GetLocalExitRootForBatchNo(batchNo uint64) (common.Hash, error)
 	GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber uint64) ([]types.GerUpdateProto, error)
 	GetForkId(batchNumber uint64) (uint64, error)
 	GetBlockGlobalExitRoot(blockNumber uint64) (libcommon.Hash, error)
@@ -38,6 +40,8 @@ const (
 type DataStreamServer struct {
 	stream  *datastreamer.StreamServer
 	chainId uint64
+	highestBlockWritten,
+	highestBatchWritten *uint64
 }
 
 type DataStreamEntry interface {
@@ -52,8 +56,10 @@ type DataStreamEntryProto interface {
 
 func NewDataStreamServer(stream *datastreamer.StreamServer, chainId uint64) *DataStreamServer {
 	return &DataStreamServer{
-		stream:  stream,
-		chainId: chainId,
+		stream:              stream,
+		chainId:             chainId,
+		highestBlockWritten: nil,
+		highestBatchWritten: nil,
 	}
 }
 
@@ -87,7 +93,7 @@ func NewDataStreamEntries(size int) *DataStreamEntries {
 	}
 }
 
-func (srv *DataStreamServer) CommitEntriesToStreamProto(entries []DataStreamEntryProto) error {
+func (srv *DataStreamServer) CommitEntriesToStreamProto(entries []DataStreamEntryProto, latestBlockNum, latestBatchNum *uint64) error {
 	for _, entry := range entries {
 		entryType := entry.Type()
 
@@ -97,16 +103,22 @@ func (srv *DataStreamServer) CommitEntriesToStreamProto(entries []DataStreamEntr
 		}
 
 		if entryType == types.BookmarkEntryType {
-			_, err = srv.stream.AddStreamBookmark(em)
-			if err != nil {
+			if _, err = srv.stream.AddStreamBookmark(em); err != nil {
 				return err
 			}
 		} else {
-			_, err = srv.stream.AddStreamEntry(datastreamer.EntryType(entryType), em)
-			if err != nil {
+			if _, err = srv.stream.AddStreamEntry(datastreamer.EntryType(entryType), em); err != nil {
 				return err
 			}
 		}
+	}
+
+	if latestBlockNum != nil {
+		srv.highestBlockWritten = latestBlockNum
+	}
+
+	if latestBatchNum != nil {
+		srv.highestBatchWritten = latestBatchNum
 	}
 	return nil
 }
@@ -244,7 +256,7 @@ func createTransactionEntryProto(
 	tx eritypes.Transaction,
 	blockNum uint64,
 	isEtrog bool,
-) (DataStreamEntryProto, error) {
+) (txProto DataStreamEntryProto, err error) {
 	effectiveGasPricePercentage, err := reader.GetEffectiveGasPricePercentage(tx.Hash())
 	if err != nil {
 		return nil, err
@@ -252,16 +264,14 @@ func createTransactionEntryProto(
 
 	var intermediateRoot libcommon.Hash
 	if isEtrog {
-		intermediateRoot, err = reader.GetIntermediateTxStateRoot(blockNum, tx.Hash())
-		if err != nil {
+		if intermediateRoot, err = reader.GetIntermediateTxStateRoot(blockNum, tx.Hash()); err != nil {
 			return nil, err
 		}
 	}
 
 	// TRANSACTION
 
-	txProto, err := newTransactionProto(effectiveGasPricePercentage, intermediateRoot, tx, blockNum)
-	if err != nil {
+	if txProto, err = newTransactionProto(effectiveGasPricePercentage, intermediateRoot, tx, blockNum); err != nil {
 		return nil, err
 	}
 
@@ -279,13 +289,12 @@ func CreateAndBuildStreamEntryBytesProto(
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 	isBatchEnd bool,
 	transactionsToIncludeByIndex []int, // passing nil here will include all transactions in the blocks
-) ([]byte, error) {
+) (result []byte, err error) {
 	entries, err := createBlockWithBatchCheckStreamEntriesProto(chainId, reader, tx, block, lastBlock, batchNumber, lastBatchNumber, l1InfoTreeMinTimestamps, isBatchEnd, transactionsToIncludeByIndex)
 	if err != nil {
 		return nil, err
 	}
 
-	var result []byte
 	for _, entry := range entries {
 		b, err := encodeEntryToBytesProto(entry)
 		if err != nil {
@@ -298,6 +307,10 @@ func CreateAndBuildStreamEntryBytesProto(
 }
 
 func (srv *DataStreamServer) GetHighestBlockNumber() (uint64, error) {
+	if srv.highestBlockWritten != nil {
+		return *srv.highestBlockWritten, nil
+	}
+
 	header := srv.stream.GetHeader()
 
 	if header.TotalEntries == 0 {
@@ -313,21 +326,36 @@ func (srv *DataStreamServer) GetHighestBlockNumber() (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		if entry.Type == datastreamer.EntryType(2) {
+		if uint32(entry.Type) == uint32(types.EntryTypeL2Block) || uint32(entry.Type) == uint32(types.EntryTypeL2Tx) {
 			break
 		}
 		entryNum -= 1
 	}
 
-	l2Block, err := types.UnmarshalL2Block(entry.Data)
-	if err != nil {
-		return 0, err
+	if uint32(entry.Type) == uint32(types.EntryTypeL2Block) {
+		l2Block, err := types.UnmarshalL2Block(entry.Data)
+		if err != nil {
+			return 0, err
+		}
+
+		return l2Block.L2BlockNumber, nil
+	} else if uint32(entry.Type) == uint32(types.EntryTypeL2Tx) {
+		tx, err := types.UnmarshalTx(entry.Data)
+		if err != nil {
+			return 0, err
+		}
+
+		return tx.L2BlockNumber, nil
 	}
 
-	return l2Block.L2BlockNumber, nil
+	return 0, nil
 }
 
 func (srv *DataStreamServer) GetHighestBatchNumber() (uint64, error) {
+	if srv.highestBatchWritten != nil {
+		return *srv.highestBatchWritten, nil
+	}
+
 	header := srv.stream.GetHeader()
 
 	if header.TotalEntries == 0 {
@@ -352,6 +380,8 @@ func (srv *DataStreamServer) GetHighestBatchNumber() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	srv.highestBatchWritten = &batch.Number
 
 	return batch.Number, nil
 }

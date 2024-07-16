@@ -49,6 +49,7 @@ type Zk struct {
 	DAUrl                                  string
 	DataStreamHost                         string
 	DataStreamPort                         uint
+	DataStreamWriteTimeout                 time.Duration
 
 	RebuildTreeAfter      uint64
 	IncrementTreeAlways   bool
@@ -57,6 +58,7 @@ type Zk struct {
 	SyncLimit             uint64
 	Gasless               bool
 
+	DebugTimers    bool
 	DebugNoSync    bool
 	DebugLimit     uint64
 	DebugStep      uint64
