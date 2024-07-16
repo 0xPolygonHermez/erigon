@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"sync/atomic"
 )
 
 type DB interface {
@@ -53,7 +54,7 @@ type Worker struct {
 	name       string
 	jobs       chan func() JobResult
 	jobResults chan JobResult
-	stopped    bool
+	stopped    atomic.Bool
 }
 
 // NewWorker initializes a new Worker.
@@ -63,7 +64,7 @@ func NewWorker(ctx context.Context, name string, jobQueueSize int) *Worker {
 		name,
 		make(chan func() JobResult, jobQueueSize),
 		make(chan JobResult, jobQueueSize),
-		false,
+		atomic.Bool{},
 	}
 }
 
@@ -76,23 +77,23 @@ func (w *Worker) GetJobResultsChannel() chan JobResult {
 }
 
 func (w *Worker) Stop() {
-	w.stopped = true
+	w.stopped.Store(true)
 }
 
 // DoWork processes jobs from the queue (jobs channel).
 func (w *Worker) DoWork() {
-	finish := false
-	for !finish {
+LOOP:
+	for {
 		select {
 		case <-w.ctx.Done():
-			finish = true
+			break LOOP
 		// if job received.
 		case job := <-w.jobs:
 			jobRes := job()
 			w.jobResults <- jobRes
 		default:
-			if w.stopped {
-				finish = true
+			if w.stopped.Load() {
+				break LOOP
 			}
 		}
 	}

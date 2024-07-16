@@ -42,7 +42,7 @@ func TestBinaryStringToInt64(t *testing.T) {
 	}
 }
 
-func BenchmarkAppend(b *testing.B) {
+func BenchmarkConvertBigIntToHex(b *testing.B) {
 	b.ReportAllocs()
 	for n := 0; n < b.N; n++ {
 		ConvertBigIntToHex(big.NewInt(int64(n)))

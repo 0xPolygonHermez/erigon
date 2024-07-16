@@ -269,6 +269,23 @@ func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys
 
 	wg.Wait()
 
+	// wait and save all jobs
+LOOP:
+	for {
+		select {
+		case result := <-deletesWorker.GetJobResultsChannel():
+			if result.GetError() != nil {
+				return [4]uint64{}, result.GetError()
+			}
+
+			if err := result.Save(); err != nil {
+				return [4]uint64{}, err
+			}
+		default:
+			break LOOP
+		}
+	}
+
 	s.updateDepth(maxReachedLevel)
 
 	tempTreeBuildTime := time.Since(tempTreeBuildStart)
