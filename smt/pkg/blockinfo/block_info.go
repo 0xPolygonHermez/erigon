@@ -112,52 +112,36 @@ func (b *BlockInfoTree) GetRoot() *big.Int {
 }
 
 func (b *BlockInfoTree) GenerateBlockHeader(oldBlockHash *common.Hash, coinbase *common.Address, blockNumber, gasLimit, timestamp uint64, ger, l1BlochHash *common.Hash) (keys []*utils.NodeKey, vals []*utils.NodeValue8, err error) {
-	var key *utils.NodeKey
-	var val *utils.NodeValue8
 	keys = make([]*utils.NodeKey, 7)
 	vals = make([]*utils.NodeValue8, 7)
 
-	if key, val, err = generateL2BlockHash(oldBlockHash); err != nil {
+	if keys[0], vals[0], err = generateL2BlockHash(oldBlockHash); err != nil {
 		return nil, nil, err
 	}
-	keys[0] = key
-	vals[0] = val
 
-	if key, val, err = generateCoinbase(coinbase); err != nil {
+	if keys[1], vals[1], err = generateCoinbase(coinbase); err != nil {
 		return nil, nil, err
 	}
-	keys[1] = key
-	vals[1] = val
 
-	if key, val, err = generateBlockNumber(blockNumber); err != nil {
+	if keys[2], vals[2], err = generateBlockNumber(blockNumber); err != nil {
 		return nil, nil, err
 	}
-	keys[2] = key
-	vals[2] = val
 
-	if key, val, err = generateGasLimit(gasLimit); err != nil {
+	if keys[3], vals[3], err = generateGasLimit(gasLimit); err != nil {
 		return nil, nil, err
 	}
-	keys[3] = key
-	vals[3] = val
 
-	if key, val, err = generateTimestamp(timestamp); err != nil {
+	if keys[4], vals[4], err = generateTimestamp(timestamp); err != nil {
 		return nil, nil, err
 	}
-	keys[4] = key
-	vals[4] = val
 
-	if key, val, err = generateGer(ger); err != nil {
+	if keys[5], vals[5], err = generateGer(ger); err != nil {
 		return nil, nil, err
 	}
-	keys[5] = key
-	vals[5] = val
 
-	if key, val, err = generateL1BlockHash(l1BlochHash); err != nil {
+	if keys[6], vals[6], err = generateL1BlockHash(l1BlochHash); err != nil {
 		return nil, nil, err
 	}
-	keys[6] = key
-	vals[6] = val
 
 	return keys, vals, nil
 }
@@ -326,8 +310,8 @@ func (b *BlockInfoTree) GenerateBlockTxKeysVals(
 	cumulativeGasUsed uint64,
 	effectivePercentage uint8,
 ) ([]*utils.NodeKey, []*utils.NodeValue8, error) {
-	var keys []*utils.NodeKey
-	var vals []*utils.NodeValue8
+	var keys []*utils.NodeKey = make([]*utils.NodeKey, 0, 4+len(receipt.Logs))
+	var vals []*utils.NodeValue8 = make([]*utils.NodeValue8, 0, 4+len(receipt.Logs))
 	txIndexBig := big.NewInt(int64(txIndex))
 
 	key, val, err := generateL2TxHash(txIndexBig, l2TxHash.Big())
