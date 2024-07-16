@@ -181,9 +181,7 @@ func IsArrayUint64Empty(arr []uint64) bool {
 
 func Value8FromBigIntArray(arr []*big.Int) NodeValue8 {
 	nv := [8]*big.Int{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return nv
 }
 
@@ -192,9 +190,7 @@ func NodeValue12FromBigIntArray(arr []*big.Int) (*NodeValue12, error) {
 		return &NodeValue12{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue12{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return &nv, nil
 }
 
@@ -247,13 +243,9 @@ func (nv *NodeValue12) IsFinalNode() bool {
 	return nv[8].Cmp(big.NewInt(1)) == 0
 }
 
-// 3 times more efficient than sprintf
+// 7 times more efficient than sprintf
 func ConvertBigIntToHex(n *big.Int) string {
-	hex := make([]byte, 0, 2+len(n.Text(16)))
-	hex = append(hex, "0x"...)
-	hex = strconv.AppendUint(hex, n.Uint64(), 16)
-
-	return string(hex)
+	return "0x" + n.Text(16)
 }
 
 func ConvertHexToBigInt(hex string) *big.Int {
