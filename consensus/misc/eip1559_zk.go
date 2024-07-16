@@ -10,7 +10,7 @@ func CalcBaseFeeZk(config *chain.Config, parent *types.Header) *big.Int {
 	if config.SupportGasless {
 		return big.NewInt(0)
 	}
-	if !config.IsLondon(parent.Number.Uint64()) {
+	if !config.IsLondon(parent.Number.Uint64() + 1) {
 		return big.NewInt(0)
 	}
 
