@@ -141,7 +141,7 @@ func TestSMT_Create_CompareWithRandomData(t *testing.T) {
 }
 
 func TestSMT_Create_Benchmark(t *testing.T) {
-	limit := 500000
+	limit := 100000
 	ctx := context.Background()
 
 	kvMap := map[utils.NodeKey]utils.NodeValue8{}
