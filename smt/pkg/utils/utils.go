@@ -181,9 +181,7 @@ func IsArrayUint64Empty(arr []uint64) bool {
 
 func Value8FromBigIntArray(arr []*big.Int) NodeValue8 {
 	nv := [8]*big.Int{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return nv
 }
 
@@ -192,9 +190,7 @@ func NodeValue12FromBigIntArray(arr []*big.Int) (*NodeValue12, error) {
 		return &NodeValue12{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue12{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return &nv, nil
 }
 
@@ -213,17 +209,15 @@ func NodeValue8FromBigIntArray(arr []*big.Int) (*NodeValue8, error) {
 		return &NodeValue8{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue8{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return &nv, nil
 }
 
 func BigIntArrayFromNodeValue8(nv *NodeValue8) []*big.Int {
 	arr := make([]*big.Int, 8)
-	for i, v := range nv {
-		arr[i] = v
-	}
+
+	copy(arr, nv[:])
+
 	return arr
 }
 
@@ -248,8 +242,7 @@ func (nv *NodeValue12) IsFinalNode() bool {
 }
 
 func ConvertBigIntToHex(n *big.Int) string {
-	hex := fmt.Sprintf("0x%0x", n)
-	return hex
+	return "0x" + n.Text(16)
 }
 
 func ConvertHexToBigInt(hex string) *big.Int {
@@ -407,9 +400,7 @@ func BinaryKey(key NodeKey) string {
 func ConcatArrays4(a, b [4]uint64) [8]uint64 {
 	result := [8]uint64{}
 
-	for i, v := range a {
-		result[i] = v
-	}
+	copy(result[:], a[:])
 
 	for i, v := range b {
 		result[i+4] = v
@@ -489,33 +480,31 @@ func ScalarToArrayBig12(scalar *big.Int) []*big.Int {
 	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11}
 }
 
-func ScalarToArrayBig(scalar *big.Int) []*big.Int {
-	scalar = new(big.Int).Set(scalar)
-	mask := new(big.Int)
-	mask.SetString("FFFFFFFF", 16)
+var mask = big.NewInt(4294967295)
 
+func ScalarToArrayBig(scalar *big.Int) []*big.Int {
 	r0 := new(big.Int).And(scalar, mask)
 
 	r1 := new(big.Int).Rsh(scalar, 32)
-	r1 = new(big.Int).And(r1, mask)
+	r1.And(r1, mask)
 
 	r2 := new(big.Int).Rsh(scalar, 64)
-	r2 = new(big.Int).And(r2, mask)
+	r2.And(r2, mask)
 
 	r3 := new(big.Int).Rsh(scalar, 96)
-	r3 = new(big.Int).And(r3, mask)
+	r3.And(r3, mask)
 
 	r4 := new(big.Int).Rsh(scalar, 128)
-	r4 = new(big.Int).And(r4, mask)
+	r4.And(r4, mask)
 
 	r5 := new(big.Int).Rsh(scalar, 160)
-	r5 = new(big.Int).And(r5, mask)
+	r5.And(r5, mask)
 
 	r6 := new(big.Int).Rsh(scalar, 192)
-	r6 = new(big.Int).And(r6, mask)
+	r6.And(r6, mask)
 
 	r7 := new(big.Int).Rsh(scalar, 224)
-	r7 = new(big.Int).And(r7, mask)
+	r7.And(r7, mask)
 
 	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7}
 }
@@ -705,14 +694,10 @@ func HashContractBytecode(bc string) (string, error) {
 		}
 
 		var in [8]uint64
-		for i, value := range elementsToHash[4:12] {
-			in[i] = value
-		}
+		copy(in[:], elementsToHash[4:12])
 
 		var capacity [4]uint64
-		for i, value := range elementsToHash[:4] {
-			capacity[i] = value
-		}
+		copy(capacity[:], elementsToHash[:4])
 
 		tmpHash, err = Hash(in, capacity)
 		if err != nil {
