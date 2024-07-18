@@ -100,7 +100,12 @@ func (nv *NodeValue8) ToUintArray() [8]uint64 {
 	var result [8]uint64
 
 	if nv != nil {
-		copy(result[:], nv[:])
+		for i := 0; i < 8; i++ {
+			if nv[i] != nil {
+				result[i] = nv[i].Uint64()
+			}
+			// if nv[i] is nil, result[i] will remain as its zero value (0)
+		}
 	}
 	// if nv is nil, result will be an array of 8 zeros
 
@@ -210,9 +215,9 @@ func NodeValue8FromBigIntArray(arr []*big.Int) (*NodeValue8, error) {
 
 func BigIntArrayFromNodeValue8(nv *NodeValue8) []*big.Int {
 	arr := make([]*big.Int, 8)
-	for i, v := range nv {
-		arr[i] = v
-	}
+
+	copy(arr, nv[:])
+
 	return arr
 }
 
@@ -395,9 +400,7 @@ func BinaryKey(key NodeKey) string {
 func ConcatArrays4(a, b [4]uint64) [8]uint64 {
 	result := [8]uint64{}
 
-	for i, v := range a {
-		result[i] = v
-	}
+	copy(result[:], a[:])
 
 	for i, v := range b {
 		result[i+4] = v
@@ -693,14 +696,10 @@ func HashContractBytecode(bc string) (string, error) {
 		}
 
 		var in [8]uint64
-		for i, value := range elementsToHash[4:12] {
-			in[i] = value
-		}
+		copy(in[:], elementsToHash[4:12])
 
 		var capacity [4]uint64
-		for i, value := range elementsToHash[:4] {
-			capacity[i] = value
-		}
+		copy(capacity[:], elementsToHash[:4])
 
 		tmpHash, err = Hash(in, capacity)
 		if err != nil {
