@@ -104,7 +104,7 @@ type BlockInfoTree struct {
 
 func NewBlockInfoTree() *BlockInfoTree {
 	return &BlockInfoTree{
-		smt: smt.NewSMT(nil),
+		smt: smt.NewSMT(nil, true),
 	}
 }
 func (b *BlockInfoTree) GetRoot() *big.Int {
