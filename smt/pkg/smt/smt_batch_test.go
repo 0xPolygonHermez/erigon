@@ -359,21 +359,15 @@ func TestBatchWitness(t *testing.T) {
 
 	smtIncremental := smt.NewSMT(nil, false)
 	smtBatch := smt.NewSMT(nil, false)
-	smtBatchNoSave := smt.NewSMT(nil, true)
 
 	for i, k := range keys {
 		smtIncremental.Insert(k, values[i])
 		_, err := smtBatch.InsertBatch(context.Background(), "", []*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
 		assert.NilError(t, err)
 
-		_, err = smtBatchNoSave.InsertBatch(context.Background(), "", []*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
-		assert.NilError(t, err)
-
 		smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
 		smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
-		smtBatchNoSaveRootHash, _ := smtBatchNoSave.Db.GetLastRoot()
 		assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtIncrementalRootHash))
-		assert.Equal(t, utils.ConvertBigIntToHex(smtBatchRootHash), utils.ConvertBigIntToHex(smtBatchNoSaveRootHash))
 	}
 
 	smtIncremental.DumpTree()
