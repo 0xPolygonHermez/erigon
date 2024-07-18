@@ -20,12 +20,10 @@ func EnableTimer(enable bool) {
 }
 
 func StartTimer(taskNames ...string) *Timer {
-	if !timerEnabled {
-		return nil
-	}
 	return &Timer{
 		start:     time.Now(),
 		taskNames: taskNames,
+		elapsed:   0,
 	}
 }
 
