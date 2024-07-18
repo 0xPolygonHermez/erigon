@@ -316,7 +316,6 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 		}
 
 		prevStateRoot = block.Root()
-		reader.Close() // close the cursors created by the plainstate
 	}
 
 	var rl trie.RetainDecider
