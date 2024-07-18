@@ -100,12 +100,7 @@ func (nv *NodeValue8) ToUintArray() [8]uint64 {
 	var result [8]uint64
 
 	if nv != nil {
-		for i := 0; i < 8; i++ {
-			if nv[i] != nil {
-				result[i] = nv[i].Uint64()
-			}
-			// if nv[i] is nil, result[i] will remain as its zero value (0)
-		}
+		copy(result[:], nv[:])
 	}
 	// if nv is nil, result will be an array of 8 zeros
 
@@ -181,9 +176,7 @@ func IsArrayUint64Empty(arr []uint64) bool {
 
 func Value8FromBigIntArray(arr []*big.Int) NodeValue8 {
 	nv := [8]*big.Int{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return nv
 }
 
@@ -192,9 +185,7 @@ func NodeValue12FromBigIntArray(arr []*big.Int) (*NodeValue12, error) {
 		return &NodeValue12{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue12{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return &nv, nil
 }
 
@@ -213,9 +204,7 @@ func NodeValue8FromBigIntArray(arr []*big.Int) (*NodeValue8, error) {
 		return &NodeValue8{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue8{}
-	for i, v := range arr {
-		nv[i] = v
-	}
+	copy(nv[:], arr)
 	return &nv, nil
 }
 
@@ -248,8 +237,7 @@ func (nv *NodeValue12) IsFinalNode() bool {
 }
 
 func ConvertBigIntToHex(n *big.Int) string {
-	hex := fmt.Sprintf("0x%0x", n)
-	return hex
+	return "0x" + n.Text(16)
 }
 
 func ConvertHexToBigInt(hex string) *big.Int {
