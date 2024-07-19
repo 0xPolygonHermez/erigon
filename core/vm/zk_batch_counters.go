@@ -290,13 +290,13 @@ func (bcc *BatchCounterCollector) UpdateProcessingCountersCache(txCounters *Tran
 	}
 }
 
-func (bcc *BatchCounterCollector) CacheCounters() {
+func (bcc *BatchCounterCollector) SnapshotCounters() {
 	bcc.rlpCombinedCountersCache = bcc.rlpCombinedCounters.Clone()
 	bcc.executionCombinedCountersCache = bcc.executionCombinedCounters.Clone()
 	bcc.processingCombinedCountersCache = bcc.processingCombinedCounters.Clone()
 }
 
-func (bcc *BatchCounterCollector) ResetCounters() {
+func (bcc *BatchCounterCollector) RevertToSnapshotCounters() {
 	bcc.rlpCombinedCounters = bcc.rlpCombinedCountersCache.Clone()
 	bcc.executionCombinedCounters = bcc.executionCombinedCountersCache.Clone()
 	bcc.processingCombinedCounters = bcc.processingCombinedCountersCache.Clone()
