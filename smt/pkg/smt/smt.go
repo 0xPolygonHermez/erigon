@@ -542,22 +542,19 @@ func prepareHashValueForSave(in [8]uint64, capacity [4]uint64) utils.NodeValue12
 	sl = append(sl, in[:]...)
 	sl = append(sl, capacity[:]...)
 
-		v := utils.NodeValue12{}
-		for i, val := range sl {
-			b := new(big.Int)
-			v[i] = b.SetUint64(val)
-		}
-
-		err := s.Db.Insert(h, v)
-		if err != nil {
-			return [4]uint64{}
-		}
+	v := utils.NodeValue12{}
+	for i, val := range sl {
+		b := new(big.Int)
+		v[i] = b.SetUint64(val)
 	}
 
 	return v
 }
 
 func (s *SMT) hashSave(in [8]uint64, capacity, h [4]uint64) error {
+	if s.noSaveOnInsert {
+		return nil
+	}
 	v := prepareHashValueForSave(in, capacity)
 
 	return s.Db.Insert(h, v)
