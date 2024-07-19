@@ -60,7 +60,7 @@ func TestSMT_Create_Insert(t *testing.T) {
 	ctx := context.Background()
 	for _, scenario := range testCases {
 		t.Run(scenario.name, func(t *testing.T) {
-			s := NewSMT(nil)
+			s := NewSMT(nil, false)
 			keys := []utils.NodeKey{}
 			for k, v := range scenario.kvMap {
 				if !v.IsZero() {
@@ -94,7 +94,7 @@ func TestSMT_Create_CompareWithRandomData(t *testing.T) {
 
 	//build and benchmark the tree the first way
 	startTime := time.Now()
-	s1 := NewSMT(nil)
+	s1 := NewSMT(nil, false)
 
 	var root1 *big.Int
 	for k, v := range kvMap {
@@ -112,7 +112,7 @@ func TestSMT_Create_CompareWithRandomData(t *testing.T) {
 
 	//build the tree the from kvbulk
 	startTime = time.Now()
-	s2 := NewSMT(nil)
+	s2 := NewSMT(nil, false)
 	// set scenario old root if fail
 	keys := []utils.NodeKey{}
 	for k, v := range kvMap {
@@ -153,7 +153,7 @@ func TestSMT_Create_Benchmark(t *testing.T) {
 	//build and benchmark the tree the first way
 	startTime := time.Now()
 	//build the tree the from kvbulk
-	s := NewSMT(nil)
+	s := NewSMT(nil, false)
 	// set scenario old root if fail
 	keys := []utils.NodeKey{}
 	for k, v := range kvMap {

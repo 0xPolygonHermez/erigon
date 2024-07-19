@@ -127,7 +127,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 
 	shouldRegenerate := to > s.BlockNumber && to-s.BlockNumber > cfg.zk.RebuildTreeAfter
 	eridb := db2.NewEriDb(tx)
-	smt := smt.NewSMT(eridb)
+	smt := smt.NewSMT(eridb, false)
 
 	if cfg.zk.IncrementTreeAlways {
 		// increment only behaviour
@@ -414,7 +414,7 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 
 			ach := hexutils.BytesToHex(cc)
 			if len(ach) > 0 {
-				hexcc := fmt.Sprintf("0x%s", ach)
+				hexcc := "0x" + ach
 				codeChanges[addr] = hexcc
 				if err != nil {
 					return trie.EmptyRoot, err
@@ -475,7 +475,7 @@ func unwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, db kv.R
 	defer log.Info(fmt.Sprintf("[%s] Unwind ended", logPrefix))
 
 	eridb := db2.NewEriDb(db)
-	dbSmt := smt.NewSMT(eridb)
+	dbSmt := smt.NewSMT(eridb, false)
 
 	log.Info(fmt.Sprintf("[%s]", logPrefix), "last root", common.BigToHash(dbSmt.LastRoot()))
 
@@ -582,7 +582,7 @@ func unwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, db kv.R
 				ach := hexutils.BytesToHex(cc)
 				hexcc := ""
 				if len(ach) > 0 {
-					hexcc = fmt.Sprintf("0x%s", ach)
+					hexcc = "0x" + ach
 				}
 				codeChanges[addr] = hexcc
 			}
@@ -668,7 +668,7 @@ func processAccount(db smt.DB, a *accounts.Account, as map[string]string, inc ui
 
 	ach := hexutils.BytesToHex(cc)
 	if len(ach) > 0 {
-		hexcc := fmt.Sprintf("0x%s", ach)
+		hexcc := "0x" + ach
 		keys, err = insertContractBytecodeToKV(db, keys, addr.String(), hexcc)
 		if err != nil {
 			return []utils.NodeKey{}, err

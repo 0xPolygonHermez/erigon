@@ -140,35 +140,69 @@ LOOP:
 					treeInitialised = true
 				}
 
-				latestUpdate, err = HandleL1InfoTreeUpdate(cfg.syncer, hermezDb, l, latestUpdate, found, header)
+				if header == nil {
+					header, err = cfg.syncer.GetHeader(l.BlockNumber)
+					if err != nil {
+						return err
+					}
+				}
+
+				tmpUpdate, err := CreateL1InfoTreeUpdate(l, header)
+
 				if err != nil {
 					return err
 				}
+
+				leafHash := l1infotree.HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
+
+				if tree.LeafExists(leafHash) {
+					log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", leafHash)
+					continue
+				}
+
+				if found {
+					tmpUpdate.Index = latestUpdate.Index + 1
+				} else {
+					tmpUpdate.Index = 0
+				}
+
 				found = true
+				latestUpdate = tmpUpdate
 
-				leafHash := l1infotree.HashLeafData(latestUpdate.GER, latestUpdate.ParentHash, latestUpdate.Timestamp)
-
-				err = hermezDb.WriteL1InfoTreeLeaf(latestUpdate.Index, leafHash)
+				err = HandleL1InfoTreeUpdate(hermezDb, latestUpdate)
 				if err != nil {
 					return err
 				}
 
-				newRoot, err := tree.AddLeaf(uint32(latestUpdate.Index), leafHash)
+				leafFoundInDb, err := hermezDb.IsL1InfoTreeLeafSaves(leafHash)
 				if err != nil {
 					return err
 				}
-				log.Debug("New L1 Index",
-					"index", latestUpdate.Index,
-					"root", newRoot.String(),
-					"mainnet", latestUpdate.MainnetExitRoot.String(),
-					"rollup", latestUpdate.RollupExitRoot.String(),
-					"ger", latestUpdate.GER.String(),
-					"parent", latestUpdate.ParentHash.String(),
-				)
 
-				err = hermezDb.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), latestUpdate.Index)
-				if err != nil {
-					return err
+				if leafFoundInDb {
+					log.Warn("Leaf already saved in db", "index", latestUpdate.Index, "hash", leafHash)
+				} else {
+					if err = hermezDb.WriteL1InfoTreeLeaf(latestUpdate.Index, leafHash); err != nil {
+						return err
+					}
+
+					newRoot, err := tree.AddLeaf(uint32(latestUpdate.Index), leafHash)
+					if err != nil {
+						return err
+					}
+					log.Debug("New L1 Index",
+						"index", latestUpdate.Index,
+						"root", newRoot.String(),
+						"mainnet", latestUpdate.MainnetExitRoot.String(),
+						"rollup", latestUpdate.RollupExitRoot.String(),
+						"ger", latestUpdate.GER.String(),
+						"parent", latestUpdate.ParentHash.String(),
+					)
+
+					err = hermezDb.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), latestUpdate.Index)
+					if err != nil {
+						return err
+					}
 				}
 
 				processed++
