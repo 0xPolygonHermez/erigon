@@ -112,7 +112,10 @@ LOOP:
 	defer ticker.Stop()
 	processed := 0
 
-	var tree *l1infotree.L1InfoTree
+	tree, err := initialiseL1InfoTree(hermezDb)
+	if err != nil {
+		return err
+	}
 
 	// process the logs in chunks
 	for _, chunk := range chunks {
@@ -130,13 +133,6 @@ LOOP:
 		for _, l := range chunk {
 			switch l.Topics[0] {
 			case contracts.UpdateL1InfoTreeTopic:
-				if tree == nil {
-					tree, err = initialiseL1InfoTree(hermezDb)
-					if err != nil {
-						return err
-					}
-				}
-
 				header := headersMap[l.BlockNumber]
 				if header == nil {
 					header, err = cfg.syncer.GetHeader(l.BlockNumber)
