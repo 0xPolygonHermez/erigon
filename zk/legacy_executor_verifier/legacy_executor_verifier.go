@@ -283,8 +283,10 @@ func (v *LegacyExecutorVerifier) AddRequestUnsafe(request *VerifierRequest, sequ
 		// log timing w/o stream write
 		t.LogTimer()
 
-		if err = v.checkAndWriteToStream(tx, hermezDb, request.BatchNumber); err != nil {
-			log.Error("error writing data to stream", "err", err)
+		if ok {
+			if err = v.checkAndWriteToStream(tx, hermezDb, request.BatchNumber); err != nil {
+				log.Error("error writing data to stream", "err", err)
+			}
 		}
 
 		verifierBundle.response = &VerifierResponse{
