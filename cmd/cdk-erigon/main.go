@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/pprof"
 	"strings"
 
 	"github.com/gateway-fm/vectorized-poseidon-gold/src/vectorizedposeidongold"
@@ -18,11 +19,18 @@ import (
 	"github.com/ledgerwatch/erigon/params"
 	erigonapp "github.com/ledgerwatch/erigon/turbo/app"
 	erigoncli "github.com/ledgerwatch/erigon/turbo/cli"
-	"github.com/ledgerwatch/erigon/turbo/node"
 	"github.com/ledgerwatch/erigon/turbo/logging"
+	"github.com/ledgerwatch/erigon/turbo/node"
 )
 
 func main() {
+	f, perr := os.Create("cpu.pprof")
+	if perr != nil {
+		panic(perr)
+	}
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
+
 	defer func() {
 		/*
 			panicResult := recover()
