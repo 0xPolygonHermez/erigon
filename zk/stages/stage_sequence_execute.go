@@ -83,23 +83,6 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	if !isLastBatchPariallyProcessed && !isLastEntryBatchEnd {
-		log.Warn(fmt.Sprintf("[%s] Last batch %d was not closed properly, closing it now...", logPrefix, lastBatch))
-		ler, err := utils.GetBatchLocalExitRootFromSCStorage(lastBatch, sdb.hermezDb.HermezDbReader, tx)
-		if err != nil {
-			return err
-		}
-
-		lastBlock, err := rawdb.ReadBlockByNumber(sdb.tx, executionAt)
-		if err != nil {
-			return err
-		}
-		root := lastBlock.Root()
-		if err = cfg.datastreamServer.WriteBatchEnd(sdb.hermezDb, lastBatch, lastBatch-1, &root, &ler); err != nil {
-			return err
-		}
-	}
-
 	// injected batch
 	if executionAt == 0 {
 		// set the block height for the fork we're running at to ensure contract interactions are correct
@@ -130,6 +113,23 @@ func SpawnSequencingStage(
 		}
 
 		return nil
+	}
+
+	if !isLastBatchPariallyProcessed && !isLastEntryBatchEnd {
+		log.Warn(fmt.Sprintf("[%s] Last batch %d was not closed properly, closing it now...", logPrefix, lastBatch))
+		ler, err := utils.GetBatchLocalExitRootFromSCStorage(lastBatch, sdb.hermezDb.HermezDbReader, tx)
+		if err != nil {
+			return err
+		}
+
+		lastBlock, err := rawdb.ReadBlockByNumber(sdb.tx, executionAt)
+		if err != nil {
+			return err
+		}
+		root := lastBlock.Root()
+		if err = cfg.datastreamServer.WriteBatchEnd(sdb.hermezDb, lastBatch, lastBatch-1, &root, &ler); err != nil {
+			return err
+		}
 	}
 
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {

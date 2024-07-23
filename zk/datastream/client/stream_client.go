@@ -196,7 +196,7 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 		return err
 	}
 	count := uint64(0)
-	logTicker := time.NewTicker(2 * time.Second)
+	logTicker := time.NewTicker(10 * time.Second)
 
 	for {
 		select {
