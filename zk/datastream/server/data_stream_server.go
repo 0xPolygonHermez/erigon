@@ -93,6 +93,9 @@ func (d *DataStreamEntries) Size() int {
 }
 
 func (d *DataStreamEntries) Entries() []DataStreamEntryProto {
+	if d == nil || d.entries == nil {
+		return []DataStreamEntryProto{}
+	}
 	return d.entries
 }
 
@@ -148,19 +151,19 @@ func (srv *DataStreamServer) CommitEntriesToStreamProto(entries []DataStreamEntr
 }
 
 func createBlockWithBatchCheckStreamEntriesProto(
-	chainId uint64,
 	reader DbReader,
 	tx kv.Tx,
 	block,
 	lastBlock *eritypes.Block,
-	transactions *eritypes.Transactions,
 	batchNumber,
-	lastBatchNumber uint64,
+	lastBatchNumber,
+	chainId,
+	forkId uint64,
 	shouldSkipBatchEndEntry bool,
 ) (*DataStreamEntries, error) {
 	var err error
-	var blockEntriesProto, endEntriesProto []DataStreamEntryProto
-	var startEntriesProto *DataStreamEntries
+	var endEntriesProto []DataStreamEntryProto
+	var startEntriesProto, blockEntries *DataStreamEntries
 	// we might have a series of empty batches to account for, so we need to know the gap
 	batchGap := batchNumber - lastBatchNumber
 	isBatchStart := batchGap > 0
@@ -191,11 +194,6 @@ func createBlockWithBatchCheckStreamEntriesProto(
 
 	blockNum := block.NumberU64()
 
-	forkId, err := reader.GetForkId(batchNumber)
-	if err != nil {
-		return nil, err
-	}
-
 	l1InfoTreeMinTimestamps := make(map[uint64]uint64)
 	deltaTimestamp := block.Time() - lastBlock.Time()
 	if blockNum == 1 {
@@ -203,16 +201,18 @@ func createBlockWithBatchCheckStreamEntriesProto(
 		l1InfoTreeMinTimestamps[0] = 0
 	}
 
-	blockEntries, err := createFullBlockStreamEntriesProto(reader, tx, block, *transactions, forkId, deltaTimestamp, batchNumber, l1InfoTreeMinTimestamps)
-	if err != nil {
+	if blockEntries, err = createFullBlockStreamEntriesProto(reader, tx, block, block.Transactions(), forkId, deltaTimestamp, batchNumber, l1InfoTreeMinTimestamps); err != nil {
 		return nil, err
 	}
-	blockEntriesProto = blockEntries.Entries()
 
-	entries := NewDataStreamEntries(len(endEntriesProto) + startEntriesProto.Size() + len(blockEntriesProto))
+	if blockEntries.Size() == 0 {
+		return nil, fmt.Errorf("didn't create any entries for block %d", blockNum)
+	}
+
+	entries := NewDataStreamEntries(len(endEntriesProto) + startEntriesProto.Size() + blockEntries.Size())
 	entries.AddMany(endEntriesProto)
 	entries.AddMany(startEntriesProto.Entries())
-	entries.AddMany(blockEntriesProto)
+	entries.AddMany(blockEntries.Entries())
 
 	return entries, nil
 }

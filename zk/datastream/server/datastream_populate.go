@@ -139,6 +139,7 @@ func (srv *DataStreamServer) WriteBlocksToStreamConsecutively(
 	}
 
 	entries := make([]DataStreamEntryProto, 0, insertEntryCount)
+	var forkId uint64
 LOOP:
 	for currentBlockNumber := from; currentBlockNumber <= to; currentBlockNumber++ {
 		select {
@@ -161,8 +162,15 @@ LOOP:
 			return err
 		}
 
-		transations := block.Transactions()
-		blockEntries, err := createBlockWithBatchCheckStreamEntriesProto(srv.chainId, reader, tx, block, lastBlock, &transations, batchNum, latestbatchNum, islastEntrybatchEnd)
+		// fork id changes only per batch so query it only once per batch
+		if batchNum != latestbatchNum {
+			forkId, err = reader.GetForkId(batchNum)
+			if err != nil {
+				return err
+			}
+		}
+
+		blockEntries, err := createBlockWithBatchCheckStreamEntriesProto(reader, tx, block, lastBlock, batchNum, latestbatchNum, srv.chainId, forkId, islastEntrybatchEnd)
 		if err != nil {
 			return err
 		}
