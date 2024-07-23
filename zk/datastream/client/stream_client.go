@@ -195,7 +195,18 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 	if err := c.initiateDownloadBookmark(protoBookmark); err != nil {
 		return err
 	}
+	count := uint64(0)
+	logTicker := time.NewTicker(2 * time.Second)
+
 	for {
+		select {
+		case <-logTicker.C:
+			fmt.Println("Entries read count: ", count)
+		default:
+		}
+		if c.Header.TotalEntries == count {
+			break
+		}
 		file, err := c.readFileEntry()
 		if err != nil {
 			return fmt.Errorf("error reading file entry: %v", err)
@@ -204,7 +215,10 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 			return fmt.Errorf("error executing function: %v", err)
 
 		}
+		count++
 	}
+
+	return nil
 }
 
 // reads entries to the end of the stream

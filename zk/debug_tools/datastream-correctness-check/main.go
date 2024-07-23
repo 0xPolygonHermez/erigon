@@ -114,9 +114,10 @@ func main() {
 		return nil
 	}
 	// send start command
-	if err := client.ExecutePerFile(bookmark, function); err != nil {
-		fmt.Println("progress block: ", progressBlock)
-		fmt.Println("progress batch: ", progressBatch)
+	err = client.ExecutePerFile(bookmark, function)
+	fmt.Println("progress block: ", progressBlock)
+	fmt.Println("progress batch: ", progressBatch)
+	if err != nil {
 		panic(fmt.Sprintf("found an error: %s", err))
 	}
 }
