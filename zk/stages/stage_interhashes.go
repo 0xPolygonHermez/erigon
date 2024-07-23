@@ -148,7 +148,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			return trie.EmptyRoot, err
 		}
 	} else {
-		if root, err = regenerateIntermediateHashes(logPrefix, tx, eridb, smt, to); err != nil {
+		if root, err = regenerateIntermediateHashes(ctx, logPrefix, tx, eridb, smt, to); err != nil {
 			return trie.EmptyRoot, err
 		}
 	}
