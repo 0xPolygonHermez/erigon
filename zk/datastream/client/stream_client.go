@@ -181,6 +181,32 @@ func (c *StreamClient) ReadEntries(bookmark *types.BookmarkProto, l2BlocksAmount
 	return fullL2Blocks, gerUpates, batchBookmarks, blockBookmarks, entriesRead, nil
 }
 
+func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function func(file *types.FileEntry) error) error {
+	// Get header from server
+	if err := c.GetHeader(); err != nil {
+		return fmt.Errorf("%s get header error: %v", c.id, err)
+	}
+
+	protoBookmark, err := bookmark.Marshal()
+	if err != nil {
+		return fmt.Errorf("failed to marshal bookmark: %v", err)
+	}
+
+	if err := c.initiateDownloadBookmark(protoBookmark); err != nil {
+		return err
+	}
+	for {
+		file, err := c.readFileEntry()
+		if err != nil {
+			return fmt.Errorf("error reading file entry: %v", err)
+		}
+		if err := function(file); err != nil {
+			return fmt.Errorf("error executing function: %v", err)
+
+		}
+	}
+}
+
 // reads entries to the end of the stream
 // at end will wait for new entries to arrive
 func (c *StreamClient) ReadAllEntriesToChannel() error {
