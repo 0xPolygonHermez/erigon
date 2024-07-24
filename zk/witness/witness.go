@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"math/big"
+
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/datadir"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -27,11 +29,10 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/l1_data"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	zkUtils "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
-	"github.com/ledgerwatch/erigon/zk/l1_data"
-	"math/big"
 )
 
 var (
@@ -69,6 +70,9 @@ func NewGenerator(
 }
 
 func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum uint64, debug, witnessFull bool) ([]byte, error) {
+	t := zkUtils.StartTimer("witness", "getwitnessbybatch")
+	defer t.LogTimer()
+
 	reader := hermez_db.NewHermezDbReader(tx)
 	badBatch, err := reader.GetInvalidBatch(batchNum)
 	if err != nil {
@@ -143,6 +147,9 @@ func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum ui
 }
 
 func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error) {
+	t := zkUtils.StartTimer("witness", "getwitnessbyblockrange")
+	defer t.LogTimer()
+
 	if startBlock > endBlock {
 		return nil, ErrEndBeforeStart
 	}
@@ -165,6 +172,9 @@ func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startB
 }
 
 func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eritypes.Block, debug, witnessFull bool) ([]byte, error) {
+	t := zkUtils.StartTimer("witness", "generatewitness")
+	defer t.LogTimer()
+
 	endBlock := blocks[len(blocks)-1].NumberU64()
 	startBlock := blocks[0].NumberU64()
 
@@ -232,9 +242,12 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 
 	prevStateRoot := prevHeader.Root
 
+	reader := state.NewPlainState(tx, blocks[0].NumberU64(), systemcontracts.SystemContractCodeLookup[g.chainCfg.ChainName])
+	defer reader.Close()
+
 	for _, block := range blocks {
 		blockNum := block.NumberU64()
-		reader := state.NewPlainState(tx, blockNum, systemcontracts.SystemContractCodeLookup[g.chainCfg.ChainName])
+		reader.SetBlockNr(blockNum)
 
 		tds.SetStateReader(reader)
 
@@ -303,7 +316,6 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 		}
 
 		prevStateRoot = block.Root()
-		reader.Close() // close the cursors created by the plainstate
 	}
 
 	var rl trie.RetainDecider
@@ -318,7 +330,7 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 	}
 
 	eridb := db2.NewEriDb(batch)
-	smtTrie := smt.NewSMT(eridb)
+	smtTrie := smt.NewSMT(eridb, false)
 
 	witness, err := smt.BuildWitness(smtTrie, rl, ctx)
 	if err != nil {

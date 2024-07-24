@@ -521,6 +521,11 @@ var (
 		Usage: "Define the host used for the zkevm data stream",
 		Value: "",
 	}
+	DataStreamWriteTimeout = cli.DurationFlag{
+		Name:  "zkevm.data-stream-writeTimeout",
+		Usage: "Define the TCP write timeout when sending data to a datastream client",
+		Value: 5 * time.Second,
+	}
 	Limbo = cli.BoolFlag{
 		Name:  "zkevm.limbo",
 		Usage: "Enable limbo processing on batches that failed verification",
@@ -605,6 +610,11 @@ var (
 		Name:  "zkevm.da-url",
 		Usage: "The URL of the data availability service",
 		Value: "",
+	}
+	DebugTimers = cli.BoolFlag{
+		Name:  "debug.timers",
+		Usage: "Enable debug timers",
+		Value: false,
 	}
 	DebugNoSync = cli.BoolFlag{
 		Name:  "debug.no-sync",

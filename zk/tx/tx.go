@@ -322,7 +322,7 @@ func TransactionToL2Data(tx types.Transaction, forkId uint16, efficiencyPercenta
 		removeLeadingZeroesFromBytes(gas),
 		to, // don't remove leading 0s from addr
 		removeLeadingZeroesFromBytes(valueBytes),
-		removeLeadingZeroesFromBytes(tx.GetData()),
+		tx.GetData(),
 	}
 
 	if !tx.GetChainID().Eq(uint256.NewInt(0)) || !(v.Eq(uint256.NewInt(27)) || v.Eq(uint256.NewInt(28))) {
@@ -384,7 +384,7 @@ func GetDecodedV(tx types.Transaction, v *uint256.Int) *uint256.Int {
 
 func GenerateBlockBatchL2Data(forkId uint16, deltaTimestamp uint32, l1InfoTreeIndex uint32, transactions []types.Transaction, egTx map[common.Hash]uint8) ([]byte, error) {
 	// add in the changeL2Block transaction
-	result := GenerateStartBlockBatchL2Data(forkId, deltaTimestamp, l1InfoTreeIndex)
+	result := GenerateStartBlockBatchL2Data(deltaTimestamp, l1InfoTreeIndex)
 
 	for _, transaction := range transactions {
 		encoded, err := TransactionToL2Data(transaction, forkId, egTx[transaction.Hash()])
@@ -397,7 +397,11 @@ func GenerateBlockBatchL2Data(forkId uint16, deltaTimestamp uint32, l1InfoTreeIn
 	return result, nil
 }
 
-func GenerateStartBlockBatchL2Data(forkId uint16, deltaTimestamp uint32, l1InfoTreeIndex uint32) []byte {
+var (
+	START_BLOCK_BATCH_L2_DATA_SIZE = uint64(65) // change this if GenerateStartBlockBatchL2Data changes
+)
+
+func GenerateStartBlockBatchL2Data(deltaTimestamp uint32, l1InfoTreeIndex uint32) []byte {
 	var result []byte
 
 	// add in the changeL2Block transaction
@@ -500,6 +504,8 @@ func ComputeL2TxHash(
 	return common.HexToHash(hashed), nil
 }
 
+var re = regexp.MustCompile("^[0-9a-fA-F]*$")
+
 func formatL2TxHashParam(param interface{}, paramLength int) (string, error) {
 	var paramStr string
 
@@ -556,11 +562,7 @@ func formatL2TxHashParam(param interface{}, paramLength int) (string, error) {
 		paramStr = "0" + paramStr
 	}
 
-	matched, err := regexp.MatchString("^[0-9a-fA-F]+$", paramStr)
-	if err != nil {
-		return "", err
-	}
-	if !matched {
+	if !re.MatchString(paramStr) {
 		return "", fmt.Errorf("invalid hex string")
 	}
 

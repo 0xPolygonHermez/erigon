@@ -6,10 +6,10 @@ import (
 
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/core/state"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 func newBatchBookmarkEntryProto(batchNo uint64) *types.BookmarkProto {
@@ -134,11 +134,15 @@ func createBatchStartEntriesProto(
 	batchNumber, lastBatchNumber, batchGap, chainId uint64,
 	root libcommon.Hash,
 	gers []types.GerUpdateProto,
-) ([]DataStreamEntryProto, error) {
+) (*DataStreamEntries, error) {
 	var err error
 	var batchStartEntries []DataStreamEntryProto
 
-	entries := make([]DataStreamEntryProto, 0, 2+int(3*(batchGap-1))+len(gers))
+	batchGapEntriesCount := int(batchGap) - 1
+	if batchGapEntriesCount < 0 {
+		batchGapEntriesCount = 0
+	}
+	entries := NewDataStreamEntries(2 + 3*batchGapEntriesCount + len(gers))
 
 	// if we have a gap of more than 1 batch then we need to write in the batch start and ends for these empty batches
 	if batchGap > 1 {
@@ -150,24 +154,24 @@ func createBatchStartEntriesProto(
 			if batchStartEntries, err = addBatchStartEntries(reader, workingBatch, chainId); err != nil {
 				return nil, err
 			}
-			entries = append(entries, batchStartEntries...)
+			// entries = append(entries, batchStartEntries...)
+			entries.AddMany(batchStartEntries)
 
 			// see if we have any gers to handle
 			for _, ger := range gers {
 				upd := ger.UpdateGER
 				if upd.BatchNumber == workingBatch {
-					entries = append(
-						entries,
+					entries.Add(
 						newGerUpdateProto(upd.BatchNumber, upd.Timestamp, libcommon.BytesToHash(upd.GlobalExitRoot), libcommon.BytesToAddress(upd.Coinbase), upd.ForkId, upd.ChainId, libcommon.BytesToHash(upd.StateRoot)),
 					)
 				}
 			}
 
 			// seal off the last batch
-			if localExitRoot, err = getLocalExitRoot(workingBatch, reader, tx); err != nil {
+			if localExitRoot, err = utils.GetBatchLocalExitRootFromSCStorage(workingBatch, reader, tx); err != nil {
 				return nil, err
 			}
-			entries = append(entries, newBatchEndProto(localExitRoot, root, workingBatch))
+			entries.Add(newBatchEndProto(localExitRoot, root, workingBatch))
 		}
 	}
 
@@ -175,16 +179,15 @@ func createBatchStartEntriesProto(
 	if batchStartEntries, err = addBatchStartEntries(reader, batchNumber, chainId); err != nil {
 		return nil, err
 	}
-	entries = append(entries, batchStartEntries...)
+	entries.AddMany(batchStartEntries)
 	return entries, nil
 }
 
 func addBatchEndEntriesProto(
-	reader DbReader,
-	tx kv.Tx,
-	batchNumber, lastBatchNumber uint64,
-	root libcommon.Hash,
+	batchNumber uint64,
+	root *libcommon.Hash,
 	gers []types.GerUpdateProto,
+	localExitRoot *libcommon.Hash,
 ) ([]DataStreamEntryProto, error) {
 	entries := make([]DataStreamEntryProto, 0, len(gers)+1)
 
@@ -196,12 +199,8 @@ func addBatchEndEntriesProto(
 		}
 	}
 
-	localExitRoot, err := getLocalExitRoot(batchNumber, reader, tx)
-	if err != nil {
-		return nil, err
-	}
 	// seal off the last batch
-	entries = append(entries, newBatchEndProto(localExitRoot, root, batchNumber))
+	entries = append(entries, newBatchEndProto(*localExitRoot, *root, batchNumber))
 
 	return entries, nil
 }
@@ -233,47 +232,6 @@ func addBatchStartEntries(reader DbReader, batchNum, chainId uint64) ([]DataStre
 
 	entries[1] = newBatchStartProto(batchNum, chainId, fork, batchType)
 	return entries, nil
-}
-
-func getLocalExitRoot(batch uint64, reader DbReader, tx kv.Tx) (libcommon.Hash, error) {
-	// now to fetch the LER for the batch - based on the last block of the batch
-	var localExitRoot libcommon.Hash
-	if batch > 0 {
-		checkBatch := batch
-		for ; checkBatch > 0; checkBatch-- {
-			lastBlockNumber, err := reader.GetHighestBlockInBatch(checkBatch)
-			if err != nil {
-				return libcommon.Hash{}, err
-			}
-			stateReader := state.NewPlainState(tx, lastBlockNumber, nil)
-			rawLer, err := stateReader.ReadAccountStorage(state.GER_MANAGER_ADDRESS, 1, &state.GLOBAL_EXIT_ROOT_POS_1)
-			if err != nil {
-				return libcommon.Hash{}, err
-			}
-			stateReader.Close()
-			localExitRoot = libcommon.BytesToHash(rawLer)
-			if localExitRoot != (libcommon.Hash{}) {
-				break
-			}
-		}
-	}
-	return localExitRoot, nil
-}
-
-func filterTransactionByIndexes(
-	filteredTransactions eritypes.Transactions,
-	transactionsToIncludeByIndex []int,
-) eritypes.Transactions {
-	if transactionsToIncludeByIndex != nil {
-		filteredTransactionsBuilder := make(eritypes.Transactions, len(transactionsToIncludeByIndex))
-		for i, txIndexInBlock := range transactionsToIncludeByIndex {
-			filteredTransactionsBuilder[i] = filteredTransactions[txIndexInBlock]
-		}
-
-		filteredTransactions = filteredTransactionsBuilder
-	}
-
-	return filteredTransactions
 }
 
 const (
