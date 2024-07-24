@@ -26,6 +26,7 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 	if err != nil {
 		return common.Hash{}, err
 	}
+
 	defer tx.Rollback()
 	cc, err := api.chainConfig(tx)
 	if err != nil {
