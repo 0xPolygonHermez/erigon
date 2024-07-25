@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"sync/atomic"
+	"time"
 )
 
 type DB interface {
@@ -95,6 +96,7 @@ LOOP:
 			if w.stopped.Load() {
 				break LOOP
 			}
+			time.Sleep(1 * time.Millisecond)
 		}
 	}
 }

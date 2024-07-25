@@ -76,7 +76,6 @@ func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys
 
 	tempTreeBuildStart := time.Now()
 	leafValueMap := sync.Map{}
-	// leafValueMap := make(map[utils.NodeKey]utils.NodeValue8)
 
 	var err error
 	for _, k := range nodeKeys {
@@ -160,7 +159,7 @@ func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys
 			jobResult := utils.NewCalcAndPrepareJobResult(s.Db)
 			//hash, save and delete left leaf
 			deleteFunc := func() utils.JobResult {
-				_, leftHash, err := nodeToDelFrom.node0.deleteTreeNoSave(pathToDeleteFrom, &leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
+				leftHash, err := nodeToDelFrom.node0.deleteTreeNoSave(pathToDeleteFrom, &leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
 				if err != nil {
 					jobResult.Err = err
 					return jobResult
@@ -229,7 +228,7 @@ func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys
 					// get all leaf keys so we can then get all needed values and pass them
 					// this is needed because w can't read from the db in another routine
 					deleteFunc := func() utils.JobResult {
-						_, leftHash, err := nodeToDelFrom.node0.deleteTreeNoSave(pathToDeleteFrom, &leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
+						leftHash, err := nodeToDelFrom.node0.deleteTreeNoSave(pathToDeleteFrom, &leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
 
 						if err != nil {
 							jobResult.Err = err
@@ -239,7 +238,6 @@ func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys
 						nodeToDelFrom.node0 = nil
 						return jobResult
 					}
-					// deleteFunc()
 
 					deletesWorker.AddJob(deleteFunc)
 				}
@@ -250,20 +248,8 @@ func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys
 			}
 		}
 
-	LOOP1:
-		for {
-			select {
-			case result := <-deletesWorker.GetJobResultsChannel():
-				if result.GetError() != nil {
-					return [4]uint64{}, result.GetError()
-				}
-
-				if err := result.Save(); err != nil {
-					return [4]uint64{}, err
-				}
-			default:
-				break LOOP1
-			}
+		if err := runSaveLoop(deletesWorker.GetJobResultsChannel()); err != nil {
+			return [4]uint64{}, err
 		}
 
 		insertedKeysCount++
@@ -274,20 +260,8 @@ func (s *SMT) GenerateFromKVBulk(ctx context.Context, logPrefix string, nodeKeys
 	wg.Wait()
 
 	// wait and save all jobs
-LOOP2:
-	for {
-		select {
-		case result := <-deletesWorker.GetJobResultsChannel():
-			if result.GetError() != nil {
-				return [4]uint64{}, result.GetError()
-			}
-
-			if err := result.Save(); err != nil {
-				return [4]uint64{}, err
-			}
-		default:
-			break LOOP2
-		}
+	if err := runSaveLoop(deletesWorker.GetJobResultsChannel()); err != nil {
+		return [4]uint64{}, err
 	}
 
 	s.updateDepth(maxReachedLevel)
@@ -321,7 +295,7 @@ LOOP2:
 		rootNode.rKey = newRkey
 	}
 
-	_, finalRoot, err := rootNode.deleteTree(pathToDeleteFrom, s, &leafValueMap)
+	finalRoot, err := rootNode.deleteTree(pathToDeleteFrom, s, &leafValueMap)
 	if err != nil {
 		return [4]uint64{}, err
 	}
@@ -331,6 +305,23 @@ LOOP2:
 	}
 
 	return finalRoot, nil
+}
+
+func runSaveLoop(jobResultsChannel chan utils.JobResult) error {
+	for {
+		select {
+		case result := <-jobResultsChannel:
+			if result.GetError() != nil {
+				return result.GetError()
+			}
+
+			if err := result.Save(); err != nil {
+				return err
+			}
+		default:
+			return nil
+		}
+	}
 }
 
 type SmtNode struct {
@@ -378,19 +369,17 @@ func (n *SmtNode) findLastNode(keys []int) ([]*SmtNode, int) {
 	return siblings, level
 }
 
-func (n *SmtNode) deleteTreeNoSave(keyPath []int, leafValueMap *sync.Map, kvMapOfValuesToSave map[[4]uint64]utils.NodeValue12, kvMapOfLeafValuesToSave map[[4]uint64][4]uint64) ([]utils.NodeKey, [4]uint64, error) {
-	deletedKeys := []utils.NodeKey{}
-
+func (n *SmtNode) deleteTreeNoSave(keyPath []int, leafValueMap *sync.Map, kvMapOfValuesToSave map[[4]uint64]utils.NodeValue12, kvMapOfLeafValuesToSave map[[4]uint64][4]uint64) ([4]uint64, error) {
 	if n.isLeaf() {
 		fullKey := append(keyPath, n.rKey...)
 		k, err := utils.NodeKeyFromPath(fullKey)
 		if err != nil {
-			return nil, [4]uint64{}, err
+			return [4]uint64{}, err
 		}
 
 		v, ok := leafValueMap.LoadAndDelete(k)
 		if !ok {
-			return nil, [4]uint64{}, fmt.Errorf("value not found for key %v", k)
+			return [4]uint64{}, fmt.Errorf("value not found for key %v", k)
 		}
 		accoutnValue := v.(utils.NodeValue8)
 
@@ -398,41 +387,39 @@ func (n *SmtNode) deleteTreeNoSave(keyPath []int, leafValueMap *sync.Map, kvMapO
 		//hash and save leaf
 		newValH, newValHV, newLeafHash, newLeafHashV, err := createNewLeafNoSave(newKey, &accoutnValue)
 		if err != nil {
-			return nil, [4]uint64{}, err
+			return [4]uint64{}, err
 		}
 		kvMapOfValuesToSave[newValH] = newValHV
 		kvMapOfValuesToSave[newLeafHash] = newLeafHashV
 		kvMapOfLeafValuesToSave[newLeafHash] = k
 
-		return deletedKeys, newLeafHash, nil
+		return newLeafHash, nil
 	}
 
 	var totalHash utils.NodeValue8
 
 	if n.node0 != nil {
 		if !utils.IsArrayUint64Empty(n.leftHash[:]) {
-			return nil, [4]uint64{}, fmt.Errorf("node has previously deleted left part")
+			return [4]uint64{}, fmt.Errorf("node has previously deleted left part")
 		}
 		localKeyPath := append(keyPath, 0)
-		_, leftHash, err := n.node0.deleteTreeNoSave(localKeyPath, leafValueMap, kvMapOfValuesToSave, kvMapOfLeafValuesToSave)
+		leftHash, err := n.node0.deleteTreeNoSave(localKeyPath, leafValueMap, kvMapOfValuesToSave, kvMapOfLeafValuesToSave)
 		if err != nil {
-			return nil, [4]uint64{}, err
+			return [4]uint64{}, err
 		}
 
 		n.leftHash = leftHash
-		// deletedKeys = append(deletedKeys, keysFromBelow...)
 		n.node0 = nil
 	}
 
 	if n.node1 != nil {
 		localKeyPath := append(keyPath, 1)
-		_, rightHash, err := n.node1.deleteTreeNoSave(localKeyPath, leafValueMap, kvMapOfValuesToSave, kvMapOfLeafValuesToSave)
+		rightHash, err := n.node1.deleteTreeNoSave(localKeyPath, leafValueMap, kvMapOfValuesToSave, kvMapOfLeafValuesToSave)
 		if err != nil {
-			return nil, [4]uint64{}, err
+			return [4]uint64{}, err
 		}
 		totalHash.SetHalfValue(rightHash, 1)
 
-		// deletedKeys = append(deletedKeys, keysFromBelow...)
 		n.node1 = nil
 	}
 
@@ -440,43 +427,24 @@ func (n *SmtNode) deleteTreeNoSave(keyPath []int, leafValueMap *sync.Map, kvMapO
 
 	newRoot, v, err := hashCalcAndPrepareForSave(totalHash.ToUintArray(), utils.BranchCapacity)
 	if err != nil {
-		return nil, [4]uint64{}, err
+		return [4]uint64{}, err
 	}
 
 	kvMapOfValuesToSave[newRoot] = v
 
-	return deletedKeys, newRoot, nil
+	return newRoot, nil
 }
 
-func (n *SmtNode) deleteTree(keyPath []int, s *SMT, leafValueMap *sync.Map) ([]utils.NodeKey, [4]uint64, error) {
+func (n *SmtNode) deleteTree(keyPath []int, s *SMT, leafValueMap *sync.Map) (newRoot [4]uint64, err error) {
 	jobResult := utils.NewCalcAndPrepareJobResult(s.Db)
 
-	deletedKeys, newRoot, err := n.deleteTreeNoSave(keyPath, leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
-	if err != nil {
-		return nil, [4]uint64{}, err
+	if newRoot, err = n.deleteTreeNoSave(keyPath, leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap); err != nil {
+		return [4]uint64{}, err
 	}
 
 	jobResult.Save()
 
-	return deletedKeys, newRoot, nil
-}
-
-func (s *SMT) createNewLeaf(k, rkey utils.NodeKey, v utils.NodeValue8) ([4]uint64, error) {
-	//hash and save leaf
-	newValH, err := s.hashcalcAndSave(v.ToUintArray(), utils.BranchCapacity)
-	if err != nil {
-		return [4]uint64{}, err
-	}
-
-	newLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(rkey, newValH), utils.LeafCapacity)
-	if err != nil {
-		return [4]uint64{}, err
-	}
-	if err := s.Db.InsertHashKey(newLeafHash, k); err != nil {
-		return [4]uint64{}, err
-	}
-
-	return newLeafHash, nil
+	return newRoot, nil
 }
 
 func createNewLeafNoSave(rkey utils.NodeKey, v *utils.NodeValue8) (newValH [4]uint64, newValHV utils.NodeValue12, newLeafHash [4]uint64, newLeafHashV utils.NodeValue12, err error) {
