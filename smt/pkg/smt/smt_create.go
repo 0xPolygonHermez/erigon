@@ -321,7 +321,7 @@ LOOP2:
 		rootNode.rKey = newRkey
 	}
 
-	_, finalRoot, err := rootNode.deleteTree(pathToDeleteFrom, s)
+	_, finalRoot, err := rootNode.deleteTree(pathToDeleteFrom, s, &leafValueMap)
 	if err != nil {
 		return [4]uint64{}, err
 	}
@@ -448,66 +448,15 @@ func (n *SmtNode) deleteTreeNoSave(keyPath []int, leafValueMap *sync.Map, kvMapO
 	return deletedKeys, newRoot, nil
 }
 
-func (n *SmtNode) deleteTree(keyPath []int, s *SMT) ([]utils.NodeKey, [4]uint64, error) {
-	deletedKeys := []utils.NodeKey{}
+func (n *SmtNode) deleteTree(keyPath []int, s *SMT, leafValueMap *sync.Map) ([]utils.NodeKey, [4]uint64, error) {
+	jobResult := utils.NewCalcAndPrepareJobResult(s.Db)
 
-	if n.isLeaf() {
-		fullKey := append(keyPath, n.rKey...)
-		k, err := utils.NodeKeyFromPath(fullKey)
-		if err != nil {
-			return nil, [4]uint64{}, err
-		}
-		v, err := s.Db.GetAccountValue(k)
-		if err != nil {
-			return nil, [4]uint64{}, err
-		}
-
-		// deletedKeys = append(deletedKeys, k)
-
-		newKey := utils.RemoveKeyBits(k, len(keyPath))
-		//hash and save leaf
-		newLeafHash, err := s.createNewLeaf(k, newKey, v)
-		if err != nil {
-			return nil, [4]uint64{}, err
-		}
-		return deletedKeys, newLeafHash, nil
-	}
-
-	var totalHash utils.NodeValue8
-
-	if n.node0 != nil {
-		if !utils.IsArrayUint64Empty(n.leftHash[:]) {
-			return nil, [4]uint64{}, fmt.Errorf("node has previously deleted left part")
-		}
-		localKeyPath := append(keyPath, 0)
-		_, leftHash, err := n.node0.deleteTree(localKeyPath, s)
-		if err != nil {
-			return nil, [4]uint64{}, err
-		}
-
-		n.leftHash = leftHash
-		// deletedKeys = append(deletedKeys, keysFromBelow...)
-		n.node0 = nil
-	}
-
-	if n.node1 != nil {
-		localKeyPath := append(keyPath, 1)
-		_, rightHash, err := n.node1.deleteTree(localKeyPath, s)
-		if err != nil {
-			return nil, [4]uint64{}, err
-		}
-		totalHash.SetHalfValue(rightHash, 1)
-
-		// deletedKeys = append(deletedKeys, keysFromBelow...)
-		n.node1 = nil
-	}
-
-	totalHash.SetHalfValue(n.leftHash, 0)
-
-	newRoot, err := s.hashcalcAndSave(totalHash.ToUintArray(), utils.BranchCapacity)
+	deletedKeys, newRoot, err := n.deleteTreeNoSave(keyPath, leafValueMap, jobResult.KvMap, jobResult.LeafsKvMap)
 	if err != nil {
 		return nil, [4]uint64{}, err
 	}
+
+	jobResult.Save()
 
 	return deletedKeys, newRoot, nil
 }
