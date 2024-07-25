@@ -15,14 +15,14 @@ func Test_readHeaderEntry(t *testing.T) {
 	type testCase struct {
 		name           string
 		input          []byte
-		expectedResult types.HeaderEntry
+		expectedResult *types.HeaderEntry
 		expectedError  error
 	}
 	testCases := []testCase{
 		{
 			name:  "Happy path",
 			input: []byte{101, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 64},
-			expectedResult: types.HeaderEntry{
+			expectedResult: &types.HeaderEntry{
 				PacketType:   101,
 				HeadLength:   29,
 				StreamType:   types.StreamType(1),
@@ -34,7 +34,7 @@ func Test_readHeaderEntry(t *testing.T) {
 		{
 			name:           "Invalid byte array length",
 			input:          []byte{20, 21, 22, 23, 24, 20},
-			expectedResult: types.HeaderEntry{},
+			expectedResult: nil,
 			expectedError:  fmt.Errorf("failed to read header bytes reading from server: unexpected EOF"),
 		},
 	}
@@ -54,7 +54,7 @@ func Test_readHeaderEntry(t *testing.T) {
 
 			header, err := c.readHeaderEntry()
 			require.Equal(t, testCase.expectedError, err)
-			assert.DeepEqual(t, testCase.expectedResult, *header)
+			assert.DeepEqual(t, testCase.expectedResult, header)
 		})
 	}
 }
