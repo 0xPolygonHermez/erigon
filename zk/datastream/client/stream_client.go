@@ -357,10 +357,18 @@ LOOP:
 	return err
 }
 
+// clar them manually rather than making new ones, because we use the pointers instage batches and hang
 func (c *StreamClient) resetChannels() {
-	c.batchStartChan = make(chan types.BatchStart, 1000)
-	c.l2BlockChan = make(chan types.FullL2Block, 100000)
-	c.gerUpdatesChan = make(chan types.GerUpdate, 1000)
+L:
+	for {
+		select {
+		case <-c.batchStartChan:
+		case <-c.l2BlockChan:
+		case <-c.gerUpdatesChan:
+		default:
+			break L
+		}
+	}
 }
 
 func (c *StreamClient) tryReConnect() error {
