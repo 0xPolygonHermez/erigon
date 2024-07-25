@@ -1,8 +1,6 @@
 package vm
 
 import (
-	"errors"
-
 	"github.com/gateway-fm/cdk-erigon-lib/common/math"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/core/vm/stack"
@@ -44,6 +42,39 @@ func getJumpTable(cr *chain.Rules) *JumpTable {
 	}
 
 	return jt
+}
+
+func shouldExecuteLastOpCode(op OpCode) bool {
+	switch op {
+	case BLOCKHASH:
+		fallthrough
+	case CODESIZE:
+		fallthrough
+	case EXTCODESIZE:
+		fallthrough
+	case EXTCODECOPY:
+		fallthrough
+	case EXTCODEHASH:
+		fallthrough
+	case SELFBALANCE:
+		fallthrough
+	case BALANCE:
+		fallthrough
+	case CREATE:
+		fallthrough
+	case RETURN:
+		fallthrough
+	case CREATE2:
+		fallthrough
+	case SENDALL:
+		fallthrough
+	case SLOAD:
+		fallthrough
+	case SSTORE:
+		return true
+	}
+
+	return false
 }
 
 // NewZKEVMInterpreter returns a new instance of the Interpreter.
@@ -159,13 +190,16 @@ func (in *EVMInterpreter) RunZk(contract *Contract, input []byte, readOnly bool)
 			By ignoring the panic we ensure that we've execute as much as possible of the additional 1 opcode.
 		*/
 
-		// execute the operation in case of SLOAD | SSTORE
-		executeBecauseOfSpecificOpCodes := op == SLOAD || op == SSTORE
+		// execute the operation in case of a list of opcodes
+		executeBecauseOfSpecificOpCodes := shouldExecuteLastOpCode(op)
 
 		// execute the operation in case of early error detection
-		_, errorIsUnderflow := err.(*ErrStackUnderflow)
-		_, errorIsOverflow := err.(*ErrStackOverflow)
-		executeBecauseOfEarlyErrorDetection := errors.Is(err, ErrOutOfGas) || errors.Is(err, ErrGasUintOverflow) || errorIsUnderflow || errorIsOverflow
+		// _, errorIsUnderflow := err.(*ErrStackUnderflow)
+		// _, errorIsOverflow := err.(*ErrStackOverflow)
+		// executeBecauseOfEarlyErrorDetection := errors.Is(err, ErrOutOfGas) || errors.Is(err, ErrGasUintOverflow) || errorIsUnderflow || errorIsOverflow
+
+		// uncommend the live above in order to enable execution based on error types in addition to opcode list
+		executeBecauseOfEarlyErrorDetection := false
 
 		// the actual result of this operation does not matter because it will be reverted anyway, because err != nil
 		// we implement it this way in order execution to be identical to tracing
