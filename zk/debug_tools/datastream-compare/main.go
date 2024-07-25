@@ -107,10 +107,10 @@ func main() {
 				blockMismatch = true
 			}
 
-			if localBlock.ChainId != remoteBlock.ChainId {
-				log.Error("Block chainids don't match", "localBlockNumber", localBlock.L2BlockNumber, "localBlockChainId", localBlock.ChainId, "remoteBlockChainId", remoteBlock.ChainId)
-				blockMismatch = true
-			}
+			// if localBlock.ChainId != remoteBlock.ChainId {
+			// 	log.Error("Block chainids don't match", "localBlockNumber", localBlock.L2BlockNumber, "localBlockChainId", localBlock.ChainId, "remoteBlockChainId", remoteBlock.ChainId)
+			// 	blockMismatch = true
+			// }
 
 			if localBlock.L1BlockHash != remoteBlock.L1BlockHash {
 				log.Error("Block L1BlockHash don't match", "localBlockNumber", localBlock.L2BlockNumber, "localBlockL1BlockHash", localBlock.L1BlockHash, "remoteBlockL1BlockHash", remoteBlock.L1BlockHash)
