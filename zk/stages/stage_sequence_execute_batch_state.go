@@ -117,7 +117,7 @@ func (l1rd *L1RecoveryData) loadNextBatchData(sdb *stageDb, thisBatch, forkId ui
 }
 
 func (l1rd *L1RecoveryData) hasAnyDecodedBlocks() bool {
-	return l1rd.decodedBlocksSize == 0
+	return l1rd.decodedBlocksSize > 0
 }
 
 func (l1rd *L1RecoveryData) getInfoTreeIndex(sdb *stageDb) (uint64, error) {

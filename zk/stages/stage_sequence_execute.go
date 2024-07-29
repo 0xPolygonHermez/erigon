@@ -60,6 +60,7 @@ func SpawnSequencingStage(
 	}
 
 	l1Recovery := cfg.zk.L1SyncStartBlock > 0
+	thisBatch := prepareBatchNumber(lastBatch, isLastBatchPariallyProcessed)
 
 	// injected batch
 	if executionAt == 0 {
@@ -90,19 +91,6 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	var header *types.Header
-	var parentBlock *types.Block
-
-	var blockState = newBlockState(l1Recovery)
-
-	thisBatch := prepareBatchNumber(lastBatch, isLastBatchPariallyProcessed)
-	hasAnyTransactionsInThisBatch := false
-
-	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
-	defer batchTicker.Stop()
-	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
-	defer nonEmptyBatchTimer.Stop()
-
 	batchCounters, err := prepareBatchCounters(&cfg, sdb, thisBatch, forkId, isLastBatchPariallyProcessed, l1Recovery)
 	if err != nil {
 		return err
@@ -114,9 +102,36 @@ func SpawnSequencingStage(
 		return err // err here could be nil as well
 	}
 
+	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
+	defer batchTicker.Stop()
+	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
+	defer nonEmptyBatchTimer.Stop()
+
+	var builtBlocks []uint64
+
+	hasExecutorForThisBatch := !isLastBatchPariallyProcessed && cfg.zk.HasExecutors()
+	hasAnyTransactionsInThisBatch := false
 	runLoopBlocks := true
 	lastStartedBn := executionAt - 1
 	yielded := mapset.NewSet[[32]byte]()
+	blockState := newBlockState(l1Recovery)
+
+	batchVerifier := NewBatchVerifier(cfg.zk, hasExecutorForThisBatch, cfg.legacyVerifier, forkId)
+	streamWriter := &SequencerBatchStreamWriter{
+		ctx:           ctx,
+		db:            cfg.db,
+		logPrefix:     logPrefix,
+		batchVerifier: batchVerifier,
+		sdb:           sdb,
+		streamServer:  cfg.datastreamServer,
+		hasExecutors:  hasExecutorForThisBatch,
+		lastBatch:     lastBatch,
+	}
+
+	blockDataSizeChecker := NewBlockDataChecker()
+
+	prevHeader := rawdb.ReadHeaderByNumber(sdb.tx, executionAt)
+	batchDataOverflow := false
 
 	limboHeaderTimestamp, limboTxHash := cfg.txPool.GetLimboTxHash(thisBatch)
 	limboRecovery := limboTxHash != nil
@@ -138,7 +153,8 @@ func SpawnSequencingStage(
 		if err = blockState.l1RecoveryData.loadNextBatchData(sdb, thisBatch, forkId); err != nil {
 			return err
 		}
-		if blockState.l1RecoveryData.hasAnyDecodedBlocks() {
+
+		if !blockState.l1RecoveryData.hasAnyDecodedBlocks() {
 			log.Info(fmt.Sprintf("[%s] L1 recovery has completed!", logPrefix), "batch", thisBatch)
 			time.Sleep(1 * time.Second)
 			return nil
@@ -155,29 +171,11 @@ func SpawnSequencingStage(
 		log.Info(fmt.Sprintf("[%s] Continuing unfinished batch %d from block %d", logPrefix, thisBatch, executionAt))
 	}
 
-	hasExecutorForThisBatch := !isLastBatchPariallyProcessed && cfg.zk.HasExecutors()
-	batchVerifier := NewBatchVerifier(cfg.zk, hasExecutorForThisBatch, cfg.legacyVerifier, forkId)
-	streamWriter := &SequencerBatchStreamWriter{
-		ctx:           ctx,
-		db:            cfg.db,
-		logPrefix:     logPrefix,
-		batchVerifier: batchVerifier,
-		sdb:           sdb,
-		streamServer:  cfg.datastreamServer,
-		hasExecutors:  hasExecutorForThisBatch,
-		lastBatch:     lastBatch,
-	}
-
-	blockDataSizeChecker := NewBlockDataChecker()
-
-	prevHeader := rawdb.ReadHeaderByNumber(sdb.tx, executionAt)
-	batchDataOverflow := false
-	var builtBlocks []uint64
-
 	var block *types.Block
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
 		if l1Recovery {
-			if !blockState.loadDataByDecodedBlockIndex(blockNumber - (executionAt + 1)) {
+			didLoadedAnyData := blockState.loadDataByDecodedBlockIndex(blockNumber - (executionAt + 1))
+			if !didLoadedAnyData {
 				runLoopBlocks = false
 				break
 			}
@@ -193,12 +191,11 @@ func SpawnSequencingStage(
 		lastStartedBn = blockNumber
 		blockState.usedBlockElements.resetBlockBuildingArrays()
 
-		header, parentBlock, err = prepareHeader(sdb.tx, blockNumber-1, blockState.getDeltaTimestamp(), limboHeaderTimestamp, forkId, blockState.getCoinbase(&cfg))
+		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, blockState.getDeltaTimestamp(), limboHeaderTimestamp, forkId, blockState.getCoinbase(&cfg))
 		if err != nil {
 			return err
 		}
 
-		// run this only once the first time, do not add it on rerun
 		if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(uint32(prevHeader.Time-header.Time), uint32(l1InfoIndex)); batchDataOverflow {
 			log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Stopping.", logPrefix), "blockNumber", blockNumber)
 			break
