@@ -2,11 +2,14 @@ package stages
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
+	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type SequencerBatchStreamWriter struct {
@@ -84,4 +87,31 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetails(verifiedBundles []*veri
 	}
 
 	return written, nil
+}
+
+func finalizeLastBatchInDatastreamIfNotFinalized(logPrefix string, sdb *stageDb, datastreamServer *server.DataStreamServer, thisBatch, thisBlock uint64) error {
+	isLastEntryBatchEnd, err := datastreamServer.IsLastEntryBatchEnd()
+	if err != nil {
+		return err
+	}
+
+	if isLastEntryBatchEnd {
+		return nil
+	}
+
+	log.Warn(fmt.Sprintf("[%s] Last batch %d was not closed properly, closing it now...", logPrefix, thisBatch))
+	ler, err := utils.GetBatchLocalExitRootFromSCStorage(thisBatch, sdb.hermezDb.HermezDbReader, sdb.tx)
+	if err != nil {
+		return err
+	}
+
+	lastBlock, err := rawdb.ReadBlockByNumber(sdb.tx, thisBlock)
+	if err != nil {
+		return err
+	}
+	root := lastBlock.Root()
+	if err = datastreamServer.WriteBatchEnd(sdb.hermezDb, thisBatch, thisBatch-1, &root, &ler); err != nil {
+		return err
+	}
+	return nil
 }

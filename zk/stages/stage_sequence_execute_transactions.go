@@ -2,7 +2,6 @@ package stages
 
 import (
 	"context"
-	"encoding/binary"
 	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -12,7 +11,6 @@ import (
 	"io"
 
 	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 	types2 "github.com/gateway-fm/cdk-erigon-lib/types"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -20,8 +18,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/rlp"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -98,56 +94,6 @@ func getLimboTransaction(cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Tra
 	}
 
 	return transactions, nil
-}
-
-func getNextL1BatchData(batchNumber uint64, forkId uint64, hermezDb *hermez_db.HermezDb) (*nextBatchL1Data, error) {
-	nextData := &nextBatchL1Data{}
-	// we expect that the batch we're going to load in next should be in the db already because of the l1 block sync
-	// stage, if it is not there we need to panic as we're in a bad state
-	batchL2Data, err := hermezDb.GetL1BatchData(batchNumber)
-	if err != nil {
-		return nextData, err
-	}
-
-	if len(batchL2Data) == 0 {
-		// end of the line for batch recovery so return empty
-		return nextData, nil
-	}
-
-	nextData.Coinbase = common.BytesToAddress(batchL2Data[:length.Addr])
-	nextData.L1InfoRoot = common.BytesToHash(batchL2Data[length.Addr : length.Addr+length.Hash])
-	tsBytes := batchL2Data[length.Addr+length.Hash : length.Addr+length.Hash+8]
-	nextData.LimitTimestamp = binary.BigEndian.Uint64(tsBytes)
-	batchL2Data = batchL2Data[length.Addr+length.Hash+8:]
-
-	nextData.DecodedData, err = zktx.DecodeBatchL2Blocks(batchL2Data, forkId)
-	if err != nil {
-		return nextData, err
-	}
-
-	// no data means no more work to do - end of the line
-	if len(nextData.DecodedData) == 0 {
-		return nextData, nil
-	}
-
-	nextData.IsWorkRemaining = true
-	transactionsInBatch := 0
-	for _, batch := range nextData.DecodedData {
-		transactionsInBatch += len(batch.Transactions)
-	}
-	if transactionsInBatch == 0 {
-		// we need to check if this batch should simply be empty or not so we need to check against the
-		// highest known batch number to see if we have work to do still
-		highestKnown, err := hermezDb.GetLastL1BatchData()
-		if err != nil {
-			return nextData, err
-		}
-		if batchNumber >= highestKnown {
-			nextData.IsWorkRemaining = false
-		}
-	}
-
-	return nextData, err
 }
 
 func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, error) {

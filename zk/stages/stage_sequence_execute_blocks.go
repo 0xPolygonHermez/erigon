@@ -66,6 +66,48 @@ func handleStateForNewBlockStarting(
 	return nil
 }
 
+func doFinishBlockAndUpdateState(
+	ctx context.Context,
+	cfg SequenceBlockCfg,
+	s *stagedsync.StageState,
+	sdb *stageDb,
+	ibs *state.IntraBlockState,
+	header *types.Header,
+	parentBlock *types.Block,
+	forkId uint64,
+	thisBatch uint64,
+	ger common.Hash,
+	l1BlockHash common.Hash,
+	usedBlockElements *UsedBlockElements,
+	l1InfoIndex uint64,
+	l1Recovery bool,
+) (*types.Block, error) {
+	thisBlockNumber := header.Number.Uint64()
+
+	if cfg.accumulator != nil {
+		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
+	}
+
+	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, cfg.accumulator, ger, l1BlockHash, usedBlockElements, l1Recovery)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1InfoIndex); err != nil {
+		return nil, err
+	}
+
+	if cfg.accumulator != nil {
+		txs, err := rawdb.RawTransactionsRange(sdb.tx, thisBlockNumber, thisBlockNumber)
+		if err != nil {
+			return nil, err
+		}
+		cfg.accumulator.ChangeTransactions(txs)
+	}
+
+	return block, nil
+}
+
 func finaliseBlock(
 	ctx context.Context,
 	cfg SequenceBlockCfg,
@@ -79,10 +121,7 @@ func finaliseBlock(
 	accumulator *shards.Accumulator,
 	ger common.Hash,
 	l1BlockHash common.Hash,
-	transactions []types.Transaction,
-	receipts types.Receipts,
-	execResults []*core.ExecutionResult,
-	effectiveGases []uint8,
+	usedBlockElements *UsedBlockElements,
 	l1Recovery bool,
 ) (*types.Block, error) {
 	stateWriter := state.NewPlainStateWriter(sdb.tx, sdb.tx, newHeader.Number.Uint64()).SetAccumulator(accumulator)
@@ -97,7 +136,7 @@ func finaliseBlock(
 	}
 
 	txInfos := []blockinfo.ExecutedTxInfo{}
-	for i, tx := range transactions {
+	for i, tx := range usedBlockElements.transactions {
 		var from common.Address
 		var err error
 		sender, ok := tx.GetSender()
@@ -110,10 +149,10 @@ func finaliseBlock(
 				return nil, err
 			}
 		}
-		localReceipt := core.CreateReceiptForBlockInfoTree(receipts[i], cfg.chainConfig, newHeader.Number.Uint64(), execResults[i])
+		localReceipt := core.CreateReceiptForBlockInfoTree(usedBlockElements.receipts[i], cfg.chainConfig, newHeader.Number.Uint64(), usedBlockElements.executionResults[i])
 		txInfos = append(txInfos, blockinfo.ExecutedTxInfo{
 			Tx:                tx,
-			EffectiveGasPrice: effectiveGases[i],
+			EffectiveGasPrice: usedBlockElements.effectiveGases[i],
 			Receipt:           localReceipt,
 			Signer:            &from,
 		})
@@ -124,8 +163,8 @@ func finaliseBlock(
 	}
 
 	if l1Recovery {
-		for i, receipt := range receipts {
-			core.ProcessReceiptForBlockExecution(receipt, sdb.hermezDb.HermezDbReader, cfg.chainConfig, newHeader.Number.Uint64(), newHeader, transactions[i])
+		for i, receipt := range usedBlockElements.receipts {
+			core.ProcessReceiptForBlockExecution(receipt, sdb.hermezDb.HermezDbReader, cfg.chainConfig, newHeader.Number.Uint64(), newHeader, usedBlockElements.transactions[i])
 		}
 	}
 
@@ -133,12 +172,12 @@ func finaliseBlock(
 		cfg.engine,
 		sdb.stateReader,
 		newHeader,
-		transactions,
+		usedBlockElements.transactions,
 		[]*types.Header{}, // no uncles
 		stateWriter,
 		cfg.chainConfig,
 		ibs,
-		receipts,
+		usedBlockElements.receipts,
 		nil, // no withdrawals
 		chainReader,
 		true,
@@ -157,8 +196,8 @@ func finaliseBlock(
 	finalHeader.Root = newRoot
 	finalHeader.Coinbase = cfg.zk.AddressSequencer
 	finalHeader.GasLimit = utils.GetBlockGasLimitForFork(forkId)
-	finalHeader.ReceiptHash = types.DeriveSha(receipts)
-	finalHeader.Bloom = types.CreateBloom(receipts)
+	finalHeader.ReceiptHash = types.DeriveSha(usedBlockElements.receipts)
+	finalHeader.Bloom = types.CreateBloom(usedBlockElements.receipts)
 	newNum := finalBlock.Number()
 
 	err = rawdb.WriteHeader_zkEvm(sdb.tx, finalHeader)

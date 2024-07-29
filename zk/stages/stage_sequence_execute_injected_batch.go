@@ -2,10 +2,13 @@ package stages
 
 import (
 	"context"
+	"math"
 
 	"errors"
 
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core"
+	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
@@ -13,6 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 const (
@@ -27,11 +31,22 @@ func processInjectedInitialBatch(
 	s *stagedsync.StageState,
 	sdb *stageDb,
 	forkId uint64,
-	header *types.Header,
-	parentBlock *types.Block,
-	blockContext *evmtypes.BlockContext,
 	l1Recovery bool,
 ) error {
+	// set the block height for the fork we're running at to ensure contract interactions are correct
+	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, forkId, cfg.chainConfig, s.LogPrefix()); err != nil {
+		return err
+	}
+
+	header, parentBlock, err := prepareHeader(sdb.tx, 0, math.MaxUint64, math.MaxUint64, forkId, cfg.zk.AddressSequencer)
+	if err != nil {
+		return err
+	}
+
+	getHeader := func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) }
+	getHashFn := core.GetHashFn(header, getHeader)
+	blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &cfg.zk.AddressSequencer, parentBlock.ExcessDataGas())
+
 	injected, err := sdb.hermezDb.GetL1InjectedBatch(0)
 	if err != nil {
 		return err
@@ -63,17 +78,19 @@ func processInjectedInitialBatch(
 		return err
 	}
 
-	txn, receipt, execResult, effectiveGas, err := handleInjectedBatch(cfg, sdb, ibs, blockContext, injected, header, parentBlock, forkId)
+	txn, receipt, execResult, effectiveGas, err := handleInjectedBatch(cfg, sdb, ibs, &blockContext, injected, header, parentBlock, forkId)
 	if err != nil {
 		return err
 	}
 
-	txns := types.Transactions{*txn}
-	receipts := types.Receipts{receipt}
-	execResults := []*core.ExecutionResult{execResult}
-	effectiveGases := []uint8{effectiveGas}
+	usedBlockElements := &UsedBlockElements{
+		transactions:     types.Transactions{*txn},
+		receipts:         types.Receipts{receipt},
+		executionResults: []*core.ExecutionResult{execResult},
+		effectiveGases:   []uint8{effectiveGas},
+	}
 
-	_, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, injectedBatchNumber, injected.LastGlobalExitRoot, injected.L1ParentHash, txns, receipts, execResults, effectiveGases, 0, l1Recovery)
+	_, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, injectedBatchNumber, injected.LastGlobalExitRoot, injected.L1ParentHash, usedBlockElements, 0, l1Recovery)
 	return err
 }
 

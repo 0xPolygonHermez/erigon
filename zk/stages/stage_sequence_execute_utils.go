@@ -1,7 +1,6 @@
 package stages
 
 import (
-	"context"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -18,7 +17,6 @@ import (
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
-	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -27,8 +25,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
-	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
-	smtNs "github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
@@ -44,19 +40,16 @@ import (
 )
 
 const (
-	logInterval = 20 * time.Second
-
-	// stateStreamLimit - don't accumulate state changes if jump is bigger than this amount of blocks
-	stateStreamLimit uint64 = 1_000
-
+	logInterval         = 20 * time.Second
 	transactionGasLimit = 30000000
+	yieldSize           = 100 // arbitrary number defining how many transactions to yield from the pool at once
 
-	yieldSize = 100 // arbitrary number defining how many transactions to yield from the pool at once
 )
 
 var (
-	noop            = state.NewNoopWriter()
-	blockDifficulty = new(big.Int).SetUint64(0)
+	noop                 = state.NewNoopWriter()
+	blockDifficulty      = new(big.Int).SetUint64(0)
+	SpecialZeroIndexHash = common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757")
 )
 
 type HasChangeSetWriter interface {
@@ -166,45 +159,7 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 	)
 }
 
-type stageDb struct {
-	tx          kv.RwTx
-	hermezDb    *hermez_db.HermezDb
-	eridb       *db2.EriDb
-	stateReader *state.PlainStateReader
-	smt         *smtNs.SMT
-}
-
-func newStageDb(tx kv.RwTx) *stageDb {
-	sdb := &stageDb{}
-	sdb.SetTx(tx)
-	return sdb
-}
-
-func (sdb *stageDb) SetTx(tx kv.RwTx) {
-	sdb.tx = tx
-	sdb.hermezDb = hermez_db.NewHermezDb(tx)
-	sdb.eridb = db2.NewEriDb(tx)
-	sdb.stateReader = state.NewPlainStateReader(tx)
-	sdb.smt = smtNs.NewSMT(sdb.eridb, false)
-}
-
-type nextBatchL1Data struct {
-	DecodedData     []zktx.DecodedBatchL2Data
-	Coinbase        common.Address
-	L1InfoRoot      common.Hash
-	IsWorkRemaining bool
-	LimitTimestamp  uint64
-}
-
-type forkDb interface {
-	GetAllForkHistory() ([]uint64, []uint64, error)
-	GetLatestForkHistory() (uint64, uint64, error)
-	GetForkId(batch uint64) (uint64, error)
-	WriteForkIdBlockOnce(forkId, block uint64) error
-	WriteForkId(batch, forkId uint64) error
-}
-
-func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, error) {
+func prepareForkId(lastBatch, executionAt uint64, hermezDb *hermez_db.HermezDb) (uint64, error) {
 	var err error
 	var latest uint64
 
@@ -275,7 +230,7 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 	}, parentBlock, nil
 }
 
-func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, decodedBlock *zktx.DecodedBatchL2Data, l1Recovery bool, proposedTimestamp uint64) (
+func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, bs *BlockState, proposedTimestamp uint64) (
 	infoTreeIndexProgress uint64,
 	l1TreeUpdate *zktypes.L1InfoTreeUpdate,
 	l1TreeUpdateIndex uint64,
@@ -293,8 +248,8 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, decodedBlock *zktx.DecodedBa
 		return
 	}
 
-	if l1Recovery {
-		l1TreeUpdateIndex = uint64(decodedBlock.L1InfoTreeIndex)
+	if bs.isL1Recovery() {
+		l1TreeUpdateIndex = uint64(bs.l1RecoveryData.decodedBlock.L1InfoTreeIndex)
 		if l1TreeUpdate, err = sdb.hermezDb.GetL1InfoTreeUpdate(l1TreeUpdateIndex); err != nil {
 			return
 		}
@@ -357,51 +312,6 @@ func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1In
 	}
 
 	return nil
-}
-
-func doFinishBlockAndUpdateState(
-	ctx context.Context,
-	cfg SequenceBlockCfg,
-	s *stagedsync.StageState,
-	sdb *stageDb,
-	ibs *state.IntraBlockState,
-	header *types.Header,
-	parentBlock *types.Block,
-	forkId uint64,
-	thisBatch uint64,
-	ger common.Hash,
-	l1BlockHash common.Hash,
-	transactions []types.Transaction,
-	receipts types.Receipts,
-	execResults []*core.ExecutionResult,
-	effectiveGases []uint8,
-	l1InfoIndex uint64,
-	l1Recovery bool,
-) (*types.Block, error) {
-	thisBlockNumber := header.Number.Uint64()
-
-	if cfg.accumulator != nil {
-		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
-	}
-
-	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, cfg.accumulator, ger, l1BlockHash, transactions, receipts, execResults, effectiveGases, l1Recovery)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1InfoIndex); err != nil {
-		return nil, err
-	}
-
-	if cfg.accumulator != nil {
-		txs, err := rawdb.RawTransactionsRange(sdb.tx, thisBlockNumber, thisBlockNumber)
-		if err != nil {
-			return nil, err
-		}
-		cfg.accumulator.ChangeTransactions(txs)
-	}
-
-	return block, nil
 }
 
 type batchChecker interface {
@@ -495,106 +405,4 @@ func (bdc *BlockDataChecker) AddTransactionData(txL2Data []byte) bool {
 	bdc.counter += encodedLen
 
 	return false
-}
-
-func updateStreamAndCheckRollback(
-	logPrefix string,
-	sdb *stageDb,
-	streamWriter *SequencerBatchStreamWriter,
-	batchNumber uint64,
-	forkId uint64,
-	u stagedsync.Unwinder,
-) (bool, int, error) {
-	committed, remaining, err := streamWriter.CommitNewUpdates(forkId)
-	if err != nil {
-		return false, remaining, err
-	}
-	for _, commit := range committed {
-		if !commit.Valid {
-			// we are about to unwind so place the marker ready for this to happen
-			if err = sdb.hermezDb.WriteJustUnwound(batchNumber); err != nil {
-				return false, 0, err
-			}
-			// capture the fork otherwise when the loop starts again to close
-			// off the batch it will detect it as a fork upgrade
-			if err = sdb.hermezDb.WriteForkId(batchNumber, forkId); err != nil {
-				return false, 0, err
-			}
-
-			unwindTo := commit.BlockNumber - 1
-
-			// for unwind we supply the block number X-1 of the block we want to remove, but supply the hash of the block
-			// causing the unwind.
-			unwindHeader := rawdb.ReadHeaderByNumber(sdb.tx, commit.BlockNumber)
-			if unwindHeader == nil {
-				return false, 0, fmt.Errorf("could not find header for block %d", commit.BlockNumber)
-			}
-
-			if err = sdb.tx.Commit(); err != nil {
-				return false, 0, err
-			}
-
-			log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", logPrefix), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
-
-			u.UnwindTo(unwindTo, unwindHeader.Hash())
-			return true, 0, nil
-		}
-	}
-
-	return false, remaining, nil
-}
-
-func runBatchLastSteps(
-	logPrefix string,
-	datastreamServer *server.DataStreamServer,
-	sdb *stageDb,
-	thisBatch uint64,
-	lastStartedBn uint64,
-	batchCounters *vm.BatchCounterCollector,
-) error {
-	l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
-	if err != nil {
-		return err
-	}
-
-	counters, err := batchCounters.CombineCollectors(l1InfoIndex != 0)
-	if err != nil {
-		return err
-	}
-
-	log.Info(fmt.Sprintf("[%s] counters consumed", logPrefix), "batch", thisBatch, "counts", counters.UsedAsString())
-
-	if err = sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap()); err != nil {
-		return err
-	}
-	if err := sdb.hermezDb.DeleteIsBatchPartiallyProcessed(thisBatch); err != nil {
-		return err
-	}
-
-	// Local Exit Root (ler): read s/c storage every batch to store the LER for the highest block in the batch
-	ler, err := utils.GetBatchLocalExitRootFromSCStorage(thisBatch, sdb.hermezDb.HermezDbReader, sdb.tx)
-	if err != nil {
-		return err
-	}
-	// write ler to hermezdb
-	if err = sdb.hermezDb.WriteLocalExitRootForBatchNo(thisBatch, ler); err != nil {
-		return err
-	}
-
-	lastBlock, err := sdb.hermezDb.GetHighestBlockInBatch(thisBatch)
-	if err != nil {
-		return err
-	}
-	block, err := rawdb.ReadBlockByNumber(sdb.tx, lastBlock)
-	if err != nil {
-		return err
-	}
-	blockRoot := block.Root()
-	if err = datastreamServer.WriteBatchEnd(sdb.hermezDb, thisBatch, thisBatch, &blockRoot, &ler); err != nil {
-		return err
-	}
-
-	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
-
-	return nil
 }
