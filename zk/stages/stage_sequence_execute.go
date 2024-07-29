@@ -599,29 +599,17 @@ func SpawnSequencingStage(
 		batchVerifier.AddNewCheck(thisBatch, blockNumber, block.Root(), batchCounters.CombineCollectorsNoChanges().UsedAsMap(), builtBlocks)
 
 		// check for new responses from the verifier
-		needsUnwind, _, err := updateStreamAndCheckRollback(logPrefix, sdb, streamWriter, forkId, thisBatch, u)
+		needsUnwind, _, err := updateStreamAndCheckRollback(logPrefix, sdb, streamWriter, thisBatch, forkId, u)
 		if err != nil {
 			return err
 		}
 		if needsUnwind {
-			if err = sdb.hermezDb.WriteJustUnwound(thisBatch); err != nil {
-				return err
-			}
-			// capture the fork otherwise when the loop starts again to close
-			// off the batch it will detect it as a fork upgrade
-			if err = sdb.hermezDb.WriteForkId(thisBatch, forkId); err != nil {
-				return err
-			}
-			// re-commit the tx so that we can capture this the next time the stage starts
-			if err = rootTx.Commit(); err != nil {
-				return err
-			}
 			return nil
 		}
 	}
 
 	for {
-		needsUnwind, remaining, err := updateStreamAndCheckRollback(logPrefix, sdb, streamWriter, forkId, thisBatch, u)
+		needsUnwind, remaining, err := updateStreamAndCheckRollback(logPrefix, sdb, streamWriter, thisBatch, forkId, u)
 		if err != nil {
 			return err
 		}
