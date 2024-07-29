@@ -3,7 +3,6 @@ package stages
 import (
 	"context"
 	"encoding/binary"
-	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -29,19 +28,12 @@ import (
 func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
 	var transactions []types.Transaction
 	var err error
-	var count int
-	// killer := time.NewTicker(300 * time.Millisecond)
 	gasLimit := utils.GetBlockGasLimitForFork(forkId)
 
 	if err := cfg.txPoolDb.View(ctx, func(poolTx kv.Tx) error {
 		slots := types2.TxsRlp{}
-		_, count, err = cfg.txPool.YieldBest(preForkId11TxLimit, &slots, poolTx, executionAt, gasLimit, alreadyYielded)
-		if err != nil {
+		if _, _, err = cfg.txPool.YieldBest(preForkId11TxLimit, &slots, poolTx, executionAt, gasLimit, alreadyYielded); err != nil {
 			return err
-		}
-		if count == 0 {
-			time.Sleep(500 * time.Microsecond)
-			return nil
 		}
 		yieldedTxs, err := extractTransactionsFromSlot(&slots)
 		if err != nil {
