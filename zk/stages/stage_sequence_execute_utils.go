@@ -163,7 +163,15 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 	)
 }
 
-func prepareForkId(lastBatch, executionAt uint64, hermezDb *hermez_db.HermezDb) (uint64, error) {
+type forkDb interface {
+	GetAllForkHistory() ([]uint64, []uint64, error)
+	GetLatestForkHistory() (uint64, uint64, error)
+	GetForkId(batch uint64) (uint64, error)
+	WriteForkIdBlockOnce(forkId, block uint64) error
+	WriteForkId(batch, forkId uint64) error
+}
+
+func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, error) {
 	var err error
 	var latest uint64
 
