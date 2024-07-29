@@ -21,7 +21,7 @@ func SequencerZkStages(
 	exec SequenceBlockCfg,
 	hashState stages.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
-	sequencerExecutorVerifyCfg SequencerExecutorVerifyCfg,
+	// sequencerExecutorVerifyCfg SequencerExecutorVerifyCfg,
 	history stages.HistoryCfg,
 	logIndex stages.LogIndexCfg,
 	callTraces stages.CallTracesCfg,
@@ -128,19 +128,19 @@ func SequencerZkStages(
 				return PruneSequencerInterhashesStage(p, tx, sequencerInterhashesCfg, ctx)
 			},
 		},
-		{
-			ID:          stages2.SequenceExecutorVerify,
-			Description: "Sequencer, check batch with legacy executor",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnSequencerExecutorVerifyStage(s, u, tx, ctx, sequencerExecutorVerifyCfg, quiet)
-			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
-				return UnwindSequencerExecutorVerifyStage(u, s, tx, ctx, sequencerExecutorVerifyCfg)
-			},
-			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
-				return PruneSequencerExecutorVerifyStage(p, tx, sequencerExecutorVerifyCfg, ctx)
-			},
-		},
+		// {
+		// 	ID:          stages2.SequenceExecutorVerify,
+		// 	Description: "Sequencer, check batch with legacy executor",
+		// 	Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
+		// 		return SpawnSequencerExecutorVerifyStage(s, u, tx, ctx, sequencerExecutorVerifyCfg, quiet)
+		// 	},
+		// 	Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
+		// 		return UnwindSequencerExecutorVerifyStage(u, s, tx, ctx, sequencerExecutorVerifyCfg)
+		// 	},
+		// 	Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
+		// 		return PruneSequencerExecutorVerifyStage(p, tx, sequencerExecutorVerifyCfg, ctx)
+		// 	},
+		// },
 		{
 			ID:          stages2.HashState,
 			Description: "Hash the key in the state",

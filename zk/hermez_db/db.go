@@ -48,6 +48,44 @@ const BATCH_PARTIALLY_PROCESSED = "batch_partially_processed"          // batch 
 const LOCAL_EXIT_ROOTS = "local_exit_roots"                            // l2 block number -> local exit root
 const ROllUP_TYPES_FORKS = "rollup_types_forks"                        // rollup type id -> fork id
 const FORK_HISTORY = "fork_history"                                    // index -> fork id + last verified batch
+const JUST_UNWOUND = "just_unwound"                                    // batch number -> true
+
+var HermezDbTables = []string{
+	L1VERIFICATIONS,
+	L1SEQUENCES,
+	FORKIDS,
+	FORKID_BLOCK,
+	BLOCKBATCHES,
+	GLOBAL_EXIT_ROOTS,
+	BLOCK_GLOBAL_EXIT_ROOTS,
+	GLOBAL_EXIT_ROOTS_BATCHES,
+	TX_PRICE_PERCENTAGE,
+	STATE_ROOTS,
+	L1_INFO_TREE_UPDATES,
+	L1_INFO_TREE_UPDATES_BY_GER,
+	BLOCK_L1_INFO_TREE_INDEX,
+	L1_INJECTED_BATCHES,
+	BLOCK_INFO_ROOTS,
+	L1_BLOCK_HASHES,
+	BLOCK_L1_BLOCK_HASHES,
+	L1_BLOCK_HASH_GER,
+	INTERMEDIATE_TX_STATEROOTS,
+	BATCH_WITNESSES,
+	BATCH_COUNTERS,
+	L1_BATCH_DATA,
+	REUSED_L1_INFO_TREE_INDEX,
+	LATEST_USED_GER,
+	BATCH_BLOCKS,
+	SMT_DEPTHS,
+	L1_INFO_LEAVES,
+	L1_INFO_ROOTS,
+	INVALID_BATCHES,
+	BATCH_PARTIALLY_PROCESSED,
+	LOCAL_EXIT_ROOTS,
+	ROllUP_TYPES_FORKS,
+	FORK_HISTORY,
+	JUST_UNWOUND,
+}
 
 type HermezDb struct {
 	tx kv.RwTx
@@ -72,42 +110,7 @@ func NewHermezDb(tx kv.RwTx) *HermezDb {
 }
 
 func CreateHermezBuckets(tx kv.RwTx) error {
-	tables := []string{
-		L1VERIFICATIONS,
-		L1SEQUENCES,
-		FORKIDS,
-		FORKID_BLOCK,
-		BLOCKBATCHES,
-		GLOBAL_EXIT_ROOTS,
-		BLOCK_GLOBAL_EXIT_ROOTS,
-		GLOBAL_EXIT_ROOTS_BATCHES,
-		TX_PRICE_PERCENTAGE,
-		STATE_ROOTS,
-		L1_INFO_TREE_UPDATES,
-		L1_INFO_TREE_UPDATES_BY_GER,
-		BLOCK_L1_INFO_TREE_INDEX,
-		L1_INJECTED_BATCHES,
-		BLOCK_INFO_ROOTS,
-		L1_BLOCK_HASHES,
-		BLOCK_L1_BLOCK_HASHES,
-		L1_BLOCK_HASH_GER,
-		INTERMEDIATE_TX_STATEROOTS,
-		BATCH_WITNESSES,
-		BATCH_COUNTERS,
-		L1_BATCH_DATA,
-		REUSED_L1_INFO_TREE_INDEX,
-		LATEST_USED_GER,
-		BATCH_BLOCKS,
-		SMT_DEPTHS,
-		L1_INFO_LEAVES,
-		L1_INFO_ROOTS,
-		INVALID_BATCHES,
-		BATCH_PARTIALLY_PROCESSED,
-		LOCAL_EXIT_ROOTS,
-		ROllUP_TYPES_FORKS,
-		FORK_HISTORY,
-	}
-	for _, t := range tables {
+	for _, t := range HermezDbTables {
 		if err := tx.CreateBucket(t); err != nil {
 			return err
 		}
@@ -167,6 +170,14 @@ func (db *HermezDbReader) GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error)
 	blocks := parseConcatenatedBlockNumbers(v)
 
 	return blocks, nil
+}
+
+func concatenateBlockNumbers(blocks []uint64) []byte {
+	v := make([]byte, len(blocks)*8)
+	for i, block := range blocks {
+		copy(v[i*8:(i+1)*8], Uint64ToBytes(block))
+	}
+	return v
 }
 
 func parseConcatenatedBlockNumbers(v []byte) []uint64 {
@@ -880,30 +891,46 @@ func (db *HermezDb) DeleteBlockL1InfoTreeIndexes(fromBlockNum, toBlockNum uint64
 func (db *HermezDb) DeleteBlockBatches(fromBlockNum, toBlockNum uint64) error {
 	// first, gather batch numbers related to the blocks we're about to delete
 	batchNos := make([]uint64, 0)
-	c, err := db.tx.Cursor(BLOCKBATCHES)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
 
-	var k, v []byte
-	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
-		if err != nil {
-			break
-		}
-		blockNum := BytesToUint64(k)
-		if blockNum >= fromBlockNum && blockNum <= toBlockNum {
-			batchNo := BytesToUint64(v)
-			batchNos = append(batchNos, batchNo)
-		}
-	}
-
-	// now delete the batch -> block records
-	for _, batchNo := range batchNos {
-		err := db.tx.Delete(BATCH_BLOCKS, Uint64ToBytes(batchNo))
+	// find all the batches involved
+	for i := fromBlockNum; i <= toBlockNum; i++ {
+		batch, err := db.GetBatchNoByL2Block(i)
 		if err != nil {
 			return err
 		}
+		found := false
+		for _, b := range batchNos {
+			if b == batch {
+				found = true
+				break
+			}
+		}
+		if !found {
+			batchNos = append(batchNos, batch)
+		}
+	}
+
+	// now for each batch go and get the block numbers and remove them from the batch to block records
+	for _, batchNo := range batchNos {
+		data, err := db.tx.GetOne(BATCH_BLOCKS, Uint64ToBytes(batchNo))
+		if err != nil {
+			return err
+		}
+		blockNos := parseConcatenatedBlockNumbers(data)
+
+		// make a new list excluding the blocks in our range
+		newBlockNos := make([]uint64, 0)
+		for _, blockNo := range blockNos {
+			if blockNo < fromBlockNum || blockNo > toBlockNum {
+				newBlockNos = append(newBlockNos, blockNo)
+			}
+		}
+
+		// concatenate the block numbers back again
+		newData := concatenateBlockNumbers(newBlockNos)
+
+		// now store it back
+		err = db.tx.Put(BATCH_BLOCKS, Uint64ToBytes(batchNo), newData)
 	}
 
 	return db.deleteFromBucketWithUintKeysRange(BLOCKBATCHES, fromBlockNum, toBlockNum)
@@ -1587,4 +1614,20 @@ func (db *HermezDbReader) GetAllForkHistory() ([]uint64, []uint64, error) {
 	}
 
 	return forks, batches, nil
+}
+
+func (db *HermezDb) WriteJustUnwound(batch uint64) error {
+	return db.tx.Put(JUST_UNWOUND, Uint64ToBytes(batch), []byte{1})
+}
+
+func (db *HermezDb) DeleteJustUnwound(batch uint64) error {
+	return db.tx.Delete(JUST_UNWOUND, Uint64ToBytes(batch))
+}
+
+func (db *HermezDb) GetJustUnwound(batch uint64) (bool, error) {
+	v, err := db.tx.GetOne(JUST_UNWOUND, Uint64ToBytes(batch))
+	if err != nil {
+		return false, err
+	}
+	return len(v) > 0, nil
 }

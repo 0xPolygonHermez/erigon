@@ -34,6 +34,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/tx"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
@@ -86,6 +87,8 @@ type SequenceBlockCfg struct {
 
 	txPool   *txpool.TxPool
 	txPoolDb kv.RwDB
+
+	legacyVerifier *verifier.LegacyExecutorVerifier
 }
 
 func StageSequenceBlocksCfg(
@@ -111,6 +114,7 @@ func StageSequenceBlocksCfg(
 
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
+	legacyVerifier *verifier.LegacyExecutorVerifier,
 ) SequenceBlockCfg {
 
 	return SequenceBlockCfg{
@@ -135,6 +139,7 @@ func StageSequenceBlocksCfg(
 		zk:               zk,
 		txPool:           txPool,
 		txPoolDb:         txPoolDb,
+		legacyVerifier:   legacyVerifier,
 	}
 }
 
@@ -490,4 +495,91 @@ func (bdc *BlockDataChecker) AddTransactionData(txL2Data []byte) bool {
 	bdc.counter += encodedLen
 
 	return false
+}
+
+func checkStreamWriterForUpdates(
+	logPrefix string,
+	tx kv.Tx,
+	streamWriter *SequencerBatchStreamWriter,
+	forkId uint64,
+	u stagedsync.Unwinder,
+) (bool, int, error) {
+	committed, remaining, err := streamWriter.CheckAndCommitUpdates(forkId)
+	if err != nil {
+		return false, remaining, err
+	}
+	for _, commit := range committed {
+		if !commit.Valid {
+			unwindTo := commit.BlockNumber - 1
+
+			// for unwind we supply the block number X-1 of the block we want to remove, but supply the hash of the block
+			// causing the unwind.
+			unwindHeader := rawdb.ReadHeaderByNumber(tx, commit.BlockNumber)
+			if unwindHeader == nil {
+				return false, 0, fmt.Errorf("could not find header for block %d", commit.BlockNumber)
+			}
+
+			log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back to block", logPrefix), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
+
+			u.UnwindTo(unwindTo, unwindHeader.Hash())
+			return true, 0, nil
+		}
+	}
+
+	return false, remaining, nil
+}
+
+func runBatchLastSteps(
+	logPrefix string,
+	datastreamServer *server.DataStreamServer,
+	sdb *stageDb,
+	thisBatch uint64,
+	lastStartedBn uint64,
+	batchCounters *vm.BatchCounterCollector,
+) error {
+	l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+	if err != nil {
+		return err
+	}
+
+	counters, err := batchCounters.CombineCollectors(l1InfoIndex != 0)
+	if err != nil {
+		return err
+	}
+
+	log.Info(fmt.Sprintf("[%s] counters consumed", logPrefix), "batch", thisBatch, "counts", counters.UsedAsString())
+
+	if err = sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap()); err != nil {
+		return err
+	}
+	if err := sdb.hermezDb.DeleteIsBatchPartiallyProcessed(thisBatch); err != nil {
+		return err
+	}
+
+	// Local Exit Root (ler): read s/c storage every batch to store the LER for the highest block in the batch
+	ler, err := utils.GetBatchLocalExitRootFromSCStorage(thisBatch, sdb.hermezDb.HermezDbReader, sdb.tx)
+	if err != nil {
+		return err
+	}
+	// write ler to hermezdb
+	if err = sdb.hermezDb.WriteLocalExitRootForBatchNo(thisBatch, ler); err != nil {
+		return err
+	}
+
+	lastBlock, err := sdb.hermezDb.GetHighestBlockInBatch(thisBatch)
+	if err != nil {
+		return err
+	}
+	block, err := rawdb.ReadBlockByNumber(sdb.tx, lastBlock)
+	if err != nil {
+		return err
+	}
+	blockRoot := block.Root()
+	if err = datastreamServer.WriteBatchEnd(sdb.hermezDb, thisBatch, thisBatch, &blockRoot, &ler); err != nil {
+		return err
+	}
+
+	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
+
+	return nil
 }
