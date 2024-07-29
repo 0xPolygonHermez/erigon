@@ -112,7 +112,6 @@ func SpawnSequencingStage(
 	hasExecutorForThisBatch := !isLastBatchPariallyProcessed && cfg.zk.HasExecutors()
 	hasAnyTransactionsInThisBatch := false
 	runLoopBlocks := true
-	lastStartedBn := executionAt - 1
 	yielded := mapset.NewSet[[32]byte]()
 	blockState := newBlockState(l1Recovery)
 
@@ -173,23 +172,20 @@ func SpawnSequencingStage(
 
 	var block *types.Block
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
+		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, forkId))
+
 		if l1Recovery {
-			didLoadedAnyData := blockState.loadDataByDecodedBlockIndex(blockNumber - (executionAt + 1))
-			if !didLoadedAnyData {
+			didLoadedAnyDataForRecovery := blockState.loadDataByDecodedBlockIndex(blockNumber - (executionAt + 1))
+			if !didLoadedAnyDataForRecovery {
 				runLoopBlocks = false
 				break
 			}
 		}
 
-		l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+		l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(blockNumber - 1)
 		if err != nil {
 			return err
 		}
-
-		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, forkId))
-
-		lastStartedBn = blockNumber
-		blockState.usedBlockElements.resetBlockBuildingArrays()
 
 		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, blockState.getDeltaTimestamp(), limboHeaderTimestamp, forkId, blockState.getCoinbase(&cfg))
 		if err != nil {
@@ -217,9 +213,11 @@ func SpawnSequencingStage(
 			return err
 		}
 
+		var anyOverflow bool
 		ibs := state.New(sdb.stateReader)
 		getHashFn := core.GetHashFn(header, func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) })
 		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &cfg.zk.AddressSequencer, parentBlock.ExcessDataGas())
+		blockState.usedBlockElements.resetBlockBuildingArrays()
 
 		parentRoot := parentBlock.Root()
 		if err = handleStateForNewBlockStarting(
@@ -247,10 +245,7 @@ func SpawnSequencingStage(
 		defer logTicker.Stop()
 		blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
 		defer blockTicker.Stop()
-		var anyOverflow bool
-		// start to wait for transactions to come in from the pool and attempt to add them to the current batch.  Once we detect a counter
-		// overflow we revert the IBS back to the previous snapshot and don't add the transaction/receipt to the collection that will
-		// end up in the finalised block
+
 	LOOP_TRANSACTIONS:
 		for {
 			select {
@@ -274,21 +269,21 @@ func SpawnSequencingStage(
 				}
 			default:
 				if limboRecovery {
-					cfg.txPool.LockFlusher()
-					blockState.blockTransactions, err = getLimboTransaction(cfg, limboTxHash)
+					blockState.blockTransactions, err = getLimboTransaction(ctx, cfg, limboTxHash)
 					if err != nil {
-						cfg.txPool.UnlockFlusher()
 						return err
 					}
-					cfg.txPool.UnlockFlusher()
 				} else if !l1Recovery {
-					cfg.txPool.LockFlusher()
-					blockState.blockTransactions, err = getNextPoolTransactions(cfg, executionAt, forkId, yielded)
+					blockState.blockTransactions, err = getNextPoolTransactions(ctx, cfg, executionAt, forkId, yielded)
 					if err != nil {
-						cfg.txPool.UnlockFlusher()
 						return err
 					}
-					cfg.txPool.UnlockFlusher()
+				}
+
+				if len(blockState.blockTransactions) == 0 {
+					time.Sleep(250 * time.Millisecond)
+				} else {
+					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(blockState.blockTransactions))
 				}
 
 				var receipt *types.Receipt
@@ -297,6 +292,7 @@ func SpawnSequencingStage(
 					txHash := transaction.Hash()
 					effectiveGas := blockState.getL1EffectiveGases(cfg, i)
 
+					// The copying of this structure is intentional
 					backupDataSizeChecker := *blockDataSizeChecker
 					if receipt, execResult, anyOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex, &backupDataSizeChecker); err != nil {
 						if limboRecovery {
@@ -312,6 +308,10 @@ func SpawnSequencingStage(
 							)
 							continue
 						}
+
+						// if running in normal operation mode and error != nil then just allow the code to continue
+						// It is safe because this approach ensures that the problematic transaction (the one that caused err != nil to be returned) is kept in yielded
+						// Each transaction in yielded will be reevaluated at the end of each batch
 					}
 
 					if anyOverflow {
@@ -337,6 +337,7 @@ func SpawnSequencingStage(
 							}
 						}
 
+						//TODO: Why do we break the loop in case of l1Recovery?!
 						break LOOP_TRANSACTIONS
 					}
 
@@ -377,19 +378,17 @@ func SpawnSequencingStage(
 			return err
 		}
 
+		if limboRecovery {
+			stateRoot := block.Root()
+			cfg.txPool.UpdateLimboRootByTxHash(limboTxHash, &stateRoot)
+			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, limboTxHash.Hex(), stateRoot.Hex())
+		}
+
 		t.LogTimer()
 		gasPerSecond := float64(0)
 		elapsedSeconds := t.Elapsed().Seconds()
 		if elapsedSeconds != 0 {
 			gasPerSecond = float64(block.GasUsed()) / elapsedSeconds
-		}
-
-		if limboRecovery {
-			stateRoot := block.Root()
-			cfg.txPool.UpdateLimboRootByTxHash(limboTxHash, &stateRoot)
-			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, limboTxHash.Hex(), stateRoot.Hex())
-		} else {
-			log.Debug(fmt.Sprintf("[%s] state root at block %d = %s", s.LogPrefix(), blockNumber, block.Root().Hex()))
 		}
 
 		if gasPerSecond != 0 {
@@ -412,8 +411,6 @@ func SpawnSequencingStage(
 			return err
 		}
 		defer sdb.tx.Rollback()
-
-		lastBatch = thisBatch
 
 		// add a check to the verifier and also check for responses
 		builtBlocks = append(builtBlocks, blockNumber)
@@ -443,7 +440,7 @@ func SpawnSequencingStage(
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	if err = runBatchLastSteps(logPrefix, cfg.datastreamServer, sdb, thisBatch, lastStartedBn, batchCounters); err != nil {
+	if err = runBatchLastSteps(logPrefix, cfg.datastreamServer, sdb, thisBatch, block.NumberU64(), batchCounters); err != nil {
 		return err
 	}
 
