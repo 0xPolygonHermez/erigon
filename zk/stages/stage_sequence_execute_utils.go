@@ -497,29 +497,44 @@ func (bdc *BlockDataChecker) AddTransactionData(txL2Data []byte) bool {
 	return false
 }
 
-func checkStreamWriterForUpdates(
+func updateStreamAndCheckRollback(
 	logPrefix string,
-	tx kv.Tx,
+	sdb *stageDb,
 	streamWriter *SequencerBatchStreamWriter,
+	batchNumber uint64,
 	forkId uint64,
 	u stagedsync.Unwinder,
 ) (bool, int, error) {
-	committed, remaining, err := streamWriter.CheckAndCommitUpdates(forkId)
+	committed, remaining, err := streamWriter.CommitNewUpdates(forkId)
 	if err != nil {
 		return false, remaining, err
 	}
 	for _, commit := range committed {
 		if !commit.Valid {
+			// we are about to unwind so place the marker ready for this to happen
+			if err = sdb.hermezDb.WriteJustUnwound(batchNumber); err != nil {
+				return false, 0, err
+			}
+			// capture the fork otherwise when the loop starts again to close
+			// off the batch it will detect it as a fork upgrade
+			if err = sdb.hermezDb.WriteForkId(batchNumber, forkId); err != nil {
+				return false, 0, err
+			}
+
 			unwindTo := commit.BlockNumber - 1
 
 			// for unwind we supply the block number X-1 of the block we want to remove, but supply the hash of the block
 			// causing the unwind.
-			unwindHeader := rawdb.ReadHeaderByNumber(tx, commit.BlockNumber)
+			unwindHeader := rawdb.ReadHeaderByNumber(sdb.tx, commit.BlockNumber)
 			if unwindHeader == nil {
 				return false, 0, fmt.Errorf("could not find header for block %d", commit.BlockNumber)
 			}
 
-			log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back to block", logPrefix), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
+			if err = sdb.tx.Commit(); err != nil {
+				return false, 0, err
+			}
+
+			log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", logPrefix), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
 
 			u.UnwindTo(unwindTo, unwindHeader.Hash())
 			return true, 0, nil

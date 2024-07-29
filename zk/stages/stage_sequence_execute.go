@@ -599,7 +599,7 @@ func SpawnSequencingStage(
 		batchVerifier.AddNewCheck(thisBatch, blockNumber, block.Root(), batchCounters.CombineCollectorsNoChanges().UsedAsMap(), builtBlocks)
 
 		// check for new responses from the verifier
-		needsUnwind, _, err := checkStreamWriterForUpdates(logPrefix, sdb.tx, streamWriter, forkId, u)
+		needsUnwind, _, err := updateStreamAndCheckRollback(logPrefix, sdb, streamWriter, forkId, thisBatch, u)
 		if err != nil {
 			return err
 		}
@@ -621,7 +621,7 @@ func SpawnSequencingStage(
 	}
 
 	for {
-		needsUnwind, remaining, err := checkStreamWriterForUpdates(logPrefix, sdb.tx, streamWriter, forkId, u)
+		needsUnwind, remaining, err := updateStreamAndCheckRollback(logPrefix, sdb, streamWriter, forkId, thisBatch, u)
 		if err != nil {
 			return err
 		}
