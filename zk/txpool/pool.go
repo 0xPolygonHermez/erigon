@@ -1132,6 +1132,7 @@ func (p *TxPool) setBaseFee(baseFee uint64, allowFreeTransactions bool) (uint64,
 	if allowFreeTransactions {
 		changed = uint64(0) != p.pendingBaseFee.Load()
 		p.pendingBaseFee.Store(0)
+		return 0, changed
 	}
 
 	if baseFee > 0 {
