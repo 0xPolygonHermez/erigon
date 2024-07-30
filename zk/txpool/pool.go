@@ -327,6 +327,13 @@ type TxPool struct {
 	limbo *Limbo
 }
 
+func CreateTxPoolBuckets(tx kv.RwTx) error {
+	if err := tx.CreateBucket(TablePoolLimbo); err != nil {
+		return err
+	}
+	return nil
+}
+
 func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, ethCfg *ethconfig.Config, cache kvcache.Cache, chainID uint256.Int, shanghaiTime *big.Int, londonBlock *big.Int, aclDB kv.RwDB) (*TxPool, error) {
 	var err error
 	localsHistory, err := simplelru.NewLRU[string, struct{}](10_000, nil)

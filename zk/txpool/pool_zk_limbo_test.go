@@ -21,7 +21,7 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-func Test_Persistency_NotWorking(t *testing.T) {
+func Test_Persistency(t *testing.T) {
 	dbPath := "/tmp/limbo-persistency"
 
 	pSource := store(t, dbPath)
@@ -135,7 +135,7 @@ func store(t *testing.T, dbPath string) *TxPool {
 
 	tx.CreateBucket(TablePoolLimbo)
 	err = pTarget.fromDBLimbo(context.Background(), tx, cacheView)
-
+	assert.NilError(t, err)
 	err = pTarget.fromDBLimbo(context.Background(), tx, cacheView)
 	assert.NilError(t, err)
 
@@ -155,7 +155,8 @@ func restoreRo(t *testing.T, dbPath string, pSource *TxPool) {
 	defer tx.Rollback()
 	defer aclDb.Close()
 
-	tx.CreateBucket(TablePoolLimbo)
+	err := tx.CreateBucket(TablePoolLimbo)
+	assert.NilError(t, err)
 
 	tx.Commit() // Close the tx because we don't need it
 
