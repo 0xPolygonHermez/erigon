@@ -22,7 +22,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
-	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -75,14 +74,6 @@ func NewVerifierBundle(request *VerifierRequest, response *VerifierResponse) *Ve
 	}
 }
 
-type ILegacyExecutor interface {
-	Verify(*Payload, *VerifierRequest, common.Hash) (bool, *executor.ProcessBatchResponseV2, error)
-	CheckOnline() bool
-	QueueLength() int
-	AquireAccess()
-	ReleaseAccess()
-}
-
 type WitnessGenerator interface {
 	GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
 }
@@ -90,16 +81,14 @@ type WitnessGenerator interface {
 type LegacyExecutorVerifier struct {
 	db                     kv.RwDB
 	cfg                    ethconfig.Zk
-	executors              []ILegacyExecutor
+	executors              []*Executor
 	executorNumber         int
 	cancelAllVerifications atomic.Bool
 
 	quit chan struct{}
 
 	streamServer     *server.DataStreamServer
-	stream           *datastreamer.StreamServer
 	witnessGenerator WitnessGenerator
-	l1Syncer         *syncer.L1Syncer
 
 	promises     []*Promise[*VerifierBundle]
 	addedBatches map[uint64]struct{}
@@ -114,11 +103,10 @@ type LegacyExecutorVerifier struct {
 
 func NewLegacyExecutorVerifier(
 	cfg ethconfig.Zk,
-	executors []ILegacyExecutor,
+	executors []*Executor,
 	chainCfg *chain.Config,
 	db kv.RwDB,
 	witnessGenerator WitnessGenerator,
-	l1Syncer *syncer.L1Syncer,
 	stream *datastreamer.StreamServer,
 ) *LegacyExecutorVerifier {
 	streamServer := server.NewDataStreamServer(stream, chainCfg.ChainID.Uint64())
@@ -130,9 +118,7 @@ func NewLegacyExecutorVerifier(
 		cancelAllVerifications: atomic.Bool{},
 		quit:                   make(chan struct{}),
 		streamServer:           streamServer,
-		stream:                 stream,
 		witnessGenerator:       witnessGenerator,
-		l1Syncer:               l1Syncer,
 		promises:               make([]*Promise[*VerifierBundle], 0),
 		addedBatches:           make(map[uint64]struct{}),
 		responsesToWrite:       map[uint64]struct{}{},
@@ -560,8 +546,8 @@ func (v *LegacyExecutorVerifier) WriteBatchToStream(batchNumber uint64, hdb *her
 	return nil
 }
 
-func (v *LegacyExecutorVerifier) GetNextOnlineAvailableExecutor() ILegacyExecutor {
-	var exec ILegacyExecutor
+func (v *LegacyExecutorVerifier) GetNextOnlineAvailableExecutor() *Executor {
+	var exec *Executor
 
 	// TODO: find executors with spare capacity
 

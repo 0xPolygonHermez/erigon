@@ -3,7 +3,6 @@ package stages
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"sync"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -160,12 +159,12 @@ func (bv *BatchVerifier) removeProcessedPromises(processed int) int {
 }
 
 func (bv *BatchVerifier) syncPromise(request *verifier.VerifierRequest, blockNumbers []uint64) *PromiseWithBlocks {
+	valid := true
 	// simulate a die roll to determine if this is a good batch or not
 	// 1 in 6 chance of being a bad batch
-	valid := true
-	if rand.Intn(6) == 0 {
-		valid = false
-	}
+	// if rand.Intn(6) == 0 {
+	// 	valid = false
+	// }
 
 	promise := verifier.NewPromiseSync[*verifier.VerifierBundleWithBlocks](func() (*verifier.VerifierBundleWithBlocks, error) {
 		response := &verifier.VerifierResponse{

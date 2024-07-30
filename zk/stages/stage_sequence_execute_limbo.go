@@ -95,7 +95,7 @@ func handleLimbo(
 			limboTxCount := limboDetails.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender, previousTxIndex)
 			limboSendersToPreviousTxMap[senderMapKey] = limboTxCount - 1
 
-			log.Info(fmt.Sprintf("[%s] adding transaction to limbo", logPrefix, "hash", hash))
+			log.Info(fmt.Sprintf("[%s] adding transaction to limbo", logPrefix), "hash", hash)
 		}
 	}
 

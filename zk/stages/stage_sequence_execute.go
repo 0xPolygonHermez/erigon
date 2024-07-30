@@ -103,6 +103,8 @@ func SpawnSequencingStage(
 	defer nonEmptyBatchTimer.Stop()
 
 	runLoopBlocks := true
+	blockDataSizeChecker := NewBlockDataChecker()
+	batchDataOverflow := false
 
 	batchVerifier := NewBatchVerifier(cfg.zk, batchState.hasExecutorForThisBatch, cfg.legacyVerifier, batchState.forkId)
 	streamWriter := &SequencerBatchStreamWriter{
@@ -114,10 +116,6 @@ func SpawnSequencingStage(
 		hasExecutors:  batchState.hasExecutorForThisBatch,
 		lastBatch:     lastBatch,
 	}
-
-	blockDataSizeChecker := NewBlockDataChecker()
-
-	batchDataOverflow := false
 
 	limboHeaderTimestamp, limboTxHash := cfg.txPool.GetLimboTxHash(batchState.batchNumber)
 	limboRecovery := limboTxHash != nil

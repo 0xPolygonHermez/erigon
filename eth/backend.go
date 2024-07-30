@@ -836,7 +836,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.engine,
 			)
 
-			var legacyExecutors []legacy_executor_verifier.ILegacyExecutor
+			var legacyExecutors []*legacy_executor_verifier.Executor = make([]*legacy_executor_verifier.Executor, 0, len(cfg.ExecutorUrls))
 			if len(cfg.ExecutorUrls) > 0 && cfg.ExecutorUrls[0] != "" {
 				levCfg := legacy_executor_verifier.Config{
 					GrpcUrls:              cfg.ExecutorUrls,
@@ -856,7 +856,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.chainConfig,
 				backend.chainDB,
 				witnessGenerator,
-				backend.l1Syncer,
 				backend.dataStream,
 			)
 
