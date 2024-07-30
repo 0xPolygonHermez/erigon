@@ -1,7 +1,6 @@
 package stages
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -16,7 +15,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
-	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
@@ -67,67 +65,54 @@ func handleStateForNewBlockStarting(
 }
 
 func doFinishBlockAndUpdateState(
-	ctx context.Context,
-	cfg SequenceBlockCfg,
-	s *stagedsync.StageState,
-	sdb *stageDb,
+	batchContext *BatchContext,
 	ibs *state.IntraBlockState,
 	header *types.Header,
 	parentBlock *types.Block,
-	forkId uint64,
-	thisBatch uint64,
+	batchState *BatchState,
 	ger common.Hash,
 	l1BlockHash common.Hash,
-	usedBlockElements *UsedBlockElements,
 	l1InfoIndex uint64,
-	l1Recovery bool,
 ) (*types.Block, error) {
 	thisBlockNumber := header.Number.Uint64()
 
-	if cfg.accumulator != nil {
-		cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
+	if batchContext.cfg.accumulator != nil {
+		batchContext.cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
 	}
 
-	block, err := finaliseBlock(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, thisBatch, cfg.accumulator, ger, l1BlockHash, usedBlockElements, l1Recovery)
+	block, err := finaliseBlock(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := updateSequencerProgress(sdb.tx, thisBlockNumber, thisBatch, l1InfoIndex); err != nil {
+	if err := updateSequencerProgress(batchContext.sdb.tx, thisBlockNumber, batchState.batchNumber, l1InfoIndex); err != nil {
 		return nil, err
 	}
 
-	if cfg.accumulator != nil {
-		txs, err := rawdb.RawTransactionsRange(sdb.tx, thisBlockNumber, thisBlockNumber)
+	if batchContext.cfg.accumulator != nil {
+		txs, err := rawdb.RawTransactionsRange(batchContext.sdb.tx, thisBlockNumber, thisBlockNumber)
 		if err != nil {
 			return nil, err
 		}
-		cfg.accumulator.ChangeTransactions(txs)
+		batchContext.cfg.accumulator.ChangeTransactions(txs)
 	}
 
 	return block, nil
 }
 
 func finaliseBlock(
-	ctx context.Context,
-	cfg SequenceBlockCfg,
-	s *stagedsync.StageState,
-	sdb *stageDb,
+	batchContext *BatchContext,
 	ibs *state.IntraBlockState,
 	newHeader *types.Header,
 	parentBlock *types.Block,
-	forkId uint64,
-	batch uint64,
-	accumulator *shards.Accumulator,
+	batchState *BatchState,
 	ger common.Hash,
 	l1BlockHash common.Hash,
-	usedBlockElements *UsedBlockElements,
-	l1Recovery bool,
 ) (*types.Block, error) {
-	stateWriter := state.NewPlainStateWriter(sdb.tx, sdb.tx, newHeader.Number.Uint64()).SetAccumulator(accumulator)
+	stateWriter := state.NewPlainStateWriter(batchContext.sdb.tx, batchContext.sdb.tx, newHeader.Number.Uint64()).SetAccumulator(batchContext.cfg.accumulator)
 	chainReader := stagedsync.ChainReader{
-		Cfg: *cfg.chainConfig,
-		Db:  sdb.tx,
+		Cfg: *batchContext.cfg.chainConfig,
+		Db:  batchContext.sdb.tx,
 	}
 
 	var excessDataGas *big.Int
@@ -136,48 +121,49 @@ func finaliseBlock(
 	}
 
 	txInfos := []blockinfo.ExecutedTxInfo{}
-	for i, tx := range usedBlockElements.transactions {
+	builtBlockElements := batchState.blockState.builtBlockElements
+	for i, tx := range builtBlockElements.transactions {
 		var from common.Address
 		var err error
 		sender, ok := tx.GetSender()
 		if ok {
 			from = sender
 		} else {
-			signer := types.MakeSigner(cfg.chainConfig, newHeader.Number.Uint64())
+			signer := types.MakeSigner(batchContext.cfg.chainConfig, newHeader.Number.Uint64())
 			from, err = tx.Sender(*signer)
 			if err != nil {
 				return nil, err
 			}
 		}
-		localReceipt := core.CreateReceiptForBlockInfoTree(usedBlockElements.receipts[i], cfg.chainConfig, newHeader.Number.Uint64(), usedBlockElements.executionResults[i])
+		localReceipt := core.CreateReceiptForBlockInfoTree(builtBlockElements.receipts[i], batchContext.cfg.chainConfig, newHeader.Number.Uint64(), builtBlockElements.executionResults[i])
 		txInfos = append(txInfos, blockinfo.ExecutedTxInfo{
 			Tx:                tx,
-			EffectiveGasPrice: usedBlockElements.effectiveGases[i],
+			EffectiveGasPrice: builtBlockElements.effectiveGases[i],
 			Receipt:           localReceipt,
 			Signer:            &from,
 		})
 	}
 
-	if err := postBlockStateHandling(cfg, ibs, sdb.hermezDb, newHeader, ger, l1BlockHash, parentBlock.Root(), txInfos); err != nil {
+	if err := postBlockStateHandling(*batchContext.cfg, ibs, batchContext.sdb.hermezDb, newHeader, ger, l1BlockHash, parentBlock.Root(), txInfos); err != nil {
 		return nil, err
 	}
 
-	if l1Recovery {
-		for i, receipt := range usedBlockElements.receipts {
-			core.ProcessReceiptForBlockExecution(receipt, sdb.hermezDb.HermezDbReader, cfg.chainConfig, newHeader.Number.Uint64(), newHeader, usedBlockElements.transactions[i])
+	if batchState.isL1Recovery() {
+		for i, receipt := range builtBlockElements.receipts {
+			core.ProcessReceiptForBlockExecution(receipt, batchContext.sdb.hermezDb.HermezDbReader, batchContext.cfg.chainConfig, newHeader.Number.Uint64(), newHeader, builtBlockElements.transactions[i])
 		}
 	}
 
 	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecutionWithHistoryWrite(
-		cfg.engine,
-		sdb.stateReader,
+		batchContext.cfg.engine,
+		batchContext.sdb.stateReader,
 		newHeader,
-		usedBlockElements.transactions,
+		builtBlockElements.transactions,
 		[]*types.Header{}, // no uncles
 		stateWriter,
-		cfg.chainConfig,
+		batchContext.cfg.chainConfig,
 		ibs,
-		usedBlockElements.receipts,
+		builtBlockElements.receipts,
 		nil, // no withdrawals
 		chainReader,
 		true,
@@ -187,55 +173,55 @@ func finaliseBlock(
 		return nil, err
 	}
 
-	newRoot, err := zkIncrementIntermediateHashes(ctx, s.LogPrefix(), s, sdb.tx, sdb.eridb, sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
+	newRoot, err := zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	if err != nil {
 		return nil, err
 	}
 
 	finalHeader := finalBlock.HeaderNoCopy()
 	finalHeader.Root = newRoot
-	finalHeader.Coinbase = cfg.zk.AddressSequencer
-	finalHeader.GasLimit = utils.GetBlockGasLimitForFork(forkId)
-	finalHeader.ReceiptHash = types.DeriveSha(usedBlockElements.receipts)
-	finalHeader.Bloom = types.CreateBloom(usedBlockElements.receipts)
+	finalHeader.Coinbase = batchContext.cfg.zk.AddressSequencer
+	finalHeader.GasLimit = utils.GetBlockGasLimitForFork(batchState.forkId)
+	finalHeader.ReceiptHash = types.DeriveSha(builtBlockElements.receipts)
+	finalHeader.Bloom = types.CreateBloom(builtBlockElements.receipts)
 	newNum := finalBlock.Number()
 
-	err = rawdb.WriteHeader_zkEvm(sdb.tx, finalHeader)
+	err = rawdb.WriteHeader_zkEvm(batchContext.sdb.tx, finalHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write header: %v", err)
 	}
-	if err := rawdb.WriteHeadHeaderHash(sdb.tx, finalHeader.Hash()); err != nil {
+	if err := rawdb.WriteHeadHeaderHash(batchContext.sdb.tx, finalHeader.Hash()); err != nil {
 		return nil, err
 	}
-	err = rawdb.WriteCanonicalHash(sdb.tx, finalHeader.Hash(), newNum.Uint64())
+	err = rawdb.WriteCanonicalHash(batchContext.sdb.tx, finalHeader.Hash(), newNum.Uint64())
 	if err != nil {
 		return nil, fmt.Errorf("failed to write header: %v", err)
 	}
 
-	erigonDB := erigon_db.NewErigonDb(sdb.tx)
+	erigonDB := erigon_db.NewErigonDb(batchContext.sdb.tx)
 	err = erigonDB.WriteBody(newNum, finalHeader.Hash(), finalTransactions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write body: %v", err)
 	}
 
 	// write the new block lookup entries
-	rawdb.WriteTxLookupEntries(sdb.tx, finalBlock)
+	rawdb.WriteTxLookupEntries(batchContext.sdb.tx, finalBlock)
 
-	if err = rawdb.WriteReceipts(sdb.tx, newNum.Uint64(), finalReceipts); err != nil {
+	if err = rawdb.WriteReceipts(batchContext.sdb.tx, newNum.Uint64(), finalReceipts); err != nil {
 		return nil, err
 	}
 
-	if err = sdb.hermezDb.WriteForkId(batch, forkId); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
 		return nil, err
 	}
 
 	// now process the senders to avoid a stage by itself
-	if err := addSenders(cfg, newNum, finalTransactions, sdb.tx, finalHeader); err != nil {
+	if err := addSenders(*batchContext.cfg, newNum, finalTransactions, batchContext.sdb.tx, finalHeader); err != nil {
 		return nil, err
 	}
 
 	// now add in the zk batch to block references
-	if err := sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batch); err != nil {
+	if err := batchContext.sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batchState.batchNumber); err != nil {
 		return nil, fmt.Errorf("write block batch error: %v", err)
 	}
 

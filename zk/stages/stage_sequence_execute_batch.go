@@ -7,7 +7,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -20,35 +19,35 @@ func prepareBatchNumber(lastBatch uint64, isLastBatchPariallyProcessed bool) uin
 	return lastBatch + 1
 }
 
-func prepareBatchCounters(cfg *SequenceBlockCfg, sdb *stageDb, thisBatch, forkId uint64, isLastBatchPariallyProcessed, l1Recovery bool) (*vm.BatchCounterCollector, error) {
+func prepareBatchCounters(batchContext *BatchContext, batchState *BatchState, isLastBatchPariallyProcessed bool) (*vm.BatchCounterCollector, error) {
 	var intermediateUsedCounters *vm.Counters
 	if isLastBatchPariallyProcessed {
-		intermediateCountersMap, found, err := sdb.hermezDb.GetBatchCounters(thisBatch)
+		intermediateCountersMap, found, err := batchContext.sdb.hermezDb.GetBatchCounters(batchState.batchNumber)
 		if err != nil {
 			return nil, err
 		}
 		if !found {
-			return nil, fmt.Errorf("intermediate counters not found for batch %d", thisBatch)
+			return nil, fmt.Errorf("intermediate counters not found for batch %d", batchState.batchNumber)
 		}
 
 		intermediateUsedCounters = vm.NewCountersFromUsedMap(intermediateCountersMap)
 	}
 
-	return vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery), intermediateUsedCounters), nil
+	return vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), intermediateUsedCounters), nil
 }
 
-func doInstantCloseIfNeeded(logPrefix string, cfg *SequenceBlockCfg, sdb *stageDb, thisBatch, forkId uint64, batchCounters *vm.BatchCounterCollector) (bool, error) {
-	instantClose, err := sdb.hermezDb.GetJustUnwound(thisBatch)
+func doInstantCloseIfNeeded(batchContext *BatchContext, batchState *BatchState, batchCounters *vm.BatchCounterCollector) (bool, error) {
+	instantClose, err := batchContext.sdb.hermezDb.GetJustUnwound(batchState.batchNumber)
 	if err != nil || !instantClose {
 		return false, err // err here could be nil as well
 	}
 
-	if err = sdb.hermezDb.DeleteJustUnwound(thisBatch); err != nil {
+	if err = batchContext.sdb.hermezDb.DeleteJustUnwound(batchState.batchNumber); err != nil {
 		return false, err
 	}
 
 	// lets first check if we actually wrote any blocks in this batch
-	blocks, err := sdb.hermezDb.GetL2BlockNosByBatch(thisBatch)
+	blocks, err := batchContext.sdb.hermezDb.GetL2BlockNosByBatch(batchState.batchNumber)
 	if err != nil {
 		return false, err
 	}
@@ -56,39 +55,36 @@ func doInstantCloseIfNeeded(logPrefix string, cfg *SequenceBlockCfg, sdb *stageD
 	// only close this batch down if we actually made any progress in it, otherwise
 	// just continue processing as normal and recreate the batch from scratch
 	if len(blocks) > 0 {
-		if err = runBatchLastSteps(logPrefix, cfg.datastreamServer, sdb, thisBatch, blocks[len(blocks)-1], batchCounters); err != nil {
+		if err = runBatchLastSteps(batchContext, batchState.batchNumber, blocks[len(blocks)-1], batchCounters); err != nil {
 			return false, err
 		}
-		if err = stages.SaveStageProgress(sdb.tx, stages.HighestSeenBatchNumber, thisBatch); err != nil {
+		if err = stages.SaveStageProgress(batchContext.sdb.tx, stages.HighestSeenBatchNumber, batchState.batchNumber); err != nil {
 			return false, err
 		}
-		if err = sdb.hermezDb.WriteForkId(thisBatch, forkId); err != nil {
-			return false, err
-		}
-
-		if err = sdb.tx.Commit(); err != nil {
+		if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
 			return false, err
 		}
 
-		return true, nil
+		err = batchContext.sdb.tx.Commit()
+		return err == nil, err
 	}
 
 	return false, nil
 }
 
-func doCheckForBadBatch(logPrefix string, sdb *stageDb, l1rd *L1RecoveryData, thisBlock, thisBatch, forkId uint64) (bool, error) {
-	infoTreeIndex, err := l1rd.getInfoTreeIndex(sdb)
+func doCheckForBadBatch(batchContext *BatchContext, batchState *BatchState, thisBlock uint64) (bool, error) {
+	infoTreeIndex, err := batchState.batchL1RecoveryData.getInfoTreeIndex(batchContext.sdb)
 	if err != nil {
 		return false, err
 	}
 
 	// now let's detect a bad batch and skip it if we have to
-	currentBlock, err := rawdb.ReadBlockByNumber(sdb.tx, thisBlock)
+	currentBlock, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, thisBlock)
 	if err != nil {
 		return false, err
 	}
 
-	badBatch, err := checkForBadBatch(thisBatch, sdb.hermezDb, currentBlock.Time(), infoTreeIndex, l1rd.nextBatchData.LimitTimestamp, l1rd.nextBatchData.DecodedData)
+	badBatch, err := checkForBadBatch(batchState.batchNumber, batchContext.sdb.hermezDb, currentBlock.Time(), infoTreeIndex, batchState.batchL1RecoveryData.recoveredBatchData.LimitTimestamp, batchState.batchL1RecoveryData.recoveredBatchData.DecodedData)
 	if err != nil {
 		return false, err
 	}
@@ -97,50 +93,48 @@ func doCheckForBadBatch(logPrefix string, sdb *stageDb, l1rd *L1RecoveryData, th
 		return false, nil
 	}
 
-	log.Info(fmt.Sprintf("[%s] Skipping bad batch %d...", logPrefix, thisBatch))
+	log.Info(fmt.Sprintf("[%s] Skipping bad batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
 	// store the fact that this batch was invalid during recovery - will be used for the stream later
-	if err = sdb.hermezDb.WriteInvalidBatch(thisBatch); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteInvalidBatch(batchState.batchNumber); err != nil {
 		return false, err
 	}
-	if err = sdb.hermezDb.WriteBatchCounters(thisBatch, map[string]int{}); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteBatchCounters(batchState.batchNumber, map[string]int{}); err != nil {
 		return false, err
 	}
-	if err = sdb.hermezDb.DeleteIsBatchPartiallyProcessed(thisBatch); err != nil {
+	if err = batchContext.sdb.hermezDb.DeleteIsBatchPartiallyProcessed(batchState.batchNumber); err != nil {
 		return false, err
 	}
-	if err = stages.SaveStageProgress(sdb.tx, stages.HighestSeenBatchNumber, thisBatch); err != nil {
+	if err = stages.SaveStageProgress(batchContext.sdb.tx, stages.HighestSeenBatchNumber, batchState.batchNumber); err != nil {
 		return false, err
 	}
-	if err = sdb.hermezDb.WriteForkId(thisBatch, forkId); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
 		return false, err
 	}
-	if err = sdb.tx.Commit(); err != nil {
+	if err = batchContext.sdb.tx.Commit(); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
 func updateStreamAndCheckRollback(
-	logPrefix string,
-	sdb *stageDb,
+	batchContext *BatchContext,
+	batchState *BatchState,
 	streamWriter *SequencerBatchStreamWriter,
-	batchNumber uint64,
-	forkId uint64,
 	u stagedsync.Unwinder,
 ) (bool, int, error) {
-	committed, remaining, err := streamWriter.CommitNewUpdates(forkId)
+	committed, remaining, err := streamWriter.CommitNewUpdates(batchState.forkId)
 	if err != nil {
 		return false, remaining, err
 	}
 	for _, commit := range committed {
 		if !commit.Valid {
 			// we are about to unwind so place the marker ready for this to happen
-			if err = sdb.hermezDb.WriteJustUnwound(batchNumber); err != nil {
+			if err = batchContext.sdb.hermezDb.WriteJustUnwound(batchState.batchNumber); err != nil {
 				return false, 0, err
 			}
 			// capture the fork otherwise when the loop starts again to close
 			// off the batch it will detect it as a fork upgrade
-			if err = sdb.hermezDb.WriteForkId(batchNumber, forkId); err != nil {
+			if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
 				return false, 0, err
 			}
 
@@ -148,16 +142,16 @@ func updateStreamAndCheckRollback(
 
 			// for unwind we supply the block number X-1 of the block we want to remove, but supply the hash of the block
 			// causing the unwind.
-			unwindHeader := rawdb.ReadHeaderByNumber(sdb.tx, commit.BlockNumber)
+			unwindHeader := rawdb.ReadHeaderByNumber(batchContext.sdb.tx, commit.BlockNumber)
 			if unwindHeader == nil {
 				return false, 0, fmt.Errorf("could not find header for block %d", commit.BlockNumber)
 			}
 
-			if err = sdb.tx.Commit(); err != nil {
+			if err = batchContext.sdb.tx.Commit(); err != nil {
 				return false, 0, err
 			}
 
-			log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", logPrefix), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
+			log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", batchContext.s.LogPrefix()), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
 
 			u.UnwindTo(unwindTo, unwindHeader.Hash())
 			return true, 0, nil
@@ -168,14 +162,12 @@ func updateStreamAndCheckRollback(
 }
 
 func runBatchLastSteps(
-	logPrefix string,
-	datastreamServer *server.DataStreamServer,
-	sdb *stageDb,
+	batchContext *BatchContext,
 	thisBatch uint64,
 	lastStartedBn uint64,
 	batchCounters *vm.BatchCounterCollector,
 ) error {
-	l1InfoIndex, err := sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+	l1InfoIndex, err := batchContext.sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
 	if err != nil {
 		return err
 	}
@@ -185,39 +177,39 @@ func runBatchLastSteps(
 		return err
 	}
 
-	log.Info(fmt.Sprintf("[%s] counters consumed", logPrefix), "batch", thisBatch, "counts", counters.UsedAsString())
+	log.Info(fmt.Sprintf("[%s] counters consumed", batchContext.s.LogPrefix()), "batch", thisBatch, "counts", counters.UsedAsString())
 
-	if err = sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap()); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap()); err != nil {
 		return err
 	}
-	if err := sdb.hermezDb.DeleteIsBatchPartiallyProcessed(thisBatch); err != nil {
+	if err := batchContext.sdb.hermezDb.DeleteIsBatchPartiallyProcessed(thisBatch); err != nil {
 		return err
 	}
 
 	// Local Exit Root (ler): read s/c storage every batch to store the LER for the highest block in the batch
-	ler, err := utils.GetBatchLocalExitRootFromSCStorage(thisBatch, sdb.hermezDb.HermezDbReader, sdb.tx)
+	ler, err := utils.GetBatchLocalExitRootFromSCStorage(thisBatch, batchContext.sdb.hermezDb.HermezDbReader, batchContext.sdb.tx)
 	if err != nil {
 		return err
 	}
 	// write ler to hermezdb
-	if err = sdb.hermezDb.WriteLocalExitRootForBatchNo(thisBatch, ler); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteLocalExitRootForBatchNo(thisBatch, ler); err != nil {
 		return err
 	}
 
-	lastBlock, err := sdb.hermezDb.GetHighestBlockInBatch(thisBatch)
+	lastBlock, err := batchContext.sdb.hermezDb.GetHighestBlockInBatch(thisBatch)
 	if err != nil {
 		return err
 	}
-	block, err := rawdb.ReadBlockByNumber(sdb.tx, lastBlock)
+	block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, lastBlock)
 	if err != nil {
 		return err
 	}
 	blockRoot := block.Root()
-	if err = datastreamServer.WriteBatchEnd(sdb.hermezDb, thisBatch, thisBatch, &blockRoot, &ler); err != nil {
+	if err = batchContext.cfg.datastreamServer.WriteBatchEnd(batchContext.sdb.hermezDb, thisBatch, thisBatch, &blockRoot, &ler); err != nil {
 		return err
 	}
 
-	log.Info(fmt.Sprintf("[%s] Finish batch %d...", logPrefix, thisBatch))
+	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), thisBatch))
 
 	return nil
 }

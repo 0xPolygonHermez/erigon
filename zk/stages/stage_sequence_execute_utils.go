@@ -242,7 +242,7 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 	}, parentBlock, nil
 }
 
-func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, bs *BlockState, proposedTimestamp uint64) (
+func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, proposedTimestamp uint64) (
 	infoTreeIndexProgress uint64,
 	l1TreeUpdate *zktypes.L1InfoTreeUpdate,
 	l1TreeUpdateIndex uint64,
@@ -260,8 +260,8 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, bs *BlockState, proposedTime
 		return
 	}
 
-	if bs.isL1Recovery() {
-		l1TreeUpdateIndex = uint64(bs.l1RecoveryData.decodedBlock.L1InfoTreeIndex)
+	if batchState.isL1Recovery() {
+		l1TreeUpdateIndex = uint64(batchState.blockState.blockL1RecoveryData.L1InfoTreeIndex)
 		if l1TreeUpdate, err = sdb.hermezDb.GetL1InfoTreeUpdate(l1TreeUpdateIndex); err != nil {
 			return
 		}
@@ -396,7 +396,7 @@ func NewBlockDataChecker() *BlockDataChecker {
 
 // adds bytes amounting to the block data and checks if the limit is reached
 // if the limit is reached, the data is not added, so this can be reused again for next check
-func (bdc *BlockDataChecker) AddBlockStartData(deltaTimestamp, l1InfoTreeIndex uint32) bool {
+func (bdc *BlockDataChecker) AddBlockStartData() bool {
 	blockStartBytesAmount := tx.START_BLOCK_BATCH_L2_DATA_SIZE // tx.GenerateStartBlockBatchL2Data(deltaTimestamp, l1InfoTreeIndex) returns 65 long byte array
 	// add in the changeL2Block transaction
 	if bdc.counter+blockStartBytesAmount > bdc.limit {

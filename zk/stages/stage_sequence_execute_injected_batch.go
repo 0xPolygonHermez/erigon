@@ -1,7 +1,6 @@
 package stages
 
 import (
-	"context"
 	"math"
 
 	"errors"
@@ -13,41 +12,37 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 const (
-	injectedBatchNumber      = 1
 	injectedBatchBlockNumber = 1
 	injectedBatchBatchNumber = 1
 )
 
 func processInjectedInitialBatch(
-	ctx context.Context,
-	cfg SequenceBlockCfg,
-	s *stagedsync.StageState,
-	sdb *stageDb,
-	forkId uint64,
-	l1Recovery bool,
+	batchContext *BatchContext,
+	batchState *BatchState,
 ) error {
 	// set the block height for the fork we're running at to ensure contract interactions are correct
-	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, forkId, cfg.chainConfig, s.LogPrefix()); err != nil {
+	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, batchState.forkId, batchContext.cfg.chainConfig, batchContext.s.LogPrefix()); err != nil {
 		return err
 	}
 
-	header, parentBlock, err := prepareHeader(sdb.tx, 0, math.MaxUint64, math.MaxUint64, forkId, cfg.zk.AddressSequencer)
+	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64, batchState.forkId, batchContext.cfg.zk.AddressSequencer)
 	if err != nil {
 		return err
 	}
 
-	getHeader := func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) }
+	getHeader := func(hash common.Hash, number uint64) *types.Header {
+		return rawdb.ReadHeader(batchContext.sdb.tx, hash, number)
+	}
 	getHashFn := core.GetHashFn(header, getHeader)
-	blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &cfg.zk.AddressSequencer, parentBlock.ExcessDataGas())
+	blockContext := core.NewEVMBlockContext(header, getHashFn, batchContext.cfg.engine, &batchContext.cfg.zk.AddressSequencer, parentBlock.ExcessDataGas())
 
-	injected, err := sdb.hermezDb.GetL1InjectedBatch(0)
+	injected, err := batchContext.sdb.hermezDb.GetL1InjectedBatch(0)
 	if err != nil {
 		return err
 	}
@@ -58,15 +53,15 @@ func processInjectedInitialBatch(
 		Timestamp:  injected.Timestamp,
 	}
 
-	ibs := state.New(sdb.stateReader)
+	ibs := state.New(batchContext.sdb.stateReader)
 
 	// the injected batch block timestamp should also match that of the injected batch
 	header.Time = injected.Timestamp
 
 	parentRoot := parentBlock.Root()
 	if err = handleStateForNewBlockStarting(
-		cfg.chainConfig,
-		sdb.hermezDb,
+		batchContext.cfg.chainConfig,
+		batchContext.sdb.hermezDb,
 		ibs,
 		injectedBatchBlockNumber,
 		injectedBatchBatchNumber,
@@ -78,25 +73,24 @@ func processInjectedInitialBatch(
 		return err
 	}
 
-	txn, receipt, execResult, effectiveGas, err := handleInjectedBatch(cfg, sdb, ibs, &blockContext, injected, header, parentBlock, forkId)
+	txn, receipt, execResult, effectiveGas, err := handleInjectedBatch(batchContext, ibs, &blockContext, injected, header, parentBlock, batchState.forkId)
 	if err != nil {
 		return err
 	}
 
-	usedBlockElements := &UsedBlockElements{
+	batchState.blockState.builtBlockElements = BuiltBlockElements{
 		transactions:     types.Transactions{*txn},
 		receipts:         types.Receipts{receipt},
 		executionResults: []*core.ExecutionResult{execResult},
 		effectiveGases:   []uint8{effectiveGas},
 	}
 
-	_, err = doFinishBlockAndUpdateState(ctx, cfg, s, sdb, ibs, header, parentBlock, forkId, injectedBatchNumber, injected.LastGlobalExitRoot, injected.L1ParentHash, usedBlockElements, 0, l1Recovery)
+	_, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injected.LastGlobalExitRoot, injected.L1ParentHash, 0)
 	return err
 }
 
 func handleInjectedBatch(
-	cfg SequenceBlockCfg,
-	sdb *stageDb,
+	batchContext *BatchContext,
 	ibs *state.IntraBlockState,
 	blockContext *evmtypes.BlockContext,
 	injected *zktypes.L1InjectedBatch,
@@ -115,11 +109,11 @@ func handleInjectedBatch(
 		return nil, nil, nil, 0, errors.New("expected 1 transaction in the injected batch")
 	}
 
-	batchCounters := vm.NewBatchCounterCollector(sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(false), nil)
+	batchCounters := vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(false), nil)
 
 	// process the tx and we can ignore the counters as an overflow at this stage means no network anyway
-	effectiveGas := DeriveEffectiveGasPrice(cfg, decodedBlocks[0].Transactions[0])
-	receipt, execResult, _, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, blockContext, header, decodedBlocks[0].Transactions[0], effectiveGas, false, forkId, 0 /* use 0 for l1InfoIndex in injected batch */, nil)
+	effectiveGas := DeriveEffectiveGasPrice(*batchContext.cfg, decodedBlocks[0].Transactions[0])
+	receipt, execResult, _, err := attemptAddTransaction(*batchContext.cfg, batchContext.sdb, ibs, batchCounters, blockContext, header, decodedBlocks[0].Transactions[0], effectiveGas, false, forkId, 0 /* use 0 for l1InfoIndex in injected batch */, nil)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}

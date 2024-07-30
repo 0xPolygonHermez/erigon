@@ -266,8 +266,8 @@ func SpawnSequencerExecutorVerifyStage(
 	// // send off the new batches to the verifier to be processed
 	// for batch := progress + 1; batch <= latestBatch; batch++ {
 	// 	// we do not need to verify batch 1 as this is the injected batch so just updated progress and move on
-	// 	if batch == injectedBatchNumber {
-	// 		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, injectedBatchNumber); err != nil {
+	// 	if batch == injectedBatchBatchNumber {
+	// 		if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, injectedBatchBatchNumber); err != nil {
 	// 			return err
 	// 		}
 	// 	} else {
