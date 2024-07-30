@@ -85,7 +85,7 @@ func doFinishBlockAndUpdateState(
 		return nil, err
 	}
 
-	if err := updateSequencerProgress(batchContext.sdb.tx, thisBlockNumber, batchState.batchNumber, l1InfoIndex); err != nil {
+	if err := updateSequencerProgress(batchContext.sdb.tx, thisBlockNumber, batchState.batchNumber, l1InfoIndex, false); err != nil {
 		return nil, err
 	}
 

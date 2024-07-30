@@ -40,28 +40,12 @@ func NewPromise[T any](task func() (T, error)) *Promise[T] {
 	return p
 }
 
-func NewPromiseSync[T any](task func() (T, error)) *Promise[T] {
-	p := &Promise[T]{}
-
-	result, err := task()
-	p.mutex.Lock()
-	defer p.mutex.Unlock() // this will be the first defer that is executed when the function retunrs
-
-	if p.cancelled {
-		err = ErrPromiseCancelled
-	} else {
-		p.result = result
-		p.err = err
-	}
-
-	if err != nil {
-		p.task = task
-	}
-	return p
+func (p *Promise[T]) Wait() {
+	p.wg.Wait() // .Wait ensures that all memory operations before .Done are visible after .Wait => no need to lock/unlock the mutex
 }
 
 func (p *Promise[T]) Get() (T, error) {
-	p.wg.Wait() // .Wait ensures that all memory operations before .Done are visible after .Wait => no need to lock/unlock the mutex
+	p.Wait()
 	return p.result, p.err
 }
 
@@ -77,6 +61,6 @@ func (p *Promise[T]) Cancel() {
 	p.cancelled = true
 }
 
-func (p *Promise[T]) Task() func() (T, error) {
-	return p.task
+func (p *Promise[T]) CloneAndRerun() *Promise[T] {
+	return NewPromise[T](p.task)
 }

@@ -47,6 +47,9 @@ func UnwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.Stage
 func unwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, ctx context.Context, cfg SequenceBlockCfg, initialCycle bool) error {
 	hermezDb := hermez_db.NewHermezDb(tx)
 	fromBatch, err := hermezDb.GetBatchNoByL2Block(u.UnwindPoint)
+	if err != nil {
+		return err
+	}
 
 	if err := stagedsync.UnwindExecutionStageErigon(u, s, tx, ctx, cfg.toErigonExecuteBlockCfg(), initialCycle); err != nil {
 		return err
@@ -60,7 +63,8 @@ func unwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.Stage
 		return err
 	}
 
-	if err = updateSequencerProgress(tx, u.UnwindPoint, fromBatch, 1); err != nil {
+	//TODO: why l1infoindex is 1?
+	if err = updateSequencerProgress(tx, u.UnwindPoint, fromBatch, 1, true); err != nil {
 		return err
 	}
 

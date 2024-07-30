@@ -12,13 +12,13 @@ import (
 )
 
 type SequencerBatchStreamWriter struct {
-	ctx           context.Context
-	logPrefix     string
-	batchVerifier *BatchVerifier
-	sdb           *stageDb
-	streamServer  *server.DataStreamServer
-	hasExecutors  bool
-	lastBatch     uint64
+	ctx            context.Context
+	logPrefix      string
+	legacyVerifier *verifier.LegacyExecutorVerifier
+	sdb            *stageDb
+	streamServer   *server.DataStreamServer
+	hasExecutors   bool
+	lastBatch      uint64
 }
 
 type BlockStatus struct {
@@ -27,9 +27,9 @@ type BlockStatus struct {
 	Error       error
 }
 
-func (sbc *SequencerBatchStreamWriter) CommitNewUpdates(forkId uint64) ([]BlockStatus, int, error) {
+func (sbc *SequencerBatchStreamWriter) CommitNewUpdates() ([]BlockStatus, int, error) {
 	var written []BlockStatus
-	responses, remaining, err := sbc.batchVerifier.CheckProgress()
+	responses, remaining, err := sbc.legacyVerifier.ProcessResultsSequentially()
 	if err != nil {
 		return written, remaining, err
 	}
@@ -38,7 +38,7 @@ func (sbc *SequencerBatchStreamWriter) CommitNewUpdates(forkId uint64) ([]BlockS
 		return written, remaining, nil
 	}
 
-	written, err = sbc.writeBlockDetails(responses, forkId)
+	written, err = sbc.writeBlockDetailsToDatastream(responses)
 	if err != nil {
 		return written, remaining, err
 	}
@@ -46,9 +46,10 @@ func (sbc *SequencerBatchStreamWriter) CommitNewUpdates(forkId uint64) ([]BlockS
 	return written, remaining, nil
 }
 
-func (sbc *SequencerBatchStreamWriter) writeBlockDetails(verifiedBundles []*verifier.VerifierBundle, forkId uint64) ([]BlockStatus, error) {
+func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBundles []*verifier.VerifierBundle) ([]BlockStatus, error) {
 	var written []BlockStatus
 	for _, bundle := range verifiedBundles {
+		request := bundle.Request
 		response := bundle.Response
 
 		if response.Valid {
@@ -61,7 +62,7 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetails(verifiedBundles []*veri
 				return written, err
 			}
 
-			if err := sbc.streamServer.WriteBlockWithBatchStartToStream(sbc.logPrefix, sbc.sdb.tx, sbc.sdb.hermezDb, forkId, response.BatchNumber, sbc.lastBatch, *parentBlock, *block); err != nil {
+			if err := sbc.streamServer.WriteBlockWithBatchStartToStream(sbc.logPrefix, sbc.sdb.tx, sbc.sdb.hermezDb, request.ForkId, response.BatchNumber, sbc.lastBatch, *parentBlock, *block); err != nil {
 				return written, err
 			}
 

@@ -190,6 +190,7 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, erro
 		}
 	}
 
+	latest = 11
 	if latest == 0 {
 		return 0, fmt.Errorf("could not find a suitable fork for batch %v, cannot start sequencer, check contract configuration", lastBatch+1)
 	}
@@ -307,7 +308,7 @@ func calculateNextL1TreeUpdateToUse(lastInfoIndex uint64, hermezDb *hermez_db.He
 	return nextL1Index, l1Info, nil
 }
 
-func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1InfoIndex uint64) error {
+func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1InfoIndex uint64, unwinding bool) error {
 	// now update stages that will be used later on in stageloop.go and other stages. As we're the sequencer
 	// we won't have headers stage for example as we're already writing them here
 	if err := stages.SaveStageProgress(tx, stages.Execution, newHeight); err != nil {
@@ -321,6 +322,13 @@ func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1In
 	}
 	if err := stages.SaveStageProgress(tx, stages.HighestUsedL1InfoIndex, l1InfoIndex); err != nil {
 		return err
+	}
+
+	if !unwinding {
+		// Update interhashes stage progress
+		if err := stages.SaveStageProgress(tx, stages.IntermediateHashes, newHeight); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -74,6 +74,7 @@ func SpawnSequencingStage(
 		return sdb.tx.Commit()
 	}
 
+	// if !isLastBatchPariallyProcessed {
 	// handle case where batch wasn't closed properly
 	// close it before starting a new one
 	// this occurs when sequencer was switched from syncer or sequencer datastream files were deleted
@@ -81,6 +82,7 @@ func SpawnSequencingStage(
 	if err = finalizeLastBatchInDatastreamIfNotFinalized(batchContext, batchState, executionAt); err != nil {
 		return err
 	}
+	// }
 
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
 		return err
@@ -106,15 +108,15 @@ func SpawnSequencingStage(
 	blockDataSizeChecker := NewBlockDataChecker()
 	batchDataOverflow := false
 
-	batchVerifier := NewBatchVerifier(cfg.zk, batchState.hasExecutorForThisBatch, cfg.legacyVerifier, batchState.forkId)
+	// batchVerifier := NewBatchVerifier(cfg.zk, batchState.hasExecutorForThisBatch, cfg.legacyVerifier, batchState.forkId)
 	streamWriter := &SequencerBatchStreamWriter{
-		ctx:           ctx,
-		logPrefix:     logPrefix,
-		batchVerifier: batchVerifier,
-		sdb:           sdb,
-		streamServer:  cfg.datastreamServer,
-		hasExecutors:  batchState.hasExecutorForThisBatch,
-		lastBatch:     lastBatch,
+		ctx:            ctx,
+		logPrefix:      logPrefix,
+		legacyVerifier: cfg.legacyVerifier,
+		sdb:            sdb,
+		streamServer:   cfg.datastreamServer,
+		hasExecutors:   batchState.hasExecutorForThisBatch,
+		lastBatch:      lastBatch,
 	}
 
 	limboHeaderTimestamp, limboTxHash := cfg.txPool.GetLimboTxHash(batchState.batchNumber)
@@ -152,7 +154,7 @@ func SpawnSequencingStage(
 	if !isLastBatchPariallyProcessed {
 		log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
 	} else {
-		log.Info(fmt.Sprintf("[%s] Continuing unfinished batch %d from block %d", logPrefix, batchState.batchNumber, executionAt))
+		log.Info(fmt.Sprintf("[%s] Continuing unfinished batch %d from block %d", logPrefix, batchState.batchNumber, executionAt+1))
 	}
 
 	var block *types.Block
@@ -391,17 +393,27 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		if err = sdb.CommitAndStart(); err != nil {
-			return err
+		// add a check to the verifier and also check for responses
+		batchState.onBuiltBlock(blockNumber)
+
+		// commit block data here so it is accessible in other threads
+		if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
+			return errCommitAndStart
 		}
 		defer sdb.tx.Rollback()
 
-		// add a check to the verifier and also check for responses
-		batchState.onBuiltBlock(blockNumber)
-		batchVerifier.AddNewCheck(batchState.batchNumber, blockNumber, block.Root(), batchCounters.CombineCollectorsNoChanges().UsedAsMap(), batchState.builtBlocks)
+		cfg.legacyVerifier.StartAsyncVerification(batchState.forkId, batchState.batchNumber, block.Root(), batchCounters.CombineCollectorsNoChanges().UsedAsMap(), batchState.builtBlocks, batchState.hasExecutorForThisBatch)
 
 		// check for new responses from the verifier
 		needsUnwind, _, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
+
+		// lets commit everything after updateStreamAndCheckRollback no matter of its result
+		if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
+			return errCommitAndStart
+		}
+		defer sdb.tx.Rollback()
+
+		// check the return values of updateStreamAndCheckRollback and CommitAndStart
 		if err != nil || needsUnwind {
 			return err
 		}

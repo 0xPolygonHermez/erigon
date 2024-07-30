@@ -55,13 +55,16 @@ func doInstantCloseIfNeeded(batchContext *BatchContext, batchState *BatchState, 
 	// only close this batch down if we actually made any progress in it, otherwise
 	// just continue processing as normal and recreate the batch from scratch
 	if len(blocks) > 0 {
+		// if err = stages.SaveStageProgress(batchContext.sdb.tx, stages.HighestSeenBatchNumber, batchState.batchNumber); err != nil {
+		// 	return false, err
+		// }
 		if err = runBatchLastSteps(batchContext, batchState.batchNumber, blocks[len(blocks)-1], batchCounters); err != nil {
 			return false, err
 		}
-		if err = stages.SaveStageProgress(batchContext.sdb.tx, stages.HighestSeenBatchNumber, batchState.batchNumber); err != nil {
+		if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
 			return false, err
 		}
-		if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
+		if err = updateSequencerProgress(batchContext.sdb.tx, blocks[len(blocks)-1], batchState.batchNumber, 1, false); err != nil {
 			return false, err
 		}
 
@@ -122,40 +125,40 @@ func updateStreamAndCheckRollback(
 	streamWriter *SequencerBatchStreamWriter,
 	u stagedsync.Unwinder,
 ) (bool, int, error) {
-	committed, remaining, err := streamWriter.CommitNewUpdates(batchState.forkId)
+	committed, remaining, err := streamWriter.CommitNewUpdates()
 	if err != nil {
 		return false, remaining, err
 	}
+
 	for _, commit := range committed {
-		if !commit.Valid {
-			// we are about to unwind so place the marker ready for this to happen
-			if err = batchContext.sdb.hermezDb.WriteJustUnwound(batchState.batchNumber); err != nil {
-				return false, 0, err
-			}
-			// capture the fork otherwise when the loop starts again to close
-			// off the batch it will detect it as a fork upgrade
-			if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
-				return false, 0, err
-			}
-
-			unwindTo := commit.BlockNumber - 1
-
-			// for unwind we supply the block number X-1 of the block we want to remove, but supply the hash of the block
-			// causing the unwind.
-			unwindHeader := rawdb.ReadHeaderByNumber(batchContext.sdb.tx, commit.BlockNumber)
-			if unwindHeader == nil {
-				return false, 0, fmt.Errorf("could not find header for block %d", commit.BlockNumber)
-			}
-
-			if err = batchContext.sdb.tx.Commit(); err != nil {
-				return false, 0, err
-			}
-
-			log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", batchContext.s.LogPrefix()), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
-
-			u.UnwindTo(unwindTo, unwindHeader.Hash())
-			return true, 0, nil
+		if commit.Valid {
+			continue
 		}
+
+		// we are about to unwind so place the marker ready for this to happen
+		if err = batchContext.sdb.hermezDb.WriteJustUnwound(batchState.batchNumber); err != nil {
+			return false, 0, err
+		}
+		// capture the fork otherwise when the loop starts again to close
+		// off the batch it will detect it as a fork upgrade
+		if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
+			return false, 0, err
+		}
+
+		unwindTo := commit.BlockNumber - 1
+
+		// for unwind we supply the block number X-1 of the block we want to remove, but supply the hash of the block
+		// causing the unwind.
+		unwindHeader := rawdb.ReadHeaderByNumber(batchContext.sdb.tx, commit.BlockNumber)
+		if unwindHeader == nil {
+			return false, 0, fmt.Errorf("could not find header for block %d", commit.BlockNumber)
+		}
+
+		log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", batchContext.s.LogPrefix()), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
+
+		u.UnwindTo(unwindTo, unwindHeader.Hash())
+		streamWriter.legacyVerifier.CancelAllRequests()
+		return true, 0, nil
 	}
 
 	return false, remaining, nil
