@@ -890,7 +890,7 @@ func (db *HermezDb) DeleteBlockL1InfoTreeIndexes(fromBlockNum, toBlockNum uint64
 // from and to are inclusive
 func (db *HermezDb) DeleteBlockBatches(fromBlockNum, toBlockNum uint64) error {
 	// first, gather batch numbers related to the blocks we're about to delete
-	batchNos := make([]uint64, 0)
+	batchNumbersMap := map[uint64]struct{}{}
 
 	// find all the batches involved
 	for i := fromBlockNum; i <= toBlockNum; i++ {
@@ -898,28 +898,19 @@ func (db *HermezDb) DeleteBlockBatches(fromBlockNum, toBlockNum uint64) error {
 		if err != nil {
 			return err
 		}
-		found := false
-		for _, b := range batchNos {
-			if b == batch {
-				found = true
-				break
-			}
-		}
-		if !found {
-			batchNos = append(batchNos, batch)
-		}
+		batchNumbersMap[batch] = struct{}{}
 	}
 
 	// now for each batch go and get the block numbers and remove them from the batch to block records
-	for _, batchNo := range batchNos {
-		data, err := db.tx.GetOne(BATCH_BLOCKS, Uint64ToBytes(batchNo))
+	for batchNumber := range batchNumbersMap {
+		data, err := db.tx.GetOne(BATCH_BLOCKS, Uint64ToBytes(batchNumber))
 		if err != nil {
 			return err
 		}
 		blockNos := parseConcatenatedBlockNumbers(data)
 
 		// make a new list excluding the blocks in our range
-		newBlockNos := make([]uint64, 0)
+		newBlockNos := make([]uint64, 0, len(blockNos))
 		for _, blockNo := range blockNos {
 			if blockNo < fromBlockNum || blockNo > toBlockNum {
 				newBlockNos = append(newBlockNos, blockNo)
@@ -929,8 +920,15 @@ func (db *HermezDb) DeleteBlockBatches(fromBlockNum, toBlockNum uint64) error {
 		// concatenate the block numbers back again
 		newData := concatenateBlockNumbers(newBlockNos)
 
-		// now store it back
-		err = db.tx.Put(BATCH_BLOCKS, Uint64ToBytes(batchNo), newData)
+		// now delete/store it back
+		if len(newData) == 0 {
+			err = db.tx.Delete(BATCH_BLOCKS, Uint64ToBytes(batchNumber))
+		} else {
+			err = db.tx.Put(BATCH_BLOCKS, Uint64ToBytes(batchNumber), newData)
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	return db.deleteFromBucketWithUintKeysRange(BLOCKBATCHES, fromBlockNum, toBlockNum)
