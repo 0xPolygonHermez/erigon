@@ -259,15 +259,15 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 	}
 }
 
-func (p *TxPool) StartIfNotStarted(ctx context.Context, tx kv.Tx) error {
+func (p *TxPool) StartIfNotStarted(ctx context.Context, txPoolDb kv.RoDB, coreTx kv.Tx) error {
 	if !p.started.Load() {
-		coreTx, err := p.coreDB().BeginRo(ctx)
+		txPoolDbTx, err := txPoolDb.BeginRo(ctx)
 		if err != nil {
 			return err
 		}
-		defer coreTx.Rollback()
+		defer txPoolDbTx.Rollback()
 
-		if err := p.fromDB(ctx, tx, coreTx); err != nil {
+		if err := p.fromDB(ctx, txPoolDbTx, coreTx); err != nil {
 			return fmt.Errorf("loading txs from DB: %w", err)
 		}
 	}
