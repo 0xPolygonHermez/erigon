@@ -88,7 +88,6 @@ func (bcc *BatchCounterCollector) AddNewTransactionCounters(txCounters *Transact
 
 	bcc.transactions = append(bcc.transactions, txCounters)
 	bcc.UpdateRlpCountersCache(txCounters)
-	bcc.UpdateExecutionCountersCache(txCounters) // all txCounters.executionCounters.counters `used` fields are zero now
 
 	return bcc.CheckForOverflow(false) //no need to calculate the merkle proof here
 }
@@ -278,26 +277,12 @@ func (bcc *BatchCounterCollector) UpdateRlpCountersCache(txCounters *Transaction
 	}
 }
 
-func (bcc *BatchCounterCollector) UpdateExecutionCountersCache(txCounters *TransactionCounter) {
+func (bcc *BatchCounterCollector) UpdateExecutionAndProcessingCountersCache(txCounters *TransactionCounter) {
 	for k, v := range txCounters.executionCounters.counters {
 		bcc.executionCombinedCounters[k].used += v.used
 	}
-}
 
-func (bcc *BatchCounterCollector) UpdateProcessingCountersCache(txCounters *TransactionCounter) {
 	for k, v := range txCounters.processingCounters.counters {
 		bcc.processingCombinedCounters[k].used += v.used
 	}
-}
-
-func (bcc *BatchCounterCollector) SnapshotCounters() {
-	bcc.rlpCombinedCountersCache = bcc.rlpCombinedCounters.Clone()
-	bcc.executionCombinedCountersCache = bcc.executionCombinedCounters.Clone()
-	bcc.processingCombinedCountersCache = bcc.processingCombinedCounters.Clone()
-}
-
-func (bcc *BatchCounterCollector) RevertToSnapshotCounters() {
-	bcc.rlpCombinedCounters = bcc.rlpCombinedCountersCache.Clone()
-	bcc.executionCombinedCounters = bcc.executionCombinedCountersCache.Clone()
-	bcc.processingCombinedCounters = bcc.processingCombinedCountersCache.Clone()
 }

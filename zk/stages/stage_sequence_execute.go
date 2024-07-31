@@ -423,7 +423,6 @@ func SpawnSequencingStage(
 					}
 
 					backupDataSizeChecker := *blockDataSizeChecker
-					batchCounters.SnapshotCounters()
 					if receipt, execResult, anyOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, l1Recovery, forkId, l1InfoIndex, &backupDataSizeChecker); err != nil {
 						if limboRecovery {
 							panic("limbo transaction has already been executed once so they must not fail while re-executing")
@@ -438,10 +437,6 @@ func SpawnSequencingStage(
 							)
 							continue
 						}
-					}
-
-					if anyOverflow || err != nil {
-						batchCounters.RevertToSnapshotCounters()
 					}
 
 					if anyOverflow {
