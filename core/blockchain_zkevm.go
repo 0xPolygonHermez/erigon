@@ -319,6 +319,9 @@ func FinalizeBlockExecutionWithHistoryWrite(
 		isMining,
 		excessDataGas,
 	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	if err := stateWriter.WriteHistory(); err != nil {
 		return nil, nil, nil, fmt.Errorf("writing history for block %d failed: %w", header.Number.Uint64(), err)

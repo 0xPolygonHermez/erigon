@@ -407,7 +407,7 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
 
 		if request.BlockNumber == 4 && counter == 0 {
-			ok = false
+			// ok = false
 			counter = 1
 		}
 
