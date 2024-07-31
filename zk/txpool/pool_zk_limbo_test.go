@@ -200,12 +200,12 @@ func initDb(t *testing.T, dbPath string, wipe bool) (kv.RwDB, kv.RwTx, kv.RwDB) 
 
 	txRw, err := database.BeginRw(ctx)
 	if err != nil {
-		t.Fatalf("Cannot craete db transaction %e", err)
+		t.Fatalf("Cannot create db transaction %e", err)
 	}
 
 	aclDB, err := OpenACLDB(ctx, dbPath)
 	if err != nil {
-		t.Fatalf("Cannot craete acl db %e", err)
+		t.Fatalf("Cannot create acl db %e", err)
 	}
 
 	return database, txRw, aclDB
