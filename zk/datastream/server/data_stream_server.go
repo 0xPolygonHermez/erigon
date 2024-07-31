@@ -455,24 +455,12 @@ func (srv *DataStreamServer) GetHighestBatchNumber() (uint64, error) {
 		return *srv.highestBatchWritten, nil
 	}
 
-	header := srv.stream.GetHeader()
-
-	if header.TotalEntries == 0 {
-		return 0, nil
+	entry, found, err := srv.getLastEntryOfType(datastreamer.EntryType(types.EntryTypeBatchStart))
+	if err != nil {
+		return 0, err
 	}
-
-	entryNum := header.TotalEntries - 1
-	var err error
-	var entry datastreamer.FileEntry
-	for {
-		entry, err = srv.stream.GetEntry(entryNum)
-		if err != nil {
-			return 0, err
-		}
-		if entry.Type == datastreamer.EntryType(1) {
-			break
-		}
-		entryNum -= 1
+	if !found {
+		return 0, nil
 	}
 
 	batch, err := types.UnmarshalBatchStart(entry.Data)
@@ -481,6 +469,23 @@ func (srv *DataStreamServer) GetHighestBatchNumber() (uint64, error) {
 	}
 
 	srv.highestBatchWritten = &batch.Number
+
+	return batch.Number, nil
+}
+
+func (srv *DataStreamServer) GetHighestClosedBatch() (uint64, error) {
+	entry, found, err := srv.getLastEntryOfType(datastreamer.EntryType(types.EntryTypeBatchEnd))
+	if err != nil {
+		return 0, err
+	}
+	if !found {
+		return 0, nil
+	}
+
+	batch, err := types.UnmarshalBatchEnd(entry.Data)
+	if err != nil {
+		return 0, err
+	}
 
 	return batch.Number, nil
 }
@@ -523,4 +528,22 @@ func (srv *DataStreamServer) UnwindToBatchStart(batchNumber uint64) error {
 	}
 
 	return srv.stream.TruncateFile(entryNum)
+}
+
+func (srv *DataStreamServer) getLastEntryOfType(entryType datastreamer.EntryType) (datastreamer.FileEntry, bool, error) {
+	header := srv.stream.GetHeader()
+	emtryEntry := datastreamer.FileEntry{}
+
+	// loop will become infinite if using unsigned type
+	for entryNum := int64(header.TotalEntries - 1); entryNum >= 0; entryNum-- {
+		entry, err := srv.stream.GetEntry(uint64(entryNum))
+		if err != nil {
+			return emtryEntry, false, err
+		}
+		if entry.Type == entryType {
+			return entry, true, nil
+		}
+	}
+
+	return emtryEntry, false, nil
 }

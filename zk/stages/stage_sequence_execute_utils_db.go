@@ -2,7 +2,6 @@ package stages
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 
@@ -23,11 +22,8 @@ type stageDb struct {
 	smt         *smtNs.SMT
 }
 
-func newStageDb(ctx context.Context, tx kv.RwTx, db kv.RwDB) (sdb *stageDb, err error) {
-	if tx != nil {
-		return nil, fmt.Errorf("sequencer cannot use global db's tx object, because it commits the tx object itself")
-	}
-
+func newStageDb(ctx context.Context, db kv.RwDB) (sdb *stageDb, err error) {
+	var tx kv.RwTx
 	if tx, err = db.BeginRw(ctx); err != nil {
 		return nil, err
 	}

@@ -8,7 +8,6 @@ import (
 
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -23,8 +22,7 @@ import (
 )
 
 func handleStateForNewBlockStarting(
-	chainConfig *chain.Config,
-	hermezDb *hermez_db.HermezDb,
+	batchContext *BatchContext,
 	ibs *state.IntraBlockState,
 	blockNumber uint64,
 	batchNumber uint64,
@@ -33,6 +31,9 @@ func handleStateForNewBlockStarting(
 	l1info *zktypes.L1InfoTreeUpdate,
 	shouldWriteGerToContract bool,
 ) error {
+	chainConfig := batchContext.cfg.chainConfig
+	hermezDb := batchContext.sdb.hermezDb
+
 	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
 
 	// handle writing to the ger manager contract but only if the index is above 0

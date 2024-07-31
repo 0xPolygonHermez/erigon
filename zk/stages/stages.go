@@ -106,7 +106,7 @@ func SequencerZkStages(
 			ID:          stages2.Execution,
 			Description: "Sequence transactions",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return SpawnSequencingStage(s, u, tx, ctx, exec, history, quiet)
+				return SpawnSequencingStage(s, u, ctx, exec, history, quiet)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
 				return UnwindSequenceExecutionStage(u, s, tx, ctx, exec, firstCycle)

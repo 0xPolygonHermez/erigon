@@ -100,6 +100,15 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("get toBatch no by l2 block error: %v", err)
 	}
 
+	lastBatchToKeepBeforeFrom, err := hermezDb.GetBatchNoByL2Block(u.UnwindPoint)
+	if err != nil {
+		return fmt.Errorf("get fromBatch no by l2 block error: %v", err)
+	}
+	fromBatchForForkIdDeletion := fromBatch
+	if lastBatchToKeepBeforeFrom == fromBatch {
+		fromBatchForForkIdDeletion++
+	}
+
 	// only seq
 	if err = hermezDb.TruncateLatestUsedGers(fromBatch); err != nil {
 		return fmt.Errorf("truncate latest used gers error: %v", err)
@@ -121,7 +130,7 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("truncate block batches error: %v", err)
 	}
 	// only seq
-	if err = hermezDb.TruncateForkId(fromBatch, toBatch); err != nil {
+	if err = hermezDb.TruncateForkId(fromBatchForForkIdDeletion, toBatch); err != nil {
 		return fmt.Errorf("truncate fork id error: %v", err)
 	}
 

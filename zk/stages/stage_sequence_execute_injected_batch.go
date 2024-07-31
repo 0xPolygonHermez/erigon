@@ -59,17 +59,7 @@ func processInjectedInitialBatch(
 	header.Time = injected.Timestamp
 
 	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(
-		batchContext.cfg.chainConfig,
-		batchContext.sdb.hermezDb,
-		ibs,
-		injectedBatchBlockNumber,
-		injectedBatchBatchNumber,
-		injected.Timestamp,
-		&parentRoot,
-		fakeL1TreeUpdate,
-		true,
-	); err != nil {
+	if err = handleStateForNewBlockStarting(batchContext, ibs, injectedBatchBlockNumber, injectedBatchBatchNumber, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, true); err != nil {
 		return err
 	}
 

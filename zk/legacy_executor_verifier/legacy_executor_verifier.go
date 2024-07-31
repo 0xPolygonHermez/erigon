@@ -331,10 +331,6 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 	// ProcessResultsSequentiallyUnsafe relies on the fact that this function returns ALWAYS non-verifierBundle and error. The only exception is the case when verifications has been canceled. Only then the verifierBundle can be nil
 	return NewPromise[*VerifierBundle](func() (*VerifierBundle, error) {
 		verifierBundle := NewVerifierBundle(request, nil)
-		// bundleWithBlocks := &VerifierBundle{
-		// 	Blocks: blockNumbers,
-		// 	Bundle: verifierBundle,
-		// }
 
 		e := v.GetNextOnlineAvailableExecutor()
 		if e == nil {
@@ -368,7 +364,7 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 			return verifierBundle, err
 		}
 
-		witness, err := v.witnessGenerator.GetWitnessByBlockRange(tx, ctx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
+		witness, err := v.witnessGenerator.GetWitnessByBlockRange(tx, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
 		if err != nil {
 			return verifierBundle, err
 		}
@@ -407,7 +403,7 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
 
 		if request.BlockNumber == 4 && counter == 0 {
-			// ok = false
+			ok = false
 			counter = 1
 		}
 
@@ -434,18 +430,11 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 }
 
 func (v *LegacyExecutorVerifier) VerifyWithoutExecutor(request *VerifierRequest, blockNumbers []uint64) *Promise[*VerifierBundle] {
-	valid := true
-	// simulate a die roll to determine if this is a good batch or not
-	// 1 in 6 chance of being a bad batch
-	// if rand.Intn(6) == 0 {
-	// 	valid = false
-	// }
-
 	promise := NewPromise[*VerifierBundle](func() (*VerifierBundle, error) {
 		response := &VerifierResponse{
 			BatchNumber:      request.BatchNumber,
 			BlockNumber:      request.BlockNumber,
-			Valid:            valid,
+			Valid:            true,
 			OriginalCounters: request.Counters,
 			Witness:          nil,
 			ExecutorResponse: nil,
@@ -458,7 +447,7 @@ func (v *LegacyExecutorVerifier) VerifyWithoutExecutor(request *VerifierRequest,
 	return promise
 }
 
-func (v *LegacyExecutorVerifier) ProcessResultsSequentially() ([]*VerifierBundle, int, error) {
+func (v *LegacyExecutorVerifier) ProcessResultsSequentially() ([]*VerifierBundle, error) {
 	v.mtxPromises.Lock()
 	defer v.mtxPromises.Unlock()
 
@@ -484,7 +473,7 @@ func (v *LegacyExecutorVerifier) ProcessResultsSequentially() ([]*VerifierBundle
 
 			if verifierBundle.Request.IsOverdue() {
 				// signal an error, the caller can check on this and stop the process if needs be
-				return nil, 0, fmt.Errorf("error: batch %d couldn't be processed in 30 minutes", verifierBundle.Request.BatchNumber)
+				return nil, fmt.Errorf("error: batch %d couldn't be processed in 30 minutes", verifierBundle.Request.BatchNumber)
 			}
 
 			// re-queue the task - it should be safe to replace the index of the slice here as we only add to it
@@ -500,7 +489,7 @@ func (v *LegacyExecutorVerifier) ProcessResultsSequentially() ([]*VerifierBundle
 	// remove processed promises from the list
 	v.promises = v.promises[len(verifierResponse):]
 
-	return verifierResponse, len(v.promises), nil
+	return verifierResponse, nil
 }
 
 // func (v *LegacyExecutorVerifier) checkAndWriteToStream(tx kv.Tx, hdb *hermez_db.HermezDbReader, newBatch uint64) error {
@@ -595,6 +584,12 @@ func (v *LegacyExecutorVerifier) ProcessResultsSequentially() ([]*VerifierBundle
 // 	v.promises = v.promises[1:]
 // 	delete(v.addedBatches, batchNumber)
 // }
+
+func (v *LegacyExecutorVerifier) Wait() {
+	for _, p := range v.promises {
+		p.Wait()
+	}
+}
 
 func (v *LegacyExecutorVerifier) CancelAllRequests() {
 	// cancel all promises

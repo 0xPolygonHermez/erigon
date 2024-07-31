@@ -317,11 +317,15 @@ func (srv *DataStreamServer) UnwindIfNecessary(logPrefix string, reader DbReader
 
 func (srv *DataStreamServer) WriteBatchEnd(
 	reader DbReader,
-	batchNumber,
-	lastBatchNumber uint64,
+	batchNumber uint64,
 	stateRoot *common.Hash,
 	localExitRoot *common.Hash,
 ) (err error) {
+	lastBatchNumber, err := srv.GetHighestClosedBatch()
+	if err != nil {
+		return err
+	}
+
 	gers, err := reader.GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber)
 	if err != nil {
 		return err

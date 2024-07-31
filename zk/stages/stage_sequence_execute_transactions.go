@@ -176,7 +176,7 @@ func attemptAddTransaction(
 
 	if overflow {
 		ibs.RevertToSnapshot(snapshot)
-		return nil, nil, true, err
+		return nil, nil, true, nil
 	}
 
 	// add the gas only if not reverted. This should not be moved above the overflow check
@@ -190,5 +190,5 @@ func attemptAddTransaction(
 
 	ibs.FinalizeTx(evm.ChainRules(), noop)
 
-	return receipt, execResult, overflow, err
+	return receipt, execResult, false, nil
 }

@@ -21,29 +21,41 @@ type SequencerBatchStreamWriter struct {
 	lastBatch      uint64
 }
 
+func newSequencerBatchStreamWriter(batchContext *BatchContext, batchState *BatchState, lastBatch uint64) *SequencerBatchStreamWriter {
+	return &SequencerBatchStreamWriter{
+		ctx:            batchContext.ctx,
+		logPrefix:      batchContext.s.LogPrefix(),
+		legacyVerifier: batchContext.cfg.legacyVerifier,
+		sdb:            batchContext.sdb,
+		streamServer:   batchContext.cfg.datastreamServer,
+		hasExecutors:   batchState.hasExecutorForThisBatch,
+		lastBatch:      lastBatch,
+	}
+}
+
 type BlockStatus struct {
 	BlockNumber uint64
 	Valid       bool
 	Error       error
 }
 
-func (sbc *SequencerBatchStreamWriter) CommitNewUpdates() ([]BlockStatus, int, error) {
+func (sbc *SequencerBatchStreamWriter) CommitNewUpdates() ([]BlockStatus, error) {
 	var written []BlockStatus
-	responses, remaining, err := sbc.legacyVerifier.ProcessResultsSequentially()
+	responses, err := sbc.legacyVerifier.ProcessResultsSequentially()
 	if err != nil {
-		return written, remaining, err
+		return written, err
 	}
 
 	if len(responses) == 0 {
-		return written, remaining, nil
+		return written, nil
 	}
 
 	written, err = sbc.writeBlockDetailsToDatastream(responses)
 	if err != nil {
-		return written, remaining, err
+		return written, err
 	}
 
-	return written, remaining, nil
+	return written, nil
 }
 
 func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBundles []*verifier.VerifierBundle) ([]BlockStatus, error) {
@@ -109,7 +121,7 @@ func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, bat
 		return err
 	}
 	root := lastBlock.Root()
-	if err = batchContext.cfg.datastreamServer.WriteBatchEnd(batchContext.sdb.hermezDb, batchState.batchNumber, batchState.batchNumber-1, &root, &ler); err != nil {
+	if err = batchContext.cfg.datastreamServer.WriteBatchEnd(batchContext.sdb.hermezDb, batchState.batchNumber-1, &root, &ler); err != nil {
 		return err
 	}
 	return nil
