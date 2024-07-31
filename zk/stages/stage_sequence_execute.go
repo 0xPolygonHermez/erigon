@@ -26,6 +26,7 @@ func SpawnSequencingStage(
 	rootTx kv.RwTx,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
+	historyCfg stagedsync.HistoryCfg,
 	quiet bool,
 ) (err error) {
 	logPrefix := s.LogPrefix()
@@ -58,7 +59,7 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	batchContext := newBatchContext(ctx, &cfg, s, sdb)
+	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
 	batchState := newBatchState(forkId, prepareBatchNumber(lastBatch, isLastBatchPariallyProcessed), !isLastBatchPariallyProcessed && cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0)
 
 	// injected batch

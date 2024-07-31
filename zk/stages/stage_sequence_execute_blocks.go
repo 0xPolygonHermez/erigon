@@ -154,7 +154,7 @@ func finaliseBlock(
 		}
 	}
 
-	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecutionWithHistoryWrite(
+	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecution(
 		batchContext.cfg.engine,
 		batchContext.sdb.stateReader,
 		newHeader,
@@ -173,6 +173,7 @@ func finaliseBlock(
 		return nil, err
 	}
 
+	// this is actually the interhashes stage
 	newRoot, err := zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	if err != nil {
 		return nil, err
@@ -223,6 +224,20 @@ func finaliseBlock(
 	// now add in the zk batch to block references
 	if err := batchContext.sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batchState.batchNumber); err != nil {
 		return nil, fmt.Errorf("write block batch error: %v", err)
+	}
+
+	// this is actually account + storage indices stages
+	quitCh := batchContext.ctx.Done()
+	from := newNum.Uint64()
+	if from == 1 {
+		from = 0
+	}
+	to := newNum.Uint64() + 1
+	if err = stagedsync.PromoteHistory(batchContext.s.LogPrefix(), batchContext.sdb.tx, kv.AccountChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
+		return nil, err
+	}
+	if err = stagedsync.PromoteHistory(batchContext.s.LogPrefix(), batchContext.sdb.tx, kv.StorageChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
+		return nil, err
 	}
 
 	return finalBlock, nil

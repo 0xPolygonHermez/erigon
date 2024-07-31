@@ -325,8 +325,15 @@ func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1In
 	}
 
 	if !unwinding {
-		// Update interhashes stage progress
 		if err := stages.SaveStageProgress(tx, stages.IntermediateHashes, newHeight); err != nil {
+			return err
+		}
+
+		if err := stages.SaveStageProgress(tx, stages.AccountHistoryIndex, newHeight); err != nil {
+			return err
+		}
+
+		if err := stages.SaveStageProgress(tx, stages.StorageHistoryIndex, newHeight); err != nil {
 			return err
 		}
 	}
