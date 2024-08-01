@@ -894,7 +894,16 @@ func (db *HermezDb) DeleteBlockBatches(fromBlockNum, toBlockNum uint64) error {
 		blockNum := BytesToUint64(k)
 		if blockNum >= fromBlockNum && blockNum <= toBlockNum {
 			batchNo := BytesToUint64(v)
-			batchNos = append(batchNos, batchNo)
+			add := true
+			for _, b := range batchNos {
+				if b == batchNo {
+					add = false
+					break
+				}
+			}
+			if add {
+				batchNos = append(batchNos, batchNo)
+			}
 		}
 	}
 
