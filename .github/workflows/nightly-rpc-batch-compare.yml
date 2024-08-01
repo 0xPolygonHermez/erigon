@@ -17,7 +17,7 @@ jobs:
             legacy: "https://rpc.zkevm-internal.com"
             erigon: "https://rpc.internal.zkevm-rpc.com"
           - name: integration8
-            legacy: "???"
+            legacy: "http://34.175.214.161:18505"
             erigon: "http://34.175.214.161:18124"
 
     steps:

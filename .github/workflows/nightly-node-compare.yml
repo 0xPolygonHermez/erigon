@@ -14,7 +14,7 @@ jobs:
         nodes:
           - name: "Integration 8"
             erigon: "http://34.175.214.161:18124"
-            zkevm: "http://34.175.214.161:??????"
+            zkevm: "http://34.175.214.161:18505"
             sequencer: "http://34.175.214.161:18123"
             compare-blocks: 1000
             allowed-block-diff: 2000
