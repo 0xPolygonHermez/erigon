@@ -504,7 +504,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		defer tx.Rollback()
 	}
 
-	fromBlock := u.UnwindPoint
+	fromBlock := u.UnwindPoint + 1
 	toBlock := u.CurrentBlockNumber
 	log.Info(fmt.Sprintf("[%s] Unwinding batches stage from block number", logPrefix), "fromBlock", fromBlock, "toBlock", toBlock)
 	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
@@ -634,7 +634,6 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	///////////////////////////////////////////////////////
 
 	log.Info(fmt.Sprintf("[%s] Deleted headers, bodies, forkIds and blockBatches.", logPrefix))
-	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", fromBlock)
 
 	stageprogress := uint64(0)
 	if fromBlock > 1 {
@@ -643,6 +642,8 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	if err := stages.SaveStageProgress(tx, stages.Batches, stageprogress); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
+
+	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "fromBlock", stageprogress)
 
 	/////////////////////////////////////////////
 	// store the highest hashable block number //
