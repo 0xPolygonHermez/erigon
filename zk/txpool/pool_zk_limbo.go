@@ -532,6 +532,11 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 			txn.SenderID, txn.Traced = p.senders.getOrCreateID(addr)
 			binary.BigEndian.Uint64(v)
 
+			// ValidateTx function validates a tx against current network state.
+			// Limbo transactions are expected to be invalid according to current network state.
+			// That's why there is no point to check it while recovering the pool from a database.
+			// These transactions may become valid after some of the current tx in the pool are executed
+			// so leave the decision whether a limbo transaction (or any other transaction that has been unwound) to the execution stage.
 			// if reason := p.validateTx(txn, true, cacheView, addr); reason != NotSet && reason != Success {
 			// 	return nil
 			// }
