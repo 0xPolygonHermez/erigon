@@ -7,21 +7,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 )
 
-// type SequencerInterhashesCfg struct {
-// 	db          kv.RwDB
-// 	accumulator *shards.Accumulator
-// }
-
-// func StageSequencerInterhashesCfg(
-// 	db kv.RwDB,
-// 	accumulator *shards.Accumulator,
-// ) SequencerInterhashesCfg {
-// 	return SequencerInterhashesCfg{
-// 		db:          db,
-// 		accumulator: accumulator,
-// 	}
-// }
-
 // This stages does NOTHING while going forward, because its done during execution
 // Even this stage progress is updated in execution stage
 func SpawnSequencerInterhashesStage(
@@ -32,32 +17,6 @@ func SpawnSequencerInterhashesStage(
 	cfg ZkInterHashesCfg,
 	quiet bool,
 ) error {
-	// var err error
-
-	// freshTx := tx == nil
-	// if freshTx {
-	// 	tx, err = cfg.db.BeginRw(ctx)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	defer tx.Rollback()
-	// }
-
-	// to, err := s.ExecutionAt(tx)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// if err := s.Update(tx, to); err != nil {
-	// 	return err
-	// }
-
-	// if freshTx {
-	// 	if err = tx.Commit(); err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	return nil
 }
 

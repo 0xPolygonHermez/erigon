@@ -8,7 +8,6 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/ledgerwatch/log/v3"
 
-	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -57,8 +56,12 @@ func SpawnSequencingStage(
 		return err
 	}
 
+	var block *types.Block
+	runLoopBlocks := true
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
-	batchState := newBatchState(forkId, prepareBatchNumber(lastBatch, isLastBatchPariallyProcessed), !isLastBatchPariallyProcessed && cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0)
+	batchState := newBatchState(forkId, prepareBatchNumber(lastBatch, isLastBatchPariallyProcessed), !isLastBatchPariallyProcessed && cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool)
+	blockDataSizeChecker := newBlockDataChecker()
+	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState, lastBatch) // using lastBatch (rather than batchState.batchNumber) is not mistake
 
 	// injected batch
 	if executionAt == 0 {
@@ -82,13 +85,15 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	if isLastBatchPariallyProcessed {
+	if !batchState.isL1Recovery() {
 		// check if we just unwound from a bad executor response and if we did just close the batch here
-		handled, err := doInstantCloseIfNeeded(batchContext, batchState, batchCounters)
+		handled, err := doInstantCloseAfterUnwindOfBatchVerificationErrorIfNeeded(batchContext, batchState, batchCounters)
 		if err != nil || handled {
 			return err
 		}
-	} else {
+	}
+
+	if !isLastBatchPariallyProcessed {
 		// handle case where batch wasn't closed properly
 		// close it before starting a new one
 		// this occurs when sequencer was switched from syncer or sequencer datastream files were deleted
@@ -96,25 +101,6 @@ func SpawnSequencingStage(
 		if err = finalizeLastBatchInDatastreamIfNotFinalized(batchContext, batchState, executionAt); err != nil {
 			return err
 		}
-	}
-
-	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
-	defer batchTicker.Stop()
-	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
-	defer nonEmptyBatchTimer.Stop()
-
-	runLoopBlocks := true
-	batchDataOverflow := false
-	blockDataSizeChecker := NewBlockDataChecker()
-	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState, lastBatch)
-
-	limboHeaderTimestamp, limboTxHash := cfg.txPool.GetLimboTxHash(batchState.batchNumber)
-	limboRecovery := limboTxHash != nil
-	isAnyRecovery := batchState.isL1Recovery() || limboRecovery
-
-	// if not limbo set the limboHeaderTimestamp to the "default" value for "prepareHeader" function
-	if !limboRecovery {
-		limboHeaderTimestamp = math.MaxUint64
 	}
 
 	if batchState.isL1Recovery() {
@@ -140,11 +126,21 @@ func SpawnSequencingStage(
 		}
 	}
 
+	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
+	defer batchTicker.Stop()
+	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
+	defer nonEmptyBatchTimer.Stop()
+	logTicker := time.NewTicker(10 * time.Second)
+	defer logTicker.Stop()
+	blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
+	defer blockTicker.Stop()
+
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
 
-	var block *types.Block
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
+		logTicker.Reset(10 * time.Second)
+		blockTicker.Reset(cfg.zk.SequencerBlockSealTime)
 
 		if batchState.isL1Recovery() {
 			didLoadedAnyDataForRecovery := batchState.loadBlockL1RecoveryData(blockNumber - (executionAt + 1))
@@ -159,12 +155,12 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), limboHeaderTimestamp, batchState.forkId, batchState.getCoinbase(&cfg))
+		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg))
 		if err != nil {
 			return err
 		}
 
-		if batchDataOverflow = blockDataSizeChecker.AddBlockStartData(); batchDataOverflow {
+		if batchDataOverflow := blockDataSizeChecker.AddBlockStartData(); batchDataOverflow {
 			log.Info(fmt.Sprintf("[%s] BatchL2Data limit reached. Stopping.", logPrefix), "blockNumber", blockNumber)
 			break
 		}
@@ -176,7 +172,7 @@ func SpawnSequencingStage(
 		if err != nil {
 			return err
 		}
-		if !isAnyRecovery && overflowOnNewBlock {
+		if !batchState.isAnyRecovery() && overflowOnNewBlock {
 			break
 		}
 
@@ -197,41 +193,34 @@ func SpawnSequencingStage(
 		}
 
 		// start waiting for a new transaction to arrive
-		if !isAnyRecovery {
+		if !batchState.isAnyRecovery() {
 			log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 		}
-
-		// we don't care about defer order here we just need to make sure the tickers are stopped to
-		// avoid a leak
-		logTicker := time.NewTicker(10 * time.Second)
-		defer logTicker.Stop()
-		blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
-		defer blockTicker.Stop()
 
 	LOOP_TRANSACTIONS:
 		for {
 			select {
 			case <-logTicker.C:
-				if !isAnyRecovery {
+				if !batchState.isAnyRecovery() {
 					log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
 				}
 			case <-blockTicker.C:
-				if !isAnyRecovery {
+				if !batchState.isAnyRecovery() {
 					break LOOP_TRANSACTIONS
 				}
 			case <-batchTicker.C:
-				if !isAnyRecovery {
+				if !batchState.isAnyRecovery() {
 					runLoopBlocks = false
 					break LOOP_TRANSACTIONS
 				}
 			case <-nonEmptyBatchTimer.C:
-				if !isAnyRecovery && batchState.hasAnyTransactionsInThisBatch {
+				if !batchState.isAnyRecovery() && batchState.hasAnyTransactionsInThisBatch {
 					runLoopBlocks = false
 					break LOOP_TRANSACTIONS
 				}
 			default:
-				if limboRecovery {
-					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, limboTxHash)
+				if batchState.isLimboRecovery() {
+					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash)
 					if err != nil {
 						return err
 					}
@@ -257,7 +246,7 @@ func SpawnSequencingStage(
 					// The copying of this structure is intentional
 					backupDataSizeChecker := *blockDataSizeChecker
 					if receipt, execResult, anyOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, batchState.isL1Recovery(), batchState.forkId, l1InfoIndex, &backupDataSizeChecker); err != nil {
-						if limboRecovery {
+						if batchState.isLimboRecovery() {
 							panic("limbo transaction has already been executed once so they must not fail while re-executing")
 						}
 
@@ -277,7 +266,7 @@ func SpawnSequencingStage(
 					}
 
 					if anyOverflow {
-						if limboRecovery {
+						if batchState.isLimboRecovery() {
 							panic("limbo transaction has already been executed once so they must not overflow counters while re-executing")
 						}
 
@@ -322,7 +311,7 @@ func SpawnSequencingStage(
 					break LOOP_TRANSACTIONS
 				}
 
-				if limboRecovery {
+				if batchState.isLimboRecovery() {
 					runLoopBlocks = false
 					break LOOP_TRANSACTIONS
 				}
@@ -338,10 +327,10 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		if limboRecovery {
+		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()
-			cfg.txPool.UpdateLimboRootByTxHash(limboTxHash, &stateRoot)
-			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, limboTxHash.Hex(), stateRoot.Hex())
+			cfg.txPool.UpdateLimboRootByTxHash(batchState.limboRecoveryData.limboTxHash, &stateRoot)
+			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, batchState.limboRecoveryData.limboTxHash.Hex(), stateRoot.Hex())
 		}
 
 		t.LogTimer()

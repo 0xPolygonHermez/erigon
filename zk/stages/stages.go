@@ -17,11 +17,9 @@ func SequencerZkStages(
 	l1InfoTreeCfg L1InfoTreeCfg,
 	sequencerL1BlockSyncCfg SequencerL1BlockSyncCfg,
 	dataStreamCatchupCfg DataStreamCatchupCfg,
-	// sequencerInterhashesCfg SequencerInterhashesCfg,
 	exec SequenceBlockCfg,
 	hashState stages.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
-	// sequencerExecutorVerifyCfg SequencerExecutorVerifyCfg,
 	history stages.HistoryCfg,
 	logIndex stages.LogIndexCfg,
 	callTraces stages.CallTracesCfg,
@@ -128,19 +126,6 @@ func SequencerZkStages(
 				return PruneSequencerInterhashesStage(p, tx, zkInterHashesCfg, ctx)
 			},
 		},
-		// {
-		// 	ID:          stages2.SequenceExecutorVerify,
-		// 	Description: "Sequencer, check batch with legacy executor",
-		// 	Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
-		// 		return SpawnSequencerExecutorVerifyStage(s, u, tx, ctx, sequencerExecutorVerifyCfg, quiet)
-		// 	},
-		// 	Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
-		// 		return UnwindSequencerExecutorVerifyStage(u, s, tx, ctx, sequencerExecutorVerifyCfg)
-		// 	},
-		// 	Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
-		// 		return PruneSequencerExecutorVerifyStage(p, tx, sequencerExecutorVerifyCfg, ctx)
-		// 	},
-		// },
 		{
 			ID:          stages2.HashState,
 			Description: "Hash the key in the state",
@@ -175,8 +160,9 @@ func SequencerZkStages(
 			Description: "Generate account history index",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return nil
 				// return stages.SpawnAccountHistoryIndex(s, tx, history, ctx)
+				// only forward part of this stage is part of execution stage
+				return nil
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
 				return stages.UnwindAccountHistoryIndex(u, s, tx, history, ctx)
@@ -190,8 +176,9 @@ func SequencerZkStages(
 			Description: "Generate storage history index",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, tx kv.RwTx, quiet bool) error {
-				return nil
 				// return stages.SpawnStorageHistoryIndex(s, tx, history, ctx)
+				// only forward part of this stage is part of execution stage
+				return nil
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
 				return stages.UnwindStorageHistoryIndex(u, s, tx, history, ctx)

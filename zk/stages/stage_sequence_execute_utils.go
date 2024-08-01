@@ -402,7 +402,7 @@ type BlockDataChecker struct {
 	counter uint64 // counter amount of bytes
 }
 
-func NewBlockDataChecker() *BlockDataChecker {
+func newBlockDataChecker() *BlockDataChecker {
 	return &BlockDataChecker{
 		limit:   LIMIT_120_KB,
 		counter: 0,

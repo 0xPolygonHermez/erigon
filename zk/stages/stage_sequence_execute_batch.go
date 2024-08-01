@@ -2,6 +2,7 @@ package stages
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/vm"
@@ -36,7 +37,7 @@ func prepareBatchCounters(batchContext *BatchContext, batchState *BatchState, is
 	return vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), intermediateUsedCounters), nil
 }
 
-func doInstantCloseIfNeeded(batchContext *BatchContext, batchState *BatchState, batchCounters *vm.BatchCounterCollector) (bool, error) {
+func doInstantCloseAfterUnwindOfBatchVerificationErrorIfNeeded(batchContext *BatchContext, batchState *BatchState, batchCounters *vm.BatchCounterCollector) (bool, error) {
 	instantClose, err := batchContext.sdb.hermezDb.GetJustUnwound(batchState.batchNumber)
 	if err != nil || !instantClose {
 		return false, err // err here could be nil as well
@@ -119,14 +120,31 @@ func updateStreamAndCheckRollback(
 	streamWriter *SequencerBatchStreamWriter,
 	u stagedsync.Unwinder,
 ) (bool, error) {
-	committed, err := streamWriter.CommitNewUpdates()
+	checkedVerifierBundles, err := streamWriter.CommitNewUpdates()
 	if err != nil {
 		return false, err
 	}
 
-	for _, commit := range committed {
-		if commit.Valid {
+	infiniteLoop := func(batchNumber uint64) {
+		// this infinite loop will make the node to print the error once every minute therefore preventing it for creating new blocks
+		for {
+			time.Sleep(time.Minute)
+			log.Error(fmt.Sprintf("[%s] identified an invalid batch with number %d", batchContext.s.LogPrefix(), batchNumber))
+		}
+	}
+
+	for _, verifierBundle := range checkedVerifierBundles {
+		if verifierBundle.Response.Valid {
 			continue
+		}
+
+		// updateStreamAndCheckRollback cannot be invoked during l1 recovery so no point to check it
+		if batchState.isL1Recovery() || !batchContext.cfg.zk.Limbo {
+			infiniteLoop(verifierBundle.Request.BatchNumber)
+		}
+
+		if err = handleLimbo(batchContext, batchState, verifierBundle); err != nil {
+			return false, err
 		}
 
 		// we are about to unwind so place the marker ready for this to happen
@@ -134,16 +152,16 @@ func updateStreamAndCheckRollback(
 			return false, err
 		}
 
-		unwindTo := commit.BlockNumber - 1
+		unwindTo := verifierBundle.Request.GetLastBlockNumber() - 1
 
 		// for unwind we supply the block number X-1 of the block we want to remove, but supply the hash of the block
 		// causing the unwind.
-		unwindHeader := rawdb.ReadHeaderByNumber(batchContext.sdb.tx, commit.BlockNumber)
+		unwindHeader := rawdb.ReadHeaderByNumber(batchContext.sdb.tx, verifierBundle.Request.GetLastBlockNumber())
 		if unwindHeader == nil {
-			return false, fmt.Errorf("could not find header for block %d", commit.BlockNumber)
+			return false, fmt.Errorf("could not find header for block %d", verifierBundle.Request.GetLastBlockNumber())
 		}
 
-		log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", batchContext.s.LogPrefix()), "badBlock", commit.BlockNumber, "unwindTo", unwindTo, "root", unwindHeader.Root)
+		log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", batchContext.s.LogPrefix()), "badBlock", verifierBundle.Request.GetLastBlockNumber(), "unwindTo", unwindTo, "root", unwindHeader.Root)
 
 		u.UnwindTo(unwindTo, unwindHeader.Hash())
 		streamWriter.legacyVerifier.CancelAllRequests()

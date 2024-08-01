@@ -12,6 +12,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/zk/l1_data"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
+	"github.com/ledgerwatch/erigon/zk/txpool"
 )
 
 type BatchContext struct {
@@ -42,10 +43,11 @@ type BatchState struct {
 	yieldedTransactions           mapset.Set[[32]byte]
 	blockState                    *BlockState
 	batchL1RecoveryData           *BatchL1RecoveryData
+	limboRecoveryData             *LimboRecoveryData
 }
 
-func newBatchState(forkId, batchNumber uint64, hasExecutorForThisBatch, l1Recovery bool) *BatchState {
-	blockState := &BatchState{
+func newBatchState(forkId, batchNumber uint64, hasExecutorForThisBatch, l1Recovery bool, txPool *txpool.TxPool) *BatchState {
+	batchState := &BatchState{
 		forkId:                        forkId,
 		batchNumber:                   batchNumber,
 		hasExecutorForThisBatch:       hasExecutorForThisBatch,
@@ -54,17 +56,31 @@ func newBatchState(forkId, batchNumber uint64, hasExecutorForThisBatch, l1Recove
 		yieldedTransactions:           mapset.NewSet[[32]byte](),
 		blockState:                    newBlockState(),
 		batchL1RecoveryData:           nil,
+		limboRecoveryData:             nil,
 	}
 
 	if l1Recovery {
-		blockState.batchL1RecoveryData = newBatchL1RecoveryData()
+		batchState.batchL1RecoveryData = newBatchL1RecoveryData()
 	}
 
-	return blockState
+	limboHeaderTimestamp, limboTxHash := txPool.GetLimboTxHash(batchState.batchNumber)
+	if limboTxHash != nil {
+		batchState.limboRecoveryData = newLimboRecoveryData(limboHeaderTimestamp, limboTxHash)
+	}
+
+	return batchState
 }
 
 func (bs *BatchState) isL1Recovery() bool {
 	return bs.batchL1RecoveryData != nil
+}
+
+func (bs *BatchState) isLimboRecovery() bool {
+	return bs.limboRecoveryData != nil
+}
+
+func (bs *BatchState) isAnyRecovery() bool {
+	return bs.isL1Recovery() || bs.isLimboRecovery()
 }
 
 func (bs *BatchState) isThereAnyTransactionsToRecover() bool {
@@ -81,8 +97,17 @@ func (bs *BatchState) loadBlockL1RecoveryData(decodedBlocksIndex uint64) bool {
 	return found
 }
 
+// if not limbo set the limboHeaderTimestamp to the "default" value for "prepareHeader" function
+func (bs *BatchState) getBlockHeaderForcedTimestamp() uint64 {
+	if bs.isLimboRecovery() {
+		return bs.limboRecoveryData.limboHeaderTimestamp
+	}
+
+	return math.MaxUint64
+}
+
 func (bs *BatchState) getCoinbase(cfg *SequenceBlockCfg) common.Address {
-	if bs.batchL1RecoveryData != nil {
+	if bs.isL1Recovery() {
 		return bs.batchL1RecoveryData.recoveredBatchData.Coinbase
 	}
 
@@ -146,6 +171,19 @@ func (batchL1RecoveryData *BatchL1RecoveryData) getDecodedL1RecoveredBatchDataBy
 	}
 
 	return &batchL1RecoveryData.recoveredBatchData.DecodedData[decodedBlocksIndex], true
+}
+
+// TYPE LIMBO RECOVERY DATA
+type LimboRecoveryData struct {
+	limboHeaderTimestamp uint64
+	limboTxHash          *common.Hash
+}
+
+func newLimboRecoveryData(limboHeaderTimestamp uint64, limboTxHash *common.Hash) *LimboRecoveryData {
+	return &LimboRecoveryData{
+		limboHeaderTimestamp: limboHeaderTimestamp,
+		limboTxHash:          limboTxHash,
+	}
 }
 
 // TYPE BLOCK STATE
