@@ -220,16 +220,16 @@ func (srv *DataStreamServer) WriteBlockWithBatchStartToStream(
 	t := utils.StartTimer("write-stream", "writeblockstostream")
 	defer t.LogTimer()
 
-	if err = srv.stream.StartAtomicOp(); err != nil {
-		return err
-	}
-	defer srv.stream.RollbackAtomicOp()
-
 	blockNum := block.NumberU64()
 
 	if err = srv.UnwindIfNecessary(logPrefix, reader, blockNum, prevBlockBatchNum, batchNum); err != nil {
 		return err
 	}
+
+	if err = srv.stream.StartAtomicOp(); err != nil {
+		return err
+	}
+	defer srv.stream.RollbackAtomicOp()
 
 	// if start of new batch add batch start entries
 	var batchStartEntries *DataStreamEntries
