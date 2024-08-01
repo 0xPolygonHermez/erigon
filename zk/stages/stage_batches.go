@@ -683,10 +683,13 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// finish store the highest seen forkid//
 	/////////////////////////////////////////
 
-	/////////////////////////////////////////
-	// store the highest used l1 info index//
-	/////////////////////////////////////////
+	////////////////////////////////////////////////////////
+	// delete and re-store the highest used l1 info index //
+	////////////////////////////////////////////////////////
 
+	if err = hermezDb.TruncateBlockL1InfoTreeIndex(fromBlock, toBlock); err != nil {
+		return fmt.Errorf("truncate block l1 info tree index error: %v", err)
+	}
 	highestL1InfoTreeIndex, err := hermezDb.GetLatestL1InfoTreeIndex()
 	if err != nil {
 		return fmt.Errorf("get latest l1 info tree index error: %v", err)
