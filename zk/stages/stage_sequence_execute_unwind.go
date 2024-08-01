@@ -133,6 +133,15 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 	if err = hermezDb.TruncateForkId(fromBatchForForkIdDeletion, toBatch); err != nil {
 		return fmt.Errorf("truncate fork id error: %v", err)
 	}
+	// only seq
+	if err = hermezDb.TruncateIsBatchPartiallyProcessed(fromBatch, toBatch); err != nil {
+		return fmt.Errorf("truncate fork id error: %v", err)
+	}
+	if lastBatchToKeepBeforeFrom == fromBatch {
+		if err = hermezDb.WriteIsBatchPartiallyProcessed(lastBatchToKeepBeforeFrom); err != nil {
+			return fmt.Errorf("truncate fork id error: %v", err)
+		}
+	}
 
 	return nil
 }

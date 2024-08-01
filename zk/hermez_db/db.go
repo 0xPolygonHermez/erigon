@@ -1533,6 +1533,15 @@ func (db *HermezDbReader) GetIsBatchPartiallyProcessed(batchNo uint64) (bool, er
 	return len(v) > 0, nil
 }
 
+func (db *HermezDb) TruncateIsBatchPartiallyProcessed(fromBatch, toBatch uint64) error {
+	for batch := fromBatch; batch <= toBatch; batch++ {
+		if err := db.DeleteIsBatchPartiallyProcessed(batch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (db *HermezDb) WriteLocalExitRootForBatchNo(batchNo uint64, root common.Hash) error {
 	return db.tx.Put(LOCAL_EXIT_ROOTS, Uint64ToBytes(batchNo), root.Bytes())
 }
@@ -1614,18 +1623,18 @@ func (db *HermezDbReader) GetAllForkHistory() ([]uint64, []uint64, error) {
 	return forks, batches, nil
 }
 
-func (db *HermezDb) WriteJustUnwound(batch uint64) error {
-	return db.tx.Put(JUST_UNWOUND, Uint64ToBytes(batch), []byte{1})
-}
+// func (db *HermezDb) WriteJustUnwound(batch uint64) error {
+// 	return db.tx.Put(JUST_UNWOUND, Uint64ToBytes(batch), []byte{1})
+// }
 
-func (db *HermezDb) DeleteJustUnwound(batch uint64) error {
-	return db.tx.Delete(JUST_UNWOUND, Uint64ToBytes(batch))
-}
+// func (db *HermezDb) DeleteJustUnwound(batch uint64) error {
+// 	return db.tx.Delete(JUST_UNWOUND, Uint64ToBytes(batch))
+// }
 
-func (db *HermezDb) GetJustUnwound(batch uint64) (bool, error) {
-	v, err := db.tx.GetOne(JUST_UNWOUND, Uint64ToBytes(batch))
-	if err != nil {
-		return false, err
-	}
-	return len(v) > 0, nil
-}
+// func (db *HermezDb) GetJustUnwound(batch uint64) (bool, error) {
+// 	v, err := db.tx.GetOne(JUST_UNWOUND, Uint64ToBytes(batch))
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	return len(v) > 0, nil
+// }

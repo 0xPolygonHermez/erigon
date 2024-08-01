@@ -253,8 +253,8 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
 
-		if request.GetLastBlockNumber() == 9 && counter == 0 {
-			ok = false
+		if request.GetLastBlockNumber() == 7 && counter == 0 {
+			// ok = false
 			counter = 1
 		}
 

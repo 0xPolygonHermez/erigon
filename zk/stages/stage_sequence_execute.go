@@ -85,13 +85,11 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	if !batchState.isL1Recovery() {
-		// check if we just unwound from a bad executor response and if we did just close the batch here
-		handled, err := doInstantCloseAfterUnwindOfBatchVerificationErrorIfNeeded(batchContext, batchState, batchCounters)
-		if err != nil || handled {
-			return err
-		}
-	}
+	// // check if we just unwound from a bad executor response and if we did just close the batch here
+	// handled, err := doInstantCloseAfterUnwindOfBatchVerificationErrorIfNeeded(batchContext, batchState, isLastBatchPariallyProcessed, batchCounters)
+	// if err != nil || handled {
+	// 	return err
+	// }
 
 	if !isLastBatchPariallyProcessed {
 		// handle case where batch wasn't closed properly

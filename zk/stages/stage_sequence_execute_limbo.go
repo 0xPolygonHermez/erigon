@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"sort"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -88,10 +87,10 @@ func handleLimbo(
 	// now we need to figure out the highest block number in the batch
 	// and grab all the transaction hashes along the way to inform the
 	// pool of hashes to avoid
-	blockNumbers := request.BlockNumbers
-	sort.Slice(blockNumbers, func(i, j int) bool {
-		return blockNumbers[i] < blockNumbers[j]
-	})
+	// blockNumbers := request.BlockNumbers
+	// sort.Slice(blockNumbers, func(i, j int) bool {
+	// 	return blockNumbers[i] < blockNumbers[j]
+	// })
 
 	var lowestBlock, highestBlock *types.Block
 	forkId, err := batchContext.sdb.hermezDb.GetForkId(request.BatchNumber)
@@ -100,7 +99,8 @@ func handleLimbo(
 	}
 
 	l1InfoTreeMinTimestamps := make(map[uint64]uint64)
-	if _, err = legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blockNumbers, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, nil); err != nil {
+	// if _, err = legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blockNumbers, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, nil); err != nil {
+	if _, err = legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, []uint64{request.GetLastBlockNumber()}, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, nil); err != nil {
 		return err
 	}
 
@@ -113,51 +113,52 @@ func handleLimbo(
 	limboDetails.BatchNumber = request.BatchNumber
 	limboDetails.ForkId = forkId
 
-	for _, blockNumber := range blockNumbers {
-		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, blockNumber)
+	// for _, blockNumber := range blockNumbers {
+	blockNumber := request.GetLastBlockNumber()
+	block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, blockNumber)
+	if err != nil {
+		return err
+	}
+	highestBlock = block
+	if lowestBlock == nil {
+		// capture the first block, then we can set the bad block hash in the unwind to terminate the
+		// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
+		lowestBlock = block
+	}
+
+	for i, transaction := range block.Transactions() {
+		var b []byte
+		buffer := bytes.NewBuffer(b)
+		err = transaction.EncodeRLP(buffer)
 		if err != nil {
 			return err
 		}
-		highestBlock = block
-		if lowestBlock == nil {
-			// capture the first block, then we can set the bad block hash in the unwind to terminate the
-			// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
-			lowestBlock = block
+
+		signer := types.MakeSigner(batchContext.cfg.chainConfig, blockNumber)
+		sender, err := transaction.Sender(*signer)
+		if err != nil {
+			return err
+		}
+		senderMapKey := sender.Hex()
+
+		blocksForStreamBytes, transactionsToIncludeByIndex := limboStreamBytesBuilderHelper.append(senderMapKey, blockNumber, i)
+		streamBytes, err := legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blocksForStreamBytes, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
+		if err != nil {
+			return err
 		}
 
-		for i, transaction := range block.Transactions() {
-			var b []byte
-			buffer := bytes.NewBuffer(b)
-			err = transaction.EncodeRLP(buffer)
-			if err != nil {
-				return err
-			}
-
-			signer := types.MakeSigner(batchContext.cfg.chainConfig, blockNumber)
-			sender, err := transaction.Sender(*signer)
-			if err != nil {
-				return err
-			}
-			senderMapKey := sender.Hex()
-
-			blocksForStreamBytes, transactionsToIncludeByIndex := limboStreamBytesBuilderHelper.append(senderMapKey, blockNumber, i)
-			streamBytes, err := legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blocksForStreamBytes, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
-			if err != nil {
-				return err
-			}
-
-			previousTxIndex, ok := limboSendersToPreviousTxMap[senderMapKey]
-			if !ok {
-				previousTxIndex = math.MaxUint32
-			}
-
-			hash := transaction.Hash()
-			limboTxCount := limboDetails.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender, previousTxIndex)
-			limboSendersToPreviousTxMap[senderMapKey] = limboTxCount - 1
-
-			log.Info(fmt.Sprintf("[%s] adding transaction to limbo", batchContext.s.LogPrefix()), "hash", hash)
+		previousTxIndex, ok := limboSendersToPreviousTxMap[senderMapKey]
+		if !ok {
+			previousTxIndex = math.MaxUint32
 		}
+
+		hash := transaction.Hash()
+		limboTxCount := limboDetails.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender, previousTxIndex)
+		limboSendersToPreviousTxMap[senderMapKey] = limboTxCount - 1
+
+		log.Info(fmt.Sprintf("[%s] adding transaction to limbo", batchContext.s.LogPrefix()), "hash", hash)
 	}
+	// }
 
 	limboDetails.TimestampLimit = highestBlock.Time()
 	limboDetails.FirstBlockNumber = lowestBlock.NumberU64()
