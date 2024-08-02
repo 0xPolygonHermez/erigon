@@ -289,11 +289,8 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 
 func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker) {
 	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
-	defer batchTicker.Stop()
 	logTicker := time.NewTicker(10 * time.Second)
-	defer logTicker.Stop()
 	blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
-	defer blockTicker.Stop()
 
 	return batchTicker, logTicker, blockTicker
 }
