@@ -163,6 +163,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.LightClientDiscoveryTCPPortFlag,
 	&utils.SentinelAddrFlag,
 	&utils.SentinelPortFlag,
+	&utils.YieldSizeFlag,
 
 	&utils.L2ChainIdFlag,
 	&utils.L2RpcUrlFlag,
@@ -190,6 +191,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.SmtRegenerateInMemory,
 	&utils.SequencerBlockSealTime,
 	&utils.SequencerBatchSealTime,
+	&utils.SequencerHaltOnBatchNumber,
 	&utils.ExecutorUrls,
 	&utils.ExecutorStrictMode,
 	&utils.ExecutorRequestTimeout,

@@ -95,8 +95,8 @@ func updateStreamAndCheckRollback(
 	infiniteLoop := func(batchNumber uint64) {
 		// this infinite loop will make the node to print the error once every minute therefore preventing it for creating new blocks
 		for {
-			time.Sleep(time.Minute)
 			log.Error(fmt.Sprintf("[%s] identified an invalid batch with number %d", batchContext.s.LogPrefix(), batchNumber))
+			time.Sleep(time.Minute)
 		}
 	}
 

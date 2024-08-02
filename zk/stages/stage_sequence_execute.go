@@ -76,6 +76,8 @@ func SpawnSequencingStage(
 		return sdb.tx.Commit()
 	}
 
+	tryHaltSequencer(batchContext, batchState.batchNumber)
+
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
 		return err
 	}

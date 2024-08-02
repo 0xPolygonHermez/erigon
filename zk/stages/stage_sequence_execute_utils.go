@@ -86,6 +86,7 @@ type SequenceBlockCfg struct {
 	txPoolDb kv.RwDB
 
 	legacyVerifier *verifier.LegacyExecutorVerifier
+	yieldSize      uint16
 }
 
 func StageSequenceBlocksCfg(
@@ -112,6 +113,7 @@ func StageSequenceBlocksCfg(
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
 	legacyVerifier *verifier.LegacyExecutorVerifier,
+	yieldSize uint16,
 ) SequenceBlockCfg {
 
 	return SequenceBlockCfg{
@@ -137,6 +139,7 @@ func StageSequenceBlocksCfg(
 		txPool:           txPool,
 		txPoolDb:         txPoolDb,
 		legacyVerifier:   legacyVerifier,
+		yieldSize:        yieldSize,
 	}
 }
 
@@ -347,6 +350,15 @@ func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1In
 	}
 
 	return nil
+}
+
+func tryHaltSequencer(batchContext *BatchContext, thisBatch uint64) {
+	if batchContext.cfg.zk.SequencerHaltOnBatchNumber != 0 && batchContext.cfg.zk.SequencerHaltOnBatchNumber == thisBatch {
+		for {
+			log.Info(fmt.Sprintf("[%s] Halt sequencer on batch %d...", batchContext.s.LogPrefix(), thisBatch))
+			time.Sleep(5 * time.Second) //nolint:gomnd
+		}
+	}
 }
 
 type batchChecker interface {

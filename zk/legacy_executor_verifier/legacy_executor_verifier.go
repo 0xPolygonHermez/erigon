@@ -175,8 +175,6 @@ func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, 
 	return executorErr
 }
 
-var counter = 0
-
 func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumbers []uint64) *Promise[*VerifierBundle] {
 	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
 	// ProcessResultsSequentiallyUnsafe relies on the fact that this function returns ALWAYS non-verifierBundle and error. The only exception is the case when verifications has been canceled. Only then the verifierBundle can be nil
@@ -252,11 +250,6 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 		}
 
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
-
-		if request.GetLastBlockNumber() == 8 && counter == 0 {
-			ok = false
-			counter = 1
-		}
 
 		if executorErr != nil {
 			if errors.Is(executorErr, ErrExecutorStateRootMismatch) {
