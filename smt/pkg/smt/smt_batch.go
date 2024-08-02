@@ -172,7 +172,7 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 	if smtBatchNodeRoot == nil {
 		rootNodeHash = &utils.NodeKey{0, 0, 0, 0}
 	} else {
-		calculateAndSaveHashesDfs(s, smtBatchNodeRoot, make([]int, 256), 0)
+		calculateAndSaveHashes(s, smtBatchNodeRoot, make([]int, 256), 0)
 		rootNodeHash = (*utils.NodeKey)(smtBatchNodeRoot.hash)
 	}
 	if err := s.setLastRoot(*rootNodeHash); err != nil {
@@ -382,6 +382,19 @@ func updateNodeHashesForDelete(nodeHashesForDelete map[uint64]map[uint64]map[uin
 	}
 }
 
+func calculateAndSaveHashes(s *SMT, smtBatchNode *smtBatchNode, path []int, level int) error {
+	//return calculateAndSaveHashesDfs(s, smtBatchNode, path, level)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode, path, level, &wg)
+
+	wg.Wait()
+
+	return nil
+}
+
 func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, level int) error {
 	if smtBatchNode.isLeaf() {
 		hashObj, err := s.hashcalcAndSave(utils.ConcatArrays4(*smtBatchNode.nodeLeftHashOrRemainingKey, *smtBatchNode.nodeRightHashOrValueHash), utils.LeafCapacity)
@@ -419,6 +432,68 @@ func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, l
 		return err
 	}
 	smtBatchNode.hash = &hashObj
+	return nil
+}
+
+func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, level int, wg *sync.WaitGroup) error {
+	defer wg.Done()
+
+	if smtBatchNode.isLeaf() {
+		hashObj, err := s.hashcalcAndSave(utils.ConcatArrays4(*smtBatchNode.nodeLeftHashOrRemainingKey, *smtBatchNode.nodeRightHashOrValueHash), utils.LeafCapacity)
+		if err != nil {
+			return err
+		}
+
+		nodeKey := utils.JoinKey(path[:level], *smtBatchNode.nodeLeftHashOrRemainingKey)
+		s.Db.InsertHashKey(hashObj, *nodeKey)
+
+		smtBatchNode.hash = &hashObj
+
+		return nil
+	}
+
+	// Create wait groups for left and right children
+	var leftWG, rightWG sync.WaitGroup
+
+	if smtBatchNode.leftNode != nil {
+		leftPath := make([]int, len(path))
+		copy(leftPath, path)
+		leftPath[level] = 0
+
+		leftWG.Add(1)
+		go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode.leftNode, leftPath, level+1, &leftWG)
+	}
+
+	if smtBatchNode.rightNode != nil {
+		path[level] = 1
+
+		rightWG.Add(1)
+		go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode.rightNode, path, level+1, &rightWG)
+	}
+
+	// Wait for the left and right traversals to complete
+	leftWG.Wait()
+	rightWG.Wait()
+
+	var totalHash utils.NodeValue8
+	if smtBatchNode.leftNode != nil {
+		totalHash.SetHalfValue(*smtBatchNode.leftNode.hash, 0)
+	} else {
+		totalHash.SetHalfValue(*smtBatchNode.nodeLeftHashOrRemainingKey, 0)
+	}
+
+	if smtBatchNode.rightNode != nil {
+		totalHash.SetHalfValue(*smtBatchNode.rightNode.hash, 1)
+	} else {
+		totalHash.SetHalfValue(*smtBatchNode.nodeRightHashOrValueHash, 1)
+	}
+
+	hashObj, err := s.hashcalcAndSave(totalHash.ToUintArray(), utils.BranchCapacity)
+	if err != nil {
+		return err
+	}
+	smtBatchNode.hash = &hashObj
+
 	return nil
 }
 
