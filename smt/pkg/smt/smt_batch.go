@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/ledgerwatch/log/v3"
+	"runtime"
 	"sync"
 
 	"github.com/dgravesa/go-parallel/parallel"
@@ -386,7 +387,7 @@ func updateNodeHashesForDelete(nodeHashesForDelete map[uint64]map[uint64]map[uin
 func calculateAndSaveHashes(s *SMT, smtBatchNode *smtBatchNode, path []int, level int) error {
 	//return calculateAndSaveHashesDfs(s, smtBatchNode, path, level)
 
-	ch := make(chan interface{}, 4000)
+	ch := make(chan interface{}, runtime.NumCPU()*2)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
