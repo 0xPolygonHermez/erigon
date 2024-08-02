@@ -522,6 +522,12 @@ func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, pat
 	return nil
 }
 
+type SaveHash struct {
+	in       [8]uint64
+	capacity [4]uint64
+	h        [4]uint64
+}
+
 type smtBatchNode struct {
 	nodeLeftHashOrRemainingKey *utils.NodeKey
 	nodeRightHashOrValueHash   *utils.NodeKey

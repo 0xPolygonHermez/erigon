@@ -50,12 +50,6 @@ type DebuggableDB interface {
 	GetDb() map[string][]string
 }
 
-type SaveHash struct {
-	in       [8]uint64
-	capacity [4]uint64
-	h        [4]uint64
-}
-
 type SMT struct {
 	noSaveOnInsert bool
 	Db             DB
