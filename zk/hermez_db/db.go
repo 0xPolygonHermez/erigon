@@ -1622,19 +1622,3 @@ func (db *HermezDbReader) GetAllForkHistory() ([]uint64, []uint64, error) {
 
 	return forks, batches, nil
 }
-
-// func (db *HermezDb) WriteJustUnwound(batch uint64) error {
-// 	return db.tx.Put(JUST_UNWOUND, Uint64ToBytes(batch), []byte{1})
-// }
-
-// func (db *HermezDb) DeleteJustUnwound(batch uint64) error {
-// 	return db.tx.Delete(JUST_UNWOUND, Uint64ToBytes(batch))
-// }
-
-// func (db *HermezDb) GetJustUnwound(batch uint64) (bool, error) {
-// 	v, err := db.tx.GetOne(JUST_UNWOUND, Uint64ToBytes(batch))
-// 	if err != nil {
-// 		return false, err
-// 	}
-// 	return len(v) > 0, nil
-// }

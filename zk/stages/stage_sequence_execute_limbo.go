@@ -67,40 +67,15 @@ func (_this *limboStreamBytesBuilderHelper) add(senderMapKey string, blockNumber
 	return limboStreamBytesGroups
 }
 
-func handleLimbo(
-	batchContext *BatchContext,
-	batchState *BatchState,
-	verifierBundle *legacy_executor_verifier.VerifierBundle,
-	// pool *txpool.TxPool,
-	// chainConfig *chain.Config,
-) error {
+func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBundle *legacy_executor_verifier.VerifierBundle) error {
 	request := verifierBundle.Request
 	response := verifierBundle.Response
 	legacyVerifier := batchContext.cfg.legacyVerifier
 
 	log.Info(fmt.Sprintf("[%s] identified an invalid batch, entering limbo", batchContext.s.LogPrefix()), "batch", request.BatchNumber)
-	// we have an invalid batch, so we need to notify the txpool that these transactions are spurious
-	// and need to go into limbo and then trigger a rewind.  The rewind will put all TX back into the
-	// pool, but as it knows about these limbo transactions it will place them into limbo instead
-	// of queueing them again
-
-	// now we need to figure out the highest block number in the batch
-	// and grab all the transaction hashes along the way to inform the
-	// pool of hashes to avoid
-	// blockNumbers := request.BlockNumbers
-	// sort.Slice(blockNumbers, func(i, j int) bool {
-	// 	return blockNumbers[i] < blockNumbers[j]
-	// })
-
-	var lowestBlock, highestBlock *types.Block
-	forkId, err := batchContext.sdb.hermezDb.GetForkId(request.BatchNumber)
-	if err != nil {
-		return err
-	}
 
 	l1InfoTreeMinTimestamps := make(map[uint64]uint64)
-	// if _, err = legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blockNumbers, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, nil); err != nil {
-	if _, err = legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, []uint64{request.GetLastBlockNumber()}, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, nil); err != nil {
+	if _, err := legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, []uint64{request.GetLastBlockNumber()}, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, nil); err != nil {
 		return err
 	}
 
@@ -111,19 +86,12 @@ func handleLimbo(
 	limboDetails.Witness = response.Witness
 	limboDetails.L1InfoTreeMinTimestamps = l1InfoTreeMinTimestamps
 	limboDetails.BatchNumber = request.BatchNumber
-	limboDetails.ForkId = forkId
+	limboDetails.ForkId = request.ForkId
 
-	// for _, blockNumber := range blockNumbers {
 	blockNumber := request.GetLastBlockNumber()
 	block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, blockNumber)
 	if err != nil {
 		return err
-	}
-	highestBlock = block
-	if lowestBlock == nil {
-		// capture the first block, then we can set the bad block hash in the unwind to terminate the
-		// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
-		lowestBlock = block
 	}
 
 	for i, transaction := range block.Transactions() {
@@ -158,10 +126,9 @@ func handleLimbo(
 
 		log.Info(fmt.Sprintf("[%s] adding transaction to limbo", batchContext.s.LogPrefix()), "hash", hash)
 	}
-	// }
 
-	limboDetails.TimestampLimit = highestBlock.Time()
-	limboDetails.FirstBlockNumber = lowestBlock.NumberU64()
+	limboDetails.TimestampLimit = block.Time()
+	limboDetails.FirstBlockNumber = block.NumberU64()
 	batchContext.cfg.txPool.ProcessLimboBatchDetails(limboDetails)
 	return nil
 }
