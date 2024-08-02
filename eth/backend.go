@@ -635,7 +635,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	}()
 
+	tx, err := backend.chainDB.BeginRw(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
 	if !config.DeprecatedTxPool.Disable {
+		// we need to start the pool before stage loop itself
+		// the pool holds the info about how execution stage should work - as regular or as limbo recovery
+		if err := backend.txPool2.StartIfNotStarted(ctx, backend.txPool2DB, tx); err != nil {
+			return nil, err
+		}
+
 		backend.txPool2Fetch.ConnectCore()
 		backend.txPool2Fetch.ConnectSentries()
 		var newTxsBroadcaster *txpool2.NewSlotsStreams
@@ -695,12 +707,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
-
-	tx, err := backend.chainDB.BeginRw(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
 
 	// create buckets
 	if err := createBuckets(tx); err != nil {
@@ -863,12 +869,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			// we need to make sure the pool is always aware of the latest block for when
 			// we switch context from being an RPC node to a sequencer
 			backend.txPool2.ForceUpdateLatestBlock(executionProgress)
-
-			// we need to start the pool before stage loop itself
-			// the pool holds the info about how execution stage should work - as regular or as limbo recovery
-			if err := backend.txPool2.StartIfNotStarted(ctx, backend.txPool2DB, tx); err != nil {
-				return nil, err
-			}
 
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,

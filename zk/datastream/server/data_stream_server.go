@@ -43,6 +43,7 @@ type DataStreamServer struct {
 	stream  *datastreamer.StreamServer
 	chainId uint64
 	highestBlockWritten,
+	highestClosedBatchWritten,
 	highestBatchWritten *uint64
 }
 
@@ -118,7 +119,33 @@ func NewDataStreamEntries(size int) *DataStreamEntries {
 	}
 }
 
-func (srv *DataStreamServer) CommitEntriesToStreamProto(entries []DataStreamEntryProto, latestBlockNum, latestBatchNum *uint64) error {
+func (srv *DataStreamServer) commitAtomicOp(latestBlockNum, latestBatchNum, latestClosedBatch *uint64) error {
+	if err := srv.stream.CommitAtomicOp(); err != nil {
+		return err
+	}
+
+	// copy the values in case they are changed outside the function
+	// pointers are used for easier check if we should set check them from the DS or not
+	// since 0 is a valid number, we can't use it
+	if latestBlockNum != nil {
+		a := *latestBlockNum
+		srv.highestBlockWritten = &a
+	}
+
+	if latestBatchNum != nil {
+		a := *latestBatchNum
+		srv.highestBatchWritten = &a
+	}
+
+	if latestClosedBatch != nil {
+		a := *latestClosedBatch
+		srv.highestClosedBatchWritten = &a
+	}
+
+	return nil
+}
+
+func (srv *DataStreamServer) commitEntriesToStreamProto(entries []DataStreamEntryProto) error {
 	for _, entry := range entries {
 		entryType := entry.Type()
 
@@ -136,16 +163,6 @@ func (srv *DataStreamServer) CommitEntriesToStreamProto(entries []DataStreamEntr
 				return err
 			}
 		}
-	}
-
-	if latestBlockNum != nil {
-		a := *latestBlockNum
-		srv.highestBlockWritten = &a
-	}
-
-	if latestBatchNum != nil {
-		a := *latestBatchNum
-		srv.highestBatchWritten = &a
 	}
 	return nil
 }
@@ -473,6 +490,9 @@ func (srv *DataStreamServer) GetHighestBatchNumber() (uint64, error) {
 }
 
 func (srv *DataStreamServer) GetHighestClosedBatch() (uint64, error) {
+	if srv.highestClosedBatchWritten != nil {
+		return *srv.highestClosedBatchWritten, nil
+	}
 	entry, found, err := srv.getLastEntryOfType(datastreamer.EntryType(types.EntryTypeBatchEnd))
 	if err != nil {
 		return 0, err
@@ -485,6 +505,8 @@ func (srv *DataStreamServer) GetHighestClosedBatch() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	srv.highestClosedBatchWritten = &batch.Number
 
 	return batch.Number, nil
 }
