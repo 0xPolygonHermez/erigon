@@ -118,13 +118,9 @@ func SpawnSequencingStage(
 		}
 	}
 
-	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
+	batchTicker, logTicker, blockTicker := prepareTickers(batchContext.cfg)
 	defer batchTicker.Stop()
-	nonEmptyBatchTimer := time.NewTicker(cfg.zk.SequencerNonEmptyBatchSealTime)
-	defer nonEmptyBatchTimer.Stop()
-	logTicker := time.NewTicker(10 * time.Second)
 	defer logTicker.Stop()
-	blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
 	defer blockTicker.Stop()
 
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
@@ -202,11 +198,6 @@ func SpawnSequencingStage(
 				}
 			case <-batchTicker.C:
 				if !batchState.isAnyRecovery() {
-					runLoopBlocks = false
-					break LOOP_TRANSACTIONS
-				}
-			case <-nonEmptyBatchTimer.C:
-				if !batchState.isAnyRecovery() && batchState.hasAnyTransactionsInThisBatch {
 					runLoopBlocks = false
 					break LOOP_TRANSACTIONS
 				}
@@ -288,8 +279,6 @@ func SpawnSequencingStage(
 					if err == nil {
 						blockDataSizeChecker = &backupDataSizeChecker
 						batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
-
-						nonEmptyBatchTimer.Reset(cfg.zk.SequencerNonEmptyBatchSealTime)
 					}
 				}
 
