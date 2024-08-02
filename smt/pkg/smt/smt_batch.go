@@ -3,6 +3,7 @@ package smt
 import (
 	"context"
 	"fmt"
+	"github.com/ledgerwatch/log/v3"
 	"sync"
 
 	"github.com/dgravesa/go-parallel/parallel"
@@ -385,12 +386,24 @@ func updateNodeHashesForDelete(nodeHashesForDelete map[uint64]map[uint64]map[uin
 func calculateAndSaveHashes(s *SMT, smtBatchNode *smtBatchNode, path []int, level int) error {
 	//return calculateAndSaveHashesDfs(s, smtBatchNode, path, level)
 
+	ch := make(chan SaveHash, 50000)
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode, path, level, &wg)
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
 
-	wg.Wait()
+	go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode, path, level, &wg, ch)
+
+	for hashInfo := range ch {
+		err := s.hashSave(hashInfo.in, hashInfo.capacity, hashInfo.h)
+		if err != nil {
+			log.Error("fail to save node hash: ", err)
+		}
+	}
 
 	return nil
 }
@@ -435,20 +448,26 @@ func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, l
 	return nil
 }
 
-func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, level int, wg *sync.WaitGroup) error {
+func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, level int, wg *sync.WaitGroup, ch chan SaveHash) error {
 	defer wg.Done()
 
 	if smtBatchNode.isLeaf() {
-		hashObj, err := s.hashcalcAndSave(utils.ConcatArrays4(*smtBatchNode.nodeLeftHashOrRemainingKey, *smtBatchNode.nodeRightHashOrValueHash), utils.LeafCapacity)
+		in := utils.ConcatArrays4(*smtBatchNode.nodeLeftHashOrRemainingKey, *smtBatchNode.nodeRightHashOrValueHash)
+		hashObj, err := utils.Hash(in, utils.LeafCapacity)
 		if err != nil {
 			return err
+		}
+
+		ch <- SaveHash{
+			in:       in,
+			capacity: utils.LeafCapacity,
+			h:        hashObj,
 		}
 
 		nodeKey := utils.JoinKey(path[:level], *smtBatchNode.nodeLeftHashOrRemainingKey)
 		s.Db.InsertHashKey(hashObj, *nodeKey)
 
 		smtBatchNode.hash = &hashObj
-
 		return nil
 	}
 
@@ -461,14 +480,14 @@ func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, pat
 		leftPath[level] = 0
 
 		leftWG.Add(1)
-		go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode.leftNode, leftPath, level+1, &leftWG)
+		go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode.leftNode, leftPath, level+1, &leftWG, ch)
 	}
 
 	if smtBatchNode.rightNode != nil {
 		path[level] = 1
 
 		rightWG.Add(1)
-		go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode.rightNode, path, level+1, &rightWG)
+		go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode.rightNode, path, level+1, &rightWG, ch)
 	}
 
 	// Wait for the left and right traversals to complete
@@ -488,11 +507,17 @@ func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, pat
 		totalHash.SetHalfValue(*smtBatchNode.nodeRightHashOrValueHash, 1)
 	}
 
-	hashObj, err := s.hashcalcAndSave(totalHash.ToUintArray(), utils.BranchCapacity)
+	hashObj, err := utils.Hash(totalHash.ToUintArray(), utils.BranchCapacity)
 	if err != nil {
 		return err
 	}
 	smtBatchNode.hash = &hashObj
+
+	ch <- SaveHash{
+		in:       totalHash.ToUintArray(),
+		capacity: utils.BranchCapacity,
+		h:        hashObj,
+	}
 
 	return nil
 }
