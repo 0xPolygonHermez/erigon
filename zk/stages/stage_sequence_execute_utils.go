@@ -193,7 +193,6 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, erro
 		}
 	}
 
-	latest = 11
 	if latest == 0 {
 		return 0, fmt.Errorf("could not find a suitable fork for batch %v, cannot start sequencer, check contract configuration", lastBatch+1)
 	}
