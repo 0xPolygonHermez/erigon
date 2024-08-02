@@ -476,6 +476,11 @@ var (
 		Usage: "Batch seal time. Defaults to 3s",
 		Value: "3s",
 	}
+	SequencerHaltOnBatchNumber = cli.Uint64Flag{
+		Name:  "zkevm.sequencer-halt-on-batch-number",
+		Usage: "Halt the sequencer on this batch number",
+		Value: 0,
+	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",
@@ -1060,6 +1065,11 @@ var (
 		Name:  "sentinel.port",
 		Usage: "Port for sentinel",
 		Value: 7777,
+	}
+	YieldSizeFlag = cli.Uint64Flag{
+		Name:  "yieldsize",
+		Usage: "transaction count fetched from txpool each time",
+		Value: 1000,
 	}
 )
 
@@ -1798,6 +1808,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	setTxPool(ctx, &cfg.DeprecatedTxPool)
 	cfg.TxPool = ethconfig.DefaultTxPool2Config(cfg.DeprecatedTxPool)
 	cfg.TxPool.DBDir = nodeConfig.Dirs.TxPool
+	cfg.YieldSize = ctx.Uint64(YieldSizeFlag.Name)
 
 	setEthash(ctx, nodeConfig.Dirs.DataDir, cfg)
 	setClique(ctx, &cfg.Clique, nodeConfig.Dirs.DataDir)

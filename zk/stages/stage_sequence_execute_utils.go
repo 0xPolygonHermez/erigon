@@ -89,6 +89,8 @@ type SequenceBlockCfg struct {
 
 	txPool   *txpool.TxPool
 	txPoolDb kv.RwDB
+
+	yieldSize uint16
 }
 
 func StageSequenceBlocksCfg(
@@ -114,6 +116,7 @@ func StageSequenceBlocksCfg(
 
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
+	yieldSize uint16,
 ) SequenceBlockCfg {
 
 	return SequenceBlockCfg{
@@ -138,6 +141,7 @@ func StageSequenceBlocksCfg(
 		zk:               zk,
 		txPool:           txPool,
 		txPoolDb:         txPoolDb,
+		yieldSize:        yieldSize,
 	}
 }
 
