@@ -69,7 +69,6 @@ func (_this *limboStreamBytesBuilderHelper) add(senderMapKey string, blockNumber
 
 func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBundle *legacy_executor_verifier.VerifierBundle) error {
 	request := verifierBundle.Request
-	response := verifierBundle.Response
 	legacyVerifier := batchContext.cfg.legacyVerifier
 
 	log.Info(fmt.Sprintf("[%s] identified an invalid batch, entering limbo", batchContext.s.LogPrefix()), "batch", request.BatchNumber)
@@ -83,7 +82,6 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 	limboStreamBytesBuilderHelper := newLimboStreamBytesBuilderHelper()
 
 	limboDetails := txpool.NewLimboBatchDetails()
-	limboDetails.Witness = response.Witness
 	limboDetails.L1InfoTreeMinTimestamps = l1InfoTreeMinTimestamps
 	limboDetails.BatchNumber = request.BatchNumber
 	limboDetails.ForkId = request.ForkId

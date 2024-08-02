@@ -141,7 +141,13 @@ func (v *LegacyExecutorVerifier) appendPromise(promise *Promise[*VerifierBundle]
 	v.promises = append(v.promises, promise)
 }
 
-func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, witness, streamBytes []byte, timestampLimit, firstBlockNumber uint64, l1InfoTreeMinTimestamps map[uint64]uint64) error {
+func (v *LegacyExecutorVerifier) VerifySync(ctx context.Context, tx kv.Tx, request *VerifierRequest, streamBytes []byte, timestampLimit, firstBlockNumber uint64, l1InfoTreeMinTimestamps map[uint64]uint64) error {
+	blockNumbers := []uint64{firstBlockNumber}
+	witness, err := v.witnessGenerator.GetWitnessByBlockRange(tx, ctx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
+	if err != nil {
+		return err
+	}
+
 	oldAccInputHash := common.HexToHash("0x0")
 	payload := &Payload{
 		Witness:                 witness,
@@ -253,8 +259,8 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 
 		ok, executorResponse, executorErr := e.Verify(payload, request, previousBlock.Root())
 
-		if request.GetLastBlockNumber() == 7 && counter == 0 {
-			// ok = false
+		if request.GetLastBlockNumber() == 8 && counter == 0 {
+			ok = false
 			counter = 1
 		}
 
