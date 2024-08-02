@@ -965,10 +965,6 @@ func createBuckets(tx kv.RwTx) error {
 		return err
 	}
 
-	if err := txpool.CreateTxPoolBuckets(tx); err != nil {
-		return err
-	}
-
 	return nil
 }
 
