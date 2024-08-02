@@ -386,7 +386,7 @@ func updateNodeHashesForDelete(nodeHashesForDelete map[uint64]map[uint64]map[uin
 func calculateAndSaveHashes(s *SMT, smtBatchNode *smtBatchNode, path []int, level int) error {
 	//return calculateAndSaveHashesDfs(s, smtBatchNode, path, level)
 
-	ch := make(chan SaveHash, 50000)
+	ch := make(chan interface{}, 4000)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -398,10 +398,22 @@ func calculateAndSaveHashes(s *SMT, smtBatchNode *smtBatchNode, path []int, leve
 
 	go concurrentCalculateAndSaveHashesDfs(s, smtBatchNode, path, level, &wg, ch)
 
-	for hashInfo := range ch {
-		err := s.hashSave(hashInfo.in, hashInfo.capacity, hashInfo.h)
-		if err != nil {
-			log.Error("fail to save node hash: ", err)
+	for data := range ch {
+		switch data.(type) {
+		case SaveNodeHash:
+			hashInfo := data.(SaveNodeHash)
+			err := s.hashSave(hashInfo.in, hashInfo.capacity, hashInfo.h)
+			if err != nil {
+				log.Error("fail to save node hash: ", err)
+			}
+		case SaveHashKey:
+			hashKey := data.(SaveHashKey)
+			err := s.Db.InsertHashKey(hashKey.key, hashKey.value)
+			if err != nil {
+				log.Error("fail to save hash key pair: ", err)
+			}
+		default:
+			log.Error("not supported data type")
 		}
 	}
 
@@ -448,7 +460,7 @@ func calculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, l
 	return nil
 }
 
-func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, level int, wg *sync.WaitGroup, ch chan SaveHash) error {
+func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, path []int, level int, wg *sync.WaitGroup, ch chan interface{}) error {
 	defer wg.Done()
 
 	if smtBatchNode.isLeaf() {
@@ -458,14 +470,17 @@ func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, pat
 			return err
 		}
 
-		ch <- SaveHash{
+		ch <- SaveNodeHash{
 			in:       in,
 			capacity: utils.LeafCapacity,
 			h:        hashObj,
 		}
 
 		nodeKey := utils.JoinKey(path[:level], *smtBatchNode.nodeLeftHashOrRemainingKey)
-		s.Db.InsertHashKey(hashObj, *nodeKey)
+		ch <- SaveHashKey{
+			key:   hashObj,
+			value: *nodeKey,
+		}
 
 		smtBatchNode.hash = &hashObj
 		return nil
@@ -513,7 +528,7 @@ func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, pat
 	}
 	smtBatchNode.hash = &hashObj
 
-	ch <- SaveHash{
+	ch <- SaveNodeHash{
 		in:       totalHash.ToUintArray(),
 		capacity: utils.BranchCapacity,
 		h:        hashObj,
@@ -522,10 +537,15 @@ func concurrentCalculateAndSaveHashesDfs(s *SMT, smtBatchNode *smtBatchNode, pat
 	return nil
 }
 
-type SaveHash struct {
+type SaveNodeHash struct {
 	in       [8]uint64
 	capacity [4]uint64
-	h        [4]uint64
+	h        utils.NodeKey
+}
+
+type SaveHashKey struct {
+	key   utils.NodeKey
+	value utils.NodeKey
 }
 
 type smtBatchNode struct {
