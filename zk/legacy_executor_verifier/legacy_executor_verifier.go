@@ -87,7 +87,7 @@ type LegacyExecutorVerifier struct {
 	cancelAllVerifications atomic.Bool
 
 	streamServer     *server.DataStreamServer
-	witnessGenerator WitnessGenerator
+	WitnessGenerator WitnessGenerator
 
 	promises    []*Promise[*VerifierBundle]
 	mtxPromises *sync.Mutex
@@ -109,7 +109,7 @@ func NewLegacyExecutorVerifier(
 		executorNumber:         0,
 		cancelAllVerifications: atomic.Bool{},
 		streamServer:           streamServer,
-		witnessGenerator:       witnessGenerator,
+		WitnessGenerator:       witnessGenerator,
 		promises:               make([]*Promise[*VerifierBundle], 0),
 		mtxPromises:            &sync.Mutex{},
 	}
@@ -141,13 +141,7 @@ func (v *LegacyExecutorVerifier) appendPromise(promise *Promise[*VerifierBundle]
 	v.promises = append(v.promises, promise)
 }
 
-func (v *LegacyExecutorVerifier) VerifySync(ctx context.Context, tx kv.Tx, request *VerifierRequest, streamBytes []byte, timestampLimit, firstBlockNumber uint64, l1InfoTreeMinTimestamps map[uint64]uint64) error {
-	blockNumbers := []uint64{firstBlockNumber}
-	witness, err := v.witnessGenerator.GetWitnessByBlockRange(tx, ctx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
-	if err != nil {
-		return err
-	}
-
+func (v *LegacyExecutorVerifier) VerifySync(tx kv.Tx, request *VerifierRequest, witness, streamBytes []byte, timestampLimit, firstBlockNumber uint64, l1InfoTreeMinTimestamps map[uint64]uint64) error {
 	oldAccInputHash := common.HexToHash("0x0")
 	payload := &Payload{
 		Witness:                 witness,
@@ -221,7 +215,7 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 			return verifierBundle, err
 		}
 
-		witness, err := v.witnessGenerator.GetWitnessByBlockRange(tx, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
+		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
 		if err != nil {
 			return verifierBundle, err
 		}

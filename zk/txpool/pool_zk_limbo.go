@@ -22,6 +22,7 @@ const (
 	DbKeyBatchesPrefix               = uint8(3)
 	DbKeyAwaitingBlockHandlingPrefix = uint8(4)
 
+	DbKeyBatchesWitnessPrefix          = uint8(5)
 	DbKeyBatchesL1InfoTreePrefix       = uint8(6)
 	DbKeyBatchesTimestampLimitPrefix   = uint8(7)
 	DbKeyBatchesFirstBlockNumberPrefix = uint8(8)
@@ -145,6 +146,7 @@ func (_this *Limbo) getLimboTxDetailsByTxHash(txHash *common.Hash) (*LimboBatchD
 }
 
 type LimboBatchDetails struct {
+	Witness                 []byte
 	L1InfoTreeMinTimestamps map[uint64]uint64
 	TimestampLimit          uint64
 	FirstBlockNumber        uint64
@@ -394,6 +396,13 @@ func (p *TxPool) flushLockedLimbo(tx kv.RwTx) (err error) {
 	for i, limboBatch := range p.limbo.limboBatches {
 		binary.LittleEndian.PutUint32(keyBytes[1:5], uint32(i))
 
+		// Witness
+		keyBytes[5] = DbKeyBatchesWitnessPrefix
+		binary.LittleEndian.PutUint64(keyBytes[6:14], 0)
+		if err := tx.Put(TablePoolLimbo, keyBytes, limboBatch.Witness); err != nil {
+			return err
+		}
+
 		// L1InfoTreeMinTimestamps
 		keyBytes[5] = DbKeyBatchesL1InfoTreePrefix
 		for k, v := range limboBatch.L1InfoTreeMinTimestamps {
@@ -533,6 +542,8 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 			p.limbo.resizeBatches(int(batchesI) + 1)
 
 			switch k[5] {
+			case DbKeyBatchesWitnessPrefix:
+				p.limbo.limboBatches[batchesI].Witness = v
 			case DbKeyBatchesL1InfoTreePrefix:
 				p.limbo.limboBatches[batchesI].L1InfoTreeMinTimestamps[batchesJ] = binary.LittleEndian.Uint64(v)
 			case DbKeyBatchesTimestampLimitPrefix:

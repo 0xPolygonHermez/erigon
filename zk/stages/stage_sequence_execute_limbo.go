@@ -78,15 +78,21 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 		return err
 	}
 
+	blockNumber := request.GetLastBlockNumber()
+	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.ctx, blockNumber, blockNumber, false, batchContext.cfg.zk.WitnessFull)
+	if err != nil {
+		return err
+	}
+
 	limboSendersToPreviousTxMap := make(map[string]uint32)
 	limboStreamBytesBuilderHelper := newLimboStreamBytesBuilderHelper()
 
 	limboDetails := txpool.NewLimboBatchDetails()
+	limboDetails.Witness = witness
 	limboDetails.L1InfoTreeMinTimestamps = l1InfoTreeMinTimestamps
 	limboDetails.BatchNumber = request.BatchNumber
 	limboDetails.ForkId = request.ForkId
 
-	blockNumber := request.GetLastBlockNumber()
 	block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, blockNumber)
 	if err != nil {
 		return err
