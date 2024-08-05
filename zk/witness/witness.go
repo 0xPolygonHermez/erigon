@@ -8,6 +8,7 @@ import (
 
 	"math/big"
 
+	"github.com/c2h5oh/datasize"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/datadir"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -69,7 +70,7 @@ func NewGenerator(
 	}
 }
 
-func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum uint64, debug, witnessFull bool) ([]byte, error) {
+func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum uint64, debug, witnessFull bool) (witness []byte, err error) {
 	t := zkUtils.StartTimer("witness", "getwitnessbybatch")
 	defer t.LogTimer()
 
@@ -78,10 +79,12 @@ func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum ui
 	if err != nil {
 		return nil, err
 	}
-	var witness []byte
 	if badBatch {
 		// we need the header of the block prior to this batch to build up the blocks
 		previousHeight, err := reader.GetHighestBlockInBatch(batchNum - 1)
+		if err != nil {
+			return nil, err
+		}
 		previousHeader := rawdb.ReadHeaderByNumber(tx, previousHeight)
 		if previousHeader == nil {
 			return nil, fmt.Errorf("failed to get header for block %d", previousHeight)
@@ -120,8 +123,7 @@ func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum ui
 			blocks[i] = block
 		}
 
-		witness, err = g.generateWitness(tx, ctx, blocks, debug, witnessFull)
-
+		return g.generateWitness(tx, ctx, blocks, debug, witnessFull)
 	} else {
 		blockNumbers, err := reader.GetL2BlockNosByBatch(batchNum)
 		if err != nil {
@@ -140,10 +142,8 @@ func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum ui
 			blocks[idx] = block
 			idx++
 		}
-		witness, err = g.generateWitness(tx, ctx, blocks, debug, witnessFull)
+		return g.generateWitness(tx, ctx, blocks, debug, witnessFull)
 	}
-
-	return witness, nil
 }
 
 func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error) {
@@ -187,7 +187,7 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 		return nil, fmt.Errorf("block number is in the future latest=%d requested=%d", latestBlock, endBlock)
 	}
 
-	batch := memdb.NewMemoryBatch(tx, g.dirs.Tmp)
+	batch := memdb.NewMemoryBatchWithSize(tx, g.dirs.Tmp, 2*datasize.GB)
 	defer batch.Rollback()
 	if err = populateDbTables(batch); err != nil {
 		return nil, err
@@ -209,14 +209,13 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 		hashStageCfg := stagedsync.StageHashStateCfg(nil, g.dirs, g.historyV3, g.agg)
 		hashStageCfg.SetQuiet(true)
 		if err := stagedsync.UnwindHashStateStage(unwindState, stageState, batch, hashStageCfg, ctx); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unwind hash state: %w", err)
 		}
 
 		interHashStageCfg := zkStages.StageZkInterHashesCfg(nil, true, true, false, g.dirs.Tmp, g.blockReader, nil, g.historyV3, g.agg, nil)
 
-		err = zkStages.UnwindZkIntermediateHashesStage(unwindState, stageState, batch, interHashStageCfg, ctx)
-		if err != nil {
-			return nil, err
+		if err = zkStages.UnwindZkIntermediateHashesStage(unwindState, stageState, batch, interHashStageCfg, ctx); err != nil {
+			return nil, fmt.Errorf("unwind intermediate hashes: %w", err)
 		}
 
 		tx = batch
@@ -334,7 +333,7 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 
 	witness, err := smt.BuildWitness(smtTrie, rl, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build witness: %v", err)
 	}
 
 	return getWitnessBytes(witness, debug)
@@ -349,7 +348,7 @@ func getWitnessBytes(witness *trie.Witness, debug bool) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func populateDbTables(batch *memdb.MemoryMutation) error {
+func populateDbTables(batch kv.RwTx) error {
 	tables := []string{
 		db2.TableSmt,
 		db2.TableAccountValues,
