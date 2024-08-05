@@ -67,6 +67,7 @@ type HermezDb interface {
 	WriteBatchGlobalExitRoot(batchNumber uint64, ger types.GerUpdate) error
 	WriteIntermediateTxStateRoot(l2BlockNumber uint64, txHash common.Hash, rpcRoot common.Hash) error
 	WriteBlockL1InfoTreeIndex(blockNumber uint64, l1Index uint64) error
+	WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error
 	WriteLatestUsedGer(batchNo uint64, ger common.Hash) error
 	WriteLocalExitRootForBatchNo(batchNo uint64, localExitRoot common.Hash) error
 }
@@ -686,7 +687,8 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// store the highest used l1 info index//
 	/////////////////////////////////////////
 
-	highestL1InfoTreeIndex, err := hermezDb.GetLatestL1InfoTreeIndex()
+	// highestL1InfoTreeIndex, err := hermezDb.GetLatestL1InfoTreeIndex()
+	highestL1InfoTreeIndex, err := hermezDb.GetBlockL1InfoTreeIndexProgress(fromBlock)
 	if err != nil {
 		return fmt.Errorf("get latest l1 info tree index error: %v", err)
 	}
@@ -841,6 +843,9 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block,
 
 	if l2Block.L1InfoTreeIndex != 0 {
 		if err := hermezDb.WriteBlockL1InfoTreeIndex(l2Block.L2BlockNumber, uint64(l2Block.L1InfoTreeIndex)); err != nil {
+			return err
+		}
+		if err := hermezDb.WriteBlockL1InfoTreeIndexProgress(l2Block.L2BlockNumber, highestL1InfoTreeIndex); err != nil {
 			return err
 		}
 

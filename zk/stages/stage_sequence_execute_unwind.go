@@ -63,8 +63,11 @@ func unwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.Stage
 		return err
 	}
 
-	//TODO: why l1infoindex is 1?
-	if err = updateSequencerProgress(tx, u.UnwindPoint, fromBatch, 1, true); err != nil {
+	infoTreeIndexProgress, err := hermezDb.GetBlockL1InfoTreeIndexProgress(u.UnwindPoint)
+	if err != nil {
+		return err
+	}
+	if err = updateSequencerProgress(tx, u.UnwindPoint, fromBatch, infoTreeIndexProgress, true); err != nil {
 		return err
 	}
 
@@ -114,15 +117,19 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("truncate latest used gers error: %v", err)
 	}
 	// only seq
-	if err = hermezDb.TruncateBlockGlobalExitRoot(u.UnwindPoint+1, s.BlockNumber); err != nil {
+	if err = hermezDb.DeleteBlockGlobalExitRoots(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("truncate block ger error: %v", err)
 	}
 	// only seq
-	if err = hermezDb.TruncateBlockL1BlockHash(u.UnwindPoint+1, s.BlockNumber); err != nil {
+	if err = hermezDb.DeleteBlockL1BlockHashes(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("truncate block l1 block hash error: %v", err)
 	}
 	// only seq
-	if err = hermezDb.TruncateBlockL1InfoTreeIndex(u.UnwindPoint+1, s.BlockNumber); err != nil {
+	if err = hermezDb.DeleteBlockL1InfoTreeIndexes(u.UnwindPoint+1, s.BlockNumber); err != nil {
+		return fmt.Errorf("truncate block l1 info tree index error: %v", err)
+	}
+	// only seq
+	if err = hermezDb.DeleteBlockL1InfoTreeIndexesProgress(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("truncate block l1 info tree index error: %v", err)
 	}
 	// only seq
@@ -130,7 +137,7 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("truncate block batches error: %v", err)
 	}
 	// only seq
-	if err = hermezDb.TruncateForkId(fromBatchForForkIdDeletion, toBatch); err != nil {
+	if err = hermezDb.DeleteForkIds(fromBatchForForkIdDeletion, toBatch); err != nil {
 		return fmt.Errorf("truncate fork id error: %v", err)
 	}
 	// only seq
