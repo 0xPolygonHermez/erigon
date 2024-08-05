@@ -105,7 +105,7 @@ func SpawnSequencingStage(
 		}
 
 		// let's check if we have any L1 data to recover
-		if err = batchState.batchL1RecoveryData.loadBatchData(sdb, batchState.batchNumber, batchState.forkId); err != nil {
+		if err = batchState.batchL1RecoveryData.loadBatchData(sdb); err != nil {
 			return err
 		}
 

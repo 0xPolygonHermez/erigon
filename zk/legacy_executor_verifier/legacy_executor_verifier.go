@@ -186,6 +186,9 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest, blockNumb
 			return verifierBundle, ErrNoExecutorAvailable
 		}
 
+		t := utils.StartTimer("legacy-executor-verifier", "verify-async")
+		defer t.LogTimer()
+
 		e.AquireAccess()
 		defer e.ReleaseAccess()
 		if v.cancelAllVerifications.Load() {

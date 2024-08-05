@@ -60,7 +60,7 @@ func newBatchState(forkId, batchNumber uint64, hasExecutorForThisBatch, l1Recove
 	}
 
 	if l1Recovery {
-		batchState.batchL1RecoveryData = newBatchL1RecoveryData()
+		batchState.batchL1RecoveryData = newBatchL1RecoveryData(batchState)
 	}
 
 	limboHeaderTimestamp, limboTxHash := txPool.GetLimboTxHash(batchState.batchNumber)
@@ -127,14 +127,17 @@ func (bs *BatchState) onBuiltBlock(blockNumber uint64) {
 type BatchL1RecoveryData struct {
 	recoveredBatchDataSize int
 	recoveredBatchData     *l1_data.DecodedL1Data
+	batchState             *BatchState
 }
 
-func newBatchL1RecoveryData() *BatchL1RecoveryData {
-	return &BatchL1RecoveryData{}
+func newBatchL1RecoveryData(batchState *BatchState) *BatchL1RecoveryData {
+	return &BatchL1RecoveryData{
+		batchState: batchState,
+	}
 }
 
-func (batchL1RecoveryData *BatchL1RecoveryData) loadBatchData(sdb *stageDb, thisBatch, forkId uint64) (err error) {
-	batchL1RecoveryData.recoveredBatchData, err = l1_data.BreakDownL1DataByBatch(thisBatch, forkId, sdb.hermezDb.HermezDbReader)
+func (batchL1RecoveryData *BatchL1RecoveryData) loadBatchData(sdb *stageDb) (err error) {
+	batchL1RecoveryData.recoveredBatchData, err = l1_data.BreakDownL1DataByBatch(batchL1RecoveryData.batchState.batchNumber, batchL1RecoveryData.batchState.forkId, sdb.hermezDb.HermezDbReader)
 	if err != nil {
 		return err
 	}
