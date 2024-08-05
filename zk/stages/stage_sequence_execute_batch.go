@@ -105,7 +105,11 @@ func updateStreamAndCheckRollback(
 			continue
 		}
 
-		// updateStreamAndCheckRollback cannot be invoked during l1 recovery so no point to check it
+		// The sequencer can goes to this point of the code only in L1Recovery mode or Default Mode.
+		// There is no way to get here in LimboRecoveryMode
+		// If we are here in L1RecoveryMode then let's stop everything by using an infinite loop because something is quite wrong
+		// If we are here in Default mode and limbo is disabled then again do the same as in L1RecoveryMode
+		// If we are here in Default mode and limbo is enabled then continue normal flow
 		if batchState.isL1Recovery() || !batchContext.cfg.zk.Limbo {
 			infiniteLoop(verifierBundle.Request.BatchNumber)
 		}
