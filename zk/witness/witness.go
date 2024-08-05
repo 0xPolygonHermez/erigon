@@ -8,7 +8,6 @@ import (
 
 	"math/big"
 
-	"github.com/c2h5oh/datasize"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/datadir"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -22,6 +21,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
@@ -49,6 +49,7 @@ type Generator struct {
 	agg         *libstate.AggregatorV3
 	blockReader services.FullBlockReader
 	chainCfg    *chain.Config
+	zkConfig    *ethconfig.Zk
 	engine      consensus.EngineReader
 }
 
@@ -58,6 +59,7 @@ func NewGenerator(
 	agg *libstate.AggregatorV3,
 	blockReader services.FullBlockReader,
 	chainCfg *chain.Config,
+	zkConfig *ethconfig.Zk,
 	engine consensus.EngineReader,
 ) *Generator {
 	return &Generator{
@@ -66,6 +68,7 @@ func NewGenerator(
 		agg:         agg,
 		blockReader: blockReader,
 		chainCfg:    chainCfg,
+		zkConfig:    zkConfig,
 		engine:      engine,
 	}
 }
@@ -187,7 +190,7 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, blocks []*eri
 		return nil, fmt.Errorf("block number is in the future latest=%d requested=%d", latestBlock, endBlock)
 	}
 
-	batch := memdb.NewMemoryBatchWithSize(tx, g.dirs.Tmp, 2*datasize.GB)
+	batch := memdb.NewMemoryBatchWithSize(tx, g.dirs.Tmp, g.zkConfig.WitnessMemdbSize)
 	defer batch.Rollback()
 	if err = populateDbTables(batch); err != nil {
 		return nil, err
