@@ -102,10 +102,6 @@ func CatchupDatastream(ctx context.Context, logPrefix string, tx kv.RwTx, stream
 			// without execution we save progress block by block and can populate an unfinished batch to stream
 			// otherwise we get a batch gap in the stream because a few blocks don't get written to the stream
 			// and then execution continues from the middle of the batch
-			_, err = stages.GetStageProgress(tx, stages.HighestSeenBatchNumber)
-			if err != nil {
-				return 0, err
-			}
 			finalBlockNumber, err = stages.GetStageProgress(tx, stages.Execution)
 			if err != nil {
 				return 0, err
