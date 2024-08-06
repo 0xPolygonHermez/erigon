@@ -131,6 +131,7 @@ Loop:
 				infos = append(infos, &info)
 				batchLogTypes = append(batchLogTypes, batchLogType)
 				if batchLogType == logL1InfoTreeUpdate {
+					// TODO: Unused, is it safe to remove it?
 					logsForQueryBlocks = append(logsForQueryBlocks, l)
 				}
 			}
