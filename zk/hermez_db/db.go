@@ -15,40 +15,41 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-const L1VERIFICATIONS = "hermez_l1Verifications"                       // l1blockno, batchno -> l1txhash
-const L1SEQUENCES = "hermez_l1Sequences"                               // l1blockno, batchno -> l1txhash
-const FORKIDS = "hermez_forkIds"                                       // batchNo -> forkId
-const FORKID_BLOCK = "hermez_forkIdBlock"                              // forkId -> startBlock
-const BLOCKBATCHES = "hermez_blockBatches"                             // l2blockno -> batchno
-const GLOBAL_EXIT_ROOTS = "hermez_globalExitRootsSaved"                // GER -> true
-const BLOCK_GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"               // l2blockno -> GER
-const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches"     // batchkno -> GER
-const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"                 // txHash -> txPricePercentage
-const STATE_ROOTS = "hermez_stateRoots"                                // l2blockno -> stateRoot
-const L1_INFO_TREE_UPDATES = "l1_info_tree_updates"                    // index -> L1InfoTreeUpdate
-const L1_INFO_TREE_UPDATES_BY_GER = "l1_info_tree_updates_by_ger"      // GER -> L1InfoTreeUpdate
-const BLOCK_L1_INFO_TREE_INDEX = "block_l1_info_tree_index"            // block number -> l1 info tree index
-const L1_INJECTED_BATCHES = "l1_injected_batches"                      // index increasing by 1 -> injected batch for the start of the chain
-const BLOCK_INFO_ROOTS = "block_info_roots"                            // block number -> block info root hash
-const L1_BLOCK_HASHES = "l1_block_hashes"                              // l1 block hash -> true
-const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                  // block number -> l1 block hash
-const L1_BLOCK_HASH_GER = "l1_block_hash_ger"                          // l1 block hash -> GER
-const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots" // l2blockno -> stateRoot
-const BATCH_WITNESSES = "hermez_batch_witnesses"                       // batch number -> witness
-const BATCH_COUNTERS = "hermez_batch_counters"                         // batch number -> counters
-const L1_BATCH_DATA = "l1_batch_data"                                  // batch number -> l1 batch data from transaction call data
-const REUSED_L1_INFO_TREE_INDEX = "reused_l1_info_tree_index"          // block number => const 1
-const LATEST_USED_GER = "latest_used_ger"                              // batch number -> GER latest used GER
-const BATCH_BLOCKS = "batch_blocks"                                    // batch number -> block numbers (concatenated together)
-const SMT_DEPTHS = "smt_depths"                                        // block number -> smt depth
-const L1_INFO_LEAVES = "l1_info_leaves"                                // l1 info tree index -> l1 info tree leaf
-const L1_INFO_ROOTS = "l1_info_roots"                                  // root hash -> l1 info tree index
-const INVALID_BATCHES = "invalid_batches"                              // batch number -> true
-const BATCH_PARTIALLY_PROCESSED = "batch_partially_processed"          // batch number -> true
-const LOCAL_EXIT_ROOTS = "local_exit_roots"                            // l2 block number -> local exit root
-const ROllUP_TYPES_FORKS = "rollup_types_forks"                        // rollup type id -> fork id
-const FORK_HISTORY = "fork_history"                                    // index -> fork id + last verified batch
-const JUST_UNWOUND = "just_unwound"                                    // batch number -> true
+const L1VERIFICATIONS = "hermez_l1Verifications"                        // l1blockno, batchno -> l1txhash
+const L1SEQUENCES = "hermez_l1Sequences"                                // l1blockno, batchno -> l1txhash
+const FORKIDS = "hermez_forkIds"                                        // batchNo -> forkId
+const FORKID_BLOCK = "hermez_forkIdBlock"                               // forkId -> startBlock
+const BLOCKBATCHES = "hermez_blockBatches"                              // l2blockno -> batchno
+const GLOBAL_EXIT_ROOTS = "hermez_globalExitRootsSaved"                 // GER -> true
+const BLOCK_GLOBAL_EXIT_ROOTS = "hermez_globalExitRoots"                // l2blockno -> GER
+const GLOBAL_EXIT_ROOTS_BATCHES = "hermez_globalExitRoots_batches"      // batchkno -> GER
+const TX_PRICE_PERCENTAGE = "hermez_txPricePercentage"                  // txHash -> txPricePercentage
+const STATE_ROOTS = "hermez_stateRoots"                                 // l2blockno -> stateRoot
+const L1_INFO_TREE_UPDATES = "l1_info_tree_updates"                     // index -> L1InfoTreeUpdate
+const L1_INFO_TREE_UPDATES_BY_GER = "l1_info_tree_updates_by_ger"       // GER -> L1InfoTreeUpdate
+const BLOCK_L1_INFO_TREE_INDEX = "block_l1_info_tree_index"             // block number -> l1 info tree index
+const BLOCK_L1_INFO_TREE_INDEX_PROGRESS = "block_l1_info_tree_progress" // block number -> l1 info tree progress
+const L1_INJECTED_BATCHES = "l1_injected_batches"                       // index increasing by 1 -> injected batch for the start of the chain
+const BLOCK_INFO_ROOTS = "block_info_roots"                             // block number -> block info root hash
+const L1_BLOCK_HASHES = "l1_block_hashes"                               // l1 block hash -> true
+const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                   // block number -> l1 block hash
+const L1_BLOCK_HASH_GER = "l1_block_hash_ger"                           // l1 block hash -> GER
+const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots"  // l2blockno -> stateRoot
+const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch number -> witness
+const BATCH_COUNTERS = "hermez_batch_counters"                          // batch number -> counters
+const L1_BATCH_DATA = "l1_batch_data"                                   // batch number -> l1 batch data from transaction call data
+const REUSED_L1_INFO_TREE_INDEX = "reused_l1_info_tree_index"           // block number => const 1
+const LATEST_USED_GER = "latest_used_ger"                               // batch number -> GER latest used GER
+const BATCH_BLOCKS = "batch_blocks"                                     // batch number -> block numbers (concatenated together)
+const SMT_DEPTHS = "smt_depths"                                         // block number -> smt depth
+const L1_INFO_LEAVES = "l1_info_leaves"                                 // l1 info tree index -> l1 info tree leaf
+const L1_INFO_ROOTS = "l1_info_roots"                                   // root hash -> l1 info tree index
+const INVALID_BATCHES = "invalid_batches"                               // batch number -> true
+const BATCH_PARTIALLY_PROCESSED = "batch_partially_processed"           // batch number -> true
+const LOCAL_EXIT_ROOTS = "local_exit_roots"                             // l2 block number -> local exit root
+const ROllUP_TYPES_FORKS = "rollup_types_forks"                         // rollup type id -> fork id
+const FORK_HISTORY = "fork_history"                                     // index -> fork id + last verified batch
+const JUST_UNWOUND = "just_unwound"                                     // batch number -> true
 
 var HermezDbTables = []string{
 	L1VERIFICATIONS,
@@ -64,6 +65,7 @@ var HermezDbTables = []string{
 	L1_INFO_TREE_UPDATES,
 	L1_INFO_TREE_UPDATES_BY_GER,
 	BLOCK_L1_INFO_TREE_INDEX,
+	BLOCK_L1_INFO_TREE_INDEX_PROGRESS,
 	L1_INJECTED_BATCHES,
 	BLOCK_INFO_ROOTS,
 	L1_BLOCK_HASHES,
@@ -774,18 +776,6 @@ func (db *HermezDbReader) GetBlockGlobalExitRoot(l2BlockNo uint64) (common.Hash,
 	return common.BytesToHash(bytes), nil
 }
 
-func (db *HermezDb) TruncateBlockGlobalExitRoot(fromL2BlockNum, toL2BlockNum uint64) error {
-	for i := fromL2BlockNum; i <= toL2BlockNum; i++ {
-		err := db.tx.Delete(BLOCK_GLOBAL_EXIT_ROOTS, Uint64ToBytes(i))
-		if err != nil {
-			return err
-		}
-
-	}
-
-	return nil
-}
-
 // from and to are inclusive
 func (db *HermezDbReader) GetBlockGlobalExitRoots(fromBlockNo, toBlockNo uint64) ([]common.Hash, error) {
 	c, err := db.tx.Cursor(BLOCK_GLOBAL_EXIT_ROOTS)
@@ -823,18 +813,6 @@ func (db *HermezDbReader) GetBlockL1BlockHash(l2BlockNo uint64) (common.Hash, er
 	}
 
 	return common.BytesToHash(bytes), nil
-}
-
-func (db *HermezDb) TruncateBlockL1BlockHash(fromL2BlockNum, toL2BlockNum uint64) error {
-	for i := fromL2BlockNum; i <= toL2BlockNum; i++ {
-		err := db.tx.Delete(BLOCK_L1_BLOCK_HASHES, Uint64ToBytes(i))
-		if err != nil {
-			return err
-		}
-
-	}
-
-	return nil
 }
 
 // from and to are inclusive
@@ -1100,18 +1078,6 @@ func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, bool, error) {
 	return blockNum, found, err
 }
 
-func (db *HermezDb) TruncateForkId(fromBatchNum, toBatchNum uint64) error {
-	for i := fromBatchNum; i <= toBatchNum; i++ {
-		err := db.tx.Delete(FORKIDS, Uint64ToBytes(i))
-		if err != nil {
-			return err
-		}
-
-	}
-
-	return nil
-}
-
 func (db *HermezDb) DeleteForkIdBlock(fromBlockNo, toBlockNo uint64) error {
 	return db.deleteFromBucketWithUintKeysRange(FORKID_BLOCK, fromBlockNo, toBlockNo)
 }
@@ -1295,38 +1261,39 @@ func (db *HermezDbReader) GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, e
 	return BytesToUint64(v), nil
 }
 
-func (db *HermezDb) TruncateBlockL1InfoTreeIndex(fromL2BlockNum, toL2BlockNum uint64) error {
-	for i := fromL2BlockNum; i <= toL2BlockNum; i++ {
-		err := db.tx.Delete(BLOCK_L1_INFO_TREE_INDEX, Uint64ToBytes(i))
-		if err != nil {
-			return err
-		}
-
+func (db *HermezDb) WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error {
+	latestBlockNumber, latestL1Index, err := db.GetLatestBlockL1InfoTreeIndexProgress()
+	if err != nil {
+		return err
+	}
+	if latestBlockNumber > blockNumber {
+		return fmt.Errorf("unable to set l1index for block %d because it has already been set for block %d", blockNumber, latestBlockNumber)
+	}
+	if l1Index <= latestL1Index {
+		return nil
 	}
 
-	return nil
+	k := Uint64ToBytes(blockNumber)
+	v := Uint64ToBytes(l1Index)
+	return db.tx.Put(BLOCK_L1_INFO_TREE_INDEX_PROGRESS, k, v)
 }
 
-func (db *HermezDbReader) GetLatestL1InfoTreeIndex() (uint64, error) {
-	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX)
+func (db *HermezDbReader) GetLatestBlockL1InfoTreeIndexProgress() (uint64, uint64, error) {
+	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX_PROGRESS)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer c.Close()
 
-	var k, v []byte
-	for k, v, err = c.Last(); k != nil; k, v, err = c.Prev() {
-		if err != nil {
-			break
-		}
-
-		if len(v) != 0 && v[0] == 1 {
-			blockNum := BytesToUint64(k[:8])
-			return blockNum, nil
-		}
+	k, v, err := c.Last()
+	if err != nil {
+		return 0, 0, err
 	}
+	return BytesToUint64(k), BytesToUint64(v), nil
+}
 
-	return 0, nil
+func (db *HermezDb) DeleteBlockL1InfoTreeIndexesProgress(fromBlockNum, toBlockNum uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(BLOCK_L1_INFO_TREE_INDEX_PROGRESS, fromBlockNum, toBlockNum)
 }
 
 func (db *HermezDb) WriteL1InjectedBatch(batch *types.L1InjectedBatch) error {

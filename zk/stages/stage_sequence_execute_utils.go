@@ -253,7 +253,7 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 	// we keep track of this here
 	shouldWriteGerToContract = true
 
-	if infoTreeIndexProgress, err = stages.GetStageProgress(sdb.tx, stages.HighestUsedL1InfoIndex); err != nil {
+	if _, infoTreeIndexProgress, err = sdb.hermezDb.GetLatestBlockL1InfoTreeIndexProgress(); err != nil {
 		return
 	}
 
@@ -312,7 +312,7 @@ func calculateNextL1TreeUpdateToUse(lastInfoIndex uint64, hermezDb *hermez_db.He
 	return nextL1Index, l1Info, nil
 }
 
-func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1InfoIndex uint64, unwinding bool) error {
+func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, unwinding bool) error {
 	// now update stages that will be used later on in stageloop.go and other stages. As we're the sequencer
 	// we won't have headers stage for example as we're already writing them here
 	if err := stages.SaveStageProgress(tx, stages.Execution, newHeight); err != nil {
@@ -322,9 +322,6 @@ func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, l1In
 		return err
 	}
 	if err := stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, newBatch); err != nil {
-		return err
-	}
-	if err := stages.SaveStageProgress(tx, stages.HighestUsedL1InfoIndex, l1InfoIndex); err != nil {
 		return err
 	}
 

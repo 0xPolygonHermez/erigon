@@ -75,7 +75,7 @@ func processInjectedInitialBatch(
 		effectiveGases:   []uint8{effectiveGas},
 	}
 
-	_, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injected.LastGlobalExitRoot, injected.L1ParentHash, 0)
+	_, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injected.LastGlobalExitRoot, injected.L1ParentHash)
 	return err
 }
 

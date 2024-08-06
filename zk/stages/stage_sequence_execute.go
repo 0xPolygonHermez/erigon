@@ -171,7 +171,6 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		var anyOverflow bool
 		ibs := state.New(sdb.stateReader)
 		getHashFn := core.GetHashFn(header, func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) })
 		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &cfg.zk.AddressSequencer, parentBlock.ExcessDataGas())
@@ -222,15 +221,14 @@ func SpawnSequencingStage(
 					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 				}
 
-				var receipt *types.Receipt
-				var execResult *core.ExecutionResult
 				for i, transaction := range batchState.blockState.transactionsForInclusion {
 					txHash := transaction.Hash()
 					effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
 
 					// The copying of this structure is intentional
 					backupDataSizeChecker := *blockDataSizeChecker
-					if receipt, execResult, anyOverflow, err = attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, batchState.isL1Recovery(), batchState.forkId, l1InfoIndex, &backupDataSizeChecker); err != nil {
+					receipt, execResult, anyOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, batchState.isL1Recovery(), batchState.forkId, l1InfoIndex, &backupDataSizeChecker)
+					if err != nil {
 						if batchState.isLimboRecovery() {
 							panic("limbo transaction has already been executed once so they must not fail while re-executing")
 						}
@@ -304,8 +302,11 @@ func SpawnSequencingStage(
 		if err = sdb.hermezDb.WriteBlockL1InfoTreeIndex(blockNumber, l1TreeUpdateIndex); err != nil {
 			return err
 		}
+		if err = sdb.hermezDb.WriteBlockL1InfoTreeIndexProgress(blockNumber, infoTreeIndexProgress); err != nil {
+			return err
+		}
 
-		block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, infoTreeIndexProgress)
+		block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash)
 		if err != nil {
 			return err
 		}
