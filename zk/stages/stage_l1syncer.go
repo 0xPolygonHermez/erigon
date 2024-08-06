@@ -41,7 +41,7 @@ type IL1Syncer interface {
 	Stop()
 }
 
-var ErrStateRootMismatch = fmt.Errorf("state root mismatch")
+var ErrStateRootMismatch = errors.New("state root mismatch")
 
 type L1SyncerCfg struct {
 	db     kv.RwDB
@@ -126,6 +126,7 @@ Loop:
 			infos := make([]*types.L1BatchInfo, 0, len(logs))
 			batchLogTypes := make([]BatchLogType, 0, len(logs))
 			for _, l := range logs {
+				l := l
 				info, batchLogType := parseLogType(cfg.zkCfg.L1RollupId, &l)
 				infos = append(infos, &info)
 				batchLogTypes = append(batchLogTypes, batchLogType)
