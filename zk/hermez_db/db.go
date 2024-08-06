@@ -1160,8 +1160,22 @@ func (db *HermezDbReader) GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, e
 	return BytesToUint64(v), nil
 }
 
-func (db *HermezDbReader) GetLatestL1InfoTreeIndex() (uint64, error) {
-	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX)
+func (db *HermezDb) WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error {
+	latestL1Index, err := db.GetBlockL1InfoTreeIndexProgress(blockNumber - 1)
+	if err != nil {
+		return err
+	}
+	if l1Index <= latestL1Index {
+		return nil
+	}
+
+	k := Uint64ToBytes(blockNumber)
+	v := Uint64ToBytes(l1Index)
+	return db.tx.Put(BLOCK_L1_INFO_TREE_INDEX_PROGRESS, k, v)
+}
+
+func (db *HermezDbReader) GetBlockL1InfoTreeIndexProgress(blockNumber uint64) (uint64, error) {
+	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX_PROGRESS)
 	if err != nil {
 		return 0, err
 	}
@@ -1170,26 +1184,26 @@ func (db *HermezDbReader) GetLatestL1InfoTreeIndex() (uint64, error) {
 	var k, v []byte
 	for k, v, err = c.Last(); k != nil; k, v, err = c.Prev() {
 		if err != nil {
-			break
+			return 0, err
 		}
 
-		if len(v) != 0 && v[0] == 1 {
-			blockNum := BytesToUint64(k[:8])
-			return blockNum, nil
+		blockNumberFromK := BytesToUint64(k)
+		if blockNumberFromK <= blockNumber {
+			return BytesToUint64(v), nil
 		}
 	}
 
 	return 0, nil
 }
 
-func (db *HermezDb) WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error {
-	k := Uint64ToBytes(blockNumber)
-	v := Uint64ToBytes(l1Index)
-	return db.tx.Put(BLOCK_L1_INFO_TREE_INDEX_PROGRESS, k, v)
-}
+func (db *HermezDbReader) GetLatestBlockL1InfoTreeIndexProgress() (uint64, error) {
+	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX_PROGRESS)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
 
-func (db *HermezDbReader) GetBlockL1InfoTreeIndexProgress(blockNumber uint64) (uint64, error) {
-	v, err := db.tx.GetOne(BLOCK_L1_INFO_TREE_INDEX_PROGRESS, Uint64ToBytes(blockNumber))
+	_, v, err := c.Last()
 	if err != nil {
 		return 0, err
 	}

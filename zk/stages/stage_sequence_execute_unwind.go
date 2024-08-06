@@ -63,11 +63,7 @@ func unwindSequenceExecutionStage(u *stagedsync.UnwindState, s *stagedsync.Stage
 		return err
 	}
 
-	infoTreeIndexProgress, err := hermezDb.GetBlockL1InfoTreeIndexProgress(u.UnwindPoint)
-	if err != nil {
-		return err
-	}
-	if err = updateSequencerProgress(tx, u.UnwindPoint, fromBatch, infoTreeIndexProgress, true); err != nil {
+	if err = updateSequencerProgress(tx, u.UnwindPoint, fromBatch, true); err != nil {
 		return err
 	}
 
