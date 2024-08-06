@@ -1262,9 +1262,12 @@ func (db *HermezDbReader) GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, e
 }
 
 func (db *HermezDb) WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error {
-	latestL1Index, err := db.GetBlockL1InfoTreeIndexProgress(blockNumber - 1)
+	latestBlockNumber, latestL1Index, err := db.GetLatestBlockL1InfoTreeIndexProgress()
 	if err != nil {
 		return err
+	}
+	if latestBlockNumber > blockNumber {
+		return fmt.Errorf("unable to set l1index for block %d because it has already been set for block %d", blockNumber, latestBlockNumber)
 	}
 	if l1Index <= latestL1Index {
 		return nil
@@ -1275,40 +1278,18 @@ func (db *HermezDb) WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Inde
 	return db.tx.Put(BLOCK_L1_INFO_TREE_INDEX_PROGRESS, k, v)
 }
 
-func (db *HermezDbReader) GetBlockL1InfoTreeIndexProgress(blockNumber uint64) (uint64, error) {
+func (db *HermezDbReader) GetLatestBlockL1InfoTreeIndexProgress() (uint64, uint64, error) {
 	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX_PROGRESS)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer c.Close()
 
-	var k, v []byte
-	for k, v, err = c.Last(); k != nil; k, v, err = c.Prev() {
-		if err != nil {
-			return 0, err
-		}
-
-		blockNumberFromK := BytesToUint64(k)
-		if blockNumberFromK <= blockNumber {
-			return BytesToUint64(v), nil
-		}
-	}
-
-	return 0, nil
-}
-
-func (db *HermezDbReader) GetLatestBlockL1InfoTreeIndexProgress() (uint64, error) {
-	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX_PROGRESS)
+	k, v, err := c.Last()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	defer c.Close()
-
-	_, v, err := c.Last()
-	if err != nil {
-		return 0, err
-	}
-	return BytesToUint64(v), nil
+	return BytesToUint64(k), BytesToUint64(v), nil
 }
 
 func (db *HermezDb) DeleteBlockL1InfoTreeIndexesProgress(fromBlockNum, toBlockNum uint64) error {

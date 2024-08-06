@@ -199,7 +199,7 @@ func SpawnStageBatches(
 	blocksWritten := uint64(0)
 	highestHashableL2BlockNo := uint64(0)
 
-	highestL1InfoTreeIndex, err := hermezDb.GetLatestBlockL1InfoTreeIndexProgress()
+	_, highestL1InfoTreeIndex, err := hermezDb.GetLatestBlockL1InfoTreeIndexProgress()
 	if err != nil {
 		return fmt.Errorf("failed to get highest used l1 info index, %w", err)
 	}
