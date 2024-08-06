@@ -34,9 +34,14 @@ type VerifierRequest struct {
 	StateRoot    common.Hash
 	Counters     map[string]int
 	creationTime time.Time
+	timeout      time.Duration
 }
 
 func NewVerifierRequest(forkId, batchNumber uint64, blockNumbers []uint64, stateRoot common.Hash, counters map[string]int) *VerifierRequest {
+	return NewVerifierRequestWithTimeout(forkId, batchNumber, blockNumbers, stateRoot, counters, 0)
+}
+
+func NewVerifierRequestWithTimeout(forkId, batchNumber uint64, blockNumbers []uint64, stateRoot common.Hash, counters map[string]int, timeout time.Duration) *VerifierRequest {
 	return &VerifierRequest{
 		BatchNumber:  batchNumber,
 		BlockNumbers: blockNumbers,
@@ -44,11 +49,16 @@ func NewVerifierRequest(forkId, batchNumber uint64, blockNumbers []uint64, state
 		StateRoot:    stateRoot,
 		Counters:     counters,
 		creationTime: time.Now(),
+		timeout:      timeout,
 	}
 }
 
 func (vr *VerifierRequest) IsOverdue() bool {
-	return time.Since(vr.creationTime) > time.Duration(30*time.Minute)
+	if vr.timeout == 0 {
+		return false
+	}
+
+	return time.Since(vr.creationTime) > vr.timeout
 }
 
 func (vr *VerifierRequest) GetLastBlockNumber() uint64 {
@@ -122,10 +132,11 @@ func (v *LegacyExecutorVerifier) StartAsyncVerification(
 	counters map[string]int,
 	blockNumbers []uint64,
 	useRemoteExecutor bool,
+	requestTimeout time.Duration,
 ) {
 	var promise *Promise[*VerifierBundle]
 
-	request := NewVerifierRequest(forkId, batchNumber, blockNumbers, stateRoot, counters)
+	request := NewVerifierRequestWithTimeout(forkId, batchNumber, blockNumbers, stateRoot, counters, requestTimeout)
 	if useRemoteExecutor {
 		promise = v.VerifyAsync(request, blockNumbers)
 	} else {

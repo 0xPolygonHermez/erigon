@@ -349,7 +349,7 @@ func SpawnSequencingStage(
 		}
 		defer sdb.tx.Rollback()
 
-		cfg.legacyVerifier.StartAsyncVerification(batchState.forkId, batchState.batchNumber, block.Root(), batchCounters.CombineCollectorsNoChanges().UsedAsMap(), batchState.builtBlocks, batchState.hasExecutorForThisBatch)
+		cfg.legacyVerifier.StartAsyncVerification(batchState.forkId, batchState.batchNumber, block.Root(), batchCounters.CombineCollectorsNoChanges().UsedAsMap(), batchState.builtBlocks, batchState.hasExecutorForThisBatch, batchContext.cfg.zk.SequencerBatchVerificationTimeout)
 
 		// check for new responses from the verifier
 		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
