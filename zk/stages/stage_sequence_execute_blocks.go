@@ -73,7 +73,6 @@ func doFinishBlockAndUpdateState(
 	batchState *BatchState,
 	ger common.Hash,
 	l1BlockHash common.Hash,
-	l1InfoIndex uint64,
 ) (*types.Block, error) {
 	thisBlockNumber := header.Number.Uint64()
 
@@ -86,7 +85,7 @@ func doFinishBlockAndUpdateState(
 		return nil, err
 	}
 
-	if err := updateSequencerProgress(batchContext.sdb.tx, thisBlockNumber, batchState.batchNumber, l1InfoIndex, false); err != nil {
+	if err := updateSequencerProgress(batchContext.sdb.tx, thisBlockNumber, batchState.batchNumber, false); err != nil {
 		return nil, err
 	}
 
