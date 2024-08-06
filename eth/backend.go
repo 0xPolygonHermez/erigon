@@ -835,6 +835,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.agg,
 				backend.blockReader,
 				backend.chainConfig,
+				backend.config.Zk,
 				backend.engine,
 			)
 
