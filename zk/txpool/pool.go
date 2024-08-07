@@ -327,6 +327,13 @@ type TxPool struct {
 	limbo *Limbo
 }
 
+func CreateTxPoolBuckets(tx kv.RwTx) error {
+	if err := tx.CreateBucket(TablePoolLimbo); err != nil {
+		return err
+	}
+	return nil
+}
+
 func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, ethCfg *ethconfig.Config, cache kvcache.Cache, chainID uint256.Int, shanghaiTime *big.Int, londonBlock *big.Int, aclDB kv.RwDB) (*TxPool, error) {
 	var err error
 	localsHistory, err := simplelru.NewLRU[string, struct{}](10_000, nil)
@@ -1621,6 +1628,11 @@ func (p *TxPool) fromDB(ctx context.Context, tx kv.Tx, coreTx kv.Tx) error {
 	if err != nil {
 		return err
 	}
+
+	if err = p.fromDBLimbo(ctx, tx, cacheView); err != nil {
+		return err
+	}
+
 	it, err := tx.Range(kv.RecentLocalTransaction, nil, nil)
 	if err != nil {
 		return err
@@ -1664,7 +1676,7 @@ func (p *TxPool) fromDB(ctx context.Context, tx kv.Tx, coreTx kv.Tx) error {
 		isLocalTx := p.isLocalLRU.Contains(string(k))
 
 		if reason := p.validateTx(txn, isLocalTx, cacheView, addr); reason != NotSet && reason != Success {
-			return nil
+			continue
 		}
 		txs.Resize(uint(i + 1))
 		txs.Txs[i] = txn
@@ -1692,10 +1704,6 @@ func (p *TxPool) fromDB(ctx context.Context, tx kv.Tx, coreTx kv.Tx) error {
 		return err
 	}
 	p.pendingBaseFee.Store(pendingBaseFee)
-
-	if err = p.fromDBLimbo(ctx, tx, cacheView); err != nil {
-		return err
-	}
 
 	return nil
 }

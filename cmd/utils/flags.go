@@ -390,6 +390,16 @@ var (
 		Usage: "Ethereum L1 RPC endpoint",
 		Value: "",
 	}
+	L1CacheEnabledFlag = cli.BoolFlag{
+		Name:  "zkevm.l1-cache-enabled",
+		Usage: "Enable the L1 cache",
+		Value: true,
+	}
+	L1CachePortFlag = cli.UintFlag{
+		Name:  "zkevm.l1-cache-port",
+		Usage: "The port used for the L1 cache",
+		Value: 6969,
+	}
 	AddressSequencerFlag = cli.StringFlag{
 		Name:  "zkevm.address-sequencer",
 		Usage: "Sequencer address",
@@ -471,10 +481,10 @@ var (
 		Usage: "Batch seal time. Defaults to 12s",
 		Value: "12s",
 	}
-	SequencerNonEmptyBatchSealTime = cli.StringFlag{
-		Name:  "zkevm.sequencer-non-empty-batch-seal-time",
-		Usage: "Batch seal time. Defaults to 3s",
-		Value: "3s",
+	SequencerBatchVerificationTimeout = cli.StringFlag{
+		Name:  "zkevm.sequencer-batch-verification-timeout",
+		Usage: "This is a maximum time that a batch verification could take. Including retries. This could be interpreted as maximum that that the sequencer can run without executor. Setting it to 0s will mean infinite timeout. Defaults to 30min",
+		Value: "30m",
 	}
 	SequencerHaltOnBatchNumber = cli.Uint64Flag{
 		Name:  "zkevm.sequencer-halt-on-batch-number",
@@ -500,6 +510,12 @@ var (
 		Name:  "zkevm.datastream-new-block-timeout",
 		Usage: "The timeout for the executor request",
 		Value: 500 * time.Millisecond,
+	}
+
+	WitnessMemdbSize = DatasizeFlag{
+		Name:  "zkevm.witness-memdb-size",
+		Usage: "A size of the memdb used on witness generation in format \"2GB\". Might fail generation for older batches if not enough for the unwind.",
+		Value: datasizeFlagValue(2 * datasize.GB),
 	}
 	ExecutorMaxConcurrentRequests = cli.IntFlag{
 		Name:  "zkevm.executor-max-concurrent-requests",

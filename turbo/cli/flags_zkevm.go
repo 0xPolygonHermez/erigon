@@ -76,10 +76,10 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		panic(fmt.Sprintf("could not parse sequencer batch seal time timeout value %s", sequencerBatchSealTimeVal))
 	}
 
-	sequencerNonEmptyBatchSealTimeVal := ctx.String(utils.SequencerNonEmptyBatchSealTime.Name)
-	sequencerNonEmptyBatchSealTime, err := time.ParseDuration(sequencerNonEmptyBatchSealTimeVal)
+	sequencerBatchVerificationTimeoutVal := ctx.String(utils.SequencerBatchVerificationTimeout.Name)
+	sequencerBatchVerificationTimeout, err := time.ParseDuration(sequencerBatchVerificationTimeoutVal)
 	if err != nil {
-		panic(fmt.Sprintf("could not parse sequencer batch seal time timeout value %s", sequencerNonEmptyBatchSealTimeVal))
+		panic(fmt.Sprintf("could not parse sequencer batch seal time timeout value %s", sequencerBatchSealTimeVal))
 	}
 
 	effectiveGasPriceForEthTransferVal := ctx.Float64(utils.EffectiveGasPriceForEthTransfer.Name)
@@ -99,6 +99,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		panic("Effective gas price for contract deployment must be in interval [0; 1]")
 	}
 
+	witnessMemSize := utils.DatasizeFlagValue(ctx, utils.WitnessMemdbSize.Name)
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),
@@ -108,6 +110,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1SyncStopBatch:                        ctx.Uint64(utils.L1SyncStopBatch.Name),
 		L1ChainId:                              ctx.Uint64(utils.L1ChainIdFlag.Name),
 		L1RpcUrl:                               ctx.String(utils.L1RpcUrlFlag.Name),
+		L1CacheEnabled:                         ctx.Bool(utils.L1CacheEnabledFlag.Name),
+		L1CachePort:                            ctx.Uint(utils.L1CachePortFlag.Name),
 		AddressSequencer:                       libcommon.HexToAddress(ctx.String(utils.AddressSequencerFlag.Name)),
 		AddressAdmin:                           libcommon.HexToAddress(ctx.String(utils.AddressAdminFlag.Name)),
 		AddressRollup:                          libcommon.HexToAddress(ctx.String(utils.AddressRollupFlag.Name)),
@@ -126,12 +130,13 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SmtRegenerateInMemory:                  ctx.Bool(utils.SmtRegenerateInMemory.Name),
 		SequencerBlockSealTime:                 sequencerBlockSealTime,
 		SequencerBatchSealTime:                 sequencerBatchSealTime,
-		SequencerNonEmptyBatchSealTime:         sequencerNonEmptyBatchSealTime,
+		SequencerBatchVerificationTimeout:      sequencerBatchVerificationTimeout,
 		SequencerHaltOnBatchNumber:             ctx.Uint64(utils.SequencerHaltOnBatchNumber.Name),
 		ExecutorUrls:                           strings.Split(strings.ReplaceAll(ctx.String(utils.ExecutorUrls.Name), " ", ""), ","),
 		ExecutorStrictMode:                     ctx.Bool(utils.ExecutorStrictMode.Name),
 		ExecutorRequestTimeout:                 ctx.Duration(utils.ExecutorRequestTimeout.Name),
 		DatastreamNewBlockTimeout:              ctx.Duration(utils.DatastreamNewBlockTimeout.Name),
+		WitnessMemdbSize:                       *witnessMemSize,
 		ExecutorMaxConcurrentRequests:          ctx.Int(utils.ExecutorMaxConcurrentRequests.Name),
 		Limbo:                                  ctx.Bool(utils.Limbo.Name),
 		AllowFreeTransactions:                  ctx.Bool(utils.AllowFreeTransactions.Name),
