@@ -94,7 +94,7 @@ jobs:
       - name: Remove unused flags
         working-directory: ./kurtosis-cdk
         run: |
-          sed -i '/zkevm.sequencer-batch-seal-time:/d' templates/cdk-erigon/config.yml
+          sed -i '/zkevm.sequencer-non-empty-batch-seal-time:/d' templates/cdk-erigon/config.yml
 
       - name: Configure Kurtosis CDK
         working-directory: ./kurtosis-cdk
