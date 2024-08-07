@@ -274,8 +274,6 @@ func createFullBlockStreamEntriesProto(
 		entries.Add(transaction)
 	}
 
-	entries.Add(newL2BlockEndProto(blockNum))
-
 	return entries, nil
 }
 
