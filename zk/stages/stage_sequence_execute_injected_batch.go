@@ -74,9 +74,14 @@ func processInjectedInitialBatch(
 		executionResults: []*core.ExecutionResult{execResult},
 		effectiveGases:   []uint8{effectiveGas},
 	}
+	batchCounters := vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), nil)
 
-	_, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injected.LastGlobalExitRoot, injected.L1ParentHash)
-	return err
+	if _, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injected.LastGlobalExitRoot, injected.L1ParentHash, 0, 0, batchCounters); err != nil {
+		return err
+	}
+
+	// deleting the partially processed flag
+	return batchContext.sdb.hermezDb.DeleteIsBatchPartiallyProcessed(injectedBatchBatchNumber)
 }
 
 func handleInjectedBatch(

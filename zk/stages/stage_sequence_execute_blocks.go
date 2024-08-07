@@ -12,6 +12,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
@@ -55,7 +56,7 @@ func handleStateForNewBlockStarting(
 			if l1BlockHash == (common.Hash{}) {
 				// not in the contract so let's write it!
 				ibs.WriteGerManagerL1BlockHash(l1info.GER, l1info.ParentHash)
-				if err := hermezDb.WriteLatestUsedGer(batchNumber, l1info.GER); err != nil {
+				if err := hermezDb.WriteLatestUsedGer(blockNumber, l1info.GER); err != nil {
 					return err
 				}
 			}
@@ -73,6 +74,9 @@ func doFinishBlockAndUpdateState(
 	batchState *BatchState,
 	ger common.Hash,
 	l1BlockHash common.Hash,
+	l1TreeUpdateIndex uint64,
+	infoTreeIndexProgress uint64,
+	batchCounters *vm.BatchCounterCollector,
 ) (*types.Block, error) {
 	thisBlockNumber := header.Number.Uint64()
 
@@ -80,7 +84,7 @@ func doFinishBlockAndUpdateState(
 		batchContext.cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
 	}
 
-	block, err := finaliseBlock(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash)
+	block, err := finaliseBlock(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +112,18 @@ func finaliseBlock(
 	batchState *BatchState,
 	ger common.Hash,
 	l1BlockHash common.Hash,
+	l1TreeUpdateIndex uint64,
+	infoTreeIndexProgress uint64,
+	batchCounters *vm.BatchCounterCollector,
 ) (*types.Block, error) {
+	thisBlockNumber := newHeader.Number.Uint64()
+	if err := batchContext.sdb.hermezDb.WriteBlockL1InfoTreeIndex(thisBlockNumber, l1TreeUpdateIndex); err != nil {
+		return nil, err
+	}
+	if err := batchContext.sdb.hermezDb.WriteBlockL1InfoTreeIndexProgress(thisBlockNumber, infoTreeIndexProgress); err != nil {
+		return nil, err
+	}
+
 	stateWriter := state.NewPlainStateWriter(batchContext.sdb.tx, batchContext.sdb.tx, newHeader.Number.Uint64()).SetAccumulator(batchContext.cfg.accumulator)
 	chainReader := stagedsync.ChainReader{
 		Cfg: *batchContext.cfg.chainConfig,
@@ -224,6 +239,18 @@ func finaliseBlock(
 	// now add in the zk batch to block references
 	if err := batchContext.sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batchState.batchNumber); err != nil {
 		return nil, fmt.Errorf("write block batch error: %v", err)
+	}
+
+	// write batch counters
+	err = batchContext.sdb.hermezDb.WriteBatchCounters(newNum.Uint64(), batchCounters.CombineCollectorsNoChanges().UsedAsMap())
+	if err != nil {
+		return nil, err
+	}
+
+	// write partially processed
+	err = batchContext.sdb.hermezDb.WriteIsBatchPartiallyProcessed(batchState.batchNumber)
+	if err != nil {
+		return nil, err
 	}
 
 	// this is actually account + storage indices stages

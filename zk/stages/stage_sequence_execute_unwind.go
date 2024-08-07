@@ -4,13 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
-	"github.com/ledgerwatch/erigon/common/dbutils"
-	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
@@ -109,7 +106,7 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 	}
 
 	// only seq
-	if err = hermezDb.TruncateLatestUsedGers(fromBatch); err != nil {
+	if err = hermezDb.DeleteLatestUsedGers(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("truncate latest used gers error: %v", err)
 	}
 	// only seq
@@ -137,6 +134,10 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("truncate fork id error: %v", err)
 	}
 	// only seq
+	if err = hermezDb.DeleteBatchCounters(u.UnwindPoint+1, s.BlockNumber); err != nil {
+		return fmt.Errorf("truncate block batches error: %v", err)
+	}
+	// only seq
 	if err = hermezDb.TruncateIsBatchPartiallyProcessed(fromBatch, toBatch); err != nil {
 		return fmt.Errorf("truncate fork id error: %v", err)
 	}
@@ -147,14 +148,4 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 	}
 
 	return nil
-}
-
-func recoverCodeHashPlain(acc *accounts.Account, db kv.Tx, key []byte) {
-	var address common.Address
-	copy(address[:], key)
-	if acc.Incarnation > 0 && acc.IsEmptyCodeHash() {
-		if codeHash, err2 := db.GetOne(kv.PlainContractCode, dbutils.PlainGenerateStoragePrefix(address[:], acc.Incarnation)); err2 == nil {
-			copy(acc.CodeHash[:], codeHash)
-		}
-	}
 }

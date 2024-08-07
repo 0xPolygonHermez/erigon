@@ -68,7 +68,7 @@ type HermezDb interface {
 	WriteIntermediateTxStateRoot(l2BlockNumber uint64, txHash common.Hash, rpcRoot common.Hash) error
 	WriteBlockL1InfoTreeIndex(blockNumber uint64, l1Index uint64) error
 	WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error
-	WriteLatestUsedGer(batchNo uint64, ger common.Hash) error
+	WriteLatestUsedGer(blockNo uint64, ger common.Hash) error
 	WriteLocalExitRootForBatchNo(batchNo uint64, localExitRoot common.Hash) error
 }
 
@@ -621,7 +621,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		return fmt.Errorf("delete global exit roots error: %v", err)
 	}
 
-	if err = hermezDb.TruncateLatestUsedGers(fromBatch); err != nil {
+	if err = hermezDb.DeleteLatestUsedGers(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("delete latest used gers error: %v", err)
 	}
 
@@ -875,7 +875,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block,
 	// we always want the last written GER in this table as it's at the batch level, so it can and should
 	// be overwritten
 	if !l1InfoTreeIndexReused && didStoreGer {
-		if err := hermezDb.WriteLatestUsedGer(l2Block.BatchNumber, l2Block.GlobalExitRoot); err != nil {
+		if err := hermezDb.WriteLatestUsedGer(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
 			return fmt.Errorf("write latest used ger error: %w", err)
 		}
 	}

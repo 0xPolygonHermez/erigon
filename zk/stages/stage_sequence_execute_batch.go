@@ -23,7 +23,7 @@ func prepareBatchNumber(lastBatch uint64, isLastBatchPariallyProcessed bool) uin
 func prepareBatchCounters(batchContext *BatchContext, batchState *BatchState, isLastBatchPariallyProcessed bool) (*vm.BatchCounterCollector, error) {
 	var intermediateUsedCounters *vm.Counters
 	if isLastBatchPariallyProcessed {
-		intermediateCountersMap, found, err := batchContext.sdb.hermezDb.GetBatchCounters(batchState.batchNumber)
+		intermediateCountersMap, found, err := batchContext.sdb.hermezDb.GetLatestBatchCounters(batchState.batchNumber)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +63,7 @@ func doCheckForBadBatch(batchContext *BatchContext, batchState *BatchState, this
 	if err = batchContext.sdb.hermezDb.WriteInvalidBatch(batchState.batchNumber); err != nil {
 		return false, err
 	}
-	if err = batchContext.sdb.hermezDb.WriteBatchCounters(batchState.batchNumber, map[string]int{}); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteBatchCounters(currentBlock.NumberU64(), map[string]int{}); err != nil {
 		return false, err
 	}
 	if err = batchContext.sdb.hermezDb.DeleteIsBatchPartiallyProcessed(batchState.batchNumber); err != nil {
@@ -140,10 +140,10 @@ func updateStreamAndCheckRollback(
 func runBatchLastSteps(
 	batchContext *BatchContext,
 	thisBatch uint64,
-	lastStartedBn uint64,
+	blockNumber uint64,
 	batchCounters *vm.BatchCounterCollector,
 ) error {
-	l1InfoIndex, err := batchContext.sdb.hermezDb.GetBlockL1InfoTreeIndex(lastStartedBn)
+	l1InfoIndex, err := batchContext.sdb.hermezDb.GetBlockL1InfoTreeIndex(blockNumber)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func runBatchLastSteps(
 
 	log.Info(fmt.Sprintf("[%s] counters consumed", batchContext.s.LogPrefix()), "batch", thisBatch, "counts", counters.UsedAsString())
 
-	if err = batchContext.sdb.hermezDb.WriteBatchCounters(thisBatch, counters.UsedAsMap()); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteBatchCounters(blockNumber, counters.UsedAsMap()); err != nil {
 		return err
 	}
 	if err := batchContext.sdb.hermezDb.DeleteIsBatchPartiallyProcessed(thisBatch); err != nil {

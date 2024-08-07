@@ -299,14 +299,7 @@ func SpawnSequencingStage(
 			}
 		}
 
-		if err = sdb.hermezDb.WriteBlockL1InfoTreeIndex(blockNumber, l1TreeUpdateIndex); err != nil {
-			return err
-		}
-		if err = sdb.hermezDb.WriteBlockL1InfoTreeIndexProgress(blockNumber, infoTreeIndexProgress); err != nil {
-			return err
-		}
-
-		block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash)
+		block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters)
 		if err != nil {
 			return err
 		}
@@ -328,16 +321,6 @@ func SpawnSequencingStage(
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)))
 		} else {
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions)))
-		}
-
-		err = sdb.hermezDb.WriteBatchCounters(batchState.batchNumber, batchCounters.CombineCollectorsNoChanges().UsedAsMap())
-		if err != nil {
-			return err
-		}
-
-		err = sdb.hermezDb.WriteIsBatchPartiallyProcessed(batchState.batchNumber)
-		if err != nil {
-			return err
 		}
 
 		// add a check to the verifier and also check for responses

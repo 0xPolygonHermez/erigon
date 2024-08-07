@@ -1361,16 +1361,21 @@ func (db *HermezDbReader) GetWitness(batchNumber uint64) ([]byte, error) {
 	return v, nil
 }
 
-func (db *HermezDb) WriteBatchCounters(batchNumber uint64, counters map[string]int) error {
+func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters map[string]int) error {
 	countersJson, err := json.Marshal(counters)
 	if err != nil {
 		return err
 	}
-	return db.tx.Put(BATCH_COUNTERS, Uint64ToBytes(batchNumber), countersJson)
+	return db.tx.Put(BATCH_COUNTERS, Uint64ToBytes(blockNumber), countersJson)
 }
 
-func (db *HermezDbReader) GetBatchCounters(batchNumber uint64) (countersMap map[string]int, found bool, err error) {
-	v, err := db.tx.GetOne(BATCH_COUNTERS, Uint64ToBytes(batchNumber))
+func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersMap map[string]int, found bool, err error) {
+	batchBlockNumbers, err := db.GetL2BlockNosByBatch(batchNumber)
+	if err != nil {
+		return nil, false, err
+	}
+
+	v, err := db.tx.GetOne(BATCH_COUNTERS, Uint64ToBytes(batchBlockNumbers[len(batchBlockNumbers)-1]))
 	if err != nil {
 		return nil, false, err
 	}
@@ -1383,6 +1388,10 @@ func (db *HermezDbReader) GetBatchCounters(batchNumber uint64) (countersMap map[
 	}
 
 	return countersMap, found, nil
+}
+
+func (db *HermezDb) DeleteBatchCounters(fromBlockNum, toBlockNum uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(BATCH_COUNTERS, fromBlockNum, toBlockNum)
 }
 
 // WriteL1BatchData stores the data for a given L1 batch number
@@ -1416,9 +1425,8 @@ func (db *HermezDbReader) GetLastL1BatchData() (uint64, error) {
 	return BytesToUint64(k), nil
 }
 
-func (db *HermezDb) WriteLatestUsedGer(batchNo uint64, ger common.Hash) error {
-	batchBytes := Uint64ToBytes(batchNo)
-	return db.tx.Put(LATEST_USED_GER, batchBytes, ger.Bytes())
+func (db *HermezDb) WriteLatestUsedGer(blockNumber uint64, ger common.Hash) error {
+	return db.tx.Put(LATEST_USED_GER, Uint64ToBytes(blockNumber), ger.Bytes())
 }
 
 func (db *HermezDbReader) GetLatestUsedGer() (uint64, common.Hash, error) {
@@ -1439,21 +1447,8 @@ func (db *HermezDbReader) GetLatestUsedGer() (uint64, common.Hash, error) {
 	return batchNo, ger, nil
 }
 
-func (db *HermezDb) TruncateLatestUsedGers(fromBatch uint64) error {
-	latestBatch, _, err := db.GetLatestUsedGer()
-	if err != nil {
-		return err
-	}
-
-	for i := fromBatch; i <= latestBatch; i++ {
-		err := db.tx.Delete(LATEST_USED_GER, Uint64ToBytes(i))
-		if err != nil {
-			return err
-		}
-
-	}
-
-	return nil
+func (db *HermezDb) DeleteLatestUsedGers(fromBlockNum, toBlockNum uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(LATEST_USED_GER, fromBlockNum, toBlockNum)
 }
 
 func (db *HermezDb) WriteSmtDepth(l2BlockNo, depth uint64) error {
