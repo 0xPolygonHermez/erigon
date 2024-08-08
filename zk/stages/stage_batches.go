@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync/atomic"
@@ -28,7 +29,7 @@ import (
 )
 
 const (
-	HIGHEST_KNOWN_FORK  = 11
+	HIGHEST_KNOWN_FORK  = 12
 	STAGE_PROGRESS_SAVE = 3000000
 )
 
@@ -67,7 +68,8 @@ type HermezDb interface {
 	WriteBatchGlobalExitRoot(batchNumber uint64, ger types.GerUpdate) error
 	WriteIntermediateTxStateRoot(l2BlockNumber uint64, txHash common.Hash, rpcRoot common.Hash) error
 	WriteBlockL1InfoTreeIndex(blockNumber uint64, l1Index uint64) error
-	WriteLatestUsedGer(batchNo uint64, ger common.Hash) error
+	WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error
+	WriteLatestUsedGer(blockNo uint64, ger common.Hash) error
 	WriteLocalExitRootForBatchNo(batchNo uint64, localExitRoot common.Hash) error
 }
 
@@ -151,7 +153,7 @@ func SpawnStageBatches(
 
 	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
-		return fmt.Errorf("could not retrieve l1 verifications batch no progress")
+		return errors.New("could not retrieve l1 verifications batch no progress")
 	}
 
 	startSyncTime := time.Now()
@@ -198,7 +200,7 @@ func SpawnStageBatches(
 	blocksWritten := uint64(0)
 	highestHashableL2BlockNo := uint64(0)
 
-	highestL1InfoTreeIndex, err := stages.GetStageProgress(tx, stages.HighestUsedL1InfoIndex)
+	_, highestL1InfoTreeIndex, err := hermezDb.GetLatestBlockL1InfoTreeIndexProgress()
 	if err != nil {
 		return fmt.Errorf("failed to get highest used l1 info index, %w", err)
 	}
@@ -424,7 +426,10 @@ LOOP:
 		}
 
 		if blocksWritten != prevAmountBlocksWritten && blocksWritten%STAGE_PROGRESS_SAVE == 0 {
-			if err = saveStageProgress(tx, logPrefix, highestHashableL2BlockNo, highestSeenBatchNo, highestL1InfoTreeIndex, lastBlockHeight, lastForkId); err != nil {
+			if err = saveStageProgress(tx, logPrefix, highestHashableL2BlockNo, highestSeenBatchNo, lastBlockHeight, lastForkId); err != nil {
+				return err
+			}
+			if err := hermezDb.WriteBlockL1InfoTreeIndexProgress(lastBlockHeight, highestL1InfoTreeIndex); err != nil {
 				return err
 			}
 
@@ -451,7 +456,10 @@ LOOP:
 		return nil
 	}
 
-	if err = saveStageProgress(tx, logPrefix, highestHashableL2BlockNo, highestSeenBatchNo, highestL1InfoTreeIndex, lastBlockHeight, lastForkId); err != nil {
+	if err = saveStageProgress(tx, logPrefix, highestHashableL2BlockNo, highestSeenBatchNo, lastBlockHeight, lastForkId); err != nil {
+		return err
+	}
+	if err := hermezDb.WriteBlockL1InfoTreeIndexProgress(lastBlockHeight, highestL1InfoTreeIndex); err != nil {
 		return err
 	}
 
@@ -468,7 +476,7 @@ LOOP:
 	return nil
 }
 
-func saveStageProgress(tx kv.RwTx, logPrefix string, highestHashableL2BlockNo, highestSeenBatchNo, highestL1InfoTreeIndex, lastBlockHeight, lastForkId uint64) error {
+func saveStageProgress(tx kv.RwTx, logPrefix string, highestHashableL2BlockNo, highestSeenBatchNo, lastBlockHeight, lastForkId uint64) error {
 	var err error
 	// store the highest hashable block number
 	if err := stages.SaveStageProgress(tx, stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
@@ -482,10 +490,6 @@ func saveStageProgress(tx kv.RwTx, logPrefix string, highestHashableL2BlockNo, h
 	// store the highest seen forkid
 	if err := stages.SaveStageProgress(tx, stages.ForkId, lastForkId); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
-	}
-
-	if err := stages.SaveStageProgress(tx, stages.HighestUsedL1InfoIndex, uint64(highestL1InfoTreeIndex)); err != nil {
-		return err
 	}
 
 	// save the latest verified batch number as well just in case this node is upgraded
@@ -527,7 +531,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	//////////////////////////////////
 	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
-		return fmt.Errorf("could not retrieve l1 verifications batch no progress")
+		return errors.New("could not retrieve l1 verifications batch no progress")
 	}
 
 	fromBatchPrev, err := hermezDb.GetBatchNoByL2Block(fromBlock - 1)
@@ -618,7 +622,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		return fmt.Errorf("delete global exit roots error: %v", err)
 	}
 
-	if err = hermezDb.TruncateLatestUsedGers(fromBatch); err != nil {
+	if err = hermezDb.DeleteLatestUsedGers(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("delete latest used gers error: %v", err)
 	}
 
@@ -659,14 +663,14 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	/////////////////////////////////////////////
 	// iterate until a block with lower batch number is found
 	// this is the last block of the previous batch and the highest hashable block for verifications
-	highestHashableL2BlockNo := uint64(fromBlock)
+	highestHashableL2BlockNo := fromBlock
 	for i := fromBlock; i > 0; i-- {
 		batchNo, err := hermezDb.GetBatchNoByL2Block(i)
 		if err != nil {
 			return fmt.Errorf("get batch no by l2 block error: %v", err)
 		}
 		if batchNo == fromBatch-1 {
-			highestHashableL2BlockNo = uint64(i)
+			highestHashableL2BlockNo = i
 			break
 		}
 	}
@@ -696,13 +700,8 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// store the highest used l1 info index//
 	/////////////////////////////////////////
 
-	highestL1InfoTreeIndex, err := hermezDb.GetLatestL1InfoTreeIndex()
-	if err != nil {
-		return fmt.Errorf("get latest l1 info tree index error: %v", err)
-	}
-
-	if err := stages.SaveStageProgress(tx, stages.HighestUsedL1InfoIndex, highestL1InfoTreeIndex); err != nil {
-		return err
+	if err := hermezDb.DeleteBlockL1InfoTreeIndexesProgress(fromBlock, toBlock); err != nil {
+		return nil
 	}
 
 	if err := hermezDb.DeleteBlockL1InfoTreeIndexes(fromBlock, toBlock); err != nil {
@@ -877,7 +876,7 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block,
 	// we always want the last written GER in this table as it's at the batch level, so it can and should
 	// be overwritten
 	if !l1InfoTreeIndexReused && didStoreGer {
-		if err := hermezDb.WriteLatestUsedGer(l2Block.BatchNumber, l2Block.GlobalExitRoot); err != nil {
+		if err := hermezDb.WriteLatestUsedGer(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
 			return fmt.Errorf("write latest used ger error: %w", err)
 		}
 	}
@@ -886,11 +885,11 @@ func writeL2Block(eriDb ErigonDb, hermezDb HermezDb, l2Block *types.FullL2Block,
 		return fmt.Errorf("write body error: %v", err)
 	}
 
-	if err := hermezDb.WriteForkId(l2Block.BatchNumber, uint64(l2Block.ForkId)); err != nil {
+	if err := hermezDb.WriteForkId(l2Block.BatchNumber, l2Block.ForkId); err != nil {
 		return fmt.Errorf("write block batch error: %v", err)
 	}
 
-	if err := hermezDb.WriteForkIdBlockOnce(uint64(l2Block.ForkId), l2Block.L2BlockNumber); err != nil {
+	if err := hermezDb.WriteForkIdBlockOnce(l2Block.ForkId, l2Block.L2BlockNumber); err != nil {
 		return fmt.Errorf("write fork id block error: %v", err)
 	}
 
