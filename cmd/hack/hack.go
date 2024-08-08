@@ -33,6 +33,8 @@ import (
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
 
+	"path"
+
 	hackdb "github.com/ledgerwatch/erigon/cmd/hack/db"
 	"github.com/ledgerwatch/erigon/cmd/hack/flow"
 	"github.com/ledgerwatch/erigon/cmd/hack/tool"
@@ -53,7 +55,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/debug"
 	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
-	"path"
 )
 
 var (
@@ -340,6 +341,10 @@ func dumpAll(chaindata, output string) error {
 		}
 
 		for _, buc := range buckets {
+			if buc == "HermezSmtLastRoot" { // this is old and deleted table
+				continue
+			}
+
 			// create a file to dump the contents to
 			fileName := buc + ".txt"
 			file, err := os.Create(path.Join(output, fileName))
