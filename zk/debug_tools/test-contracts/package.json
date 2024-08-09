@@ -15,7 +15,8 @@
     "emitlog:mainnet": "npx hardhat compile && npx hardhat run scripts/emitlog.js --network mainnet",
     "spam:local": "npx hardhat compile && npx hardhat run scripts/spam-transactions.js --network local",
     "delegateCall:local": "npx hardhat compile && npx hardhat run scripts/delegate-call.js --network local",
-    "erc20Revert:local": "npx hardhat compile && npx hardhat run scripts/ERC20-revert.js --network local"
+    "erc20Revert:local": "npx hardhat compile && npx hardhat run scripts/ERC20-revert.js --network local",
+    "erc20Revert:sepolia": "npx hardhat compile && npx hardhat run scripts/ERC20-revert.js --network sepolia"
   },
   "keywords": [],
   "author": "",
