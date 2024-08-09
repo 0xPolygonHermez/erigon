@@ -663,19 +663,12 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	/////////////////////////////////////////////
 	// iterate until a block with lower batch number is found
 	// this is the last block of the previous batch and the highest hashable block for verifications
-	highestHashableL2BlockNo := uint64(fromBlock)
-	for i := fromBlock; i > 0; i-- {
-		batchNo, err := hermezDb.GetBatchNoByL2Block(i)
-		if err != nil {
-			return fmt.Errorf("get batch no by l2 block error: %v", err)
-		}
-		if batchNo == fromBatch-1 {
-			highestHashableL2BlockNo = uint64(i)
-			break
-		}
+	lastBatchHighestBlock, err := hermezDb.GetHighestBlockInBatch(fromBatchPrev - 1)
+	if err != nil {
+		return fmt.Errorf("get batch highest block error: %w", err)
 	}
 
-	if err := stages.SaveStageProgress(tx, stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
+	if err := stages.SaveStageProgress(tx, stages.HighestHashableL2BlockNo, lastBatchHighestBlock); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
 
