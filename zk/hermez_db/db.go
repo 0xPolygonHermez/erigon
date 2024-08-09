@@ -1349,6 +1349,10 @@ func (db *HermezDbReader) GetBlockInfoRoot(blockNumber uint64) (common.Hash, err
 	return res, nil
 }
 
+func (db *HermezDb) DeleteBlockInfoRoots(fromBlock, toBlock uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(BLOCK_INFO_ROOTS, fromBlock, toBlock)
+}
+
 func (db *HermezDb) WriteWitness(batchNumber uint64, witness []byte) error {
 	return db.tx.Put(BATCH_WITNESSES, Uint64ToBytes(batchNumber), witness)
 }

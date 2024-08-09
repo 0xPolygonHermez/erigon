@@ -585,5 +585,10 @@ func UnwindExecutionStageDbWrites(ctx context.Context, u *UnwindState, s *StageS
 		return fmt.Errorf("delete blocks: %w", err)
 	}
 
+	hermezDb := hermez_db.NewHermezDb(tx)
+	if err = hermezDb.DeleteBlockInfoRoots(u.UnwindPoint+1, s.BlockNumber); err != nil {
+		return fmt.Errorf("delete block info roots: %w", err)
+	}
+
 	return nil
 }
