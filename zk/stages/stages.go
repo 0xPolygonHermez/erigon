@@ -514,6 +514,7 @@ var ZkUnwindOrder = stages.UnwindOrder{
 	stages2.AccountHistoryIndex,
 	stages2.CallTraces,
 	stages2.Execution, // need to happen after history and calltraces
+	stages2.CumulativeIndex,
 	stages2.Senders,
 	stages2.BlockHashes,
 	stages2.Batches,
