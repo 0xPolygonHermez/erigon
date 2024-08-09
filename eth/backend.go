@@ -120,6 +120,9 @@ import (
 	txpool2 "github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
+	"github.com/ledgerwatch/erigon/zk/l1_cache"
+	"net/url"
+	"path"
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -196,6 +199,7 @@ type Ethereum struct {
 	dataStream      *datastreamer.StreamServer
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
+	l1Cache         *l1_cache.L1Cache
 
 	preStartTasks *PreStartTasks
 }
@@ -635,7 +639,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	}()
 
+	tx, err := backend.chainDB.BeginRw(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
 	if !config.DeprecatedTxPool.Disable {
+		// we need to start the pool before stage loop itself
+		// the pool holds the info about how execution stage should work - as regular or as limbo recovery
+		if err := backend.txPool2.StartIfNotStarted(ctx, backend.txPool2DB, tx); err != nil {
+			return nil, err
+		}
+
 		backend.txPool2Fetch.ConnectCore()
 		backend.txPool2Fetch.ConnectSentries()
 		var newTxsBroadcaster *txpool2.NewSlotsStreams
@@ -696,12 +712,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	backend.ethBackendRPC, backend.miningRPC, backend.stateChangesClient = ethBackendRPC, miningRPC, stateDiffClient
 
-	tx, err := backend.chainDB.BeginRw(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
 	// create buckets
 	if err := createBuckets(tx); err != nil {
 		return nil, err
@@ -749,6 +759,23 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		backend.chainConfig.SupportGasless = cfg.Gasless
 
 		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
+
+		if cfg.Zk.L1CacheEnabled {
+			l1Cache, err := l1_cache.NewL1Cache(ctx, path.Join(stack.DataDir(), "l1cache"), cfg.Zk.L1CachePort)
+			if err != nil {
+				return nil, err
+			}
+			backend.l1Cache = l1Cache
+
+			var cacheL1Urls []string
+			for _, l1Url := range l1Urls {
+				encoded := url.QueryEscape(l1Url)
+				cacheL1Url := fmt.Sprintf("http://localhost:%d?endpoint=%s&chainid=%d", cfg.Zk.L1CachePort, encoded, cfg.L2ChainId)
+				cacheL1Urls = append(cacheL1Urls, cacheL1Url)
+			}
+			l1Urls = cacheL1Urls
+		}
+
 		backend.etherManClients = make([]*etherman.Client, len(l1Urls))
 		for i, url := range l1Urls {
 			backend.etherManClients[i] = newEtherMan(cfg, chainConfig.ChainName, url)
@@ -833,7 +860,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.engine,
 			)
 
-			var legacyExecutors []legacy_executor_verifier.ILegacyExecutor
+			var legacyExecutors []*legacy_executor_verifier.Executor = make([]*legacy_executor_verifier.Executor, 0, len(cfg.ExecutorUrls))
 			if len(cfg.ExecutorUrls) > 0 && cfg.ExecutorUrls[0] != "" {
 				levCfg := legacy_executor_verifier.Config{
 					GrpcUrls:              cfg.ExecutorUrls,
@@ -853,7 +880,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				backend.chainConfig,
 				backend.chainDB,
 				witnessGenerator,
-				backend.l1Syncer,
 				backend.dataStream,
 			)
 
@@ -865,12 +891,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			// we need to make sure the pool is always aware of the latest block for when
 			// we switch context from being an RPC node to a sequencer
 			backend.txPool2.ForceUpdateLatestBlock(executionProgress)
-
-			// we need to start the pool before stage loop itself
-			// the pool holds the info about how execution stage should work - as regular or as limbo recovery
-			if err := backend.txPool2.StartIfNotStarted(ctx, backend.txPool2DB, tx); err != nil {
-				return nil, err
-			}
 
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,
@@ -964,10 +984,6 @@ func createBuckets(tx kv.RwTx) error {
 	}
 
 	if err := db.CreateEriDbBuckets(tx); err != nil {
-		return err
-	}
-
-	if err := txpool.CreateTxPoolBuckets(tx); err != nil {
 		return err
 	}
 
