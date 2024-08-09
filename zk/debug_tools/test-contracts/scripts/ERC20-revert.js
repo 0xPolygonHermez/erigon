@@ -4,7 +4,7 @@ try {
    const ERC20 = await hre.ethers.getContractFactory("MyToken");
 
    // Deploy the contracts
-   const erc20 = await ERC20.deploy(10, 100);
+   const erc20 = await ERC20.deploy();
 
    // Wait for the deployment transactions to be mined
    await erc20.waitForDeployment();
