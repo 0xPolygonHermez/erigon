@@ -590,10 +590,10 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	if err := hermezDb.DeleteIntermediateTxStateRoots(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("delete intermediate tx state roots error: %v", err)
 	}
-	if err := eriDb.DeleteHeaders(fromBlock); err != nil {
+	if err := eriDb.DeleteHeaders(fromBlock - 1); err != nil {
 		return fmt.Errorf("delete headers error: %v", err)
 	}
-	if err := eriDb.DeleteBodies(fromBlock); err != nil {
+	if err := eriDb.DeleteBodies(fromBlock - 1); err != nil {
 		return fmt.Errorf("delete bodies error: %v", err)
 	}
 	if err := hermezDb.DeleteBlockBatches(fromBlock, toBlock); err != nil {
@@ -678,6 +678,11 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	if err := stages.SaveStageProgress(tx, stages.HighestHashableL2BlockNo, highestHashableL2BlockNo); err != nil {
 		return fmt.Errorf("save stage progress error: %v", err)
 	}
+
+	if err = stages.SaveStageProgress(tx, stages.SequenceExecutorVerify, fromBatchPrev); err != nil {
+		return fmt.Errorf("save stage progress error: %v", err)
+	}
+
 	/////////////////////////////////////////////////////
 	// finish storing the highest hashable block number//
 	/////////////////////////////////////////////////////
