@@ -70,8 +70,8 @@ func (db ErigonDb) GetBodyTransactions(fromBlockNo, toBlockNo uint64) (*[]ethTyp
 	return rawdb.GetBodyTransactions(db.tx, fromBlockNo, toBlockNo)
 }
 
-func (db ErigonDb) DeleteBodies(blockFrom uint64) error {
-	return rawdb.TruncateBodies(db.tx, blockFrom+1)
+func (db ErigonDb) DeleteBodies(blockFrom uint64, fromHash common.Hash) error {
+	return rawdb.TruncateBodies(db.tx, blockFrom, fromHash)
 }
 
 func (db ErigonDb) ReadCanonicalHash(blockNo uint64) (common.Hash, error) {

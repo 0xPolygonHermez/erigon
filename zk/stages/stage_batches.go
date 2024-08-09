@@ -525,6 +525,11 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	eriDb := erigon_db.NewErigonDb(tx)
 	hermezDb := hermez_db.NewHermezDb(tx)
 
+	headerHash, err := rawdb.ReadCanonicalHash(tx, fromBlock)
+	if err != nil {
+		return err
+	}
+
 	//////////////////////////////////
 	// delete batch connected stuff //
 	//////////////////////////////////
@@ -593,7 +598,7 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	if err := eriDb.DeleteHeaders(fromBlock - 1); err != nil {
 		return fmt.Errorf("delete headers error: %v", err)
 	}
-	if err := eriDb.DeleteBodies(fromBlock - 1); err != nil {
+	if err := eriDb.DeleteBodies(fromBlock, headerHash); err != nil {
 		return fmt.Errorf("delete bodies error: %v", err)
 	}
 	if err := hermezDb.DeleteBlockBatches(fromBlock, toBlock); err != nil {
@@ -747,7 +752,12 @@ func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx
 		return fmt.Errorf("get stage datastream progress error: %v", err)
 	}
 
-	eriDb.DeleteBodies(0)
+	headerHash, err := rawdb.ReadCanonicalHash(tx, 0)
+	if err != nil {
+		return fmt.Errorf("read header error: %v", err)
+	}
+
+	eriDb.DeleteBodies(0, headerHash)
 	eriDb.DeleteHeaders(0)
 
 	hermezDb.DeleteForkIds(0, toBlock)

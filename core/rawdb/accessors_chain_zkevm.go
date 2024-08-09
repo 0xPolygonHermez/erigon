@@ -45,8 +45,9 @@ func DeleteTransactions(db kv.RwTx, txsCount, baseTxId uint64, blockHash *libcom
 	return nil
 }
 
-func TruncateBodies(tx kv.RwTx, fromBlockNum uint64) error {
-	if err := tx.ForEach(kv.BlockBody, hexutility.EncodeTs(fromBlockNum), func(k, v []byte) error {
+func TruncateBodies(tx kv.RwTx, fromBlockNum uint64, blockHash libcommon.Hash) error {
+	key := dbutils.BlockBodyKey(fromBlockNum, blockHash)
+	if err := tx.ForEach(kv.BlockBody, key, func(k, v []byte) error {
 		blockNum := binary.BigEndian.Uint64(k[:8])
 
 		var body types.BodyForStorage
