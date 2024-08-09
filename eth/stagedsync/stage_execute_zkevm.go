@@ -483,6 +483,11 @@ func UnwindExecutionStageZk(u *UnwindState, s *StageState, tx kv.RwTx, ctx conte
 		return err
 	}
 
+	// update the headers stage as we mark progress there as part of execution
+	if err = stages.SaveStageProgress(tx, stages.Headers, u.UnwindPoint); err != nil {
+		return err
+	}
+
 	if err = u.Done(tx); err != nil {
 		return err
 	}
