@@ -667,8 +667,7 @@ func NewBackend(stack *node.Node, config *ethconfig.Config, logger log.Logger) (
 			Level:       "warn",
 			Outputs:     nil,
 		}
-		// TODO: @Stefan-Ethernal introduce configuration parameters for inactivityTimeout and inactivityCheckInterval
-		backend.dataStream, err = datastreamer.NewServer(uint16(httpRpcCfg.DataStreamPort), uint8(2), 1, datastreamer.StreamType(1), file, httpRpcCfg.DataStreamWriteTimeout, 10*time.Second, 2*time.Second, logConfig)
+		backend.dataStream, err = datastreamer.NewServer(uint16(httpRpcCfg.DataStreamPort), uint8(2), 1, datastreamer.StreamType(1), file, httpRpcCfg.DataStreamWriteTimeout, httpRpcCfg.DataStreamInactivityTimeout, httpRpcCfg.DataStreamInactivityCheckInterval, logConfig)
 		if err != nil {
 			return nil, err
 		}
