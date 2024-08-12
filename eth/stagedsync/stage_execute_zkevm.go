@@ -382,9 +382,6 @@ func postExecuteCommitValues(
 	if err := rawdb.WriteCanonicalHash(tx, blockHash, blockNum); err != nil {
 		return fmt.Errorf("failed to write header: %v", err)
 	}
-	if err := eridb.WriteBody(block.Number(), blockHash, block.Transactions()); err != nil {
-		return fmt.Errorf("failed to write body: %v", err)
-	}
 
 	// write the new block lookup entries
 	if err := rawdb.WriteTxLookupEntries_zkEvm(tx, block); err != nil {
