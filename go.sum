@@ -16,6 +16,8 @@ filippo.io/edwards25519 v1.0.0-rc.1/go.mod h1:N1IkdkCkiLB6tki+MYJoSx2JTY9NUlxZE7
 git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
 github.com/0xPolygonHermez/zkevm-data-streamer v0.2.5-0.20240812082611-f01c1b6d15bd h1:HkoXmNRn+SMRGEfesUYlP9YbrpZWFnDK1u2kr262KI4=
 github.com/0xPolygonHermez/zkevm-data-streamer v0.2.5-0.20240812082611-f01c1b6d15bd/go.mod h1:RC6ouyNsUtJrv5aGPcM6Dm5xhXN209tRSzcsJsaOtZI=
+github.com/0xPolygonHermez/zkevm-data-streamer v0.2.5 h1:p0epAhai44c34G+nzX0CZ67q3vkJtOXlO07lbhAEe9g=
+github.com/0xPolygonHermez/zkevm-data-streamer v0.2.5/go.mod h1:RC6ouyNsUtJrv5aGPcM6Dm5xhXN209tRSzcsJsaOtZI=
 github.com/99designs/gqlgen v0.17.29 h1:z2MrNOFATCVgQLRCF6Uufz4uz2IQLB5BBMwPUMafJOA=
 github.com/99designs/gqlgen v0.17.29/go.mod h1:i4rEatMrzzu6RXaHydq1nmEPZkb3bKQsnxNRHS4DQB4=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
