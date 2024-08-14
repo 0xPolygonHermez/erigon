@@ -525,11 +525,6 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	eriDb := erigon_db.NewErigonDb(tx)
 	hermezDb := hermez_db.NewHermezDb(tx)
 
-	headerHash, err := rawdb.ReadCanonicalHash(tx, fromBlock)
-	if err != nil {
-		return err
-	}
-
 	//////////////////////////////////
 	// delete batch connected stuff //
 	//////////////////////////////////
@@ -595,11 +590,8 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	if err := hermezDb.DeleteIntermediateTxStateRoots(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("delete intermediate tx state roots error: %v", err)
 	}
-	if err := eriDb.DeleteHeaders(fromBlock - 1); err != nil {
-		return fmt.Errorf("delete headers error: %v", err)
-	}
-	if err := eriDb.DeleteBodies(fromBlock, headerHash); err != nil {
-		return fmt.Errorf("delete bodies error: %v", err)
+	if err = rawdb.TruncateBlocks(ctx, tx, fromBlock); err != nil {
+		return fmt.Errorf("delete blocks: %w", err)
 	}
 	if err := hermezDb.DeleteBlockBatches(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("delete block batches error: %v", err)
@@ -744,7 +736,6 @@ func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx
 	log.Info(fmt.Sprintf("[%s] Pruning barches...", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
 
-	eriDb := erigon_db.NewErigonDb(tx)
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	toBlock, err := stages.GetStageProgress(tx, stages.Batches)
@@ -752,13 +743,9 @@ func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx
 		return fmt.Errorf("get stage datastream progress error: %v", err)
 	}
 
-	headerHash, err := rawdb.ReadCanonicalHash(tx, 0)
-	if err != nil {
-		return fmt.Errorf("read header error: %v", err)
+	if err = rawdb.TruncateBlocks(ctx, tx, 1); err != nil {
+		return fmt.Errorf("delete blocks: %w", err)
 	}
-
-	eriDb.DeleteBodies(0, headerHash)
-	eriDb.DeleteHeaders(0)
 
 	hermezDb.DeleteForkIds(0, toBlock)
 	hermezDb.DeleteBlockBatches(0, toBlock)

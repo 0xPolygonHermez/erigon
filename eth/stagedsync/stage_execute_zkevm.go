@@ -18,6 +18,7 @@ import (
 
 	"os"
 
+	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -340,9 +341,20 @@ func postExecuteCommitValues(
 		if err := rawdbZk.DeleteSenders(tx, datastreamBlockHash, blockNum); err != nil {
 			return fmt.Errorf("failed to delete senders: %v", err)
 		}
-
 		if err := rawdbZk.DeleteHeader(tx, datastreamBlockHash, blockNum); err != nil {
 			return fmt.Errorf("failed to delete header: %v", err)
+		}
+
+		bodyForStorage, err := rawdb.ReadBodyForStorageByKey(tx, dbutils.BlockBodyKey(blockNum, datastreamBlockHash))
+		if err != nil {
+			return err
+		}
+
+		if err := rawdb.DeleteBodyAndTransactions(tx, blockNum, datastreamBlockHash); err != nil {
+			return err
+		}
+		if err := rawdb.WriteBodyAndTransactions(tx, blockHash, blockNum, block.Transactions(), bodyForStorage); err != nil {
+			return err
 		}
 
 		// [zkevm] senders were saved in stage_senders for headerHashes based on incomplete headers
@@ -382,6 +394,9 @@ func postExecuteCommitValues(
 	if err := rawdb.WriteCanonicalHash(tx, blockHash, blockNum); err != nil {
 		return fmt.Errorf("failed to write header: %v", err)
 	}
+	// if err := eridb.WriteBody(block.Number(), blockHash, block.Transactions()); err != nil {
+	// 	return fmt.Errorf("failed to write body: %v", err)
+	// }
 
 	// write the new block lookup entries
 	if err := rawdb.WriteTxLookupEntries_zkEvm(tx, block); err != nil {
@@ -580,11 +595,11 @@ func UnwindExecutionStageDbWrites(ctx context.Context, u *UnwindState, s *StageS
 	if err = rawdb.TruncateTxLookupEntries_zkEvm(tx, u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("delete tx lookup entires: %w", err)
 	}
-	if err = rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, true); err != nil {
-		return fmt.Errorf("delete cannonical hash with headers: %w", err)
-	}
 	if err = rawdb.TruncateBlocks(ctx, tx, u.UnwindPoint+1); err != nil {
 		return fmt.Errorf("delete blocks: %w", err)
+	}
+	if err = rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, true); err != nil {
+		return fmt.Errorf("delete cannonical hash with headers: %w", err)
 	}
 
 	hermezDb := hermez_db.NewHermezDb(tx)
