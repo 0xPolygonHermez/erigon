@@ -106,9 +106,13 @@ In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag
 - `zkevm_getFullBlockByNumber`
 - `zkevm_virtualCounters`
 - `zkevm_traceTransactionCounters`
+- `zkevm_getVersionHistory` - returns cdk-erigon versions and timestamps of their deployment (stored in datadir)
 
 ### Supported (remote)
 - `zkevm_getBatchByNumber`
+
+### Configurable
+- `zkevm_getBatchWitness` - concurrency can be limited with `zkevm.rpc-get-batch-witness-concurrency-limit` flag which defaults to 1. Use 0 for no limit.
 
 ### Not yet supported
 - `zkevm_getNativeBlockHashesInRange`

@@ -187,6 +187,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.L1MaticContractAddressFlag,
 	&utils.L1FirstBlockFlag,
 	&utils.RpcRateLimitsFlag,
+	&utils.RpcGetBatchWitnessConcurrencyLimitFlag,
 	&utils.DatastreamVersionFlag,
 	&utils.RebuildTreeAfterFlag,
 	&utils.IncrementTreeAlways,
@@ -214,6 +215,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.DataStreamHost,
 	&utils.DataStreamPort,
 	&utils.DataStreamWriteTimeout,
+	&utils.DataStreamInactivityTimeout,
+	&utils.DataStreamInactivityCheckInterval,
 	&utils.WitnessFullFlag,
 	&utils.SyncLimit,
 	&utils.SupportGasless,
@@ -226,4 +229,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.PoolManagerUrl,
 	&utils.DisableVirtualCounters,
 	&utils.DAUrl,
+	&utils.VirtualCountersSmtReduction,
 }

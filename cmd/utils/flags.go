@@ -527,6 +527,11 @@ var (
 		Usage: "RPC rate limit in requests per second.",
 		Value: 0,
 	}
+	RpcGetBatchWitnessConcurrencyLimitFlag = cli.IntFlag{
+		Name:  "zkevm.rpc-get-batch-witness-concurrency-limit",
+		Usage: "The maximum number of concurrent requests to the executor for getBatchWitness.",
+		Value: 1,
+	}
 	DatastreamVersionFlag = cli.IntFlag{
 		Name:  "zkevm.datastream-version",
 		Usage: "Stream version indicator 1: PreBigEndian, 2: BigEndian.",
@@ -546,6 +551,16 @@ var (
 		Name:  "zkevm.data-stream-writeTimeout",
 		Usage: "Define the TCP write timeout when sending data to a datastream client",
 		Value: 5 * time.Second,
+	}
+	DataStreamInactivityTimeout = cli.DurationFlag{
+		Name:  "zkevm.data-stream-inactivity-timeout",
+		Usage: "Define the inactivity timeout when interacting with a data stream server",
+		Value: 10 * time.Second,
+	}
+	DataStreamInactivityCheckInterval = cli.DurationFlag{
+		Name:  "zkevm.data-stream-inactivity-check-interval",
+		Usage: "Define the inactivity check interval timeout when interacting with a data stream server",
+		Value: 2 * time.Second,
 	}
 	Limbo = cli.BoolFlag{
 		Name:  "zkevm.limbo",
@@ -631,6 +646,11 @@ var (
 		Name:  "zkevm.da-url",
 		Usage: "The URL of the data availability service",
 		Value: "",
+	}
+	VirtualCountersSmtReduction = cli.Float64Flag{
+		Name:  "zkevm.virtual-counters-smt-reduction",
+		Usage: "The multiplier to reduce the SMT depth by when calculating virtual counters",
+		Value: 0.6,
 	}
 	DebugTimers = cli.BoolFlag{
 		Name:  "debug.timers",
