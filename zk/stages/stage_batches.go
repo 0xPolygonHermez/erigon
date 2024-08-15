@@ -522,7 +522,6 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	log.Info(fmt.Sprintf("[%s] Unwinding batches stage from block number", logPrefix), "fromBlock", fromBlock, "toBlock", toBlock)
 	defer log.Info(fmt.Sprintf("[%s] Unwinding batches complete", logPrefix))
 
-	eriDb := erigon_db.NewErigonDb(tx)
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	//////////////////////////////////
@@ -571,19 +570,8 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	// finish delete batch connected stuff //
 	/////////////////////////////////////////
 
-	//get transactions before deleting them so we can delete stuff connected to them
-	transactions, err := eriDb.GetBodyTransactions(fromBlock, toBlock)
-	if err != nil {
-		return fmt.Errorf("get body transactions error: %v", err)
-	}
-	transactionHashes := make([]common.Hash, 0, len(*transactions))
-	for _, tx := range *transactions {
-		transactionHashes = append(transactionHashes, tx.Hash())
-	}
+	// cannot unwind EffectiveGasPricePercentage here although it is written in stage batches, because we have already deleted the transactions
 
-	if err := hermezDb.DeleteEffectiveGasPricePercentages(&transactionHashes); err != nil {
-		return fmt.Errorf("delete effective gas price percentages error: %v", err)
-	}
 	if err := hermezDb.DeleteStateRoots(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("delete state roots error: %v", err)
 	}

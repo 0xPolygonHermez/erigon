@@ -589,6 +589,25 @@ func UnwindExecutionStageDbWrites(ctx context.Context, u *UnwindState, s *StageS
 	}
 	rawdb.WriteHeadHeaderHash(tx, hash)
 
+	/*
+		unwind EffectiveGasPricePercentage here although it is written in stage batches (RPC) or stage execute (Sequencer)
+		EffectiveGasPricePercentage could not be unwound after TruncateBlocks
+	*/
+	eriDb := erigon_db.NewErigonDb(tx)
+	hermezDb := hermez_db.NewHermezDb(tx)
+
+	transactions, err := eriDb.GetBodyTransactions(u.UnwindPoint+1, s.BlockNumber)
+	if err != nil {
+		return fmt.Errorf("get body transactions error: %v", err)
+	}
+	transactionHashes := make([]common.Hash, 0, len(*transactions))
+	for _, tx := range *transactions {
+		transactionHashes = append(transactionHashes, tx.Hash())
+	}
+	if err := hermezDb.DeleteEffectiveGasPricePercentages(&transactionHashes); err != nil {
+		return fmt.Errorf("delete effective gas price percentages error: %v", err)
+	}
+
 	if err = rawdbZk.TruncateSenders(tx, u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("delete senders: %w", err)
 	}
@@ -605,7 +624,6 @@ func UnwindExecutionStageDbWrites(ctx context.Context, u *UnwindState, s *StageS
 		return err
 	}
 
-	hermezDb := hermez_db.NewHermezDb(tx)
 	if err = hermezDb.DeleteBlockInfoRoots(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("delete block info roots: %w", err)
 	}
