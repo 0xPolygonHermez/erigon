@@ -50,6 +50,7 @@ const LOCAL_EXIT_ROOTS = "local_exit_roots"                             // l2 bl
 const ROllUP_TYPES_FORKS = "rollup_types_forks"                         // rollup type id -> fork id
 const FORK_HISTORY = "fork_history"                                     // index -> fork id + last verified batch
 const JUST_UNWOUND = "just_unwound"                                     // batch number -> true
+const PLAIN_STATE_VERSION = "plain_state_version"                       // batch number -> true
 
 var HermezDbTables = []string{
 	L1VERIFICATIONS,
@@ -87,6 +88,7 @@ var HermezDbTables = []string{
 	ROllUP_TYPES_FORKS,
 	FORK_HISTORY,
 	JUST_UNWOUND,
+	PLAIN_STATE_VERSION,
 }
 
 type HermezDb struct {

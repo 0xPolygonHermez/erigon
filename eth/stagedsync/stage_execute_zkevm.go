@@ -217,7 +217,7 @@ Loop:
 		return fmt.Errorf("batch commit: %w", err)
 	}
 
-	_, err = rawdb.IncrementStateVersion(tx)
+	_, err = rawdb.IncrementStateVersionByBlockNumber(tx, stageProgress) // stageProgress is latest processsed block number
 	if err != nil {
 		return fmt.Errorf("writing plain state version: %w", err)
 	}
@@ -600,6 +600,9 @@ func UnwindExecutionStageDbWrites(ctx context.Context, u *UnwindState, s *StageS
 	}
 	if err = rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, true); err != nil {
 		return fmt.Errorf("delete cannonical hash with headers: %w", err)
+	}
+	if err = rawdb.TruncateStateVersion(tx, u.UnwindPoint+1); err != nil {
+		return err
 	}
 
 	hermezDb := hermez_db.NewHermezDb(tx)
