@@ -4,10 +4,11 @@ import (
 	"encoding/binary"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
 func GetLatestStateVersion(tx kv.Tx) (uint64, uint64, error) {
-	c, err := tx.Cursor(kv.PLAIN_STATE_VERSION)
+	c, err := tx.Cursor(hermez_db.PLAIN_STATE_VERSION)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -33,7 +34,7 @@ func IncrementStateVersionByBlockNumberIfNeeded(tx kv.RwTx, blockNum uint64) (ui
 		return 0, err
 	}
 
-	c, err := tx.RwCursor(kv.PLAIN_STATE_VERSION)
+	c, err := tx.RwCursor(hermez_db.PLAIN_STATE_VERSION)
 	if err != nil {
 		return 0, err
 	}
@@ -52,7 +53,7 @@ func IncrementStateVersionByBlockNumberIfNeeded(tx kv.RwTx, blockNum uint64) (ui
 // delete all keys that are >= fromBlockNumber
 // keys are sorted in accending order
 func TruncateStateVersion(tx kv.RwTx, fromBlockNumber uint64) error {
-	c, err := tx.RwCursor(kv.PLAIN_STATE_VERSION)
+	c, err := tx.RwCursor(hermez_db.PLAIN_STATE_VERSION)
 	if err != nil {
 		return err
 	}
