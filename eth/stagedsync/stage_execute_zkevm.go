@@ -217,7 +217,7 @@ Loop:
 		return fmt.Errorf("batch commit: %w", err)
 	}
 
-	_, err = rawdb.IncrementStateVersionByBlockNumber(tx, stageProgress) // stageProgress is latest processsed block number
+	_, err = rawdb.IncrementStateVersionByBlockNumberIfNeeded(tx, stageProgress) // stageProgress is latest processsed block number
 	if err != nil {
 		return fmt.Errorf("writing plain state version: %w", err)
 	}
