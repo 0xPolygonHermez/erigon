@@ -74,6 +74,7 @@ for file in $(ls $dataPath/phase1-dump1); do
     # diff the files and if there is a difference found copy the pre and post files into the diffs folder
     if cmp -s $dataPath/phase1-dump1/$filename $dataPath/phase1-dump2/$filename; then
         echo "No difference found in $filename"
+        exit(1)
     else
         cp $dataPath/phase1-dump1/$file $dataPath/phase1-diffs/pre/$filename
         cp $dataPath/phase1-dump2/$file $dataPath/phase1-diffs/post/$filename
