@@ -19,12 +19,6 @@ jobs:
         with:
           go-version: '1.19'
 
-      # - name: Checkout cdk-erigon-lib
-      #   uses: actions/checkout@v4
-      #   with:
-      #     repository: gateway-fm/cdk-erigon-lib
-      #     ref: 5e3196248fde0e4d2c5f0b1c9819d360236e6f3a
-
       - name: Build
         run: |
           cd ./cdk-erigon
@@ -36,7 +30,29 @@ jobs:
           cd /root/go/pkg/mod/github.com/gateway-fm
           cd $(ls ./ | grep cdk-erigon-lib | tail -1)
           cd ./kv
+          chmod +x "$erigonPath/cdk-erigon/zk/tests/unwinds/modify-cdk-erigon-lib.sh"
           "$erigonPath/cdk-erigon/zk/tests/unwinds/modify-cdk-erigon-lib.sh"
           cat ./tables.go
+
+      - name: Build2
+        run: |
+          cd ./cdk-erigon
+          make cdk-erigon
+
+      - name: Prepare configs
+        run: |
+          cd ./cdk-erigon
+          mkdir ./.dynamic-configs
+          cd ./.dynamic-configs
+          cp ../zk/tests/unwinds/config/dynamic-integration8.yaml ./
+          cp ../zk/tests/unwinds/config/dynamic-integration-allocs.json ./
+          cp ../zk/tests/unwinds/config/dynamic-integration-chainspec.json ./
+          cp ../zk/tests/unwinds/config/dynamic-integration-conf.json ./
+          ls -la
+
+      - name: Run tests
+        run: |
+          chmod +x ./cdk-erigon/zk/tests/unwinds/unwind.sh
+          ./cdk-erigon/zk/tests/unwinds/unwind.sh
 
   
