@@ -32,7 +32,6 @@ jobs:
           cd ./kv
           chmod +x "$erigonPath/cdk-erigon/zk/tests/unwinds/modify-cdk-erigon-lib.sh"
           "$erigonPath/cdk-erigon/zk/tests/unwinds/modify-cdk-erigon-lib.sh"
-          cat ./tables.go
 
       - name: Build2
         run: |
@@ -48,11 +47,11 @@ jobs:
           cp ../zk/tests/unwinds/config/dynamic-integration-allocs.json ./
           cp ../zk/tests/unwinds/config/dynamic-integration-chainspec.json ./
           cp ../zk/tests/unwinds/config/dynamic-integration-conf.json ./
-          ls -la
 
       - name: Run tests
         run: |
-          chmod +x ./cdk-erigon/zk/tests/unwinds/unwind.sh
-          ./cdk-erigon/zk/tests/unwinds/unwind.sh
+          cd ./cdk-erigon
+          chmod +x ./zk/tests/unwinds/unwind.sh
+          ./zk/tests/unwinds/unwind.sh
 
   

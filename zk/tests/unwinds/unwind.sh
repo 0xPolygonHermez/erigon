@@ -74,10 +74,12 @@ for file in $(ls $dataPath/phase1-dump1); do
     # diff the files and if there is a difference found copy the pre and post files into the diffs folder
     if cmp -s $dataPath/phase1-dump1/$filename $dataPath/phase1-dump2/$filename; then
         echo "No difference found in $filename"
-        exit 1
     else
-        cp $dataPath/phase1-dump1/$file $dataPath/phase1-diffs/pre/$filename
-        cp $dataPath/phase1-dump2/$file $dataPath/phase1-diffs/post/$filename
+        if [ "$filename" = "Code.txt" ] || [ "$filename" = "HashedCodeHash.txt" ] || [ "$filename" = "hermez_l1Sequences.txt" ] || [ "$filename" = "hermez_l1Verifications.txt" ] || [ "$filename" = "HermezSmt.txt" ] || [ "$filename" = "PlainCodeHash.txt" ] || [ "$filename" = "SyncStage.txt" ]; then
+            echo "Expected differences in $filename"
+        else
+            exit 1
+        fi
     fi
 done
 
@@ -90,7 +92,6 @@ for file in $(ls $dataPath/phase2-dump1); do
     if cmp -s $dataPath/phase2-dump1/$filename $dataPath/phase2-dump2/$filename; then
         echo "No difference found in $filename"
     else
-        cp $dataPath/phase2-dump1/$file $dataPath/phase2-diffs/pre/$filename
-        cp $dataPath/phase2-dump2/$file $dataPath/phase2-diffs/post/$filename
+        exit 2
     fi
 done
