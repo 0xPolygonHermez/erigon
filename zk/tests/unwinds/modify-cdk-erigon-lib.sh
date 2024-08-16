@@ -1,3 +1,5 @@
+#!/bin/bash
+
 line=$(grep -n -m 1 "L1_INFO_TREE_UPDATES" ./tables.go | cut -d: -f1)
 sed -i "$line a\L1_INFO_TREE_UPDATES_BY_GER=\"l1_info_tree_updates_by_ger\"" ./tables.go
 line=$(grep -n -m 1 "BLOCK_L1_INFO_TREE_INDEX" ./tables.go | cut -d: -f1)
