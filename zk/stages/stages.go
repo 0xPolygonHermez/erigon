@@ -52,6 +52,21 @@ func SequencerZkStages(
 				if badBlockUnwind {
 					return nil
 				}
+				// tx, err := l1SyncerCfg.db.BeginRw(ctx)
+				// if err != nil {
+				// 	return err
+				// }
+				// progress, _ := s.ExecutionAt(tx)
+				// tx.Rollback()
+				// tx = nil
+				// if progress == 5 {
+				// 	time.Sleep(1 * time.Second)
+				// 	fmt.Println("Pause")
+				// }
+				// if progress == 9 {
+				// 	time.Sleep(1 * time.Second)
+				// 	os.Exit(0)
+				// }
 				return SpawnStageL1Syncer(s, u, ctx, tx, l1SyncerCfg, test)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
