@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/chain"
@@ -17,7 +18,6 @@ import (
 // if there is no new fully downloaded batch - do not short circuit
 // returns (shouldShortCircuit, blockNumber, error)
 func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, error) {
-	return false, 0, nil
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	// get highest verified batch

@@ -11,7 +11,6 @@ import (
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/params"
 	smtdb "github.com/ledgerwatch/erigon/smt/pkg/db"
 	erigoncli "github.com/ledgerwatch/erigon/turbo/cli"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
@@ -29,7 +28,6 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 	Example: "go run ./cmd/integration state_stages_zkevm --config=... --verbosity=3 --unwind-batch-no=100",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx, _ := common2.RootContext()
-		params.DynamicChainConfigPath = "/mnt/Working/Gateway/projects/ErigonNode/.dynamic-configs"
 		ethConfig := &ethconfig.Defaults
 		ethConfig.Genesis = core.GenesisBlockByChainName(chain)
 		erigoncli.ApplyFlagsForEthConfigCobra(cmd.Flags(), ethConfig)
