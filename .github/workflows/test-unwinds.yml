@@ -15,4 +15,7 @@ jobs:
         with:
           path: cdk-erigon
 
+      - name: Bash
+        run: ls -la
+
   
