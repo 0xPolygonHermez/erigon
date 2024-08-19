@@ -41,12 +41,10 @@ jobs:
       - name: Prepare configs
         run: |
           cd ./cdk-erigon
-          mkdir ./.dynamic-configs
-          cd ./.dynamic-configs
-          cp ../zk/tests/unwinds/config/dynamic-integration8.yaml ./
-          cp ../zk/tests/unwinds/config/dynamic-integration-allocs.json ./
-          cp ../zk/tests/unwinds/config/dynamic-integration-chainspec.json ./
-          cp ../zk/tests/unwinds/config/dynamic-integration-conf.json ./
+          cp ./zk/tests/unwinds/config/dynamic-integration8.yaml ./
+          cp ./zk/tests/unwinds/config/dynamic-integration-allocs.json ./
+          cp ./zk/tests/unwinds/config/dynamic-integration-chainspec.json ./
+          cp ./zk/tests/unwinds/config/dynamic-integration-conf.json ./
 
       - name: Run tests
         run: |

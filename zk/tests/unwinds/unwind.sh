@@ -27,7 +27,7 @@ rm -rf "$dataPath/phase2-diffs"
 # run erigon for a while to sync to the unwind point to capture the dump
 timeout 40s ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config=./.dynamic-configs/dynamic-integration8.yaml \
+    --config=./dynamic-integration8.yaml \
     --zkevm.sync-limit=${firstStop}
 
 # now get a dump of the datadir at this point
@@ -36,7 +36,7 @@ go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata"
 # now run to the final stop block
 timeout 15s ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config=./.dynamic-configs/dynamic-integration8.yaml \
+    --config=./dynamic-integration8.yaml \
     --zkevm.sync-limit=${stopBlock}
 
 # now get a dump of the datadir at this point
@@ -45,7 +45,7 @@ go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata"
 # now run the unwind
 go run ./cmd/integration state_stages_zkevm \
     --datadir="$dataPath/rpc-datadir" \
-    --config=./.dynamic-configs/dynamic-integration8.yaml \
+    --config=./dynamic-integration8.yaml \
     --chain=dynamic-integration \
     --unwind-batch-no=${unwindBatch}
 
@@ -55,7 +55,7 @@ go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata"
 # now sync again
 timeout 15s ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config=./.dynamic-configs/dynamic-integration8.yaml \
+    --config=./dynamic-integration8.yaml \
     --zkevm.sync-limit=${stopBlock}
 
 # dump the data again into the post folder
