@@ -24,6 +24,9 @@ rm -rf "$dataPath/phase2-dump2"
 rm -rf "$dataPath/phase1-diffs"
 rm -rf "$dataPath/phase2-diffs"  
 
+# run datastream server
+timeout 300s go run ./zk/debug_tools/datastream-host --file=./zk/tests/unwinds/datastream/hermez-dynamic-integration8-datastream/data-stream.bin &
+
 # run erigon for a while to sync to the unwind point to capture the dump
 timeout 40s ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
