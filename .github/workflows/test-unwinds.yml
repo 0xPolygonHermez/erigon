@@ -46,6 +46,11 @@ jobs:
           cp ./zk/tests/unwinds/config/dynamic-integration-chainspec.json ./
           cp ./zk/tests/unwinds/config/dynamic-integration-conf.json ./
 
+      - name: Prepare data stream
+        run: |
+          cd ./cdk-erigon/zk/tests/unwinds/datastream
+          tar -xzf ./datastream-net8-upto-11318-101.zip ./
+
       - name: Run tests
         run: |
           cd ./cdk-erigon
