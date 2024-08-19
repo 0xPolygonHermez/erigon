@@ -84,6 +84,7 @@ for file in $(ls $dataPath/phase1-dump1); do
         if [ "$filename" = "Code.txt" ] || [ "$filename" = "HashedCodeHash.txt" ] || [ "$filename" = "hermez_l1Sequences.txt" ] || [ "$filename" = "hermez_l1Verifications.txt" ] || [ "$filename" = "HermezSmt.txt" ] || [ "$filename" = "PlainCodeHash.txt" ] || [ "$filename" = "SyncStage.txt" ]; then
             echo "Expected differences in $filename"
         else
+            echo "Unexpected differences in $filename"
             exit 1
         fi
     fi
@@ -98,6 +99,7 @@ for file in $(ls $dataPath/phase2-dump1); do
     if cmp -s $dataPath/phase2-dump1/$filename $dataPath/phase2-dump2/$filename; then
         echo "No difference found in $filename"
     else
+        echo "Unexpected differences in $filename"
         exit 2
     fi
 done
