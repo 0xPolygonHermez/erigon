@@ -3,6 +3,7 @@ package ethconfig
 import (
 	"time"
 
+	"github.com/c2h5oh/datasize"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 )
 
@@ -26,16 +27,20 @@ type Zk struct {
 	L1HighestBlockType                     string
 	L1MaticContractAddress                 common.Address
 	L1FirstBlock                           uint64
+	L1CacheEnabled                         bool
+	L1CachePort                            uint
 	RpcRateLimits                          int
+	RpcGetBatchWitnessConcurrencyLimit     int
 	DatastreamVersion                      int
 	SequencerBlockSealTime                 time.Duration
 	SequencerBatchSealTime                 time.Duration
-	SequencerNonEmptyBatchSealTime         time.Duration
+	SequencerBatchVerificationTimeout      time.Duration
 	SequencerHaltOnBatchNumber             uint64
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
 	DatastreamNewBlockTimeout              time.Duration
+	WitnessMemdbSize                       datasize.ByteSize
 	ExecutorMaxConcurrentRequests          int
 	Limbo                                  bool
 	AllowFreeTransactions                  bool
@@ -51,6 +56,8 @@ type Zk struct {
 	DataStreamHost                         string
 	DataStreamPort                         uint
 	DataStreamWriteTimeout                 time.Duration
+	DataStreamInactivityTimeout            time.Duration
+	DataStreamInactivityCheckInterval      time.Duration
 
 	RebuildTreeAfter      uint64
 	IncrementTreeAlways   bool
