@@ -3,17 +3,17 @@ package blockinfo
 import (
 	"context"
 	"encoding/hex"
-	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"math/big"
 	"runtime"
 	"sync"
 
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
-
-	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/log/v3"
+
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 )
 
 type ExecutedTxInfo struct {
