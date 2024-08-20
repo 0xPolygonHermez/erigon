@@ -41,6 +41,7 @@ type ReadOnlyHermezDb interface {
 	GetVerificationByBatchNo(batchNo uint64) (*zktypes.L1BatchInfo, error)
 	GetL1BatchData(batchNumber uint64) ([]byte, error)
 	GetL1InfoTreeUpdateByGer(ger libcommon.Hash) (*zktypes.L1InfoTreeUpdate, error)
+	GetLastBlockGlobalExitRoot(l2BlockNo uint64) (libcommon.Hash, uint64, error)
 }
 
 func (sdb *IntraBlockState) GetTxCount() (uint64, error) {

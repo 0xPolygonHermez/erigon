@@ -28,6 +28,20 @@ func NewDbDataRetriever(tx kv.Tx) *DbDataRetriever {
 
 // GetBatchByNumber reads batch by number from the database
 func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) (*rpcTypes.Batch, error) {
+	highestBlock, err := rawdb.ReadLastBlockSynced(d.tx)
+	if err != nil {
+		return nil, err
+	}
+
+	highestBatchNo, err := d.dbReader.GetBatchNoByL2Block(highestBlock.NumberU64())
+	if err != nil {
+		return nil, err
+	}
+
+	if batchNum > highestBatchNo {
+		return nil, fmt.Errorf("batch %d does not exist", batchNum)
+	}
+
 	// Get highest block in batch
 	latestBlockInBatch, err := d.getHighestBlockInBatch(batchNum)
 	if err != nil {
@@ -52,13 +66,11 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	// Get global exit root
-	ger, err := d.dbReader.GetBatchGlobalExitRoot(batchNum)
+	batchGer, _, err := d.dbReader.GetLastBlockGlobalExitRoot(latestBlockInBatch.NumberU64())
 	if err != nil {
 		return nil, err
 	}
-	if ger != nil {
-		batch.GlobalExitRoot = ger.GlobalExitRoot
-	}
+	batch.GlobalExitRoot = batchGer
 
 	// Get sequence
 	seq, err := d.dbReader.GetSequenceByBatchNo(batchNum)
@@ -162,7 +174,7 @@ func (d *DbDataRetriever) addBlockToBatch(batch *rpcTypes.Batch, blockNum uint64
 	}
 
 	if verboseOutput {
-		batch.Blocks = append(batch.Blocks, block)
+		batch.Blocks = append(batch.Blocks, block.Header())
 	} else {
 		batch.Blocks = append(batch.Blocks, block.Hash())
 	}

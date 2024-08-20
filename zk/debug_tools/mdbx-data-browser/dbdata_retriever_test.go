@@ -12,6 +12,7 @@ import (
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
@@ -34,6 +35,9 @@ func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
 		expectedBlockHashes[blockNum] = block.Hash()
 	}
 
+	err := stages.SaveStageProgress(dbTx, stages.Execution, blocksInBatch)
+	require.NoError(t, err)
+
 	dbReader := NewDbDataRetriever(dbTx)
 	batch, err := dbReader.GetBatchByNumber(batchNum, true)
 	require.NoError(t, err)
@@ -41,9 +45,9 @@ func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
 	require.Equal(t, batchNum, uint64(batch.Number))
 	require.Len(t, expectedBlockHashes, int(blocksInBatch))
 	for _, blockGeneric := range batch.Blocks {
-		block, ok := blockGeneric.(*types.Block)
+		block, ok := blockGeneric.(*types.Header)
 		require.True(t, ok)
-		expectedHash, exists := expectedBlockHashes[block.NumberU64()]
+		expectedHash, exists := expectedBlockHashes[block.Number.Uint64()]
 		require.True(t, exists)
 		require.Equal(t, expectedHash, block.Hash())
 	}
