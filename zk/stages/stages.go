@@ -134,7 +134,7 @@ func SequencerZkStages(
 				return stages.SpawnHashStateStage(s, tx, hashState, ctx, quiet)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
-				return stages.UnwindHashStateStage(u, s, tx, hashState, ctx)
+				return stages.UnwindHashStateStage(u, s, tx, hashState, ctx, false)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
 				return stages.PruneHashStateStage(p, tx, hashState, ctx)
@@ -354,7 +354,7 @@ func DefaultZkStages(
 				return stages.SpawnHashStateStage(s, tx, hashState, ctx, quiet)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
-				return stages.UnwindHashStateStage(u, s, tx, hashState, ctx)
+				return stages.UnwindHashStateStage(u, s, tx, hashState, ctx, false)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
 				return stages.PruneHashStateStage(p, tx, hashState, ctx)
@@ -369,7 +369,7 @@ func DefaultZkStages(
 				return err
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, tx kv.RwTx) error {
-				return UnwindZkIntermediateHashesStage(u, s, tx, zkInterHashesCfg, ctx)
+				return UnwindZkIntermediateHashesStage(u, s, tx, zkInterHashesCfg, ctx, false)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx) error {
 				// TODO: implement this in zk interhashes
@@ -492,7 +492,6 @@ var AllStagesZk = []stages2.SyncStage{
 }
 
 var ZkSequencerUnwindOrder = stages.UnwindOrder{
-	stages2.Finish,
 	stages2.TxLookup,
 	stages2.LogIndex,
 	stages2.HashState,
@@ -503,10 +502,10 @@ var ZkSequencerUnwindOrder = stages.UnwindOrder{
 	stages2.CallTraces,
 	stages2.Execution, // need to happen after history and calltraces
 	stages2.L1Syncer,
+	stages2.Finish,
 }
 
 var ZkUnwindOrder = stages.UnwindOrder{
-	stages2.Finish,
 	stages2.TxLookup,
 	stages2.LogIndex,
 	stages2.HashState,
@@ -515,8 +514,10 @@ var ZkUnwindOrder = stages.UnwindOrder{
 	stages2.AccountHistoryIndex,
 	stages2.CallTraces,
 	stages2.Execution, // need to happen after history and calltraces
+	stages2.CumulativeIndex,
 	stages2.Senders,
 	stages2.BlockHashes,
 	stages2.Batches,
 	stages2.L1Syncer,
+	stages2.Finish,
 }

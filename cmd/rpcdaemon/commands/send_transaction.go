@@ -14,6 +14,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -46,6 +47,18 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 	txn, err := types.DecodeTransaction(rlp.NewStream(bytes.NewReader(encodedTx), uint64(len(encodedTx))))
 	if err != nil {
 		return common.Hash{}, err
+	}
+
+	if txn.Type() != types.LegacyTxType {
+		latestBlock, err := api.blockByNumber(ctx, rpc.LatestBlockNumber, tx)
+
+		if err != nil {
+			return common.Hash{}, err
+		}
+
+		if !cc.IsLondon(latestBlock.NumberU64()) {
+			return common.Hash{}, errors.New("only legacy transactions are supported")
+		}
 	}
 
 	// If the transaction fee cap is already specified, ensure the
