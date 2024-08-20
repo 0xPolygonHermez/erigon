@@ -16,6 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/erigon/core/vm"
 )
 
 func SpawnSequencingStage(
@@ -46,11 +47,6 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	isLastBatchPariallyProcessed, err := sdb.hermezDb.GetIsBatchPartiallyProcessed(lastBatch)
-	if err != nil {
-		return err
-	}
-
 	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb)
 	if err != nil {
 		return err
@@ -66,7 +62,7 @@ func SpawnSequencingStage(
 	var block *types.Block
 	runLoopBlocks := true
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
-	batchState := newBatchState(forkId, prepareBatchNumber(lastBatch, isLastBatchPariallyProcessed), !isLastBatchPariallyProcessed && cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool)
+	batchState := newBatchState(forkId, lastBatch+1, cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool)
 	blockDataSizeChecker := newBlockDataChecker()
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState, lastBatch) // using lastBatch (rather than batchState.batchNumber) is not mistake
 
@@ -79,6 +75,56 @@ func SpawnSequencingStage(
 		if err = cfg.datastreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
 			return err
 		}
+		if err = stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
+			return err
+		}
+
+		return sdb.tx.Commit()
+	}
+
+	if batchState.hasExecutorForThisBatch {
+		// identify a stream gap i.e. a sequencer restart without an ack back from an executor.
+		// in this case we need to unwind the state so that we match the datastream height
+		streamProgress, err := stages.GetStageProgress(sdb.tx, stages.DataStream)
+		if err != nil {
+			return err
+		}
+		if streamProgress > 0 && streamProgress < executionAt {
+			block, err := rawdb.ReadBlockByNumber(sdb.tx, streamProgress)
+			if err != nil {
+				return err
+			}
+			log.Warn(fmt.Sprintf("[%s] Unwinding due to a datastream gap", logPrefix),
+				"streamHeight", streamProgress,
+				"sequencerHeight", executionAt,
+			)
+			u.UnwindTo(streamProgress, block.Hash())
+			return nil
+		}
+	}
+
+	lastBatchSealed, err := checkIfLastBatchIsSealed(batchContext)
+	if err != nil {
+		return err
+	}
+
+	if !lastBatchSealed {
+		log.Warn(fmt.Sprintf("[%s] Closing batch early due to partial processing", logPrefix), "batch", lastBatch)
+
+		// we are in a state where the sequencer was perhaps restarted or unwound and the last batch
+		// that was partially processed needed to be closed, and we will have at least one block in it (because the last
+		// entry wasn't a batch end)
+		rawCounters, _, err := sdb.hermezDb.GetLatestBatchCounters(lastBatch)
+		if err != nil {
+			return err
+		}
+		latestCounters := vm.NewCountersFromUsedMap(rawCounters)
+
+		endBatchCounters, err := prepareBatchCounters(batchContext, batchState, latestCounters)
+
+		if err = runBatchLastSteps(batchContext, lastBatch, executionAt, endBatchCounters); err != nil {
+			return err
+		}
 
 		return sdb.tx.Commit()
 	}
@@ -89,19 +135,9 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	batchCounters, err := prepareBatchCounters(batchContext, batchState, isLastBatchPariallyProcessed)
+	batchCounters, err := prepareBatchCounters(batchContext, batchState, nil)
 	if err != nil {
 		return err
-	}
-
-	if !isLastBatchPariallyProcessed {
-		// handle case where batch wasn't closed properly
-		// close it before starting a new one
-		// this occurs when sequencer was switched from syncer or sequencer datastream files were deleted
-		// and datastream was regenerated
-		if err = finalizeLastBatchInDatastreamIfNotFinalized(batchContext, batchState, executionAt); err != nil {
-			return err
-		}
 	}
 
 	if batchState.isL1Recovery() {
