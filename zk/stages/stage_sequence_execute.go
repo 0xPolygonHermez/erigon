@@ -82,25 +82,9 @@ func SpawnSequencingStage(
 		return sdb.tx.Commit()
 	}
 
-	if batchState.hasExecutorForThisBatch {
-		// identify a stream gap i.e. a sequencer restart without an ack back from an executor.
-		// in this case we need to unwind the state so that we match the datastream height
-		streamProgress, err := stages.GetStageProgress(sdb.tx, stages.DataStream)
-		if err != nil {
-			return err
-		}
-		if streamProgress > 0 && streamProgress < executionAt {
-			block, err := rawdb.ReadBlockByNumber(sdb.tx, streamProgress)
-			if err != nil {
-				return err
-			}
-			log.Warn(fmt.Sprintf("[%s] Unwinding due to a datastream gap", logPrefix),
-				"streamHeight", streamProgress,
-				"sequencerHeight", executionAt,
-			)
-			u.UnwindTo(streamProgress, block.Hash())
-			return nil
-		}
+	unwinding, err := checkForDataStreamGap(batchState, sdb, executionAt, logPrefix, u)
+	if err != nil || unwinding {
+		return err
 	}
 
 	lastBatchSealed, err := checkIfLastBatchIsSealed(batchContext)
