@@ -185,7 +185,7 @@ func TestBatchSimpleInsert2(t *testing.T) {
 	smtBatch := smt.NewSMT(nil, false)
 	batchInsert(smtBatch, keys, vals)
 
-	smtBatchNoSave := smt.NewSMT(nil, false)
+	smtBatchNoSave := smt.NewSMT(nil, true)
 	batchInsert(smtBatchNoSave, keys, vals)
 
 	smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
