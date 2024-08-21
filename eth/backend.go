@@ -758,12 +758,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 					return nil, err
 				}
 				backend.preStartTasks.WarmUpDataStream = true
+			}
 
-				if backend.config.Zk.DataStreamTruncateBlock != 0 {
-					log.Warn(fmt.Sprintf("[stream-truncate] setting the stream truncated progress"))
-					backend.preStartTasks.TruncateDataStream = true
-					backend.preStartTasks.WarmUpDataStream = true
-				}
+			if backend.config.Zk.DataStreamTruncateBlock != 0 {
+				log.Warn(fmt.Sprintf("[stream-truncate] setting the stream truncated progress"))
+				backend.preStartTasks.TruncateDataStream = true
+				backend.preStartTasks.WarmUpDataStream = true
 			}
 		}
 
