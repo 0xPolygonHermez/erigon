@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
+	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
@@ -402,5 +403,27 @@ func (srv *DataStreamServer) WriteGenesisToStream(
 		return err
 	}
 
+	return nil
+}
+
+func (srv *DataStreamServer) TruncateBlock(blockNum uint64) error {
+	bookmark := types.NewBookmarkProto(blockNum, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
+	marshalled, err := bookmark.Marshal()
+	if err != nil {
+		log.Error("Failed to marshal bookmark", "err", err)
+		return err
+	}
+
+	entryNum, err := srv.stream.GetBookmark(marshalled)
+	if err != nil {
+		log.Error("Failed to get bookmark", "err", err)
+		return err
+	}
+
+	err = srv.stream.TruncateFile(entryNum)
+	if err != nil {
+		log.Error("Failed to truncate file", "err", err)
+		return err
+	}
 	return nil
 }
