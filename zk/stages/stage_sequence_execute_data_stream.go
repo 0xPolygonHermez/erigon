@@ -9,7 +9,6 @@ import (
 	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 type SequencerBatchStreamWriter struct {
@@ -63,10 +62,6 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBun
 				return checkedVerifierBundles, err
 			}
 
-			if err = stages.SaveStageProgress(sbc.sdb.tx, stages.DataStream, block.NumberU64()); err != nil {
-				return checkedVerifierBundles, err
-			}
-
 			// once we have handled the very first block we can update the last batch to be the current batch safely so that
 			// we don't keep adding batch bookmarks in between blocks
 			sbc.lastBatch = request.BatchNumber
@@ -83,38 +78,29 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBun
 	return checkedVerifierBundles, nil
 }
 
-func checkIfLastBatchIsSealed(batchContext *BatchContext) (bool, error) {
+func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, batchState *BatchState, thisBlock uint64) error {
 	isLastEntryBatchEnd, err := batchContext.cfg.datastreamServer.IsLastEntryBatchEnd()
 	if err != nil {
-		return false, err
-	}
-
-	return isLastEntryBatchEnd, nil
-}
-
-func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, batchState *BatchState, thisBlock uint64) (bool, error) {
-	isLastEntryBatchEnd, err := batchContext.cfg.datastreamServer.IsLastEntryBatchEnd()
-	if err != nil {
-		return false, err
+		return err
 	}
 
 	if isLastEntryBatchEnd {
-		return false, nil
+		return nil
 	}
 
-	log.Warn(fmt.Sprintf("[%s] Last batch %d was not closed properly, closing it now...", batchContext.s.LogPrefix(), batchState.batchNumber-1))
-	ler, err := utils.GetBatchLocalExitRootFromSCStorage(batchState.batchNumber-1, batchContext.sdb.hermezDb.HermezDbReader, batchContext.sdb.tx)
+	log.Warn(fmt.Sprintf("[%s] Last batch %d was not closed properly, closing it now...", batchContext.s.LogPrefix(), batchState.batchNumber))
+	ler, err := utils.GetBatchLocalExitRootFromSCStorage(batchState.batchNumber, batchContext.sdb.hermezDb.HermezDbReader, batchContext.sdb.tx)
 	if err != nil {
-		return true, err
+		return err
 	}
 
 	lastBlock, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, thisBlock)
 	if err != nil {
-		return true, err
+		return err
 	}
 	root := lastBlock.Root()
 	if err = batchContext.cfg.datastreamServer.WriteBatchEnd(batchContext.sdb.hermezDb, batchState.batchNumber-1, &root, &ler); err != nil {
-		return true, err
+		return err
 	}
-	return true, nil
+	return nil
 }

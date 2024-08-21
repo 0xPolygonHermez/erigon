@@ -753,6 +753,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			latestHeader := backend.dataStream.GetHeader()
 			if latestHeader.TotalEntries == 0 {
 				log.Info("[dataStream] setting the stream progress to 0")
+				if err := stages.SaveStageProgress(tx, stages.DataStream, 0); err != nil {
+					return nil, err
+				}
 				backend.preStartTasks.WarmUpDataStream = true
 			}
 		}
