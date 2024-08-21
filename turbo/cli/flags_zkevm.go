@@ -158,6 +158,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DebugStep:                              ctx.Uint64(utils.DebugStep.Name),
 		DebugStepAfter:                         ctx.Uint64(utils.DebugStepAfter.Name),
 		PoolManagerUrl:                         ctx.String(utils.PoolManagerUrl.Name),
+		TxPoolRejectToNull:                     ctx.Bool(utils.TxPoolRejectToNullFlag.Name),
 		DisableVirtualCounters:                 ctx.Bool(utils.DisableVirtualCounters.Name),
 		ExecutorPayloadOutput:                  ctx.String(utils.ExecutorPayloadOutput.Name),
 		DAUrl:                                  ctx.String(utils.DAUrl.Name),
@@ -214,4 +215,5 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.RebuildTreeAfterFlag.Name, cfg.RebuildTreeAfter)
 	checkFlag(utils.L1BlockRangeFlag.Name, cfg.L1BlockRange)
 	checkFlag(utils.L1QueryDelayFlag.Name, cfg.L1QueryDelay)
+	checkFlag(utils.TxPoolRejectToNullFlag.Name, cfg.TxPoolRejectToNull)
 }

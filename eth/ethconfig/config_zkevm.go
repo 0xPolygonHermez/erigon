@@ -76,6 +76,8 @@ type Zk struct {
 	DisableVirtualCounters      bool
 	VirtualCountersSmtReduction float64
 	ExecutorPayloadOutput       string
+
+	TxPoolRejectToNull bool
 }
 
 var DefaultZkConfig = &Zk{}

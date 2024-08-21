@@ -706,6 +706,12 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 		}
 	}
 
+	if p.ethCfg.Zk.TxPoolRejectToNull {
+		if txn.To == (common.Address{}) {
+			return UnsupportedTx
+		}
+	}
+
 	isLondon := p.isLondon()
 	if !isLondon && txn.Type == 0x2 {
 		return UnsupportedTx

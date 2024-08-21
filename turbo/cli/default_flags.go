@@ -227,6 +227,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.DebugStep,
 	&utils.DebugStepAfter,
 	&utils.PoolManagerUrl,
+	&utils.TxPoolRejectToNullFlag,
 	&utils.DisableVirtualCounters,
 	&utils.DAUrl,
 	&utils.VirtualCountersSmtReduction,
