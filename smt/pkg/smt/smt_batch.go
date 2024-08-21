@@ -20,11 +20,7 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 	var smtBatchNodeRoot *smtBatchNode
 	nodeHashesForDelete := make(map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey)
 
-	//start a progress checker
-	preprocessStage := uint64(size) / 10
-	finalizeStage := preprocessStage
-	progressChan, stopProgressPrinter := zk.ProgressPrinterWithoutValues(fmt.Sprintf("[%s] SMT incremental progress", logPrefix), uint64(size)+preprocessStage+finalizeStage)
-	defer stopProgressPrinter()
+	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (preprocess)", logPrefix), uint64(size), false)
 
 	if err = validateDataLengths(nodeKeys, nodeValues, &nodeValuesHashes); err != nil {
 		return nil, err
@@ -38,8 +34,6 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 		return nil, err
 	}
 
-	progressChan <- uint64(preprocessStage)
-
 	if err = calculateRootNodeHashIfNil(s, &rootNodeHash); err != nil {
 		return nil, err
 	}
@@ -50,7 +44,7 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 			return nil, fmt.Errorf(fmt.Sprintf("[%s] Context done", logPrefix))
 		default:
 		}
-		progressChan <- preprocessStage + uint64(i)
+		progressChan <- uint64(1)
 
 		insertingNodeKey := nodeKeys[i]
 		insertingNodeValue := nodeValues[i]
@@ -143,27 +137,52 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 			maxInsertingNodePathLevel = insertingNodePathLevel
 		}
 	}
+	progressChan <- uint64(1)
+	stopProgressPrinter()
 
 	s.updateDepth(maxInsertingNodePathLevel)
 
+	totalDeleteOps := 0
+	for _, mapLevel0 := range nodeHashesForDelete {
+		for _, mapLevel1 := range mapLevel0 {
+			for _, mapLevel2 := range mapLevel1 {
+				totalDeleteOps += len(mapLevel2)
+			}
+		}
+	}
+
+	progressChanDel, stopProgressPrinterDel := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (deletes)", logPrefix), uint64(totalDeleteOps), false)
 	for _, mapLevel0 := range nodeHashesForDelete {
 		for _, mapLevel1 := range mapLevel0 {
 			for _, mapLevel2 := range mapLevel1 {
 				for _, nodeHash := range mapLevel2 {
 					s.Db.DeleteByNodeKey(*nodeHash)
 					s.Db.DeleteHashKey(*nodeHash)
+					progressChanDel <- uint64(1)
 				}
 			}
 		}
 	}
+	stopProgressPrinterDel()
+
+	totalFinalizeOps := 0
+	for _, nodeValue := range nodeValues {
+		if !nodeValue.IsZero() {
+			totalFinalizeOps++
+		}
+	}
+
+	progressChanFin, stopProgressPrinterFin := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (finalize)", logPrefix), uint64(totalFinalizeOps), false)
 	for i, nodeValue := range nodeValues {
 		if !nodeValue.IsZero() {
 			err = s.hashSave(nodeValue.ToUintArray(), utils.BranchCapacity, *nodeValuesHashes[i])
 			if err != nil {
 				return nil, err
 			}
+			progressChanFin <- uint64(1)
 		}
 	}
+	stopProgressPrinterFin()
 
 	if smtBatchNodeRoot == nil {
 		rootNodeHash = &utils.NodeKey{0, 0, 0, 0}
@@ -176,8 +195,6 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 	if err := s.setLastRoot(*rootNodeHash); err != nil {
 		return nil, err
 	}
-
-	progressChan <- preprocessStage + uint64(size) + finalizeStage
 
 	return &SMTResponse{
 		Mode:          "batch insert",

@@ -33,6 +33,9 @@ func ProgressPrinter(message string, total uint64, quiet bool) (chan uint64, fun
 				if total > 0 {
 					pct = (pc * 100) / total
 				}
+				if pct == 100 {
+					log.Info(fmt.Sprintf("%s: %d/%d (%d%%)", message, pc, total, pct))
+				}
 			case <-ticker.C:
 				if pc > 0 && !quiet {
 					log.Info(fmt.Sprintf("%s: %d/%d (%d%%)", message, pc, total, pct))
