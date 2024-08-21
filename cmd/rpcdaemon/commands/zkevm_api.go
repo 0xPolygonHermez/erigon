@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,25 +12,35 @@ import (
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/memdb"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/core/state"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/eth/tracers"
 	"github.com/ledgerwatch/erigon/rpc"
+	smtDb "github.com/ledgerwatch/erigon/smt/pkg/db"
+	smt "github.com/ledgerwatch/erigon/smt/pkg/smt"
+	smtUtils "github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
+	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	zkUtils "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
@@ -1439,4 +1450,348 @@ func populateBatchDataSlimDetails(batches []*types.BatchDataSlim) (json.RawMessa
 	}
 
 	return json.Marshal(jBatches)
+}
+
+// GetProof
+func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address, storageKeys []common.Hash, blockNrOrHash rpc.BlockNumberOrHash) (*accounts.SMTAccProofResult, error) {
+	api := zkapi.ethApi
+
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if api.historyV3(tx) {
+		return nil, fmt.Errorf("not supported by Erigon3")
+	}
+
+	blockNr, _, _, err := rpchelper.GetBlockNumber(blockNrOrHash, tx, api.filters)
+	if err != nil {
+		return nil, err
+	}
+
+	latestBlock, err := rpchelper.GetLatestBlockNumber(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	if latestBlock < blockNr {
+		// shouldn't happen, but check anyway
+		return nil, fmt.Errorf("block number is in the future latest=%d requested=%d", latestBlock, blockNr)
+	}
+
+	batch := memdb.NewMemoryBatch(tx, api.dirs.Tmp)
+	defer batch.Rollback()
+	if err = zkUtils.PopulateMemoryMutationTables(batch); err != nil {
+		return nil, err
+	}
+
+	if blockNr < latestBlock {
+		if latestBlock-blockNr > maxGetProofRewindBlockCount {
+			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", maxGetProofRewindBlockCount, latestBlock)
+		}
+		unwindState := &stagedsync.UnwindState{UnwindPoint: blockNr - 1}
+		stageState := &stagedsync.StageState{BlockNumber: latestBlock}
+
+		interHashStageCfg := zkStages.StageZkInterHashesCfg(nil, true, true, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(tx), api._agg, nil)
+
+		if err = zkStages.UnwindZkIntermediateHashesStage(unwindState, stageState, batch, interHashStageCfg, ctx, true); err != nil {
+			return nil, fmt.Errorf("unwind intermediate hashes: %w", err)
+		}
+
+		if err != nil {
+			return nil, err
+		}
+		tx = batch
+	}
+
+	reader, err := rpchelper.CreateStateReader(ctx, tx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(tx), "")
+	if err != nil {
+		return nil, err
+	}
+
+	header, err := api._blockReader.HeaderByNumber(ctx, tx, blockNr)
+	if err != nil {
+		return nil, err
+	}
+
+	tds := state.NewTrieDbState(header.Root, tx, blockNr, nil)
+	tds.SetResolveReads(true)
+	tds.StartNewBuffer()
+	tds.SetStateReader(reader)
+
+	ibs := state.New(tds)
+
+	ibs.GetBalance(address)
+
+	for _, key := range storageKeys {
+		value := new(uint256.Int)
+		ibs.GetState(address, &key, value)
+	}
+
+	rl, err := tds.ResolveSMTRetainList()
+	if err != nil {
+		return nil, err
+	}
+
+	eriDb := smtDb.NewRoEriDb(tx)
+	smt := smt.NewRoSMT(eriDb)
+
+	proofs, err := BuildProofs(smt, rl, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	stateRootNode := smtUtils.ScalarToRoot(new(big.Int).SetBytes(header.Root.Bytes()))
+
+	if err != nil {
+		return nil, err
+	}
+
+	balanceKey, err := smtUtils.KeyEthAddrBalance(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	nonceKey, err := smtUtils.KeyEthAddrNonce(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	codeHashKey, err := smtUtils.KeyContractCode(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	codeLengthKey, err := smtUtils.KeyContractLength(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	balanceProofs := filterProofs(proofs, balanceKey)
+	balanceBytes, err := VerifyAndGetVal(stateRootNode, balanceProofs, balanceKey)
+	if err != nil {
+		return nil, fmt.Errorf("balance proof verification failed: %w", err)
+	}
+
+	balance := new(big.Int).SetBytes(balanceBytes)
+
+	nonceProofs := filterProofs(proofs, nonceKey)
+	nonceBytes, err := VerifyAndGetVal(stateRootNode, nonceProofs, nonceKey)
+	if err != nil {
+		return nil, fmt.Errorf("nonce proof verification failed: %w", err)
+	}
+	nonce := new(big.Int).SetBytes(nonceBytes).Uint64()
+
+	codeHashProofs := filterProofs(proofs, codeHashKey)
+	codeHashBytes, err := VerifyAndGetVal(stateRootNode, codeHashProofs, codeHashKey)
+	if err != nil {
+		return nil, fmt.Errorf("code hash proof verification failed: %w", err)
+	}
+	codeHash := codeHashBytes
+
+	codeLengthProofs := filterProofs(proofs, codeLengthKey)
+	codeLengthBytes, err := VerifyAndGetVal(stateRootNode, codeLengthProofs, codeLengthKey)
+	if err != nil {
+		return nil, fmt.Errorf("code length proof verification failed: %w", err)
+	}
+	codeLength := new(big.Int).SetBytes(codeLengthBytes).Uint64()
+
+	accProof := &accounts.SMTAccProofResult{
+		Address:         address,
+		Balance:         (*hexutil.Big)(balance),
+		CodeHash:        libcommon.BytesToHash(codeHash),
+		CodeLength:      hexutil.Uint64(codeLength),
+		Nonce:           hexutil.Uint64(nonce),
+		BalanceProof:    balanceProofs,
+		NonceProof:      nonceProofs,
+		CodeHashProof:   codeHashProofs,
+		CodeLengthProof: codeLengthProofs,
+		StorageProof:    make([]accounts.SMTStorageProofResult, 0),
+	}
+
+	addressArrayBig := smtUtils.ScalarToArrayBig(smtUtils.ConvertHexToBigInt(address.String()))
+	for _, k := range storageKeys {
+		storageKey, err := smtUtils.KeyContractStorage(addressArrayBig, k.String())
+		if err != nil {
+			return nil, err
+		}
+		storageProofs := filterProofs(proofs, storageKey)
+
+		valueBytes, err := VerifyAndGetVal(stateRootNode, storageProofs, storageKey)
+		if err != nil {
+			return nil, fmt.Errorf("storage proof verification failed: %w", err)
+		}
+
+		value := new(big.Int).SetBytes(valueBytes)
+
+		accProof.StorageProof = append(accProof.StorageProof, accounts.SMTStorageProofResult{
+			Key:   k,
+			Value: (*hexutil.Big)(value),
+			Proof: storageProofs,
+		})
+	}
+
+	return accProof, nil
+}
+
+type SMTProofElement struct {
+	path  []byte
+	proof []byte
+}
+
+func filterProofs(proofs []*SMTProofElement, key smtUtils.NodeKey) []hexutility.Bytes {
+	filteredProofs := make([]hexutility.Bytes, 0)
+	keyPath := key.GetPath()
+
+	keyPathInBytes := make([]byte, len(keyPath))
+	for i, v := range keyPath {
+		keyPathInBytes[i] = byte(v)
+	}
+
+	for _, proof := range proofs {
+		if bytes.HasPrefix(keyPathInBytes, proof.path) {
+			filteredProofs = append(filteredProofs, proof.proof)
+		}
+	}
+
+	return filteredProofs
+}
+
+func BuildProofs(s *smt.RoSMT, rd trie.RetainDecider, ctx context.Context) ([]*SMTProofElement, error) {
+	proofs := make([]*SMTProofElement, 0)
+
+	root, err := s.DbRo.GetLastRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	action := func(prefix []byte, k smtUtils.NodeKey, v smtUtils.NodeValue12) (bool, error) {
+		retain := rd.Retain(prefix)
+
+		if !retain {
+			return false, nil
+		}
+
+		nodeBytes := make([]byte, 64)
+		smtUtils.ArrayToScalar(v.Get0to4()[:]).FillBytes(nodeBytes[:32])
+		smtUtils.ArrayToScalar(v.Get4to8()[:]).FillBytes(nodeBytes[32:])
+
+		if v.IsFinalNode() {
+			nodeBytes = append(nodeBytes, 1)
+		}
+
+		proofs = append(proofs, &SMTProofElement{
+			path:  prefix,
+			proof: nodeBytes,
+		})
+
+		if v.IsFinalNode() {
+			valHash := v.Get4to8()
+			v, err := s.DbRo.Get(*valHash)
+			if err != nil {
+				return false, err
+			}
+
+			vInBytes := smtUtils.ArrayBigToScalar(smtUtils.BigIntArrayFromNodeValue8(v.GetNodeValue8())).Bytes()
+
+			proofs = append(proofs, &SMTProofElement{
+				path:  prefix,
+				proof: vInBytes,
+			})
+
+			return false, nil
+		}
+
+		return true, nil
+	}
+
+	err = s.Traverse(ctx, root, action)
+	if err != nil {
+		return nil, err
+	}
+
+	return proofs, nil
+}
+
+func VerifyAndGetVal(stateRoot smtUtils.NodeKey, proof []hexutility.Bytes, key smtUtils.NodeKey) ([]byte, error) {
+	if len(proof) == 0 {
+		return nil, fmt.Errorf("proof is empty")
+	}
+
+	path := key.GetPath()
+
+	curRoot := stateRoot
+
+	foundValue := false
+
+	for i := 0; i < len(proof); i++ {
+		isFinalNode := len(proof[i]) == 65
+
+		capacity := smtUtils.BranchCapacity
+
+		if isFinalNode {
+			capacity = smtUtils.LeafCapacity
+		}
+
+		leftChild := smtUtils.ScalarToArray(big.NewInt(0).SetBytes(proof[i][:32]))
+		rightChild := smtUtils.ScalarToArray(big.NewInt(0).SetBytes(proof[i][32:64]))
+
+		leftChildNode := [4]uint64{leftChild[0], leftChild[1], leftChild[2], leftChild[3]}
+		rightChildNode := [4]uint64{rightChild[0], rightChild[1], rightChild[2], rightChild[3]}
+
+		h, err := smtUtils.Hash(smtUtils.ConcatArrays4(leftChildNode, rightChildNode), capacity)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if curRoot != h {
+			return nil, fmt.Errorf("root mismatch at level %d, expected %d, got %d", i, curRoot, h)
+		}
+
+		if !isFinalNode {
+			if path[i] == 0 {
+				curRoot = leftChildNode
+			} else {
+				curRoot = rightChildNode
+			}
+
+			if curRoot.IsZero() {
+				return nil, nil
+			}
+		} else {
+			joinedKey := smtUtils.JoinKey(path[:i], leftChildNode)
+			if joinedKey.IsEqualTo(key) {
+				foundValue = true
+				curRoot = rightChildNode
+				break
+			} else {
+				return nil, nil
+			}
+		}
+	}
+
+	if !foundValue {
+		return nil, nil
+	}
+
+	v := new(big.Int).SetBytes(proof[len(proof)-1])
+	x := smtUtils.ScalarToArrayBig(v)
+	nodeValue, err := smtUtils.NodeValue8FromBigIntArray(x)
+	if err != nil {
+		return nil, err
+	}
+
+	h, err := smtUtils.Hash(nodeValue.ToUintArray(), smtUtils.BranchCapacity)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if h != curRoot {
+		return nil, fmt.Errorf("root mismatch at level %d, expected %d, got %d", len(proof)-1, curRoot, h)
+	}
+
+	return proof[len(proof)-1], nil
 }

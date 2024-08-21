@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -11,14 +12,10 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/hexutil"
-	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/tracers"
 	"github.com/ledgerwatch/erigon/rpc"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
-	"github.com/ledgerwatch/erigon/smt/pkg/utils"
-	"github.com/ledgerwatch/log/v3"
-	"math/big"
 
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -629,157 +626,4 @@ func populateBatchCounters(collected *vm.Counters, smtDepth int, batchNum, block
 	}
 
 	return json.Marshal(res)
-}
-
-// GetProof
-func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address, storageKeys []common.Hash, blockNrOrHash rpc.BlockNumberOrHash) (*accounts.AccProofResult, error) {
-	api := zkapi.ethApi
-
-	dbtx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer dbtx.Rollback()
-
-	blockNr, _, _, err := rpchelper.GetBlockNumber(blockNrOrHash, dbtx, api.filters)
-	if err != nil {
-		return nil, err
-	}
-
-	latestCanBlockNumber, latestCanHash, _, err := rpchelper.GetCanonicalBlockNumber(latestNumOrHash, dbtx, api.filters) // DoCall cannot be executed on non-canonical blocks
-	if err != nil {
-		return nil, err
-	}
-
-	// try and get the block from the lru cache first then try DB before failing
-	block := api.tryBlockFromLru(latestCanHash)
-	if block == nil {
-		block, err = api.blockWithSenders(dbtx, latestCanHash, latestCanBlockNumber)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if block == nil {
-		return nil, fmt.Errorf("could not find latest block in cache or db")
-	}
-
-	eriDb := db2.NewRoEriDb(dbtx)
-	smt := smt.NewRoSMT(eriDb)
-	hermezDb := hermez_db.NewHermezDbReader(dbtx)
-
-	forkId, err := hermezDb.GetForkIdByBlockNum(block.NumberU64())
-	if err != nil {
-		return nil, err
-	}
-
-	smtDepth := smt.GetDepth()
-
-	root, err := smt.DbRo.GetLastRoot()
-	if err != nil {
-		return nil, err
-	}
-	rootHash := common.BigToHash(root)
-
-	a := utils.ConvertHexToBigInt(address.Hex())
-	addr := utils.ScalarToArrayBig(a)
-
-	accountKey, err := utils.KeyEthAddrBalance(address.Hex())
-	if err != nil {
-		return nil, err
-	}
-
-	reader, err := rpchelper.CreateStateReader(ctx, dbtx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(dbtx), "")
-	if err != nil {
-		return nil, err
-	}
-	accountData, err := reader.ReadAccountData(address)
-	if err != nil {
-		return nil, err
-	}
-
-	apr := new(accounts.AccProofResult)
-	apr.Address = address
-	apr.Balance = (*hexutil.Big)(accountData.Balance.ToBig())
-	apr.Nonce = (hexutil.Uint64)(accountData.Nonce)
-	apr.CodeHash = accountData.CodeHash
-
-	// Maybe one day i'll understand what a retainlist is
-	//rd := trie.NewRetainList(0)
-	//rd.AddHex(address.Bytes())
-	//for _, sk := range storageKeys {
-	//	rd.AddHex(sk.Bytes())
-	//}
-	accountPath := accountKey.GetPath()
-	log.Debug("account path", "path", accountPath)
-
-	log.Debug("attempting to build proof", "forkId", forkId, "depth", smtDepth, "blockNumber", blockNr, "root", rootHash.Hex(), "address", address.Hex(), "key", storageKeys[0].Hex())
-	// storageKey.ToBigInt()
-	accountProof := make([]hexutility.Bytes, 0)
-	err = smt.Traverse(ctx, root, func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) (bool, error) {
-		log.Debug("traversing", "prefix", prefix)
-		isFinal := v.IsFinalNode()
-		if prefixesMatch(accountPath, prefix) || isFinal {
-			h := common.BigToHash(k.ToBigInt())
-			log.Debug("true when you need to keep exploring the current path", "hash", h.Hex())
-			if isFinal {
-				log.Debug("finished?", "value", v.ToBigInt())
-			}
-			accountProof = append(accountProof, k.ToBigInt().Bytes())
-			return true, nil
-		}
-		log.Debug("false when you know the current path is not what we are looking for")
-		return false, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	apr.AccountProof = accountProof
-
-	spr := make([]accounts.StorProofResult, 0)
-	for _, sk := range storageKeys {
-		storageKey, err := utils.KeyContractStorage(addr, sk.Hex())
-		if err != nil {
-			return nil, err
-		}
-		storageData, err := reader.ReadAccountStorage(address, accountData.Incarnation, &sk)
-		if err != nil {
-			return nil, err
-		}
-		sp := accounts.StorProofResult{}
-		sp.Key = sk
-		storageValue := new(big.Int).SetBytes(storageData)
-		storageValueHex := hexutil.Big(*storageValue)
-		sp.Value = &storageValueHex
-		sp.Proof = make([]hexutility.Bytes, 0)
-
-		storagePath := storageKey.GetPath()
-		err = smt.Traverse(ctx, root, func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) (bool, error) {
-			isFinal := v.IsFinalNode()
-			if prefixesMatch(storagePath, prefix) || isFinal {
-				sp.Proof = append(sp.Proof, k.ToBigInt().Bytes())
-				return true, nil
-			}
-			return false, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		spr = append(spr, sp)
-	}
-	apr.StorageProof = spr
-
-	return apr, nil
-}
-
-func prefixesMatch(a []int, b []byte) bool {
-	length := len(a)
-	if len(b) < length {
-		length = len(b)
-	}
-	for i := 0; i < length; i++ {
-		if a[i] != int(b[i]) {
-			return false
-		}
-	}
-	return true
 }
