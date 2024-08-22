@@ -1045,23 +1045,7 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 
 // creates a datastream client with default parameters
 func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) *client.StreamClient {
-	// datastream
-	// Create client
-	log.Info("Starting datastream client...")
-	// retry connection
-	datastreamClient := client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestForkId)
-
-	for i := 0; i < 30; i++ {
-		// Start client (connect to the server)
-		if err := datastreamClient.Start(); err != nil {
-			log.Warn(fmt.Sprintf("Error when starting datastream client, retrying... Error: %s", err))
-			time.Sleep(1 * time.Second)
-		} else {
-			log.Info("Datastream client initialized...")
-			return datastreamClient
-		}
-	}
-	panic("datastream client could not be initialized")
+	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestForkId)
 }
 
 func (backend *Ethereum) Init(stack *node.Node, config *ethconfig.Config) error {
