@@ -317,6 +317,10 @@ func (srv *DataStreamServer) UnwindIfNecessary(logPrefix string, reader DbReader
 				return err
 			}
 		}
+	} else if highestDatastreamBlock+1 != blockNum {
+		// The error will not actually occur. If it does, the site can be preserved to investigate the cause.
+		err := fmt.Errorf("mismatch data stream block number, expected %v, but got %v", blockNum, highestDatastreamBlock+1)
+		utils.HaltNode(err)
 	}
 
 	return nil

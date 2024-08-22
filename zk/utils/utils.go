@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"time"
 
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -162,4 +163,11 @@ func GetBatchLocalExitRootFromSCStorage(batchNo uint64, db DbReader, tx kv.Tx) (
 	}
 
 	return libcommon.Hash{}, nil
+}
+
+func HaltNode(err error) {
+	log.Error(fmt.Sprintf("Halting node, fatal error: %v", err))
+	for {
+		time.Sleep(1 * time.Second) //nolint:gomnd
+	}
 }
