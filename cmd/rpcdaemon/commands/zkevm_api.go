@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -31,7 +30,6 @@ import (
 	smt "github.com/ledgerwatch/erigon/smt/pkg/smt"
 	smtUtils "github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
-	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
@@ -1534,10 +1532,9 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		return nil, err
 	}
 
-	eriDb := smtDb.NewRoEriDb(tx)
-	smt := smt.NewRoSMT(eriDb)
+	smtTrie := smt.NewRoSMT(smtDb.NewRoEriDb(tx))
 
-	proofs, err := BuildProofs(smt, rl, ctx)
+	proofs, err := smt.BuildProofs(smtTrie, rl, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1568,30 +1565,30 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		return nil, err
 	}
 
-	balanceProofs := filterProofs(proofs, balanceKey)
-	balanceBytes, err := VerifyAndGetVal(stateRootNode, balanceProofs, balanceKey)
+	balanceProofs := smt.FilterProofs(proofs, balanceKey)
+	balanceBytes, err := smt.VerifyAndGetVal(stateRootNode, balanceProofs, balanceKey)
 	if err != nil {
 		return nil, fmt.Errorf("balance proof verification failed: %w", err)
 	}
 
 	balance := new(big.Int).SetBytes(balanceBytes)
 
-	nonceProofs := filterProofs(proofs, nonceKey)
-	nonceBytes, err := VerifyAndGetVal(stateRootNode, nonceProofs, nonceKey)
+	nonceProofs := smt.FilterProofs(proofs, nonceKey)
+	nonceBytes, err := smt.VerifyAndGetVal(stateRootNode, nonceProofs, nonceKey)
 	if err != nil {
 		return nil, fmt.Errorf("nonce proof verification failed: %w", err)
 	}
 	nonce := new(big.Int).SetBytes(nonceBytes).Uint64()
 
-	codeHashProofs := filterProofs(proofs, codeHashKey)
-	codeHashBytes, err := VerifyAndGetVal(stateRootNode, codeHashProofs, codeHashKey)
+	codeHashProofs := smt.FilterProofs(proofs, codeHashKey)
+	codeHashBytes, err := smt.VerifyAndGetVal(stateRootNode, codeHashProofs, codeHashKey)
 	if err != nil {
 		return nil, fmt.Errorf("code hash proof verification failed: %w", err)
 	}
 	codeHash := codeHashBytes
 
-	codeLengthProofs := filterProofs(proofs, codeLengthKey)
-	codeLengthBytes, err := VerifyAndGetVal(stateRootNode, codeLengthProofs, codeLengthKey)
+	codeLengthProofs := smt.FilterProofs(proofs, codeLengthKey)
+	codeLengthBytes, err := smt.VerifyAndGetVal(stateRootNode, codeLengthProofs, codeLengthKey)
 	if err != nil {
 		return nil, fmt.Errorf("code length proof verification failed: %w", err)
 	}
@@ -1616,9 +1613,9 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		if err != nil {
 			return nil, err
 		}
-		storageProofs := filterProofs(proofs, storageKey)
+		storageProofs := smt.FilterProofs(proofs, storageKey)
 
-		valueBytes, err := VerifyAndGetVal(stateRootNode, storageProofs, storageKey)
+		valueBytes, err := smt.VerifyAndGetVal(stateRootNode, storageProofs, storageKey)
 		if err != nil {
 			return nil, fmt.Errorf("storage proof verification failed: %w", err)
 		}
@@ -1633,165 +1630,4 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 	}
 
 	return accProof, nil
-}
-
-type SMTProofElement struct {
-	path  []byte
-	proof []byte
-}
-
-func filterProofs(proofs []*SMTProofElement, key smtUtils.NodeKey) []hexutility.Bytes {
-	filteredProofs := make([]hexutility.Bytes, 0)
-	keyPath := key.GetPath()
-
-	keyPathInBytes := make([]byte, len(keyPath))
-	for i, v := range keyPath {
-		keyPathInBytes[i] = byte(v)
-	}
-
-	for _, proof := range proofs {
-		if bytes.HasPrefix(keyPathInBytes, proof.path) {
-			filteredProofs = append(filteredProofs, proof.proof)
-		}
-	}
-
-	return filteredProofs
-}
-
-func BuildProofs(s *smt.RoSMT, rd trie.RetainDecider, ctx context.Context) ([]*SMTProofElement, error) {
-	proofs := make([]*SMTProofElement, 0)
-
-	root, err := s.DbRo.GetLastRoot()
-	if err != nil {
-		return nil, err
-	}
-
-	action := func(prefix []byte, k smtUtils.NodeKey, v smtUtils.NodeValue12) (bool, error) {
-		retain := rd.Retain(prefix)
-
-		if !retain {
-			return false, nil
-		}
-
-		nodeBytes := make([]byte, 64)
-		smtUtils.ArrayToScalar(v.Get0to4()[:]).FillBytes(nodeBytes[:32])
-		smtUtils.ArrayToScalar(v.Get4to8()[:]).FillBytes(nodeBytes[32:])
-
-		if v.IsFinalNode() {
-			nodeBytes = append(nodeBytes, 1)
-		}
-
-		proofs = append(proofs, &SMTProofElement{
-			path:  prefix,
-			proof: nodeBytes,
-		})
-
-		if v.IsFinalNode() {
-			valHash := v.Get4to8()
-			v, err := s.DbRo.Get(*valHash)
-			if err != nil {
-				return false, err
-			}
-
-			vInBytes := smtUtils.ArrayBigToScalar(smtUtils.BigIntArrayFromNodeValue8(v.GetNodeValue8())).Bytes()
-
-			proofs = append(proofs, &SMTProofElement{
-				path:  prefix,
-				proof: vInBytes,
-			})
-
-			return false, nil
-		}
-
-		return true, nil
-	}
-
-	err = s.Traverse(ctx, root, action)
-	if err != nil {
-		return nil, err
-	}
-
-	return proofs, nil
-}
-
-func VerifyAndGetVal(stateRoot smtUtils.NodeKey, proof []hexutility.Bytes, key smtUtils.NodeKey) ([]byte, error) {
-	if len(proof) == 0 {
-		return nil, fmt.Errorf("proof is empty")
-	}
-
-	path := key.GetPath()
-
-	curRoot := stateRoot
-
-	foundValue := false
-
-	for i := 0; i < len(proof); i++ {
-		isFinalNode := len(proof[i]) == 65
-
-		capacity := smtUtils.BranchCapacity
-
-		if isFinalNode {
-			capacity = smtUtils.LeafCapacity
-		}
-
-		leftChild := smtUtils.ScalarToArray(big.NewInt(0).SetBytes(proof[i][:32]))
-		rightChild := smtUtils.ScalarToArray(big.NewInt(0).SetBytes(proof[i][32:64]))
-
-		leftChildNode := [4]uint64{leftChild[0], leftChild[1], leftChild[2], leftChild[3]}
-		rightChildNode := [4]uint64{rightChild[0], rightChild[1], rightChild[2], rightChild[3]}
-
-		h, err := smtUtils.Hash(smtUtils.ConcatArrays4(leftChildNode, rightChildNode), capacity)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if curRoot != h {
-			return nil, fmt.Errorf("root mismatch at level %d, expected %d, got %d", i, curRoot, h)
-		}
-
-		if !isFinalNode {
-			if path[i] == 0 {
-				curRoot = leftChildNode
-			} else {
-				curRoot = rightChildNode
-			}
-
-			if curRoot.IsZero() {
-				return nil, nil
-			}
-		} else {
-			joinedKey := smtUtils.JoinKey(path[:i], leftChildNode)
-			if joinedKey.IsEqualTo(key) {
-				foundValue = true
-				curRoot = rightChildNode
-				break
-			} else {
-				return nil, nil
-			}
-		}
-	}
-
-	if !foundValue {
-		return nil, nil
-	}
-
-	v := new(big.Int).SetBytes(proof[len(proof)-1])
-	x := smtUtils.ScalarToArrayBig(v)
-	nodeValue, err := smtUtils.NodeValue8FromBigIntArray(x)
-	if err != nil {
-		return nil, err
-	}
-
-	h, err := smtUtils.Hash(nodeValue.ToUintArray(), smtUtils.BranchCapacity)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if h != curRoot {
-		return nil, fmt.Errorf("root mismatch at level %d, expected %d, got %d", len(proof)-1, curRoot, h)
-	}
-
-	return proof[len(proof)-1], nil
 }
