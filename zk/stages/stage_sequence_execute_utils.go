@@ -444,28 +444,3 @@ func (bdc *BlockDataChecker) AddTransactionData(txL2Data []byte) bool {
 
 	return false
 }
-
-func checkForDataStreamGap(batchState *BatchState, sdb *stageDb, executionAt uint64, logPrefix string, u stagedsync.Unwinder) (bool, error) {
-	if batchState.hasExecutorForThisBatch {
-		// identify a stream gap i.e. a sequencer restart without an ack back from an executor.
-		// in this case we need to unwind the state so that we match the datastream height
-		streamProgress, err := stages.GetStageProgress(sdb.tx, stages.DataStream)
-		if err != nil {
-			return false, err
-		}
-		if streamProgress > 0 && streamProgress < executionAt {
-			block, err := rawdb.ReadBlockByNumber(sdb.tx, streamProgress)
-			if err != nil {
-				return true, err
-			}
-			log.Warn(fmt.Sprintf("[%s] Unwinding due to a datastream gap", logPrefix),
-				"streamHeight", streamProgress,
-				"sequencerHeight", executionAt,
-			)
-			u.UnwindTo(streamProgress, block.Hash())
-			return true, nil
-		}
-	}
-
-	return false, nil
-}

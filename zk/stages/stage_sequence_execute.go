@@ -81,6 +81,12 @@ func SpawnSequencingStage(
 		return sdb.tx.Commit()
 	}
 
+	// handle cases where the last batch wasn't committed to the data stream.
+	// this could occur because we're migrating from an RPC node to a sequencer
+	// or because the sequencer was restarted and not all processes completed (like waiting from remote executor)
+	// we consider the data stream as verified by the executor so treat it as "safe" and unwind blocks beyond there
+	// if we identify any.  During normal operation this function will simply check and move on without performing
+	// any action.
 	isUnwinding, err := handleBatchEndChecks(batchContext, batchState, executionAt, u)
 	if err != nil || isUnwinding {
 		return err

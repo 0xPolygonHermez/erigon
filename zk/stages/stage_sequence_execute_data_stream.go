@@ -111,11 +111,6 @@ func handleBatchEndChecks(batchContext *BatchContext, batchState *BatchState, th
 		return false, err
 	}
 
-	// commit the tx as we want to hold on to the values we just handled and then refresh the tx
-	//if err = batchContext.sdb.CommitAndStart(); err != nil {
-	//	return false, err
-	//}
-
 	// now check if there is a gap in the stream vs the state db
 	streamProgress, err := stages.GetStageProgress(batchContext.sdb.tx, stages.DataStream)
 	if err != nil {
