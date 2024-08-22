@@ -16,7 +16,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
 	"github.com/ledgerwatch/erigon/zk/utils"
-	"github.com/ledgerwatch/erigon/core/vm"
 )
 
 func SpawnSequencingStage(
@@ -82,35 +81,9 @@ func SpawnSequencingStage(
 		return sdb.tx.Commit()
 	}
 
-	unwinding, err := checkForDataStreamGap(batchState, sdb, executionAt, logPrefix, u)
-	if err != nil || unwinding {
+	isUnwinding, err := handleBatchEndChecks(batchContext, batchState, executionAt, u)
+	if err != nil || isUnwinding {
 		return err
-	}
-
-	lastBatchSealed, err := checkIfLastBatchIsSealed(batchContext)
-	if err != nil {
-		return err
-	}
-
-	if !lastBatchSealed {
-		log.Warn(fmt.Sprintf("[%s] Closing batch early due to partial processing", logPrefix), "batch", lastBatch)
-
-		// we are in a state where the sequencer was perhaps restarted or unwound and the last batch
-		// that was partially processed needed to be closed, and we will have at least one block in it (because the last
-		// entry wasn't a batch end)
-		rawCounters, _, err := sdb.hermezDb.GetLatestBatchCounters(lastBatch)
-		if err != nil {
-			return err
-		}
-		latestCounters := vm.NewCountersFromUsedMap(rawCounters)
-
-		endBatchCounters, err := prepareBatchCounters(batchContext, batchState, latestCounters)
-
-		if err = runBatchLastSteps(batchContext, lastBatch, executionAt, endBatchCounters); err != nil {
-			return err
-		}
-
-		return sdb.tx.Commit()
 	}
 
 	tryHaltSequencer(batchContext, batchState.batchNumber)

@@ -7,9 +7,10 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
-	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/erigon/core/vm"
 )
 
 type SequencerBatchStreamWriter struct {
@@ -83,16 +84,7 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBun
 	return checkedVerifierBundles, nil
 }
 
-func checkIfLastBatchIsSealed(batchContext *BatchContext) (bool, error) {
-	isLastEntryBatchEnd, err := batchContext.cfg.datastreamServer.IsLastEntryBatchEnd()
-	if err != nil {
-		return false, err
-	}
-
-	return isLastEntryBatchEnd, nil
-}
-
-func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, batchState *BatchState, thisBlock uint64) (bool, error) {
+func handleBatchEndChecks(batchContext *BatchContext, batchState *BatchState, thisBlock uint64, u stagedsync.Unwinder) (bool, error) {
 	isLastEntryBatchEnd, err := batchContext.cfg.datastreamServer.IsLastEntryBatchEnd()
 	if err != nil {
 		return false, err
@@ -102,19 +94,47 @@ func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, bat
 		return false, nil
 	}
 
-	log.Warn(fmt.Sprintf("[%s] Last batch %d was not closed properly, closing it now...", batchContext.s.LogPrefix(), batchState.batchNumber-1))
-	ler, err := utils.GetBatchLocalExitRootFromSCStorage(batchState.batchNumber-1, batchContext.sdb.hermezDb.HermezDbReader, batchContext.sdb.tx)
+	lastBatch := batchState.batchNumber - 1
+
+	log.Warn(fmt.Sprintf("[%s] Last batch %d was not closed properly, closing it now...", batchContext.s.LogPrefix(), lastBatch))
+
+	rawCounters, _, err := batchContext.sdb.hermezDb.GetLatestBatchCounters(lastBatch)
 	if err != nil {
-		return true, err
+		return false, err
 	}
 
-	lastBlock, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, thisBlock)
+	latestCounters := vm.NewCountersFromUsedMap(rawCounters)
+
+	endBatchCounters, err := prepareBatchCounters(batchContext, batchState, latestCounters)
+
+	if err = runBatchLastSteps(batchContext, lastBatch, thisBlock, endBatchCounters); err != nil {
+		return false, err
+	}
+
+	// commit the tx as we want to hold on to the values we just handled and then refresh the tx
+	//if err = batchContext.sdb.CommitAndStart(); err != nil {
+	//	return false, err
+	//}
+
+	// now check if there is a gap in the stream vs the state db
+	streamProgress, err := stages.GetStageProgress(batchContext.sdb.tx, stages.DataStream)
 	if err != nil {
-		return true, err
+		return false, err
 	}
-	root := lastBlock.Root()
-	if err = batchContext.cfg.datastreamServer.WriteBatchEnd(batchContext.sdb.hermezDb, batchState.batchNumber-1, &root, &ler); err != nil {
-		return true, err
+
+	unwinding := false
+	if streamProgress > 0 && streamProgress < thisBlock {
+		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, streamProgress)
+		if err != nil {
+			return true, err
+		}
+		log.Warn(fmt.Sprintf("[%s] Unwinding due to a datastream gap", batchContext.s.LogPrefix()),
+			"streamHeight", streamProgress,
+			"sequencerHeight", thisBlock,
+		)
+		u.UnwindTo(streamProgress, block.Hash())
+		unwinding = true
 	}
-	return true, nil
+
+	return unwinding, nil
 }
