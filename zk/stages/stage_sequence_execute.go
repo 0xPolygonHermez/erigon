@@ -87,7 +87,7 @@ func SpawnSequencingStage(
 	// we consider the data stream as verified by the executor so treat it as "safe" and unwind blocks beyond there
 	// if we identify any.  During normal operation this function will simply check and move on without performing
 	// any action.
-	if !batchState.isL1Recovery() {
+	if !batchState.isAnyRecovery() {
 		isUnwinding, err := handleBatchEndChecks(batchContext, batchState, executionAt, u)
 		if err != nil || isUnwinding {
 			return err
