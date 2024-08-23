@@ -754,9 +754,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			latestHeader := backend.dataStream.GetHeader()
 			if latestHeader.TotalEntries == 0 {
 				log.Info("[dataStream] setting the stream progress to 0")
-				if err := stages.SaveStageProgress(tx, stages.DataStream, 0); err != nil {
-					return nil, err
-				}
 				backend.preStartTasks.WarmUpDataStream = true
 			}
 
@@ -857,12 +854,16 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		)
 
 		// check contract addresses in config against L1
-		success, err := l1ContractAddressCheck(ctx, cfg.Zk, backend.l1Syncer)
-		if !success || err != nil {
-			//log.Warn("Contract address check failed", "success", success, "err", err)
-			panic("Contract address check failed")
+		if cfg.Zk.L1ContractAddressCheck {
+			success, err := l1ContractAddressCheck(ctx, cfg.Zk, backend.l1Syncer)
+			if !success || err != nil {
+				//log.Warn("Contract address check failed", "success", success, "err", err)
+				panic("Contract address check failed")
+			}
+			log.Info("Contract address check passed")
+		} else {
+			log.Info("Contract address check skipped")
 		}
-		log.Info("Contract address check passed")
 
 		l1InfoTreeSyncer := syncer.NewL1Syncer(
 			ctx,
@@ -1055,23 +1056,7 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 
 // creates a datastream client with default parameters
 func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) *client.StreamClient {
-	// datastream
-	// Create client
-	log.Info("Starting datastream client...")
-	// retry connection
-	datastreamClient := client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestForkId)
-
-	for i := 0; i < 30; i++ {
-		// Start client (connect to the server)
-		if err := datastreamClient.Start(); err != nil {
-			log.Warn(fmt.Sprintf("Error when starting datastream client, retrying... Error: %s", err))
-			time.Sleep(1 * time.Second)
-		} else {
-			log.Info("Datastream client initialized...")
-			return datastreamClient
-		}
-	}
-	panic("datastream client could not be initialized")
+	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestForkId)
 }
 
 func (backend *Ethereum) Init(stack *node.Node, config *ethconfig.Config) error {
