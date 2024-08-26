@@ -36,7 +36,7 @@ func (t *Timer) LogTimer() {
 	keysAndValues := make([]interface{}, 0, 2+2*len(t.taskNames))
 
 	logMessage := fmt.Sprintf("duration: %s, task: %s", t.elapsed, t.taskNames[0])
-	keysAndValues = append(keysAndValues, "duration-ms", fmt.Sprintf("%d.%d", t.elapsed/time.Millisecond, t.elapsed%time.Millisecond), "task", t.taskNames[0])
+	keysAndValues = append(keysAndValues, "duration-ms", fmt.Sprintf("%d", t.elapsed/time.Millisecond), "task", t.taskNames[0])
 
 	for i, task := range t.taskNames[1:] {
 		logMessage += fmt.Sprintf(", subtask%d: %s", i+1, task)
