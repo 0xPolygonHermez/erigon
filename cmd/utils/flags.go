@@ -493,7 +493,7 @@ var (
 	}
 	SequencerTimeoutOnEmptyTxPool = cli.StringFlag{
 		Name:  "zkevm.sequencer-timeout-on-empty-tx-pool",
-		Usage: "Batch seal time. Defaults to 250ms",
+		Usage: "Timeout before requesting txs from the txpool if none were found before. Defaults to 250ms",
 		Value: "250ms",
 	}
 	SequencerHaltOnBatchNumber = cli.Uint64Flag{
