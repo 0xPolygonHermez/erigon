@@ -3,12 +3,22 @@ FROM docker.io/library/golang:1.20-alpine3.17 AS builder
 
 RUN apk --no-cache add build-base linux-headers git bash ca-certificates libstdc++
 
+# install rust env
+RUN apk add --no-cache curl build-base
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup install nightly
+
 WORKDIR /app
 ADD go.mod go.mod
 ADD go.sum go.sum
 
 RUN go mod download
 ADD . .
+
+WORKDIR /app/smt/pkg/hash/poseidon_goldilocks
+RUN cargo +nightly build --release && cp ./target/release/libposeidon_goldilocks.* . && cargo clean
+WORKDIR /app
 
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/tmp/go-build \

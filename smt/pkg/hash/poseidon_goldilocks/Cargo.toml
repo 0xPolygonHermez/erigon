@@ -1,0 +1,12 @@
+[package]
+name = "poseidon_goldilocks"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+plonky2 = { git = "https://github.com/louisliu2048/plonky2", branch = "xiong/hermez-poseidon" }
+jemallocator = "0.5.0"
+libc = "0.2"
