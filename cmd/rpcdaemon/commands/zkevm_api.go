@@ -410,9 +410,12 @@ func generateBatchData(
 			egTx[txn.Hash()] = eg
 		}
 
-		bl2d, err := zktx.GenerateBlockBatchL2Data(uint16(forkId), dTs, uint32(iti), batchBlocks[i].Transactions(), egTx)
-		if err != nil {
-			return nil, err
+		// block 0 does not geenrate any data (special case)
+		var bl2d []byte
+		if batchBlocks[i].NumberU64() != 0 {
+			if bl2d, err = zktx.GenerateBlockBatchL2Data(uint16(forkId), dTs, uint32(iti), batchBlocks[i].Transactions(), egTx); err != nil {
+				return nil, err
+			}
 		}
 		batchL2Data = append(batchL2Data, bl2d...)
 	}
@@ -608,7 +611,9 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	if err != nil {
 		return nil, err
 	}
-	if seq != nil {
+	if batchNo == 0 {
+		batch.SendSequencesTxHash = &common.Hash{0}
+	} else if seq != nil {
 		batch.SendSequencesTxHash = &seq.L1TxHash
 	}
 
@@ -629,10 +634,10 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	if err != nil {
 		return nil, err
 	}
-	if ver == nil {
-		// TODO: this is the actual unverified batch behaviour probably set 0x00
-	}
-	if ver != nil {
+
+	if batchNo == 0 {
+		batch.VerifyBatchTxHash = &common.Hash{0}
+	} else if ver != nil {
 		batch.VerifyBatchTxHash = &ver.L1TxHash
 	}
 
@@ -1419,9 +1424,7 @@ func populateBatchDetails(batch *types.Batch) (json.RawMessage, error) {
 		jBatch["forcedBatchNumber"] = batch.ForcedBatchNumber
 	}
 	jBatch["closed"] = batch.Closed
-	if len(batch.BatchL2Data) > 0 {
-		jBatch["batchL2Data"] = batch.BatchL2Data
-	}
+	jBatch["batchL2Data"] = batch.BatchL2Data
 
 	return json.Marshal(jBatch)
 }
