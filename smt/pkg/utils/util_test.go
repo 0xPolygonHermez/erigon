@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	poseidon "github.com/gateway-fm/vectorized-poseidon-gold/src/vectorizedposeidongold"
 	"github.com/stretchr/testify/assert"
 	"math/big"
 	"math/rand"
@@ -830,7 +831,7 @@ func TestPoseidonHashFunc(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		rst, err := Hash(test.input, test.capacity)
+		rst, err := poseidon.Hash(test.input, test.capacity)
 		assert.Nil(t, err, "fail to calculate poseidon hash")
 
 		if rst != test.result {
@@ -844,7 +845,7 @@ func RandCalPoseidonHashFunc() {
 
 	input := [8]uint64{rand.Uint64(), rand.Uint64(), rand.Uint64(), rand.Uint64(), rand.Uint64(), rand.Uint64(), rand.Uint64(), rand.Uint64()}
 	capacity := [4]uint64{rand.Uint64(), rand.Uint64(), rand.Uint64(), rand.Uint64()}
-	Hash(input, capacity)
+	poseidon.Hash(input, capacity)
 }
 
 func BenchmarkRandCalculateHash_CPP(b *testing.B) {
@@ -857,7 +858,7 @@ func CalPoseidonHashFunc() {
 	input := [8]uint64{5577006791947779410, 8674665223082153551, 15352856648520921629, 13260572831089785859, 3916589616287113937, 6334824724549167320, 9828766684487745566, 10667007354186551956}
 	capacity := [4]uint64{0, 0, 0, 0}
 
-	Hash(input, capacity)
+	poseidon.Hash(input, capacity)
 }
 
 func BenchmarkCalculateHash_CPP(b *testing.B) {
