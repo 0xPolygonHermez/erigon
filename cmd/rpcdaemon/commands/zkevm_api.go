@@ -472,15 +472,6 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		Number: types.ArgUint64(batchNo),
 	}
 
-	// mimic zkevm node null response if we don't have the batch
-	_, found, err := hermezDb.GetLowestBlockInBatch(batchNo)
-	if err != nil {
-		return nil, err
-	}
-	if !found && batchNo != 0 {
-		return nil, nil
-	}
-
 	// highest block in batch
 	blockNo, err := hermezDb.GetHighestBlockInBatch(batchNo)
 	if err != nil {
@@ -598,6 +589,10 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.Transactions = nil
 	}
 
+	if len(batch.Blocks) == 0 {
+		batch.Blocks = nil
+	}
+
 	// global exit root of batch
 	batchGer, _, err := hermezDb.GetLastBlockGlobalExitRoot(blockNo)
 	if err != nil {
@@ -622,7 +617,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.Timestamp = types.ArgUint64(block.Time())
 	}
 
-	_, found, err = hermezDb.GetLowestBlockInBatch(batchNo + 1)
+	_, found, err := hermezDb.GetLowestBlockInBatch(batchNo + 1)
 	if err != nil {
 		return nil, err
 	}
