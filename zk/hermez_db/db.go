@@ -15,6 +15,7 @@ import (
 	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/chain"
 )
 
 const L1VERIFICATIONS = "hermez_l1Verifications"                        // l1blockno, batchno -> l1txhash
@@ -1089,16 +1090,22 @@ func (db *HermezDb) DeleteForkIdBlock(fromBlockNo, toBlockNo uint64) error {
 }
 
 func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
-	tempBlockNum, found, err := db.GetForkIdBlock(forkId)
-	if err != nil {
-		log.Error(fmt.Sprintf("[HermezDb] Error getting forkIdBlock: %v", err))
-		return err
+	for _, fork := range chain.ForkIdsOrdered {
+		if uint64(fork) <= forkId {
+			tempBlockNum, found, err := db.GetForkIdBlock(uint64(fork))
+			if err != nil {
+				log.Error(fmt.Sprintf("[HermezDb] Error getting forkIdBlock: %v %v", fork, err))
+				return err
+			}
+			if found {
+				log.Debug(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum))
+			} else if err = db.tx.Put(FORKID_BLOCK, Uint64ToBytes(uint64(fork)), Uint64ToBytes(blockNum)); err != nil {
+				return err
+			}
+		}
 	}
-	if found {
-		log.Debug(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum))
-		return nil
-	}
-	return db.tx.Put(FORKID_BLOCK, Uint64ToBytes(forkId), Uint64ToBytes(blockNum))
+
+	return nil
 }
 
 func (db *HermezDb) DeleteForkIds(fromBatchNum, toBatchNum uint64) error {
