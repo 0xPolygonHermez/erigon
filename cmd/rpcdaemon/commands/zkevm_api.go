@@ -378,6 +378,9 @@ func generateBatchData(
 	batchBlocks []*eritypes.Block,
 	forkId uint64,
 ) (batchL2Data []byte, err error) {
+	if len(batchBlocks) == 0 {
+		return batchL2Data, nil
+	}
 
 	lastBlockNoInPreviousBatch := uint64(0)
 	if batchBlocks[0].NumberU64() != 0 {
@@ -389,7 +392,6 @@ func generateBatchData(
 		return nil, err
 	}
 
-	batchL2Data = []byte{}
 	for i := 0; i < len(batchBlocks); i++ {
 		var dTs uint32
 		if i == 0 {
@@ -472,10 +474,16 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		Number: types.ArgUint64(batchNo),
 	}
 
-	// highest block in batch
-	blockNo, err := hermezDb.GetHighestBlockInBatch(batchNo)
-	if err != nil {
-		return nil, err
+	// loop until we find a block in the batch
+	var found bool
+	var blockNo, counter uint64
+	for !found {
+		// highest block in batch
+		blockNo, found, err = hermezDb.GetHighestBlockInBatch(batchNo - counter)
+		if err != nil {
+			return nil, err
+		}
+		counter++
 	}
 
 	block, err := api.ethApi.BaseAPI.blockByNumberWithSenders(tx, blockNo)
@@ -593,14 +601,27 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.Blocks = nil
 	}
 
-	// global exit root of batch
-	batchGer, _, err := hermezDb.GetLastBlockGlobalExitRoot(blockNo)
+	// batch l2 data - must build on the fly
+	forkId, err := hermezDb.GetForkId(batchNo)
 	if err != nil {
 		return nil, err
 	}
 
-	batch.GlobalExitRoot = batchGer
+	// global exit root of batch
+	batchGer, blockNumberForGer, err := hermezDb.GetLastBlockGlobalExitRoot(blockNo)
+	if err != nil {
+		return nil, err
+	}
 
+	gerBatchNumber, err := hermezDb.GetBatchNoByL2Block(blockNumberForGer)
+	if err != nil {
+		return nil, err
+	}
+	// only set ger if it was changed this batch and before forkid5
+	// otherwise set 0x0000...
+	if gerBatchNumber == batchNo || (forkId >= 5 && forkId < 6) {
+		batch.GlobalExitRoot = batchGer
+	}
 	// sequence
 	seq, err := hermezDb.GetSequenceByBatchNoOrHighest(batchNo)
 	if err != nil {
@@ -617,8 +638,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.Timestamp = types.ArgUint64(block.Time())
 	}
 
-	_, found, err := hermezDb.GetLowestBlockInBatch(batchNo + 1)
-	if err != nil {
+	if _, found, err = hermezDb.GetLowestBlockInBatch(batchNo + 1); err != nil {
 		return nil, err
 	}
 	// sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed, if next batch has blocks, bn must be closed
@@ -652,12 +672,6 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 	batch.LocalExitRoot = localExitRoot
 
-	// batch l2 data - must build on the fly
-	forkId, err := hermezDb.GetForkId(batchNo)
-	if err != nil {
-		return nil, err
-	}
-
 	batchL2Data, err := generateBatchData(tx, hermezDb, batchBlocks, forkId)
 	if err != nil {
 		return nil, err
@@ -677,7 +691,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	if forkId < 12 {
 		// get the previous batches exit roots
 		prevBatchNo := batchNo - 1
-		prevBatchHighestBlock, err := hermezDb.GetHighestBlockInBatch(prevBatchNo)
+		prevBatchHighestBlock, _, err := hermezDb.GetHighestBlockInBatch(prevBatchNo)
 		if err != nil {
 			return nil, err
 		}
