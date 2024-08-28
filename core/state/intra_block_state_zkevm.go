@@ -45,7 +45,6 @@ type ReadOnlyHermezDb interface {
 	GetL1InfoTreeUpdateByGer(ger libcommon.Hash) (*zktypes.L1InfoTreeUpdate, error)
 	GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, error)
 	GetBlockInfoRoot(blockNumber uint64) (libcommon.Hash, error)
-	GetLocalExitRootForBatchNo(batchNo uint64) (libcommon.Hash, error)
 	GetLastBlockGlobalExitRoot(l2BlockNo uint64) (libcommon.Hash, uint64, error)
 	GetForkId(batchNo uint64) (uint64, error)
 }
