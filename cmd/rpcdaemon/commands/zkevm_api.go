@@ -300,6 +300,9 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 	if syncing != nil && syncing != false {
 		bn := syncing.(map[string]interface{})["currentBlock"]
 		highestBatchNo, err = hermezDb.GetBatchNoByL2Block(uint64(bn.(hexutil.Uint64)))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	bds := make([]*types.BatchDataSlim, 0, len(batchNumbers.Numbers))
@@ -343,7 +346,6 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 
 		// collect blocks in batch
 		var batchBlocks []*eritypes.Block
-		var batchTxs []eritypes.Transaction
 		// handle genesis - not in the hermez tables so requires special treament
 		if batchNumber == 0 {
 			blk, err := api.ethApi.BaseAPI.blockByNumberWithSenders(tx, 0)
@@ -359,9 +361,6 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 				return nil, err
 			}
 			batchBlocks = append(batchBlocks, blk)
-			for _, btx := range blk.Transactions() {
-				batchTxs = append(batchTxs, btx)
-			}
 		}
 
 		// batch l2 data - must build on the fly
