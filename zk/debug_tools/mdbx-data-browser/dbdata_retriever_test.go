@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
+	"time"
 
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv/memdb"
@@ -14,6 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	rpcTypes "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 )
 
 func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
@@ -25,6 +27,11 @@ func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
 	_, dbTx := memdb.NewTestTx(t)
 	require.NoError(t, hermez_db.CreateHermezBuckets(dbTx))
 	db := hermez_db.NewHermezDb(dbTx)
+
+	block := createBlock(t, 0, nil)
+	require.NoError(t, rawdb.WriteCanonicalHash(dbTx, block.Hash(), block.NumberU64()))
+	require.NoError(t, rawdb.WriteBlock(dbTx, block))
+
 	expectedBlockHashes := make(map[uint64]libcommon.Hash, blocksInBatch)
 	for blockNum := uint64(1); blockNum <= blocksInBatch; blockNum++ {
 		require.NoError(t, db.WriteBlockBatch(blockNum, batchNum))
@@ -45,11 +52,11 @@ func TestDbDataRetrieverGetBatchByNumber(t *testing.T) {
 	require.Equal(t, batchNum, uint64(batch.Number))
 	require.Len(t, expectedBlockHashes, int(blocksInBatch))
 	for _, blockGeneric := range batch.Blocks {
-		block, ok := blockGeneric.(*types.Header)
+		block, ok := blockGeneric.(*rpcTypes.BlockWithInfoRootAndGer)
 		require.True(t, ok)
-		expectedHash, exists := expectedBlockHashes[block.Number.Uint64()]
+		expectedHash, exists := expectedBlockHashes[uint64(block.Number)]
 		require.True(t, exists)
-		require.Equal(t, expectedHash, block.Hash())
+		require.Equal(t, expectedHash, block.Hash)
 	}
 }
 
@@ -95,6 +102,7 @@ func createBlock(t *testing.T, number uint64, txs types.Transactions) *types.Blo
 			UncleHash:   types.EmptyUncleHash,
 			TxHash:      types.EmptyRootHash,
 			ReceiptHash: types.EmptyRootHash,
+			Time:        uint64(time.Now().Unix()),
 		})
 
 	if txs.Len() > 0 {
