@@ -608,20 +608,13 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 
 	// global exit root of batch
-	batchGer, blockNumberForGer, err := hermezDb.GetLastBlockGlobalExitRoot(blockNo)
+	batchGer, _, err := hermezDb.GetLastBlockGlobalExitRoot(blockNo)
 	if err != nil {
 		return nil, err
 	}
 
-	gerBatchNumber, err := hermezDb.GetBatchNoByL2Block(blockNumberForGer)
-	if err != nil {
-		return nil, err
-	}
-	// only set ger if it was changed this batch and before forkid5
-	// otherwise set 0x0000...
-	if gerBatchNumber == batchNo || (forkId >= 5 && forkId < 6) {
-		batch.GlobalExitRoot = batchGer
-	}
+	batch.GlobalExitRoot = batchGer
+
 	// sequence
 	seq, err := hermezDb.GetSequenceByBatchNoOrHighest(batchNo)
 	if err != nil {
@@ -688,7 +681,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	// forkid exit roots logic
 	// if forkid < 12 then we should only set the exit roots if they have changed, otherwise 0x00..00
 	// if forkid >= 12 then we should always set the exit roots
-	if forkId < 12 {
+	if forkId < 12 && forkId >= 7 {
 		// get the previous batches exit roots
 		prevBatchNo := batchNo - 1
 		prevBatchHighestBlock, _, err := hermezDb.GetHighestBlockInBatch(prevBatchNo)
