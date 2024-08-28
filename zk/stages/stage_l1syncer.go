@@ -45,7 +45,7 @@ type IL1Syncer interface {
 var (
 	ErrStateRootMismatch = errors.New("state root mismatch")
 
-	l1VerificatiosProgressCounter = metrics.GetOrCreateCounter(`last_checked_l1_block`)
+	lastCheckedL1BlockCounter = metrics.GetOrCreateCounter(`last_checked_l1_block`)
 )
 
 type L1SyncerCfg struct {
@@ -178,7 +178,7 @@ Loop:
 
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
 
-	l1VerificatiosProgressCounter.Set(latestCheckedBlock)
+	lastCheckedL1BlockCounter.Set(latestCheckedBlock)
 
 	if highestWrittenL1BlockNo > l1BlockProgress {
 		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", newVerificationsCount, "newSequencesCount", newSequencesCount, "highestWrittenL1BlockNo", highestWrittenL1BlockNo)
