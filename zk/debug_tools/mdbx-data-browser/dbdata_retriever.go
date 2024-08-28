@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 
@@ -11,6 +12,7 @@ import (
 	coreTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	rpcTypes "github.com/ledgerwatch/erigon/zk/rpcdaemon"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -216,6 +218,25 @@ func (d *DbDataRetriever) populateBlocksAndTransactions(batch *rpcTypes.Batch, b
 					return err
 				}
 
+				l2TxHash, err := zktx.ComputeL2TxHash(
+					tx.GetChainID().ToBig(),
+					tx.GetValue(),
+					tx.GetPrice(),
+					tx.GetNonce(),
+					tx.GetGas(),
+					tx.GetTo(),
+					&rpcTx.From,
+					tx.GetData(),
+				)
+				if err != nil {
+					return err
+				}
+
+				if rpcTx.Receipt != nil {
+					rpcTx.Receipt.TransactionL2Hash = l2TxHash
+				}
+				rpcTx.L2Hash = l2TxHash
+
 				batch.Transactions = append(batch.Transactions, rpcTx)
 			}
 		}
@@ -270,8 +291,46 @@ func (d *DbDataRetriever) GetBlockByNumber(blockNum uint64, includeTxs, includeR
 	return d.convertToRPCBlock(block, verboseOutput, verboseOutput)
 }
 
+// GetBatchAffiliation retrieves the batch affiliation for the provided block numbers
+func (d *DbDataRetriever) GetBatchAffiliation(blocks []uint64) ([]*BatchAffiliationInfo, error) {
+	batchInfoMap := make(map[uint64]*BatchAffiliationInfo)
+	for _, blockNum := range blocks {
+		batchNum, err := d.dbReader.GetBatchNoByL2Block(blockNum)
+		if err != nil {
+			return nil, err
+		}
+
+		if blockNum > 0 && batchNum == 0 {
+			return nil, fmt.Errorf("batch is not found for block num %d", blockNum)
+		}
+
+		batchInfo, exists := batchInfoMap[batchNum]
+		if !exists {
+			batchInfo = &BatchAffiliationInfo{Number: batchNum}
+			batchInfoMap[batchNum] = batchInfo
+		}
+		batchInfo.Blocks = append(batchInfo.Blocks, blockNum)
+	}
+
+	res := make([]*BatchAffiliationInfo, 0, len(batchInfoMap))
+	for _, bi := range batchInfoMap {
+		res = append(res, bi)
+	}
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Number < res[j].Number
+	})
+
+	return res, nil
+}
+
 // convertToRPCBlock converts the coreTypes.Block into rpcTypes.Block
 func (d *DbDataRetriever) convertToRPCBlock(block *coreTypes.Block, includeTxs, includeReceipts bool) (*rpcTypes.Block, error) {
 	receipts := rawdb.ReadReceipts(d.tx, block, block.Body().SendersFromTxs())
 	return rpcTypes.NewBlock(block, receipts.ToSlice(), includeTxs, includeReceipts)
+}
+
+type BatchAffiliationInfo struct {
+	Number uint64   `json:"batch"`
+	Blocks []uint64 `json:"blocks"`
 }
