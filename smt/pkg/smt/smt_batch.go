@@ -21,6 +21,7 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 	nodeHashesForDelete := make(map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey)
 
 	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (preprocess)", logPrefix), uint64(size), false)
+	defer stopProgressPrinter()
 
 	if err = validateDataLengths(nodeKeys, nodeValues, &nodeValuesHashes); err != nil {
 		return nil, err
@@ -142,44 +143,32 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 
 	s.updateDepth(maxInsertingNodePathLevel)
 
-	totalDeleteOps := 0
-	for _, mapLevel0 := range nodeHashesForDelete {
-		for _, mapLevel1 := range mapLevel0 {
-			for _, mapLevel2 := range mapLevel1 {
-				totalDeleteOps += len(mapLevel2)
-			}
-		}
-	}
-
+	totalDeleteOps := len(nodeHashesForDelete)
 	progressChanDel, stopProgressPrinterDel := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (deletes)", logPrefix), uint64(totalDeleteOps), false)
+	defer stopProgressPrinterDel()
 	for _, mapLevel0 := range nodeHashesForDelete {
+		progressChanDel <- uint64(1)
 		for _, mapLevel1 := range mapLevel0 {
 			for _, mapLevel2 := range mapLevel1 {
 				for _, nodeHash := range mapLevel2 {
 					s.Db.DeleteByNodeKey(*nodeHash)
 					s.Db.DeleteHashKey(*nodeHash)
-					progressChanDel <- uint64(1)
 				}
 			}
 		}
 	}
 	stopProgressPrinterDel()
 
-	totalFinalizeOps := 0
-	for _, nodeValue := range nodeValues {
-		if !nodeValue.IsZero() {
-			totalFinalizeOps++
-		}
-	}
-
+	totalFinalizeOps := len(nodeValues)
 	progressChanFin, stopProgressPrinterFin := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (finalize)", logPrefix), uint64(totalFinalizeOps), false)
+	defer stopProgressPrinterFin()
 	for i, nodeValue := range nodeValues {
+		progressChanFin <- uint64(1)
 		if !nodeValue.IsZero() {
 			err = s.hashSave(nodeValue.ToUintArray(), utils.BranchCapacity, *nodeValuesHashes[i])
 			if err != nil {
 				return nil, err
 			}
-			progressChanFin <- uint64(1)
 		}
 	}
 	stopProgressPrinterFin()
