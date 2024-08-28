@@ -1098,7 +1098,7 @@ func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
 				return err
 			}
 			if found {
-				log.Debug(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", forkId, tempBlockNum))
+				log.Debug(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", fork, tempBlockNum))
 			} else if err = db.tx.Put(FORKID_BLOCK, Uint64ToBytes(uint64(fork)), Uint64ToBytes(blockNum)); err != nil {
 				return err
 			}
