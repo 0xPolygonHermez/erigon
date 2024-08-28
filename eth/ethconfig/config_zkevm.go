@@ -87,6 +87,7 @@ type Zk struct {
 
 	TxPoolRejectSmartContractDeployments bool
 
+	BadBatches []uint64
 	InitialBatchCfgFile string
 	ACLPrintHistory     int
 }
