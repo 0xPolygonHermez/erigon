@@ -20,24 +20,32 @@ func (s *SMT) InsertBatch(ctx context.Context, logPrefix string, nodeKeys []*uti
 	var smtBatchNodeRoot *smtBatchNode
 	nodeHashesForDelete := make(map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey)
 
-	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (preprocess)", logPrefix), uint64(size), false)
-	defer stopProgressPrinter()
+	progressChanPre, stopProgressPrinterPre := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (pre-process)", logPrefix), uint64(4), false)
+	defer stopProgressPrinterPre()
 
 	if err = validateDataLengths(nodeKeys, nodeValues, &nodeValuesHashes); err != nil {
 		return nil, err
 	}
+	progressChanPre <- uint64(1)
 
 	if err = removeDuplicateEntriesByKeys(&size, &nodeKeys, &nodeValues, &nodeValuesHashes); err != nil {
 		return nil, err
 	}
+	progressChanPre <- uint64(1)
 
 	if err = calculateNodeValueHashesIfMissing(s, nodeValues, &nodeValuesHashes); err != nil {
 		return nil, err
 	}
+	progressChanPre <- uint64(1)
 
 	if err = calculateRootNodeHashIfNil(s, &rootNodeHash); err != nil {
 		return nil, err
 	}
+	progressChanPre <- uint64(1)
+	stopProgressPrinterPre()
+
+	progressChan, stopProgressPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (process)", logPrefix), uint64(size), false)
+	defer stopProgressPrinter()
 
 	for i := 0; i < size; i++ {
 		select {
