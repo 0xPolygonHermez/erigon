@@ -1090,6 +1090,7 @@ func (db *HermezDb) DeleteForkIdBlock(fromBlockNo, toBlockNo uint64) error {
 }
 
 func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
+	lastForkIdBlockNum := blockNum
 	for _, fork := range chain.ForkIdsOrdered {
 		if uint64(fork) <= forkId {
 			tempBlockNum, found, err := db.GetForkIdBlock(uint64(fork))
@@ -1098,8 +1099,9 @@ func (db *HermezDb) WriteForkIdBlockOnce(forkId, blockNum uint64) error {
 				return err
 			}
 			if found {
+				lastForkIdBlockNum = tempBlockNum
 				log.Debug(fmt.Sprintf("[HermezDb] Fork id block already exists: %d, block:%v, set db failed.", fork, tempBlockNum))
-			} else if err = db.tx.Put(FORKID_BLOCK, Uint64ToBytes(uint64(fork)), Uint64ToBytes(blockNum)); err != nil {
+			} else if err = db.tx.Put(FORKID_BLOCK, Uint64ToBytes(uint64(fork)), Uint64ToBytes(lastForkIdBlockNum)); err != nil {
 				return err
 			}
 		}
