@@ -111,7 +111,7 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 	}
 
 	// Get Local Exit Root
-	localExitRoot, err := utils.GetBatchLocalExitRoot(batchNum, d.dbReader, d.tx)
+	localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorageForLatestBlock(batchNum, d.dbReader, d.tx)
 	if err != nil {
 		return nil, err
 	}
