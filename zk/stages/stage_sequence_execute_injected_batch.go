@@ -31,8 +31,7 @@ func processInjectedInitialBatch(
 		return err
 	}
 
-	coinbase := batchState.getCoinbase(batchContext.cfg)
-	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64, batchState.forkId, coinbase)
+	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64, batchState.forkId, batchContext.cfg.zk.AddressSequencer)
 	if err != nil {
 		return err
 	}
@@ -41,7 +40,7 @@ func processInjectedInitialBatch(
 		return rawdb.ReadHeader(batchContext.sdb.tx, hash, number)
 	}
 	getHashFn := core.GetHashFn(header, getHeader)
-	blockContext := core.NewEVMBlockContext(header, getHashFn, batchContext.cfg.engine, &coinbase, parentBlock.ExcessDataGas())
+	blockContext := core.NewEVMBlockContext(header, getHashFn, batchContext.cfg.engine, &batchContext.cfg.zk.AddressSequencer, parentBlock.ExcessDataGas())
 
 	injected, err := batchContext.sdb.hermezDb.GetL1InjectedBatch(0)
 	if err != nil {
