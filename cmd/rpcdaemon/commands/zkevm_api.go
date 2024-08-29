@@ -172,7 +172,9 @@ func (api *ZkEvmAPIImpl) IsBlockVirtualized(ctx context.Context, blockNumber rpc
 	defer tx.Rollback()
 
 	batchNum, err := getBatchNoByL2Block(tx, uint64(blockNumber.Int64()))
-	if err != nil {
+	if errors.Is(err, hermez_db.ErrorNotStored) {
+		return false, nil
+	} else if err != nil {
 		return false, err
 	}
 

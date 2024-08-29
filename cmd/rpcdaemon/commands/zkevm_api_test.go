@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/datadir"
 	"github.com/gateway-fm/cdk-erigon-lib/kv/kvcache"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind/backends"
@@ -97,7 +98,7 @@ func TestIsBlockConsolidated(t *testing.T) {
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
-	isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, 11000000000)
+	isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, 11)
 	if err != nil {
 		t.Errorf("calling IsBlockConsolidated resulted in an error: %v", err)
 	}
@@ -107,7 +108,8 @@ func TestIsBlockConsolidated(t *testing.T) {
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
 	for i := 1; i <= 10; i++ {
-		hDB.WriteBlockBatch(uint64(i), 1)
+		err := hDB.WriteBlockBatch(uint64(i), 1)
+		assert.NoError(err)
 	}
 	if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 1); err != nil {
 		t.Errorf("failed to save stage progress, %v", err)
@@ -121,4 +123,64 @@ func TestIsBlockConsolidated(t *testing.T) {
 		t.Logf("blockNumber: %d -> %v", i, isConsolidated)
 		assert.True(isConsolidated)
 	}
+	isConsolidated, err = zkEvmImpl.IsBlockConsolidated(ctx, 11)
+	if err != nil {
+		t.Errorf("calling IsBlockConsolidated resulted in an error: %v", err)
+	}
+	t.Logf("blockNumber: 11 -> %v", isConsolidated)
+	assert.False(isConsolidated)
+}
+
+func TestIsBlockVirtualized(t *testing.T) {
+	assert := assert.New(t)
+	////////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
+	var l1Syncer *syncer.L1Syncer
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	isVirtualized, err := zkEvmImpl.IsBlockVirtualized(ctx, 50)
+	if err != nil {
+		t.Errorf("calling IsBlockVirtualized resulted in an error: %v", err)
+	}
+	t.Logf("blockNumber: 50 -> %v", isVirtualized)
+	assert.False(isVirtualized)
+	tx, err := db.BeginRw(ctx)
+	assert.NoError(err)
+	hDB := hermez_db.NewHermezDb(tx)
+	for i := 1; i <= 10; i++ {
+		err := hDB.WriteBlockBatch(uint64(i), 1)
+		assert.NoError(err)
+		err = hDB.WriteBlockBatch(uint64(i+10), 2)
+		assert.NoError(err)
+		err = hDB.WriteBlockBatch(uint64(i+20), 3)
+		assert.NoError(err)
+		err = hDB.WriteBlockBatch(uint64(i+30), 4)
+		assert.NoError(err)
+	}
+	err = hDB.WriteSequence(1, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"))
+	assert.NoError(err)
+	tx.Commit()
+	for i := 1; i <= 40; i++ {
+		isVirtualized, err := zkEvmImpl.IsBlockVirtualized(ctx, rpc.BlockNumber(i))
+		if err != nil {
+			t.Errorf("calling IsBlockVirtualized resulted in an error: %v", err)
+		}
+		t.Logf("blockNumber: %d -> %v", i, isVirtualized)
+		assert.True(isVirtualized)
+	}
+	isVirtualized, err = zkEvmImpl.IsBlockVirtualized(ctx, 50)
+	if err != nil {
+		t.Errorf("calling IsBlockVirtualized resulted in an error: %v", err)
+	}
+	t.Logf("blockNumber: 50 -> %v", isVirtualized)
+	assert.False(isVirtualized)
 }
