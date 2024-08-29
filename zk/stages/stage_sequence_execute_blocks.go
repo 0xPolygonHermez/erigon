@@ -2,6 +2,7 @@ package stages
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -136,6 +137,7 @@ func finaliseBlock(
 	}
 
 	txInfos := []blockinfo.ExecutedTxInfo{}
+	var txHash2SenderCache sync.Map
 	builtBlockElements := batchState.blockState.builtBlockElements
 	for i, tx := range builtBlockElements.transactions {
 		var from common.Address
@@ -157,6 +159,8 @@ func finaliseBlock(
 			Receipt:           localReceipt,
 			Signer:            &from,
 		})
+
+		txHash2SenderCache.Store(tx.Hash(), sender)
 	}
 
 	if err := postBlockStateHandling(*batchContext.cfg, ibs, batchContext.sdb.hermezDb, newHeader, ger, l1BlockHash, parentBlock.Root(), txInfos); err != nil {
@@ -232,7 +236,7 @@ func finaliseBlock(
 	}
 
 	// now process the senders to avoid a stage by itself
-	if err := addSenders(*batchContext.cfg, newNum, finalTransactions, batchContext.sdb.tx, finalHeader); err != nil {
+	if err := addSenders(*batchContext.cfg, newNum, finalTransactions, batchContext.sdb.tx, finalHeader, txHash2SenderCache); err != nil {
 		return nil, err
 	}
 
@@ -303,14 +307,21 @@ func addSenders(
 	finalTransactions types.Transactions,
 	tx kv.RwTx,
 	finalHeader *types.Header,
+	txHash2SenderCache sync.Map,
 ) error {
 	signer := types.MakeSigner(cfg.chainConfig, newNum.Uint64())
 	cryptoContext := secp256k1.ContextForThread(1)
 	senders := make([]common.Address, 0, len(finalTransactions))
+	var from common.Address
 	for _, transaction := range finalTransactions {
-		from, err := signer.SenderWithContext(cryptoContext, transaction)
-		if err != nil {
-			return err
+		if val, ok := txHash2SenderCache.Load(transaction.Hash()); ok {
+			from = val.(common.Address)
+		} else {
+			val, err := signer.SenderWithContext(cryptoContext, transaction)
+			if err != nil {
+				return err
+			}
+			from = val
 		}
 		senders = append(senders, from)
 	}
