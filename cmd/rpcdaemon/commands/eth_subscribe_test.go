@@ -1,5 +1,3 @@
-//go:build notzkevm
-// +build notzkevm
 
 package commands
 

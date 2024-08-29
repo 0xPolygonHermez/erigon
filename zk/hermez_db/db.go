@@ -131,11 +131,11 @@ func (db *HermezDbReader) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) 
 	}
 
 	if k == nil {
-		return 0, nil
+		return 0, ErrorNotStored
 	}
 
 	if BytesToUint64(k) != l2BlockNo {
-		return 0, nil
+		return 0, ErrorL2BlockNumberNotMatch
 	}
 
 	return BytesToUint64(v), nil
