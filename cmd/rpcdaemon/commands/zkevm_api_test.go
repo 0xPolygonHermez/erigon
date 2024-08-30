@@ -148,9 +148,7 @@ func TestIsBlockVirtualized(t *testing.T) {
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
 	isVirtualized, err := zkEvmImpl.IsBlockVirtualized(ctx, 50)
-	if err != nil {
-		t.Errorf("calling IsBlockVirtualized resulted in an error: %v", err)
-	}
+	assert.NoError(err)
 	t.Logf("blockNumber: 50 -> %v", isVirtualized)
 	assert.False(isVirtualized)
 	tx, err := db.BeginRw(ctx)
@@ -171,16 +169,67 @@ func TestIsBlockVirtualized(t *testing.T) {
 	tx.Commit()
 	for i := 1; i <= 40; i++ {
 		isVirtualized, err := zkEvmImpl.IsBlockVirtualized(ctx, rpc.BlockNumber(i))
-		if err != nil {
-			t.Errorf("calling IsBlockVirtualized resulted in an error: %v", err)
-		}
+		assert.NoError(err)
 		t.Logf("blockNumber: %d -> %v", i, isVirtualized)
 		assert.True(isVirtualized)
 	}
 	isVirtualized, err = zkEvmImpl.IsBlockVirtualized(ctx, 50)
-	if err != nil {
-		t.Errorf("calling IsBlockVirtualized resulted in an error: %v", err)
-	}
+	assert.NoError(err)
 	t.Logf("blockNumber: 50 -> %v", isVirtualized)
 	assert.False(isVirtualized)
+}
+
+func TestBatchNumberByBlockNumber(t *testing.T) {
+	assert := assert.New(t)
+	////////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
+	var l1Syncer *syncer.L1Syncer
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	batchNumber, err := zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(10))
+	assert.Error(err)
+	tx, err := db.BeginRw(ctx)
+	assert.NoError(err)
+	hDB := hermez_db.NewHermezDb(tx)
+	for i := 0; i < 10; i++ {
+		err := hDB.WriteBlockBatch(uint64(i), 1)
+		assert.NoError(err)
+		err = hDB.WriteBlockBatch(uint64(i+10), 2)
+		assert.NoError(err)
+		err = hDB.WriteBlockBatch(uint64(i+20), 3)
+		assert.NoError(err)
+		err = hDB.WriteBlockBatch(uint64(i+30), 4)
+		assert.NoError(err)
+	}
+	tx.Commit()
+	for i := 0; i < 40; i++ {
+		batchNumber, err := zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(i))
+		assert.NoError(err)
+		t.Log("i/10: ", i/10)
+		if i/10 < 1 {
+			assert.Equal(hexutil.Uint64(1), batchNumber)
+		} else if i/10 == 1 {
+			assert.Equal(hexutil.Uint64(2), batchNumber)
+		} else if i/10 == 2 {
+			assert.Equal(hexutil.Uint64(3), batchNumber)
+		} else if i/10 == 3 {
+			assert.Equal(hexutil.Uint64(4), batchNumber)
+		} else {
+			panic("batch out of range")
+		}
+	}
+	batchNumber, err = zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(40))
+	assert.Error(err)
+	batchNumber, err = zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(50))
+	assert.Error(err)
+	t.Log("batchNumber", batchNumber)
 }
