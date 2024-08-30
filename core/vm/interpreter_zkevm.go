@@ -218,8 +218,9 @@ func (in *EVMInterpreter) RunZk(contract *Contract, input []byte, readOnly bool)
 			// because pc and pcCopy can be different only if the main loop finishes normally without error
 			// but is it finishes normally without error then "ret" != nil and the .execute below will never be invoked at all
 
-			overrideJumpTableForLastOpcode(in.jt, in.evm.ChainRules())
-			in.jt[op].execute(pc, in, callContext)
+			jtForLastOpCode := copyJumpTable(in.jt)
+			overrideJumpTableForLastOpcode(jtForLastOpCode, in.evm.ChainRules())
+			jtForLastOpCode[op].execute(pc, in, callContext)
 		}
 	}()
 
