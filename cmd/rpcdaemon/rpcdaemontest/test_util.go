@@ -96,19 +96,19 @@ func CreateTestSentry(t *testing.T) (*stages.MockSentry, *core.ChainPack, []*cor
 		t.Fatal(err)
 	}
 
-	// chain, err := getChainInstance(&addresses, m.ChainConfig, m.Genesis, m.Engine, m.DB, contractBackend)
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
+	chain, err := getChainInstance(&addresses, m.ChainConfig, m.Genesis, m.Engine, m.DB, contractBackend)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// if err = m.InsertChain(orphanedChain); err != nil {
-	// 	t.Fatal(err)
-	// }
-	// if err = m.InsertChain(chain); err != nil {
-	// 	t.Fatal(err)
-	// }
+	if err = m.InsertChain(orphanedChain); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.InsertChain(chain); err != nil {
+		t.Fatal(err)
+	}
 
-	return m, nil, []*core.ChainPack{orphanedChain}
+	return m, chain, []*core.ChainPack{orphanedChain}
 }
 
 var chainInstance *core.ChainPack

@@ -1,3 +1,5 @@
+//go:build notzkevm
+// +build notzkevm
 
 package commands
 
@@ -10,52 +12,52 @@ import (
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/length"
 
-	// "github.com/ledgerwatch/erigon/rpc/rpccfg"
+	"github.com/ledgerwatch/erigon/rpc/rpccfg"
 
 	"github.com/gateway-fm/cdk-erigon-lib/gointerfaces/txpool"
-	// "github.com/gateway-fm/cdk-erigon-lib/kv/kvcache"
-	// "github.com/stretchr/testify/assert"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/kvcache"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/rpcdaemontest"
-	// "github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/filters"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
-	// "github.com/ledgerwatch/erigon/turbo/snapshotsync"
+	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 	"github.com/ledgerwatch/erigon/turbo/stages"
 )
 
-// func TestNewFilters(t *testing.T) {
-// 	assert := assert.New(t)
-// 	m, _, _ := rpcdaemontest.CreateTestSentry(t)
-// 	agg := m.HistoryV3Components()
-// 	br := snapshotsync.NewBlockReaderWithSnapshots(m.BlockSnapshots, m.TransactionsV3)
-// 	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
-// 	ctx, conn := rpcdaemontest.CreateTestGrpcConn(t, stages.Mock(t))
-// 	mining := txpool.NewMiningClient(conn)
-// 	ff := rpchelper.New(ctx, nil, nil, mining, func() {})
-// 	api := NewEthAPI(NewBaseApi(ff, stateCache, br, agg, false, rpccfg.DefaultEvmCallTimeout, m.Engine, m.Dirs), m.DB, nil, nil, nil, 5000000, 100_000, ethconfig.DefaultZkConfig)
+func TestNewFilters(t *testing.T) {
+	assert := assert.New(t)
+	m, _, _ := rpcdaemontest.CreateTestSentry(t)
+	agg := m.HistoryV3Components()
+	br := snapshotsync.NewBlockReaderWithSnapshots(m.BlockSnapshots, m.TransactionsV3)
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	ctx, conn := rpcdaemontest.CreateTestGrpcConn(t, stages.Mock(t))
+	mining := txpool.NewMiningClient(conn)
+	ff := rpchelper.New(ctx, nil, nil, mining, func() {})
+	api := NewEthAPI(NewBaseApi(ff, stateCache, br, agg, false, rpccfg.DefaultEvmCallTimeout, m.Engine, m.Dirs), m.DB, nil, nil, nil, 5000000, 100_000, ethconfig.DefaultZkConfig)
 
-// 	ptf, err := api.NewPendingTransactionFilter(ctx)
-// 	assert.Nil(err)
+	ptf, err := api.NewPendingTransactionFilter(ctx)
+	assert.Nil(err)
 
-// 	nf, err := api.NewFilter(ctx, filters.FilterCriteria{})
-// 	assert.Nil(err)
+	nf, err := api.NewFilter(ctx, filters.FilterCriteria{})
+	assert.Nil(err)
 
-// 	bf, err := api.NewBlockFilter(ctx)
-// 	assert.Nil(err)
+	bf, err := api.NewBlockFilter(ctx)
+	assert.Nil(err)
 
-// 	ok, err := api.UninstallFilter(ctx, nf)
-// 	assert.Nil(err)
-// 	assert.Equal(ok, true)
+	ok, err := api.UninstallFilter(ctx, nf)
+	assert.Nil(err)
+	assert.Equal(ok, true)
 
-// 	ok, err = api.UninstallFilter(ctx, bf)
-// 	assert.Nil(err)
-// 	assert.Equal(ok, true)
+	ok, err = api.UninstallFilter(ctx, bf)
+	assert.Nil(err)
+	assert.Equal(ok, true)
 
-// 	ok, err = api.UninstallFilter(ctx, ptf)
-// 	assert.Nil(err)
-// 	assert.Equal(ok, true)
-// }
+	ok, err = api.UninstallFilter(ctx, ptf)
+	assert.Nil(err)
+	assert.Equal(ok, true)
+}
 
 func TestLogsSubscribeAndUnsubscribe_WithoutConcurrentMapIssue(t *testing.T) {
 	ctx, conn := rpcdaemontest.CreateTestGrpcConn(t, stages.Mock(t))
