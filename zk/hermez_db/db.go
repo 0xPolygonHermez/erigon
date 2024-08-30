@@ -135,7 +135,7 @@ func (db *HermezDbReader) GetBatchNoByL2Block(l2BlockNo uint64) (uint64, error) 
 	}
 
 	if BytesToUint64(k) != l2BlockNo {
-		return 0, ErrorL2BlockNumberNotMatch
+		return 0, nil
 	}
 
 	return BytesToUint64(v), nil
@@ -551,7 +551,7 @@ func (db *HermezDb) RollbackSequences(batchNo uint64) error {
 
 func (db *HermezDb) TruncateSequences(l2BlockNo uint64) error {
 	batchNo, err := db.GetBatchNoByL2Block(l2BlockNo)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrorNotStored) {
 		return err
 	}
 	if batchNo == 0 {
@@ -595,7 +595,7 @@ func (db *HermezDb) WriteVerification(l1BlockNo, batchNo uint64, l1TxHash common
 
 func (db *HermezDb) TruncateVerifications(l2BlockNo uint64) error {
 	batchNo, err := db.GetBatchNoByL2Block(l2BlockNo)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrorNotStored) {
 		return err
 	}
 	if batchNo == 0 {
@@ -946,7 +946,7 @@ func (db *HermezDb) DeleteBlockBatches(fromBlockNum, toBlockNum uint64) error {
 	// find all the batches involved
 	for i := fromBlockNum; i <= toBlockNum; i++ {
 		batch, err := db.GetBatchNoByL2Block(i)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrorNotStored) {
 			return err
 		}
 		batchNumbersMap[batch] = struct{}{}
