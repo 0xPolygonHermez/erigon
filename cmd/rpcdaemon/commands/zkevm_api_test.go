@@ -260,3 +260,40 @@ func TestBatchNumber(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(hexutil.Uint64(10), batchNumber)
 }
+
+func TestVirtualBatchNumber(t *testing.T) {
+	assert := assert.New(t)
+	////////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
+	var l1Syncer *syncer.L1Syncer
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	tx, err := db.BeginRw(ctx)
+	assert.NoError(err)
+	hDB := hermez_db.NewHermezDb(tx)
+	for i := 1; i <= 10; i++ {
+		err := hDB.WriteBlockBatch(uint64(i), uint64(i))
+		assert.NoError(err)
+	}
+	err = hDB.WriteSequence(4, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"))
+	assert.NoError(err)
+	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"))
+	assert.NoError(err)
+	for i:=1; i<=4; i++ {
+		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
+		assert.NoError(err)
+	}
+	tx.Commit()
+	virtualBatchNumber, err := zkEvmImpl.VirtualBatchNumber(ctx)
+	assert.NoError(err)
+	assert.Equal(hexutil.Uint64(7), virtualBatchNumber)
+}
