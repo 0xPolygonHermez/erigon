@@ -68,14 +68,11 @@ func TestLatestConsolidatedBlockNumber(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		hDB.WriteBlockBatch(uint64(i), 1)
 	}
-	if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 1); err != nil {
-		t.Errorf("failed to save stage progress, %v", err)
-	}
+	err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 1)
+	assert.NoError(err)
 	tx.Commit()
 	blockNumber, err := zkEvmImpl.ConsolidatedBlockNumber(ctx)
-	if err != nil {
-		t.Errorf("calling ConsolidatedBlockNumber resulted in an error: %v", err)
-	}
+	assert.NoError(err)
 	t.Log("blockNumber: ", blockNumber)
 
 	var expectedL2BlockNumber hexutil.Uint64 = 10
@@ -99,9 +96,7 @@ func TestIsBlockConsolidated(t *testing.T) {
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
 	isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, 11)
-	if err != nil {
-		t.Errorf("calling IsBlockConsolidated resulted in an error: %v", err)
-	}
+	assert.NoError(err)
 	t.Logf("blockNumber: 11 -> %v", isConsolidated)
 	assert.False(isConsolidated)
 	tx, err := db.BeginRw(ctx)
@@ -111,22 +106,17 @@ func TestIsBlockConsolidated(t *testing.T) {
 		err := hDB.WriteBlockBatch(uint64(i), 1)
 		assert.NoError(err)
 	}
-	if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 1); err != nil {
-		t.Errorf("failed to save stage progress, %v", err)
-	}
+	err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 1)
+	assert.NoError(err)
 	tx.Commit()
 	for i := 1; i <= 10; i++ {
 		isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, rpc.BlockNumber(i))
-		if err != nil {
-			t.Errorf("calling IsBlockConsolidated resulted in an error: %v", err)
-		}
+		assert.NoError(err)
 		t.Logf("blockNumber: %d -> %v", i, isConsolidated)
 		assert.True(isConsolidated)
 	}
 	isConsolidated, err = zkEvmImpl.IsBlockConsolidated(ctx, 11)
-	if err != nil {
-		t.Errorf("calling IsBlockConsolidated resulted in an error: %v", err)
-	}
+	assert.NoError(err)
 	t.Logf("blockNumber: 11 -> %v", isConsolidated)
 	assert.False(isConsolidated)
 }
@@ -232,4 +222,41 @@ func TestBatchNumberByBlockNumber(t *testing.T) {
 	batchNumber, err = zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(50))
 	assert.Error(err)
 	t.Log("batchNumber", batchNumber)
+}
+
+func TestBatchNumber(t *testing.T) {
+	assert := assert.New(t)
+	////////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
+	var l1Syncer *syncer.L1Syncer
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	tx, err := db.BeginRw(ctx)
+	assert.NoError(err)
+	hDB := hermez_db.NewHermezDb(tx)
+	for i := 1; i <= 10; i++ {
+		err := hDB.WriteBlockBatch(uint64(i), uint64(i))
+		assert.NoError(err)
+	}
+	err = hDB.WriteSequence(4, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"))
+	assert.NoError(err)
+	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"))
+	assert.NoError(err)
+	for i:=1; i<=4; i++ {
+		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
+		assert.NoError(err)
+	}
+	tx.Commit()
+	batchNumber, err := zkEvmImpl.BatchNumber(ctx)
+	assert.NoError(err)
+	assert.Equal(hexutil.Uint64(10), batchNumber)
 }
