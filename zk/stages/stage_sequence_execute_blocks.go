@@ -2,8 +2,6 @@ package stages
 
 import (
 	"fmt"
-	"sync"
-
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 
@@ -137,7 +135,7 @@ func finaliseBlock(
 	}
 
 	txInfos := []blockinfo.ExecutedTxInfo{}
-	var txHash2SenderCache sync.Map
+	txHash2SenderCache := make(map[common.Hash]common.Address)
 	builtBlockElements := batchState.blockState.builtBlockElements
 	for i, tx := range builtBlockElements.transactions {
 		var from common.Address
@@ -160,7 +158,7 @@ func finaliseBlock(
 			Signer:            &from,
 		})
 
-		txHash2SenderCache.Store(tx.Hash(), sender)
+		txHash2SenderCache[tx.Hash()] = sender
 	}
 
 	if err := postBlockStateHandling(*batchContext.cfg, ibs, batchContext.sdb.hermezDb, newHeader, ger, l1BlockHash, parentBlock.Root(), txInfos); err != nil {
@@ -307,15 +305,15 @@ func addSenders(
 	finalTransactions types.Transactions,
 	tx kv.RwTx,
 	finalHeader *types.Header,
-	txHash2SenderCache sync.Map,
+	txHash2SenderCache map[common.Hash]common.Address,
 ) error {
 	signer := types.MakeSigner(cfg.chainConfig, newNum.Uint64())
 	cryptoContext := secp256k1.ContextForThread(1)
 	senders := make([]common.Address, 0, len(finalTransactions))
 	var from common.Address
 	for _, transaction := range finalTransactions {
-		if val, ok := txHash2SenderCache.Load(transaction.Hash()); ok {
-			from = val.(common.Address)
+		if val, ok := txHash2SenderCache[transaction.Hash()]; ok {
+			from = val
 		} else {
 			val, err := signer.SenderWithContext(cryptoContext, transaction)
 			if err != nil {
