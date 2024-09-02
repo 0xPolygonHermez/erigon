@@ -21,7 +21,7 @@ import (
 )
 
 // GetTransactionByHash implements eth_getTransactionByHash. Returns information about a transaction given the transaction's hash.
-func (api *APIImpl) GetTransactionByHash(ctx context.Context, txnHash common.Hash) (interface{}, error) {
+func (api *APIImpl) GetTransactionByHash(ctx context.Context, txnHash common.Hash, includeExtraInfo bool) (interface{}, error) {
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -37,6 +37,11 @@ func (api *APIImpl) GetTransactionByHash(ctx context.Context, txnHash common.Has
 	if err != nil {
 		return nil, err
 	}
+
+	// l2txhash is only after etrog
+	isForkId7 := chainConfig.IsForkID7Etrog(blockNum)
+	includeExtraInfo = includeExtraInfo && isForkId7
+
 	// Private API returns 0 if transaction is not found.
 	if blockNum == 0 && chainConfig.Bor != nil {
 		blockNumPtr, err := rawdb.ReadBorTxLookupEntry(tx, txnHash)
@@ -86,12 +91,12 @@ func (api *APIImpl) GetTransactionByHash(ctx context.Context, txnHash common.Has
 			return newRPCBorTransaction(borTx, txnHash, blockHash, blockNum, uint64(len(block.Transactions())), baseFee, chainConfig.ChainID), nil
 		}
 
-		return newRPCTransaction(txn, blockHash, blockNum, txnIndex, baseFee), nil
+		return newRPCTransaction(txn, blockHash, blockNum, txnIndex, baseFee, includeExtraInfo), nil
 	}
 
 	if !sequencer.IsSequencer() {
 		// forward the request on to the sequencer at this point as it is the only node with an active txpool
-		return api.forwardGetTransactionByHash(api.l2RpcUrl, txnHash)
+		return api.forwardGetTransactionByHash(api.l2RpcUrl, txnHash, includeExtraInfo)
 	}
 
 	curHeader := rawdb.ReadCurrentHeader(tx)
@@ -207,7 +212,7 @@ func (api *APIImpl) GetTransactionByBlockHashAndIndex(ctx context.Context, block
 		return newRPCBorTransaction(borTx, derivedBorTxHash, block.Hash(), block.NumberU64(), uint64(txIndex), block.BaseFee(), chainConfig.ChainID), nil
 	}
 
-	return newRPCTransaction(txs[txIndex], block.Hash(), block.NumberU64(), uint64(txIndex), block.BaseFee()), nil
+	return newRPCTransaction(txs[txIndex], block.Hash(), block.NumberU64(), uint64(txIndex), block.BaseFee(), false), nil
 }
 
 // GetRawTransactionByBlockHashAndIndex returns the bytes of the transaction for the given block hash and index.
@@ -271,7 +276,7 @@ func (api *APIImpl) GetTransactionByBlockNumberAndIndex(ctx context.Context, blo
 		return newRPCBorTransaction(borTx, derivedBorTxHash, block.Hash(), block.NumberU64(), uint64(txIndex), block.BaseFee(), chainConfig.ChainID), nil
 	}
 
-	return newRPCTransaction(txs[txIndex], block.Hash(), block.NumberU64(), uint64(txIndex), block.BaseFee()), nil
+	return newRPCTransaction(txs[txIndex], block.Hash(), block.NumberU64(), uint64(txIndex), block.BaseFee(), false), nil
 }
 
 // GetRawTransactionByBlockNumberAndIndex returns the bytes of the transaction for the given block number and index.
