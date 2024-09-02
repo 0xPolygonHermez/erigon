@@ -322,7 +322,7 @@ func (c *Client) CallContext(ctx context.Context, result interface{}, method str
 	case string(resp.Result) == "null":
 		return ErrNoResult
 	default:
-		//try devcode into error message
+		//try decode into error message
 		var rpcErr errRpcResult
 		if err := json.Unmarshal(resp.Result, &rpcErr); err == nil {
 			if rpcErr.Code != 0 {
