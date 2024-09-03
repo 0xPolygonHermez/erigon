@@ -324,6 +324,16 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 			continue
 		}
 
+		// try to find the BatchData in db to avoid calculate it when it is possible
+		batchData, err := hermezDb.GetL1BatchData(batchNumber.Uint64())
+		if err != nil {
+			return nil, err
+		} else if len(batchData) != 0 {
+			bd.BatchL2Data = batchData
+			bds = append(bds, bd)
+			continue
+		}
+
 		// looks weird but we're using the rpc.BlockNumber type to represent the batch number, LatestBlockNumber represents latest batch
 		if batchNumber == rpc.LatestBlockNumber {
 			batchNumber = rpc.BlockNumber(highestBatchNo)
