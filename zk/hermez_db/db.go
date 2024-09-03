@@ -528,6 +528,27 @@ func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash, stateRoot
 	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), val)
 }
 
+// RollbackSequences deletes the sequences up to the given batch number
+func (db *HermezDb) RollbackSequences(batchNo uint64) error {
+	for {
+		latestSequence, err := db.GetLatestSequence()
+		if err != nil {
+			return err
+		}
+
+		if latestSequence == nil || latestSequence.BatchNo <= batchNo {
+			break
+		}
+
+		err = db.tx.Delete(L1SEQUENCES, ConcatKey(latestSequence.L1BlockNo, latestSequence.BatchNo))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (db *HermezDb) TruncateSequences(l2BlockNo uint64) error {
 	batchNo, err := db.GetBatchNoByL2Block(l2BlockNo)
 	if err != nil {
@@ -1339,7 +1360,7 @@ func (db *HermezDbReader) GetWitness(batchNumber uint64) ([]byte, error) {
 	return v, nil
 }
 
-func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters map[string]int) error {
+func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters []int) error {
 	countersJson, err := json.Marshal(counters)
 	if err != nil {
 		return err
@@ -1347,7 +1368,7 @@ func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters map[string]i
 	return db.tx.Put(BATCH_COUNTERS, Uint64ToBytes(blockNumber), countersJson)
 }
 
-func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersMap map[string]int, found bool, err error) {
+func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersMap []int, found bool, err error) {
 	batchBlockNumbers, err := db.GetL2BlockNosByBatch(batchNumber)
 	if err != nil {
 		return nil, false, err
