@@ -603,3 +603,78 @@ func TestGetBatchDataByNumber(t *testing.T) {
 		}
 	}
 }
+
+func TestGetExitRootsByGER(t *testing.T) {
+	assert := assert.New(t)
+	////////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	EthermanMock := mocks.NewMockIEtherman(mockCtrl)
+
+	l1Syncer := syncer.NewL1Syncer(
+		ctx,
+		[]syncer.IEtherman{EthermanMock},
+		[]common.Address{},
+		[][]common.Hash{},
+		10,
+		0,
+		"latest",
+	)
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	dbTx, err := db.BeginRw(ctx)
+	assert.NoError(err)
+	hDB := hermez_db.NewHermezDb(dbTx)
+
+	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
+	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
+	stateRoots := []common.Hash{common.HexToHash("0x70ee58f4d74b706ce88307800983c06c0479f9808d38db5d751d7306f510c9b8"), common.HexToHash("0xba46d17db3364a059cc6efada4a1cc7bea472c559247aafdd920fbd017031fee"), common.HexToHash("0x7dbca3d3f5841bb8a5da985655235587c212826b0f21127e4f3470230d05b0f8"), common.HexToHash("0x551b6fdb2b0c156b104a946f815c3e2c87324be35fba14cf0ed3e4c1287d89bf")}
+	times := []uint64{1714427000, 1714427003, 1714427006, 1714427009}
+	mainnetExitRoots := []common.Hash{common.HexToHash("0x6d2478612063b2ecb19b1c75dda5add47630bbae42a2e84f7ccd33c1540db1de"), common.HexToHash("0x17aa73f0a1b0e1acd7ec05a686cfc83a746b3230480db81105d571272aff5936"), common.HexToHash("0xf1dcb7fa915388a4a7bac1da56bd37d3590524ad84cbe0ff42d22ec2be8dcb1d"), common.HexToHash("0x63ab7d9f3c87bc4bbcff42748b09ef7cf87e7e084f6d457d277fee13a4759872")}
+	rollupExitRoots := []common.Hash{common.HexToHash("0x50b6637901ac94283cb4f2dcd3606c42a421444ce9643a55ecf95ec9ba5653a7"), common.HexToHash("0x2b911c2ea39040de58c4ddcc431c62ffde4abf63d36be05b7e5e8724056061b8"), common.HexToHash("0x50b6637901ac94283cb4f2dcd3606c42a421444ce9643a55ecf95ec9ba5653a7"), common.HexToHash("0xc8500f8630165b35e61c846262a2ffa3cbe5608305115ec2c79f65bbad91d0b6")}
+
+	for i := 0; i < 4; i++ {
+		err := hDB.WriteBlockBatch(uint64(i+1), 1)
+		assert.NoError(err)
+		err = hDB.WriteGlobalExitRoot(gers[i])
+		assert.NoError(err)
+		err = hDB.WriteBlockGlobalExitRoot(uint64(i+1), gers[i])
+		assert.NoError(err)
+		l1InforTree := &zktypes.L1InfoTreeUpdate{
+			Index:           uint64(i),
+			GER:             gers[i],
+			MainnetExitRoot: mainnetExitRoots[i],
+			RollupExitRoot:  rollupExitRoots[i],
+			ParentHash:      parentHashes[i],
+			Timestamp:       times[i],
+			BlockNumber:     uint64(i + 1),
+		}
+		err = hDB.WriteL1InfoTreeUpdateToGer(l1InforTree)
+		assert.NoError(err)
+	}
+
+	err = hDB.WriteSequence(4, 1, common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), stateRoots[len(stateRoots)-1])
+	assert.NoError(err)
+
+	dbTx.Commit()
+	for i, g := range gers {
+		exitRoots, err := zkEvmImpl.GetExitRootsByGER(ctx, g)
+		assert.NoError(err)
+		t.Logf("exitRoots: %+v", exitRoots)
+		assert.Equal(rpctypes.ArgUint64(i+1), exitRoots.BlockNumber)
+		assert.Equal(mainnetExitRoots[i], exitRoots.MainnetExitRoot)
+		assert.Equal(rollupExitRoots[i], exitRoots.RollupExitRoot)
+		assert.Equal(rpctypes.ArgUint64(times[i]), exitRoots.Timestamp)
+	}
+}
