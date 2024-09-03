@@ -133,6 +133,7 @@ Loop:
 				info, batchLogType := parseLogType(cfg.zkCfg.L1RollupId, &l)
 				switch batchLogType {
 				case logSequence:
+				case logSequenceEtrog:
 					// prevent storing pre-etrog sequences for etrog rollups
 					if batchLogType == logSequence && cfg.zkCfg.L1RollupId > 1 {
 						continue
