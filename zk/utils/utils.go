@@ -86,7 +86,6 @@ type ForkConfigWriter interface {
 }
 
 type DbReader interface {
-	GetLocalExitRootForBatchNo(batchNo uint64) (libcommon.Hash, error)
 	GetHighestBlockInBatch(batchNo uint64) (uint64, bool, error)
 }
 
