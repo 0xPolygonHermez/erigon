@@ -40,6 +40,7 @@ type IL1Syncer interface {
 	GetHeader(number uint64) (*ethTypes.Header, error)
 	Run(lastCheckedBlock uint64)
 	Stop()
+	StopSync()
 }
 
 var (
@@ -70,8 +71,7 @@ func SpawnStageL1Syncer(
 	tx kv.RwTx,
 	cfg L1SyncerCfg,
 	quiet bool,
-) error {
-
+) (funcErr error) {
 	///// DEBUG BISECT /////
 	if cfg.zkCfg.DebugLimit > 0 {
 		return nil
@@ -115,6 +115,11 @@ func SpawnStageL1Syncer(
 
 		// start the syncer
 		cfg.syncer.Run(l1BlockProgress)
+		defer func() {
+			if funcErr != nil {
+				cfg.syncer.StopSync()
+			}
+		}()
 	}
 
 	logsChan := cfg.syncer.GetLogsChan()
@@ -143,7 +148,8 @@ Loop:
 				switch batchLogType {
 				case logSequence:
 					if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
-						return fmt.Errorf("failed to write batch info, %w", err)
+						funcErr = fmt.Errorf("failed to write batch info, %w", err)
+						return funcErr
 					}
 					if info.L1BlockNo > highestWrittenL1BlockNo {
 						highestWrittenL1BlockNo = info.L1BlockNo
@@ -151,7 +157,8 @@ Loop:
 					newSequencesCount++
 				case logRollbackBatches:
 					if err := hermezDb.RollbackSequences(info.BatchNo); err != nil {
-						return fmt.Errorf("failed to write rollback sequence, %w", err)
+						funcErr = fmt.Errorf("failed to write rollback sequence, %w", err)
+						return funcErr
 					}
 					if info.L1BlockNo > highestWrittenL1BlockNo {
 						highestWrittenL1BlockNo = info.L1BlockNo
@@ -161,7 +168,8 @@ Loop:
 						highestVerification = info
 					}
 					if err := hermezDb.WriteVerification(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
-						return fmt.Errorf("failed to write verification for block %d, %w", info.L1BlockNo, err)
+						funcErr = fmt.Errorf("failed to write verification for block %d, %w", info.L1BlockNo, err)
+						return funcErr
 					}
 					if info.L1BlockNo > highestWrittenL1BlockNo {
 						highestWrittenL1BlockNo = info.L1BlockNo
@@ -191,7 +199,8 @@ Loop:
 		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", newVerificationsCount, "newSequencesCount", newSequencesCount, "highestWrittenL1BlockNo", highestWrittenL1BlockNo)
 
 		if err := stages.SaveStageProgress(tx, stages.L1Syncer, highestWrittenL1BlockNo); err != nil {
-			return fmt.Errorf("failed to save stage progress, %w", err)
+			funcErr = fmt.Errorf("failed to save stage progress, %w", err)
+			return funcErr
 		}
 		if highestVerification.BatchNo > 0 {
 			log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", highestVerification.BatchNo)
@@ -215,7 +224,8 @@ Loop:
 	if internalTxOpened {
 		log.Debug("l1 sync: first cycle, committing tx")
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit tx, %w", err)
+			funcErr = fmt.Errorf("failed to commit tx, %w", err)
+			return funcErr
 		}
 	}
 

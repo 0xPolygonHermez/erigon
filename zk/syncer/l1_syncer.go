@@ -67,6 +67,7 @@ type L1Syncer struct {
 	isSyncStarted      atomic.Bool
 	isDownloading      atomic.Bool
 	lastCheckedL1Block atomic.Uint64
+	wgDone             sync.WaitGroup
 
 	// Channels
 	logsChan            chan []ethTypes.Log
@@ -86,8 +87,8 @@ func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses
 		topics:              topics,
 		blockRange:          blockRange,
 		queryDelay:          queryDelay,
-		progressMessageChan: make(chan string),
 		logsChan:            make(chan []ethTypes.Log),
+		progressMessageChan: make(chan string),
 		quit:                make(chan struct{}),
 		highestBlockType:    highestBlockType,
 	}
@@ -123,6 +124,11 @@ func (s *L1Syncer) Stop() {
 	s.quit <- struct{}{}
 }
 
+func (s *L1Syncer) StopSync() {
+	s.Stop()
+	s.wgDone.Wait()
+}
+
 // Channels
 func (s *L1Syncer) GetLogsChan() chan []ethTypes.Log {
 	return s.logsChan
@@ -142,10 +148,14 @@ func (s *L1Syncer) Run(lastCheckedBlock uint64) {
 	s.isDownloading.Store(true)
 	s.lastCheckedL1Block.Store(lastCheckedBlock)
 
+	s.wgDone.Add(1)
+
 	//start a thread to cheack for new l1 block in interval
 	go func() {
 		s.isSyncStarted.Store(true)
 		defer s.isSyncStarted.Store(false)
+
+		defer s.wgDone.Done()
 
 		log.Info("Starting L1 syncer thread")
 		defer log.Info("Stopping L1 syncer thread")
