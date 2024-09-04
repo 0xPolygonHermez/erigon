@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/datadir"
@@ -749,4 +750,46 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 	assert.NoError(err)
 	t.Logf("ger: %+v", ger)
 	assert.Equal(gers[len(gers)-1], ger)
+}
+
+func TestGetVersionHistory(t *testing.T) {
+	assert := assert.New(t)
+	////////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
+	var l1Syncer *syncer.L1Syncer
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+
+	tx, err := db.BeginRw(ctx)
+	assert.NoError(err)
+	hDB := hermez_db.NewHermezDb(tx)
+	ti := time.Now()
+	for i := 0; i < 10; i++ {
+		tiAux := ti
+		ok, err := hDB.WriteErigonVersion(fmt.Sprintf("v%d", i+1), tiAux.Add(time.Duration(1)*time.Second))
+		assert.NoError(err)
+		assert.True(ok)
+	}
+	tx.Commit()
+
+	rawHistory, err := zkEvmImpl.GetVersionHistory(ctx)
+	assert.NoError(err)
+	var history map[string]time.Time
+	err = json.Unmarshal(rawHistory, &history)
+	assert.NoError(err)
+	t.Logf("Version history: %+v", history)
+	for i := 0; i < 10; i++ {
+		tiAux := ti
+		timeReceived := history[fmt.Sprintf("v%d", i+1)]
+		assert.Equal(tiAux.Add(time.Duration(1)*time.Second).Unix(), timeReceived.Unix())
+	}
 }
