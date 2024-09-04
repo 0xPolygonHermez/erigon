@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/VictoriaMetrics/metrics"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
@@ -37,11 +38,17 @@ type IL1Syncer interface {
 	L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error)
 	GetBlock(number uint64) (*ethTypes.Block, error)
 	GetHeader(number uint64) (*ethTypes.Header, error)
-	Run(lastCheckedBlock uint64)
-	Stop()
+	RunQueryBlocks(lastCheckedBlock uint64)
+	StopQueryBlocks()
+	ConsumeQueryBlocks()
+	WaitQueryBlocksToFinish()
 }
 
-var ErrStateRootMismatch = errors.New("state root mismatch")
+var (
+	ErrStateRootMismatch = errors.New("state root mismatch")
+
+	lastCheckedL1BlockCounter = metrics.GetOrCreateCounter(`last_checked_l1_block`)
+)
 
 type L1SyncerCfg struct {
 	db     kv.RwDB
@@ -65,8 +72,7 @@ func SpawnStageL1Syncer(
 	tx kv.RwTx,
 	cfg L1SyncerCfg,
 	quiet bool,
-) error {
-
+) (funcErr error) {
 	///// DEBUG BISECT /////
 	if cfg.zkCfg.DebugLimit > 0 {
 		return nil
@@ -109,7 +115,14 @@ func SpawnStageL1Syncer(
 		}
 
 		// start the syncer
-		cfg.syncer.Run(l1BlockProgress)
+		cfg.syncer.RunQueryBlocks(l1BlockProgress)
+		defer func() {
+			if funcErr != nil {
+				cfg.syncer.StopQueryBlocks()
+				cfg.syncer.ConsumeQueryBlocks()
+				cfg.syncer.WaitQueryBlocksToFinish()
+			}
+		}()
 	}
 
 	logsChan := cfg.syncer.GetLogsChan()
@@ -123,33 +136,44 @@ Loop:
 	for {
 		select {
 		case logs := <-logsChan:
-			infos := make([]*types.L1BatchInfo, 0, len(logs))
-			batchLogTypes := make([]BatchLogType, 0, len(logs))
 			for _, l := range logs {
 				l := l
 				info, batchLogType := parseLogType(cfg.zkCfg.L1RollupId, &l)
-				infos = append(infos, &info)
-				batchLogTypes = append(batchLogTypes, batchLogType)
-			}
-
-			for i, l := range logs {
-				info := *infos[i]
-				batchLogType := batchLogTypes[i]
 				switch batchLogType {
 				case logSequence:
+				case logSequenceEtrog:
+					// prevent storing pre-etrog sequences for etrog rollups
+					if batchLogType == logSequence && cfg.zkCfg.L1RollupId > 1 {
+						continue
+					}
 					if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
-						return fmt.Errorf("failed to write batch info, %w", err)
+						funcErr = fmt.Errorf("failed to write batch info, %w", err)
+						return funcErr
 					}
 					if info.L1BlockNo > highestWrittenL1BlockNo {
 						highestWrittenL1BlockNo = info.L1BlockNo
 					}
 					newSequencesCount++
+				case logRollbackBatches:
+					if err := hermezDb.RollbackSequences(info.BatchNo); err != nil {
+						funcErr = fmt.Errorf("failed to write rollback sequence, %w", err)
+						return funcErr
+					}
+					if info.L1BlockNo > highestWrittenL1BlockNo {
+						highestWrittenL1BlockNo = info.L1BlockNo
+					}
 				case logVerify:
+				case logVerifyEtrog:
+					// prevent storing pre-etrog verifications for etrog rollups
+					if batchLogType == logVerify && cfg.zkCfg.L1RollupId > 1 {
+						continue
+					}
 					if info.BatchNo > highestVerification.BatchNo {
 						highestVerification = info
 					}
 					if err := hermezDb.WriteVerification(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
-						return fmt.Errorf("failed to write verification for block %d, %w", info.L1BlockNo, err)
+						funcErr = fmt.Errorf("failed to write verification for block %d, %w", info.L1BlockNo, err)
+						return funcErr
 					}
 					if info.L1BlockNo > highestWrittenL1BlockNo {
 						highestWrittenL1BlockNo = info.L1BlockNo
@@ -172,11 +196,15 @@ Loop:
 	}
 
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
+
+	lastCheckedL1BlockCounter.Set(latestCheckedBlock)
+
 	if highestWrittenL1BlockNo > l1BlockProgress {
 		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", newVerificationsCount, "newSequencesCount", newSequencesCount, "highestWrittenL1BlockNo", highestWrittenL1BlockNo)
 
 		if err := stages.SaveStageProgress(tx, stages.L1Syncer, highestWrittenL1BlockNo); err != nil {
-			return fmt.Errorf("failed to save stage progress, %w", err)
+			funcErr = fmt.Errorf("failed to save stage progress, %w", err)
+			return funcErr
 		}
 		if highestVerification.BatchNo > 0 {
 			log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", highestVerification.BatchNo)
@@ -200,7 +228,8 @@ Loop:
 	if internalTxOpened {
 		log.Debug("l1 sync: first cycle, committing tx")
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit tx, %w", err)
+			funcErr = fmt.Errorf("failed to commit tx, %w", err)
+			return funcErr
 		}
 	}
 
@@ -212,16 +241,16 @@ type BatchLogType byte
 var (
 	logUnknown          BatchLogType = 0
 	logSequence         BatchLogType = 1
-	logVerify           BatchLogType = 2
-	logL1InfoTreeUpdate BatchLogType = 4
+	logSequenceEtrog    BatchLogType = 2
+	logVerify           BatchLogType = 3
+	logVerifyEtrog      BatchLogType = 4
+	logL1InfoTreeUpdate BatchLogType = 5
+	logRollbackBatches  BatchLogType = 6
 
 	logIncompatible BatchLogType = 100
 )
 
 func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1BatchInfo, batchLogType BatchLogType) {
-	bigRollupId := new(big.Int).SetUint64(l1RollupId)
-	isRollupIdMatching := log.Topics[1] == common.BigToHash(bigRollupId)
-
 	var (
 		batchNum              uint64
 		stateRoot, l1InfoRoot common.Hash
@@ -232,7 +261,7 @@ func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1Bat
 		batchLogType = logSequence
 		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
 	case contracts.SequencedBatchTopicEtrog:
-		batchLogType = logSequence
+		batchLogType = logSequenceEtrog
 		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
 		l1InfoRoot = common.BytesToHash(log.Data[:32])
 	case contracts.VerificationTopicPreEtrog:
@@ -240,16 +269,20 @@ func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1Bat
 		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
 		stateRoot = common.BytesToHash(log.Data[:32])
 	case contracts.VerificationValidiumTopicEtrog:
+		bigRollupId := new(big.Int).SetUint64(l1RollupId)
+		isRollupIdMatching := log.Topics[1] == common.BigToHash(bigRollupId)
 		if isRollupIdMatching {
-			batchLogType = logVerify
+			batchLogType = logVerifyEtrog
 			batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
 			stateRoot = common.BytesToHash(log.Data[:32])
 		} else {
 			batchLogType = logIncompatible
 		}
 	case contracts.VerificationTopicEtrog:
+		bigRollupId := new(big.Int).SetUint64(l1RollupId)
+		isRollupIdMatching := log.Topics[1] == common.BigToHash(bigRollupId)
 		if isRollupIdMatching {
-			batchLogType = logVerify
+			batchLogType = logVerifyEtrog
 			batchNum = common.BytesToHash(log.Data[:32]).Big().Uint64()
 			stateRoot = common.BytesToHash(log.Data[32:64])
 		} else {
@@ -257,6 +290,9 @@ func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1Bat
 		}
 	case contracts.UpdateL1InfoTreeTopic:
 		batchLogType = logL1InfoTreeUpdate
+	case contracts.RollbackBatchesTopic:
+		batchLogType = logRollbackBatches
+		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
 	default:
 		batchLogType = logUnknown
 		batchNum = 0
@@ -272,80 +308,13 @@ func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1Bat
 }
 
 func UnwindL1SyncerStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
-	useExternalTx := tx != nil
-	if !useExternalTx {
-		tx, err = cfg.db.BeginRw(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-	}
-	log.Debug("l1 sync: unwinding")
-
-	/*
-		1. unwind sequences table
-		2. unwind verifications table
-		3. update l1verifications batchno and l1syncer stage progress
-	*/
-
-	err = tx.ClearBucket(hermez_db.L1SEQUENCES)
-	if err != nil {
-		return err
-	}
-	err = tx.ClearBucket(hermez_db.L1VERIFICATIONS)
-	if err != nil {
-		return err
-	}
-
-	// the below are very inefficient due to key layout
-	//hermezDb := hermez_db.NewHermezDb(tx)
-	//err = hermezDb.TruncateSequences(u.UnwindPoint)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//err = hermezDb.TruncateVerifications(u.UnwindPoint)
-	//if err != nil {
-	//	return err
-	//}
-	// get the now latest l1 verification
-	//v, err := hermezDb.GetLatestVerification()
-	//if err != nil {
-	//	return err
-	//}
-
-	if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 0); err != nil {
-		return fmt.Errorf("failed to save stage progress, %w", err)
-	}
-	if err := stages.SaveStageProgress(tx, stages.L1Syncer, 0); err != nil {
-		return fmt.Errorf("failed to save stage progress, %w", err)
-	}
-
-	if !useExternalTx {
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-	}
+	// we want to keep L1 data during an unwind, as we only sync finalised data there should be
+	// no need to unwind here
 	return nil
 }
 
 func PruneL1SyncerStage(s *stagedsync.PruneState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
-	useExternalTx := tx != nil
-	if !useExternalTx {
-		tx, err = cfg.db.BeginRw(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-	}
-
-	// TODO: implement prune L1 Verifications stage! (if required)
-
-	if !useExternalTx {
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-	}
+	// no need to prune this data
 	return nil
 }
 

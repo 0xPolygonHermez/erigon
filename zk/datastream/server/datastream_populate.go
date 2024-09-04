@@ -290,7 +290,7 @@ func (srv *DataStreamServer) UnwindIfNecessary(logPrefix string, reader DbReader
 			log.Warn(fmt.Sprintf("[%s] Datastream must unwind to batch", logPrefix), "prevBlockBatchNum", prevBlockBatchNum, "batchNum", batchNum)
 
 			//get latest block in prev batch
-			lastBlockInPrevbatch, err := reader.GetHighestBlockInBatch(prevBlockBatchNum)
+			lastBlockInPrevbatch, _, err := reader.GetHighestBlockInBatch(prevBlockBatchNum)
 			if err != nil {
 				return err
 			}
@@ -379,7 +379,7 @@ func (srv *DataStreamServer) WriteGenesisToStream(
 	l2Block := newL2BlockProto(genesis, genesis.Hash().Bytes(), batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{})
 	batchStart := newBatchStartProto(batchNo, srv.chainId, GenesisForkId, datastream.BatchType_BATCH_TYPE_REGULAR)
 
-	ler, err := utils.GetBatchLocalExitRoot(0, reader, tx)
+	ler, err := utils.GetBatchLocalExitRootFromSCStorageForLatestBlock(0, reader, tx)
 	if err != nil {
 		return err
 	}

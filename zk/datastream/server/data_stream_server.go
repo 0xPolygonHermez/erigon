@@ -18,7 +18,6 @@ import (
 
 type DbReader interface {
 	GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error)
-	GetLocalExitRootForBatchNo(batchNo uint64) (libcommon.Hash, error)
 	GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber uint64) ([]types.GerUpdateProto, error)
 	GetForkId(batchNumber uint64) (uint64, error)
 	GetBlockGlobalExitRoot(blockNumber uint64) (libcommon.Hash, error)
@@ -28,7 +27,7 @@ type DbReader interface {
 	GetBlockInfoRoot(blockNumber uint64) (libcommon.Hash, error)
 	GetIntermediateTxStateRoot(blockNumber uint64, txHash libcommon.Hash) (libcommon.Hash, error)
 	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
-	GetHighestBlockInBatch(batchNumber uint64) (uint64, error)
+	GetHighestBlockInBatch(batchNumber uint64) (uint64, bool, error)
 	GetInvalidBatch(batchNumber uint64) (bool, error)
 	GetBatchNoByL2Block(blockNumber uint64) (uint64, error)
 	CheckBatchNoByL2Block(l2BlockNo uint64) (uint64, bool, error)
@@ -196,7 +195,7 @@ func createBlockWithBatchCheckStreamEntriesProto(
 		}
 		// the genesis we insert fully, so we would have to skip closing it
 		if !shouldSkipBatchEndEntry {
-			localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorage(batchNumber, reader, tx)
+			localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorageForLatestBlock(batchNumber, reader, tx)
 			if err != nil {
 				return nil, err
 			}
@@ -384,7 +383,7 @@ func BuildWholeBatchStreamEntriesProto(
 	}
 
 	// the genesis we insert fully, so we would have to skip closing it
-	localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorage(batchNumber, reader, tx)
+	localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorageForLatestBlock(batchNumber, reader, tx)
 	if err != nil {
 		return nil, err
 	}
