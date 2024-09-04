@@ -7,7 +7,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     
-jobs:
+jobs:      
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-latest
@@ -15,6 +15,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: Download code coverage results
+        uses: actions/download-artifact@v3
+        with:
+          name: code-coverage-report
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:

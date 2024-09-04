@@ -178,3 +178,9 @@ jobs:
         with:
           name: logs_${{ github.run_id }}
           path: ./kurtosis-cdk/ci_logs
+      
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-coverage-report
+          path: coverage.out
