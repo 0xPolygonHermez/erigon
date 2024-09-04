@@ -72,10 +72,12 @@ func SpawnL1SequencerSyncStage(
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	if !cfg.syncer.IsSyncStarted() {
-		cfg.syncer.Run(progress)
+		cfg.syncer.RunQueryBlocks(progress)
 		defer func() {
 			if funcErr != nil {
-				cfg.syncer.StopSync()
+				cfg.syncer.StopQueryBlocks()
+				cfg.syncer.ConsumeQueryBlocks()
+				cfg.syncer.WaitQueryBlocksToFinish()
 			}
 		}()
 	}
@@ -156,8 +158,6 @@ Loop:
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-
-	cfg.syncer.Stop()
 
 	progress = cfg.syncer.GetLastCheckedL1Block()
 	if progress >= cfg.zkCfg.L1FirstBlock {

@@ -38,9 +38,10 @@ type IL1Syncer interface {
 	L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error)
 	GetBlock(number uint64) (*ethTypes.Block, error)
 	GetHeader(number uint64) (*ethTypes.Header, error)
-	Run(lastCheckedBlock uint64)
-	Stop()
-	StopSync()
+	RunQueryBlocks(lastCheckedBlock uint64)
+	StopQueryBlocks()
+	ConsumeQueryBlocks()
+	WaitQueryBlocksToFinish()
 }
 
 var (
@@ -114,10 +115,12 @@ func SpawnStageL1Syncer(
 		}
 
 		// start the syncer
-		cfg.syncer.Run(l1BlockProgress)
+		cfg.syncer.RunQueryBlocks(l1BlockProgress)
 		defer func() {
 			if funcErr != nil {
-				cfg.syncer.StopSync()
+				cfg.syncer.StopQueryBlocks()
+				cfg.syncer.ConsumeQueryBlocks()
+				cfg.syncer.WaitQueryBlocksToFinish()
 			}
 		}()
 	}
