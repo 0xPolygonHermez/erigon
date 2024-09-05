@@ -11,25 +11,35 @@ import (
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/memdb"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/core/state"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/eth/tracers"
 	"github.com/ledgerwatch/erigon/rpc"
+	smtDb "github.com/ledgerwatch/erigon/smt/pkg/db"
+	smt "github.com/ledgerwatch/erigon/smt/pkg/smt"
+	smtUtils "github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
+	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
+	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	zkUtils "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
@@ -37,8 +47,6 @@ import (
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
-
-const ApiRollupId = 1 // todo [zkevm] this should be read from config really
 
 // ZkEvmAPI is a collection of functions that are exposed in the
 type ZkEvmAPI interface {
@@ -149,7 +157,9 @@ func (api *ZkEvmAPIImpl) IsBlockConsolidated(ctx context.Context, blockNumber rp
 	defer tx.Rollback()
 
 	batchNum, err := getBatchNoByL2Block(tx, uint64(blockNumber.Int64()))
-	if err != nil {
+	if errors.Is(err, hermez_db.ErrorNotStored) {
+		return false, nil
+	} else if err != nil {
 		return false, err
 	}
 
@@ -170,7 +180,9 @@ func (api *ZkEvmAPIImpl) IsBlockVirtualized(ctx context.Context, blockNumber rpc
 	defer tx.Rollback()
 
 	batchNum, err := getBatchNoByL2Block(tx, uint64(blockNumber.Int64()))
-	if err != nil {
+	if errors.Is(err, hermez_db.ErrorNotStored) {
+		return false, nil
+	} else if err != nil {
 		return false, err
 	}
 
@@ -290,6 +302,9 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 	if syncing != nil && syncing != false {
 		bn := syncing.(map[string]interface{})["currentBlock"]
 		highestBatchNo, err = hermezDb.GetBatchNoByL2Block(uint64(bn.(hexutil.Uint64)))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	bds := make([]*types.BatchDataSlim, 0, len(batchNumbers.Numbers))
@@ -333,7 +348,6 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 
 		// collect blocks in batch
 		var batchBlocks []*eritypes.Block
-		var batchTxs []eritypes.Transaction
 		// handle genesis - not in the hermez tables so requires special treament
 		if batchNumber == 0 {
 			blk, err := api.ethApi.BaseAPI.blockByNumberWithSenders(tx, 0)
@@ -349,9 +363,6 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 				return nil, err
 			}
 			batchBlocks = append(batchBlocks, blk)
-			for _, btx := range blk.Transactions() {
-				batchTxs = append(batchTxs, btx)
-			}
 		}
 
 		// batch l2 data - must build on the fly
@@ -360,7 +371,7 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 			return nil, err
 		}
 
-		batchL2Data, err := generateBatchData(tx, hermezDb, batchBlocks, forkId)
+		batchL2Data, err := utils.GenerateBatchData(tx, hermezDb, batchBlocks, forkId)
 		if err != nil {
 			return nil, err
 		}
@@ -378,6 +389,9 @@ func generateBatchData(
 	batchBlocks []*eritypes.Block,
 	forkId uint64,
 ) (batchL2Data []byte, err error) {
+	if len(batchBlocks) == 0 {
+		return batchL2Data, nil
+	}
 
 	lastBlockNoInPreviousBatch := uint64(0)
 	if batchBlocks[0].NumberU64() != 0 {
@@ -389,7 +403,6 @@ func generateBatchData(
 		return nil, err
 	}
 
-	batchL2Data = []byte{}
 	for i := 0; i < len(batchBlocks); i++ {
 		var dTs uint32
 		if i == 0 {
@@ -410,9 +423,12 @@ func generateBatchData(
 			egTx[txn.Hash()] = eg
 		}
 
-		bl2d, err := zktx.GenerateBlockBatchL2Data(uint16(forkId), dTs, uint32(iti), batchBlocks[i].Transactions(), egTx)
-		if err != nil {
-			return nil, err
+		// block 0 does not geenrate any data (special case)
+		var bl2d []byte
+		if batchBlocks[i].NumberU64() != 0 {
+			if bl2d, err = zktx.GenerateBlockBatchL2Data(uint16(forkId), dTs, uint32(iti), batchBlocks[i].Transactions(), egTx); err != nil {
+				return nil, err
+			}
 		}
 		batchL2Data = append(batchL2Data, bl2d...)
 	}
@@ -452,7 +468,10 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 	if _, ok := syncStatus.(bool); !ok {
 		bn := syncStatus.(map[string]interface{})["currentBlock"]
-		highestBatchNo, err = hermezDb.GetBatchNoByL2Block(uint64(bn.(hexutil.Uint64)))
+		if highestBatchNo, err = hermezDb.GetBatchNoByL2Block(uint64(bn.(hexutil.Uint64))); err != nil {
+			return nil, err
+		}
+
 	}
 	if batchNumber > rpc.BlockNumber(highestBatchNo) {
 		return nil, nil
@@ -469,19 +488,16 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		Number: types.ArgUint64(batchNo),
 	}
 
-	// mimic zkevm node null response if we don't have the batch
-	_, found, err := hermezDb.GetLowestBlockInBatch(batchNo)
-	if err != nil {
-		return nil, err
-	}
-	if !found && batchNo != 0 {
-		return nil, nil
-	}
-
-	// highest block in batch
-	blockNo, err := hermezDb.GetHighestBlockInBatch(batchNo)
-	if err != nil {
-		return nil, err
+	// loop until we find a block in the batch
+	var found bool
+	var blockNo, counter uint64
+	for !found {
+		// highest block in batch
+		blockNo, found, err = hermezDb.GetHighestBlockInBatch(batchNo - counter)
+		if err != nil {
+			return nil, err
+		}
+		counter++
 	}
 
 	block, err := api.ethApi.BaseAPI.blockByNumberWithSenders(tx, blockNo)
@@ -595,6 +611,16 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.Transactions = nil
 	}
 
+	if len(batch.Blocks) == 0 {
+		batch.Blocks = nil
+	}
+
+	// batch l2 data - must build on the fly
+	forkId, err := hermezDb.GetForkId(batchNo)
+	if err != nil {
+		return nil, err
+	}
+
 	// global exit root of batch
 	batchGer, _, err := hermezDb.GetLastBlockGlobalExitRoot(blockNo)
 	if err != nil {
@@ -608,7 +634,9 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	if err != nil {
 		return nil, err
 	}
-	if seq != nil {
+	if batchNo == 0 {
+		batch.SendSequencesTxHash = &common.Hash{0}
+	} else if seq != nil {
 		batch.SendSequencesTxHash = &seq.L1TxHash
 	}
 
@@ -617,8 +645,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.Timestamp = types.ArgUint64(block.Time())
 	}
 
-	_, found, err = hermezDb.GetLowestBlockInBatch(batchNo + 1)
-	if err != nil {
+	if _, found, err = hermezDb.GetLowestBlockInBatch(batchNo + 1); err != nil {
 		return nil, err
 	}
 	// sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed, if next batch has blocks, bn must be closed
@@ -629,10 +656,10 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	if err != nil {
 		return nil, err
 	}
-	if ver == nil {
-		// TODO: this is the actual unverified batch behaviour probably set 0x00
-	}
-	if ver != nil {
+
+	if batchNo == 0 {
+		batch.VerifyBatchTxHash = &common.Hash{0}
+	} else if ver != nil {
 		batch.VerifyBatchTxHash = &ver.L1TxHash
 	}
 
@@ -646,17 +673,11 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 
 	// local exit root
-	localExitRoot, err := utils.GetBatchLocalExitRoot(batchNo, hermezDb, tx)
+	localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorageForLatestBlock(batchNo, hermezDb, tx)
 	if err != nil {
 		return nil, err
 	}
 	batch.LocalExitRoot = localExitRoot
-
-	// batch l2 data - must build on the fly
-	forkId, err := hermezDb.GetForkId(batchNo)
-	if err != nil {
-		return nil, err
-	}
 
 	batchL2Data, err := generateBatchData(tx, hermezDb, batchBlocks, forkId)
 	if err != nil {
@@ -664,7 +685,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 	batch.BatchL2Data = batchL2Data
 
-	oldAccInputHash, err := api.l1Syncer.GetOldAccInputHash(ctx, &api.config.AddressRollup, ApiRollupId, batchNo)
+	oldAccInputHash, err := api.l1Syncer.GetOldAccInputHash(ctx, &api.config.AddressRollup, api.config.L1RollupId, batchNo)
 	if err != nil {
 		log.Warn("Failed to get old acc input hash", "err", err)
 		batch.AccInputHash = common.Hash{}
@@ -674,10 +695,10 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	// forkid exit roots logic
 	// if forkid < 12 then we should only set the exit roots if they have changed, otherwise 0x00..00
 	// if forkid >= 12 then we should always set the exit roots
-	if forkId < 12 {
+	if forkId < uint64(constants.ForkID12Banana) {
 		// get the previous batches exit roots
 		prevBatchNo := batchNo - 1
-		prevBatchHighestBlock, err := hermezDb.GetHighestBlockInBatch(prevBatchNo)
+		prevBatchHighestBlock, _, err := hermezDb.GetHighestBlockInBatch(prevBatchNo)
 		if err != nil {
 			return nil, err
 		}
@@ -1036,7 +1057,7 @@ func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64,
 		return nil, err
 	}
 
-	oldAccInputHash, err := api.l1Syncer.GetOldAccInputHash(ctx, &api.config.AddressRollup, ApiRollupId, batchNumber)
+	oldAccInputHash, err := api.l1Syncer.GetOldAccInputHash(ctx, &api.config.AddressRollup, api.config.L1RollupId, batchNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -1338,9 +1359,10 @@ func convertBlockToRpcBlock(
 			}
 
 			cid := tx.GetChainID()
-			if cid.Cmp(uint256.NewInt(0)) != 0 {
-				tran.ChainID = (*types.ArgBig)(cid.ToBig())
+			if cid == nil {
+				cid = uint256.NewInt(0)
 			}
+			tran.ChainID = (*types.ArgBig)(cid.ToBig())
 
 			t := types.TransactionOrHash{Tx: &tran}
 			result.Transactions = append(result.Transactions, t)
@@ -1419,9 +1441,7 @@ func populateBatchDetails(batch *types.Batch) (json.RawMessage, error) {
 		jBatch["forcedBatchNumber"] = batch.ForcedBatchNumber
 	}
 	jBatch["closed"] = batch.Closed
-	if len(batch.BatchL2Data) > 0 {
-		jBatch["batchL2Data"] = batch.BatchL2Data
-	}
+	jBatch["batchL2Data"] = batch.BatchL2Data
 
 	return json.Marshal(jBatch)
 }
@@ -1439,4 +1459,186 @@ func populateBatchDataSlimDetails(batches []*types.BatchDataSlim) (json.RawMessa
 	}
 
 	return json.Marshal(jBatches)
+}
+
+// GetProof
+func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address, storageKeys []common.Hash, blockNrOrHash rpc.BlockNumberOrHash) (*accounts.SMTAccProofResult, error) {
+	api := zkapi.ethApi
+
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if api.historyV3(tx) {
+		return nil, fmt.Errorf("not supported by Erigon3")
+	}
+
+	blockNr, _, _, err := rpchelper.GetBlockNumber(blockNrOrHash, tx, api.filters)
+	if err != nil {
+		return nil, err
+	}
+
+	latestBlock, err := rpchelper.GetLatestBlockNumber(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	if latestBlock < blockNr {
+		// shouldn't happen, but check anyway
+		return nil, fmt.Errorf("block number is in the future latest=%d requested=%d", latestBlock, blockNr)
+	}
+
+	batch := memdb.NewMemoryBatch(tx, api.dirs.Tmp)
+	defer batch.Rollback()
+	if err = zkUtils.PopulateMemoryMutationTables(batch); err != nil {
+		return nil, err
+	}
+
+	if blockNr < latestBlock {
+		if latestBlock-blockNr > maxGetProofRewindBlockCount {
+			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", maxGetProofRewindBlockCount, latestBlock)
+		}
+		unwindState := &stagedsync.UnwindState{UnwindPoint: blockNr}
+		stageState := &stagedsync.StageState{BlockNumber: latestBlock}
+
+		interHashStageCfg := zkStages.StageZkInterHashesCfg(nil, true, true, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(tx), api._agg, nil)
+
+		if err = zkStages.UnwindZkIntermediateHashesStage(unwindState, stageState, batch, interHashStageCfg, ctx, true); err != nil {
+			return nil, fmt.Errorf("unwind intermediate hashes: %w", err)
+		}
+
+		if err != nil {
+			return nil, err
+		}
+		tx = batch
+	}
+
+	reader, err := rpchelper.CreateStateReader(ctx, tx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(tx), "")
+	if err != nil {
+		return nil, err
+	}
+
+	header, err := api._blockReader.HeaderByNumber(ctx, tx, blockNr)
+	if err != nil {
+		return nil, err
+	}
+
+	tds := state.NewTrieDbState(header.Root, tx, blockNr, nil)
+	tds.SetResolveReads(true)
+	tds.StartNewBuffer()
+	tds.SetStateReader(reader)
+
+	ibs := state.New(tds)
+
+	ibs.GetBalance(address)
+
+	for _, key := range storageKeys {
+		value := new(uint256.Int)
+		ibs.GetState(address, &key, value)
+	}
+
+	rl, err := tds.ResolveSMTRetainList()
+	if err != nil {
+		return nil, err
+	}
+
+	smtTrie := smt.NewRoSMT(smtDb.NewRoEriDb(tx))
+
+	proofs, err := smt.BuildProofs(smtTrie, rl, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	stateRootNode := smtUtils.ScalarToRoot(new(big.Int).SetBytes(header.Root.Bytes()))
+
+	if err != nil {
+		return nil, err
+	}
+
+	balanceKey, err := smtUtils.KeyEthAddrBalance(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	nonceKey, err := smtUtils.KeyEthAddrNonce(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	codeHashKey, err := smtUtils.KeyContractCode(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	codeLengthKey, err := smtUtils.KeyContractLength(address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	balanceProofs := smt.FilterProofs(proofs, balanceKey)
+	balanceBytes, err := smt.VerifyAndGetVal(stateRootNode, balanceProofs, balanceKey)
+	if err != nil {
+		return nil, fmt.Errorf("balance proof verification failed: %w", err)
+	}
+
+	balance := new(big.Int).SetBytes(balanceBytes)
+
+	nonceProofs := smt.FilterProofs(proofs, nonceKey)
+	nonceBytes, err := smt.VerifyAndGetVal(stateRootNode, nonceProofs, nonceKey)
+	if err != nil {
+		return nil, fmt.Errorf("nonce proof verification failed: %w", err)
+	}
+	nonce := new(big.Int).SetBytes(nonceBytes).Uint64()
+
+	codeHashProofs := smt.FilterProofs(proofs, codeHashKey)
+	codeHashBytes, err := smt.VerifyAndGetVal(stateRootNode, codeHashProofs, codeHashKey)
+	if err != nil {
+		return nil, fmt.Errorf("code hash proof verification failed: %w", err)
+	}
+	codeHash := codeHashBytes
+
+	codeLengthProofs := smt.FilterProofs(proofs, codeLengthKey)
+	codeLengthBytes, err := smt.VerifyAndGetVal(stateRootNode, codeLengthProofs, codeLengthKey)
+	if err != nil {
+		return nil, fmt.Errorf("code length proof verification failed: %w", err)
+	}
+	codeLength := new(big.Int).SetBytes(codeLengthBytes).Uint64()
+
+	accProof := &accounts.SMTAccProofResult{
+		Address:         address,
+		Balance:         (*hexutil.Big)(balance),
+		CodeHash:        libcommon.BytesToHash(codeHash),
+		CodeLength:      hexutil.Uint64(codeLength),
+		Nonce:           hexutil.Uint64(nonce),
+		BalanceProof:    balanceProofs,
+		NonceProof:      nonceProofs,
+		CodeHashProof:   codeHashProofs,
+		CodeLengthProof: codeLengthProofs,
+		StorageProof:    make([]accounts.SMTStorageProofResult, 0),
+	}
+
+	addressArrayBig := smtUtils.ScalarToArrayBig(smtUtils.ConvertHexToBigInt(address.String()))
+	for _, k := range storageKeys {
+		storageKey, err := smtUtils.KeyContractStorage(addressArrayBig, k.String())
+		if err != nil {
+			return nil, err
+		}
+		storageProofs := smt.FilterProofs(proofs, storageKey)
+
+		valueBytes, err := smt.VerifyAndGetVal(stateRootNode, storageProofs, storageKey)
+		if err != nil {
+			return nil, fmt.Errorf("storage proof verification failed: %w", err)
+		}
+
+		value := new(big.Int).SetBytes(valueBytes)
+
+		accProof.StorageProof = append(accProof.StorageProof, accounts.SMTStorageProofResult{
+			Key:   k,
+			Value: (*hexutil.Big)(value),
+			Proof: storageProofs,
+		})
+	}
+
+	return accProof, nil
 }

@@ -806,6 +806,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		seqAndVerifTopics := [][]libcommon.Hash{{
 			contracts.SequencedBatchTopicPreEtrog,
 			contracts.SequencedBatchTopicEtrog,
+			contracts.RollbackBatchesTopic,
 			contracts.VerificationTopicPreEtrog,
 			contracts.VerificationTopicEtrog,
 			contracts.VerificationValidiumTopicEtrog,
@@ -852,6 +853,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			cfg.L1QueryDelay,
 			cfg.L1HighestBlockType,
 		)
+
+		log.Info("Rollup ID", "rollupId", cfg.L1RollupId)
 
 		// check contract addresses in config against L1
 		if cfg.Zk.L1ContractAddressCheck {

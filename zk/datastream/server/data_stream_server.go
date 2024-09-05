@@ -6,6 +6,7 @@ import (
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
 
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -17,7 +18,6 @@ import (
 
 type DbReader interface {
 	GetL2BlockNosByBatch(batchNo uint64) ([]uint64, error)
-	GetLocalExitRootForBatchNo(batchNo uint64) (libcommon.Hash, error)
 	GetBatchGlobalExitRootsProto(lastBatchNumber, batchNumber uint64) ([]types.GerUpdateProto, error)
 	GetForkId(batchNumber uint64) (uint64, error)
 	GetBlockGlobalExitRoot(blockNumber uint64) (libcommon.Hash, error)
@@ -27,10 +27,11 @@ type DbReader interface {
 	GetBlockInfoRoot(blockNumber uint64) (libcommon.Hash, error)
 	GetIntermediateTxStateRoot(blockNumber uint64, txHash libcommon.Hash) (libcommon.Hash, error)
 	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
-	GetHighestBlockInBatch(batchNumber uint64) (uint64, error)
+	GetHighestBlockInBatch(batchNumber uint64) (uint64, bool, error)
 	GetInvalidBatch(batchNumber uint64) (bool, error)
 	GetBatchNoByL2Block(blockNumber uint64) (uint64, error)
 	CheckBatchNoByL2Block(l2BlockNo uint64) (uint64, bool, error)
+	GetPreviousIndexBlock(blockNumber uint64) (uint64, uint64, bool, error)
 }
 
 type BookmarkType byte
@@ -194,7 +195,7 @@ func createBlockWithBatchCheckStreamEntriesProto(
 		}
 		// the genesis we insert fully, so we would have to skip closing it
 		if !shouldSkipBatchEndEntry {
-			localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorage(batchNumber, reader, tx)
+			localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorageForLatestBlock(batchNumber, reader, tx)
 			if err != nil {
 				return nil, err
 			}
@@ -209,21 +210,12 @@ func createBlockWithBatchCheckStreamEntriesProto(
 		}
 	}
 
-	blockNum := block.NumberU64()
-
-	l1InfoTreeMinTimestamps := make(map[uint64]uint64)
-	deltaTimestamp := block.Time() - lastBlock.Time()
-	if blockNum == 1 {
-		deltaTimestamp = block.Time()
-		l1InfoTreeMinTimestamps[0] = 0
-	}
-
-	if blockEntries, err = createFullBlockStreamEntriesProto(reader, tx, block, block.Transactions(), forkId, deltaTimestamp, batchNumber, l1InfoTreeMinTimestamps); err != nil {
+	if blockEntries, err = createFullBlockStreamEntriesProto(reader, tx, block, lastBlock, block.Transactions(), forkId, batchNumber, make(map[uint64]uint64)); err != nil {
 		return nil, err
 	}
 
 	if blockEntries.Size() == 0 {
-		return nil, fmt.Errorf("didn't create any entries for block %d", blockNum)
+		return nil, fmt.Errorf("didn't create any entries for block %d", block.NumberU64())
 	}
 
 	entries := NewDataStreamEntries(len(endEntriesProto) + startEntriesProto.Size() + blockEntries.Size())
@@ -237,15 +229,21 @@ func createBlockWithBatchCheckStreamEntriesProto(
 func createFullBlockStreamEntriesProto(
 	reader DbReader,
 	tx kv.Tx,
-	block *eritypes.Block,
+	block,
+	lastBlock *eritypes.Block,
 	filteredTransactions eritypes.Transactions,
 	forkId,
-	deltaTimestamp,
 	batchNumber uint64,
 	l1InfoTreeMinTimestamps map[uint64]uint64,
 ) (*DataStreamEntries, error) {
-	entries := NewDataStreamEntries(len(filteredTransactions) + 3) // block bookmark + block + block end
 	blockNum := block.NumberU64()
+	deltaTimestamp := block.Time() - lastBlock.Time()
+	if blockNum == 1 {
+		deltaTimestamp = block.Time()
+		l1InfoTreeMinTimestamps[0] = 0
+	}
+
+	entries := NewDataStreamEntries(len(filteredTransactions) + 3) // block bookmark + block + block end
 	// L2 BLOCK BOOKMARK
 	entries.Add(newL2BlockBookmarkEntryProto(blockNum))
 
@@ -264,6 +262,14 @@ func createFullBlockStreamEntriesProto(
 	}
 
 	if l1InfoIndex > 0 {
+		prevIndexBlock, prevIndex, found, err := reader.GetPreviousIndexBlock(blockNum)
+		if err != nil {
+			return nil, err
+		}
+		if found && prevIndex >= l1InfoIndex {
+			log.Warn("1 info index not bigger than previous index", "prevIndex", prevIndex, "prevBlock", prevIndexBlock, "l1InfoIndex", l1InfoIndex, "currentBlock", blockNum)
+		}
+
 		// get the l1 info data, so we can add the min timestamp to the map
 		l1Info, err := reader.GetL1InfoTreeUpdate(l1InfoIndex)
 		if err != nil {
@@ -362,18 +368,12 @@ func BuildWholeBatchStreamEntriesProto(
 	for _, block := range blocks {
 		blockNum := block.NumberU64()
 
-		deltaTimestamp := block.Time() - lastBlock.Time()
-		if blockNum == 1 {
-			deltaTimestamp = block.Time()
-			l1InfoTreeMinTimestamps[0] = 0
-		}
-
 		txForBlock, found := txsPerBlock[blockNum]
 		if !found {
 			return nil, fmt.Errorf("no transactions array found for block %d", blockNum)
 		}
 
-		blockEntries, err := createFullBlockStreamEntriesProto(reader, tx, &block, txForBlock, forkId, deltaTimestamp, batchNumber, l1InfoTreeMinTimestamps)
+		blockEntries, err := createFullBlockStreamEntriesProto(reader, tx, &block, &lastBlock, txForBlock, forkId, batchNumber, l1InfoTreeMinTimestamps)
 		if err != nil {
 			return nil, err
 		}
@@ -383,7 +383,7 @@ func BuildWholeBatchStreamEntriesProto(
 	}
 
 	// the genesis we insert fully, so we would have to skip closing it
-	localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorage(batchNumber, reader, tx)
+	localExitRoot, err := utils.GetBatchLocalExitRootFromSCStorageForLatestBlock(batchNumber, reader, tx)
 	if err != nil {
 		return nil, err
 	}
