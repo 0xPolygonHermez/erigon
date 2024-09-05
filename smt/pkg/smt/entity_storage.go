@@ -354,7 +354,12 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 		}
 	}
 
-	_, err := s.InsertBatch(ctx, logPrefix, keysBatchStorage, valuesBatchStorage, nil, nil)
+	insertBatchCfg := InsertBatchConfig{
+		Ctx:                 ctx,
+		LogPrefix:           logPrefix,
+		ShouldPrintProgress: true,
+	}
+	_, err := s.InsertBatch(insertBatchCfg, keysBatchStorage, valuesBatchStorage, nil, nil)
 	return keysBatchStorage, valuesBatchStorage, err
 }
 
