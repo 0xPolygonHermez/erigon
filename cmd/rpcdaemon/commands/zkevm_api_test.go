@@ -1024,3 +1024,172 @@ func TestGetFullBlockByNumber(t *testing.T) {
 	assert.Equal(tx7.Hash(), *block4.Transactions[1].Hash)
 	assert.Equal(tx8.Hash(), *block4.Transactions[2].Hash)
 }
+
+func TestGetFullBlockByHash(t *testing.T) {
+	assert := assert.New(t)
+	////////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
+
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
+	dbTx, err := db.BeginRw(ctx)
+	assert.NoError(err)
+	hDB := hermez_db.NewHermezDb(dbTx)
+	erigonDB := erigon_db.NewErigonDb(dbTx)
+
+	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
+	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
+	hashes := []common.Hash{common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e"), common.HexToHash("0x002241472c8ffeb86cd3c2bfe928cc41a47fdeffa0e98f56c1da3db6d50d29cb")}
+	stateRoots := []common.Hash{common.HexToHash("0x70ee58f4d74b706ce88307800983c06c0479f9808d38db5d751d7306f510c9b8"), common.HexToHash("0xba46d17db3364a059cc6efada4a1cc7bea472c559247aafdd920fbd017031fee"), common.HexToHash("0x7dbca3d3f5841bb8a5da985655235587c212826b0f21127e4f3470230d05b0f8"), common.HexToHash("0x551b6fdb2b0c156b104a946f815c3e2c87324be35fba14cf0ed3e4c1287d89bf")}
+	txsRoot := []common.Hash{common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"), common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"), common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"), common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")}
+	coinBase := common.HexToAddress("0x761d53b47334bee6612c0bd1467fb881435375b2")
+	times := []uint64{1714427000, 1714427003, 1714427006, 1714427009}
+	gasLimits := []uint64{1125899906842624, 1125899906842624, 1125899906842624, 1125899906842624}
+	mainnetExitRoots := []common.Hash{common.HexToHash("0x6d2478612063b2ecb19b1c75dda5add47630bbae42a2e84f7ccd33c1540db1de"), common.HexToHash("0x17aa73f0a1b0e1acd7ec05a686cfc83a746b3230480db81105d571272aff5936"), common.HexToHash("0xf1dcb7fa915388a4a7bac1da56bd37d3590524ad84cbe0ff42d22ec2be8dcb1d"), common.HexToHash("0x63ab7d9f3c87bc4bbcff42748b09ef7cf87e7e084f6d457d277fee13a4759872")}
+	rollupExitRoots := []common.Hash{common.HexToHash("0x50b6637901ac94283cb4f2dcd3606c42a421444ce9643a55ecf95ec9ba5653a7"), common.HexToHash("0x2b911c2ea39040de58c4ddcc431c62ffde4abf63d36be05b7e5e8724056061b8"), common.HexToHash("0x50b6637901ac94283cb4f2dcd3606c42a421444ce9643a55ecf95ec9ba5653a7"), common.HexToHash("0xc8500f8630165b35e61c846262a2ffa3cbe5608305115ec2c79f65bbad91d0b6")}
+
+	signer1 := types.MakeSigner(params.TestChainConfig, 1)
+	signer2 := types.MakeSigner(params.TestChainConfig, 2)
+	signer3 := types.MakeSigner(params.TestChainConfig, 3)
+	signer4 := types.MakeSigner(params.TestChainConfig, 4)
+
+	var tx0 types.Transaction = types.NewTransaction(0, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx1 types.Transaction = types.NewTransaction(1, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx2 types.Transaction = types.NewTransaction(0, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx3 types.Transaction = types.NewTransaction(1, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx4 types.Transaction = types.NewTransaction(0, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx5 types.Transaction = types.NewTransaction(1, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx6 types.Transaction = types.NewTransaction(0, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx7 types.Transaction = types.NewTransaction(1, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+	var tx8 types.Transaction = types.NewTransaction(2, common.Address{}, uint256.NewInt(0), 21000, uint256.NewInt(0), []byte{})
+
+	tx0, _ = types.SignTx(tx0, *signer1, testKey0)
+	tx1, _ = types.SignTx(tx1, *signer1, testKey0)
+	tx2, _ = types.SignTx(tx2, *signer2, testKey1)
+	tx3, _ = types.SignTx(tx3, *signer2, testKey1)
+	tx4, _ = types.SignTx(tx4, *signer3, testKey2)
+	tx5, _ = types.SignTx(tx5, *signer3, testKey2)
+	tx6, _ = types.SignTx(tx6, *signer4, testKey3)
+	tx7, _ = types.SignTx(tx7, *signer4, testKey3)
+	tx8, _ = types.SignTx(tx8, *signer4, testKey3)
+
+	txs := [][]types.Transaction{{tx0, tx1}, {tx2, tx3}, {tx4, tx5}, {tx6, tx7, tx8}}
+
+	for i := 0; i < 4; i++ {
+		err := hDB.WriteBlockBatch(uint64(i+1), 1)
+		assert.NoError(err)
+		err = hDB.WriteGlobalExitRoot(gers[i])
+		assert.NoError(err)
+		err = hDB.WriteBlockGlobalExitRoot(uint64(i+1), gers[i])
+		assert.NoError(err)
+		l1InforTree := &zktypes.L1InfoTreeUpdate{
+			Index:           uint64(i),
+			GER:             gers[i],
+			MainnetExitRoot: mainnetExitRoots[i],
+			RollupExitRoot:  rollupExitRoots[i],
+			ParentHash:      parentHashes[i],
+			Timestamp:       times[i],
+			BlockNumber:     uint64(i + 1),
+		}
+		err = hDB.WriteL1InfoTreeUpdateToGer(l1InforTree)
+		assert.NoError(err)
+	}
+
+	err = hDB.WriteSequence(4, 1, common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), stateRoots[len(stateRoots)-1])
+	assert.NoError(err)
+
+	for i := 0; i < 4; i++ {
+		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i])
+		assert.NoError(err)
+		err = erigonDB.WriteBody(big.NewInt(int64(i+1)), hashes[i], txs[i])
+		assert.NoError(err)
+	}
+	_, err = erigonDB.WriteHeader(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), common.HexToHash("0x57ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7bf47"), common.HexToHash("0x67ddb9a356813c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba57"), common.HexToHash("0x87ddb9a356812c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba68"), coinBase, 1714427021, 1125899906842624)
+	assert.NoError(err)
+	err = erigonDB.WriteBody(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), []types.Transaction{})
+	assert.NoError(err)
+	_, err = erigonDB.WriteHeader(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), common.HexToHash("0x37ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba43"), common.HexToHash("0x87ddb9a356815c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba56"), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba48"), coinBase, 1714427024, 1125899906842624)
+	assert.NoError(err)
+	err = erigonDB.WriteBody(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), []types.Transaction{})
+	assert.NoError(err)
+
+	dbTx.Commit()
+
+	// Block 1
+	block1, err := zkEvmImpl.GetFullBlockByHash(ctx, hashes[0], true)
+	assert.NoError(err)
+	t.Logf("block 1: %+v", block1)
+	assert.Equal(2, len(block1.Transactions))
+	for i, tx := range block1.Transactions {
+		assert.Equal(rpctypes.ArgUint64(i), tx.Tx.Nonce)
+		assert.Equal(rpctypes.ArgUint64(21000), tx.Tx.Gas)
+		assert.Equal(common.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"), tx.Tx.From)
+		assert.Equal(rpctypes.ArgUint64(1), *tx.Tx.BlockNumber)
+	}
+	block1, err = zkEvmImpl.GetFullBlockByHash(ctx, hashes[0], false)
+	assert.NoError(err)
+	assert.Equal(2, len(block1.Transactions))
+	assert.Equal(tx0.Hash(), *block1.Transactions[0].Hash)
+	assert.Equal(tx1.Hash(), *block1.Transactions[1].Hash)
+
+	// Block 2
+	block2, err := zkEvmImpl.GetFullBlockByHash(ctx, hashes[1], true)
+	assert.NoError(err)
+	t.Logf("block 2: %+v", block2)
+	assert.Equal(2, len(block2.Transactions))
+	for i, tx := range block2.Transactions {
+		assert.Equal(rpctypes.ArgUint64(i), tx.Tx.Nonce)
+		assert.Equal(rpctypes.ArgUint64(21000), tx.Tx.Gas)
+		assert.Equal(common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"), tx.Tx.From)
+		assert.Equal(rpctypes.ArgUint64(2), *tx.Tx.BlockNumber)
+	}
+	block2, err = zkEvmImpl.GetFullBlockByHash(ctx, hashes[1], false)
+	assert.NoError(err)
+	assert.Equal(2, len(block2.Transactions))
+	assert.Equal(tx2.Hash(), *block2.Transactions[0].Hash)
+	assert.Equal(tx3.Hash(), *block2.Transactions[1].Hash)
+
+	// Block 3
+	block3, err := zkEvmImpl.GetFullBlockByHash(ctx, hashes[2], true)
+	assert.NoError(err)
+	t.Logf("block 3: %+v", block3)
+	assert.Equal(2, len(block3.Transactions))
+	for i, tx := range block3.Transactions {
+		assert.Equal(rpctypes.ArgUint64(i), tx.Tx.Nonce)
+		assert.Equal(rpctypes.ArgUint64(21000), tx.Tx.Gas)
+		assert.Equal(common.HexToAddress("0x617b3a3528F9cDd6630fd3301B9c8911F7Bf063D"), tx.Tx.From)
+		assert.Equal(rpctypes.ArgUint64(3), *tx.Tx.BlockNumber)
+	}
+	block3, err = zkEvmImpl.GetFullBlockByHash(ctx, hashes[2], false)
+	assert.NoError(err)
+	assert.Equal(2, len(block3.Transactions))
+	assert.Equal(tx4.Hash(), *block3.Transactions[0].Hash)
+	assert.Equal(tx5.Hash(), *block3.Transactions[1].Hash)
+
+	// Block 4
+	block4, err := zkEvmImpl.GetFullBlockByHash(ctx, hashes[3], true)
+	assert.NoError(err)
+	t.Logf("block 4: %+v", block4)
+	assert.Equal(3, len(block4.Transactions))
+	for i, tx := range block4.Transactions {
+		assert.Equal(rpctypes.ArgUint64(i), tx.Tx.Nonce)
+		assert.Equal(rpctypes.ArgUint64(21000), tx.Tx.Gas)
+		assert.Equal(common.HexToAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8"), tx.Tx.From)
+		assert.Equal(rpctypes.ArgUint64(4), *tx.Tx.BlockNumber)
+	}
+	block4, err = zkEvmImpl.GetFullBlockByHash(ctx, hashes[3], false)
+	assert.NoError(err)
+	assert.Equal(3, len(block4.Transactions))
+	assert.Equal(tx6.Hash(), *block4.Transactions[0].Hash)
+	assert.Equal(tx7.Hash(), *block4.Transactions[1].Hash)
+	assert.Equal(tx8.Hash(), *block4.Transactions[2].Hash)
+}
