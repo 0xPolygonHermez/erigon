@@ -641,14 +641,15 @@ func ReadBodyForStorageByKey(db kv.Getter, k []byte) (*types.BodyForStorage, err
 }
 
 func ReadBody(db kv.Getter, hash libcommon.Hash, number uint64) (*types.Body, uint64, uint32) {
-	bodyForStorage := new(types.BodyForStorage)
 	data := ReadStorageBodyRLP(db, hash, number)
-	if len(data) != 0 {
-		err := rlp.DecodeBytes(data, bodyForStorage)
-		if err != nil {
-			log.Error("Invalid block body RLP", "hash", hash, "err", err)
-			return nil, 0, 0
-		}
+	if len(data) == 0 {
+		return nil, 0, 0
+	}
+	bodyForStorage := new(types.BodyForStorage)
+	err := rlp.DecodeBytes(data, bodyForStorage)
+	if err != nil {
+		log.Error("Invalid block body RLP", "hash", hash, "err", err)
+		return nil, 0, 0
 	}
 	body := new(types.Body)
 	body.Uncles = bodyForStorage.Uncles

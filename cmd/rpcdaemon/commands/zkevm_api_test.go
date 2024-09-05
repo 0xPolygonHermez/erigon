@@ -375,6 +375,8 @@ func TestGetBatchByNumber(t *testing.T) {
 		0,
 		"latest",
 	)
+	cfg := &ethconfig.Defaults
+	cfg.Zk.L1RollupId = 1
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
 	dbTx, err := db.BeginRw(ctx)
 	assert.NoError(err)
@@ -420,6 +422,9 @@ func TestGetBatchByNumber(t *testing.T) {
 	err = hDB.WriteSequence(5, 2, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"))
 	assert.NoError(err)
 
+	err = hDB.WriteForkId(1, 7)
+	assert.NoError(err)
+
 	for i := 1; i <= 2; i++ {
 		err = stages.SaveStageProgress(dbTx, stages.L1VerificationsBatchNo, uint64(i))
 		assert.NoError(err)
@@ -461,7 +466,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	assert.Equal("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf", batch.Blocks[1])
 	assert.Equal("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e", batch.Blocks[2])
 	assert.Equal(0, len(batch.Transactions))
-	assert.Equal(common.HexToHash("0x78000000000b00000003000000000b00000003000000000b0000000300000000"), common.BytesToHash(batch.BatchL2Data))
+	assert.Equal("0x0b66301478000000000b00000003000000000b00000003000000000b0000000300000000", "0x"+hex.EncodeToString(batch.BatchL2Data))
 }
 
 func TestGetBatchDataByNumber(t *testing.T) {
@@ -534,6 +539,11 @@ func TestGetBatchDataByNumber(t *testing.T) {
 		assert.NoError(err)
 	}
 
+	for i:=1; i<7; i++ {
+		err = hDB.WriteForkId(uint64(i), 7)
+		assert.NoError(err)
+	}
+
 	for i := 1; i <= 2; i++ {
 		err = stages.SaveStageProgress(dbTx, stages.L1VerificationsBatchNo, uint64(i))
 		assert.NoError(err)
@@ -577,18 +587,18 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	for i, b := range batchesData {
 		assert.Equal(uint64(i+1), b.Number)
 		if i == 0 {
-			assert.Equal("0x0b66301478000000000b00000003000000000b00000003000000000b0000000300000000", b.BatchL2Data.Hex())
+			assert.Equal("0x0b66301478000000000b00000003000000000b00000003000000000b0000000300000000", b.BatchL2Data.Hex(), "Batch 1 doesn't match")
 		} else if i <= len(batchesData)-3 {
-			assert.Equal("0x"+hex.EncodeToString(batchesL2Data[i-1]), b.BatchL2Data.Hex())
+			assert.Equal("0x"+hex.EncodeToString(batchesL2Data[i-1]), b.BatchL2Data.Hex(), fmt.Sprintf("Batch %d doesn't match", i+1))
 		} else if i <= len(batchesData)-2 {
-			assert.Equal("0x0b0000000300000000", b.BatchL2Data.Hex())
+			assert.Equal("0x0b0000000300000000", b.BatchL2Data.Hex(), fmt.Sprintf("Batch %d doesn't match", i+1))
 		} else {
-			assert.Equal("0x", b.BatchL2Data.Hex())
+			assert.Equal("0x", b.BatchL2Data.Hex(), fmt.Sprintf("Batch %d doesn't match", i+1))
 		}
 		if i <= len(batchesData)-2 {
-			assert.Equal(false, b.Empty)
+			assert.Equal(false, b.Empty, fmt.Sprintf("Batch %d doesn't match", i+1))
 		} else {
-			assert.Equal(true, b.Empty)
+			assert.Equal(true, b.Empty, fmt.Sprintf("Batch %d doesn't match", i+1))
 		}
 	}
 }
