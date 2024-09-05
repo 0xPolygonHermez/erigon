@@ -480,7 +480,7 @@ func TestBatchRawInsert(t *testing.T) {
 
 	startTime = time.Now()
 
-	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", true)
 	_, err := smtBatch.InsertBatch(insertBatchCfg, keysForBatch, valuesForBatch, nil, nil)
 	assert.NilError(t, err)
 	t.Logf("Batch insert %d values in %v\n", len(keysForBatch), time.Since(startTime))
