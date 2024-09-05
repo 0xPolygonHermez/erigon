@@ -251,14 +251,7 @@ func (srv *DataStreamServer) WriteBlockWithBatchStartToStream(
 		}
 	}
 
-	l1InfoTreeMinTimestamps := make(map[uint64]uint64)
-	deltaTimestamp := block.Time() - prevBlock.Time()
-	if blockNum == 1 {
-		deltaTimestamp = block.Time()
-		l1InfoTreeMinTimestamps[0] = 0
-	}
-
-	blockEntries, err := createFullBlockStreamEntriesProto(reader, tx, &block, block.Transactions(), forkId, deltaTimestamp, batchNum, make(map[uint64]uint64))
+	blockEntries, err := createFullBlockStreamEntriesProto(reader, tx, &block, &prevBlock, block.Transactions(), forkId, batchNum, make(map[uint64]uint64))
 	if err != nil {
 		return err
 	}
@@ -298,7 +291,7 @@ func (srv *DataStreamServer) UnwindIfNecessary(logPrefix string, reader DbReader
 			log.Warn(fmt.Sprintf("[%s] Datastream must unwind to batch", logPrefix), "prevBlockBatchNum", prevBlockBatchNum, "batchNum", batchNum)
 
 			//get latest block in prev batch
-			lastBlockInPrevbatch, err := reader.GetHighestBlockInBatch(prevBlockBatchNum)
+			lastBlockInPrevbatch, _, err := reader.GetHighestBlockInBatch(prevBlockBatchNum)
 			if err != nil {
 				return err
 			}

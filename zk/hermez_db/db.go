@@ -203,10 +203,20 @@ func (db *HermezDbReader) GetLatestDownloadedBatchNo() (uint64, error) {
 	return BytesToUint64(v), nil
 }
 
-func (db *HermezDbReader) GetHighestBlockInBatch(batchNo uint64) (uint64, error) {
+// returns 0 and true for batch 0 (custom case) even thou no block in the db for taht batch
+// returns 0 and false if no blocks found in the DB for that batch
+func (db *HermezDbReader) GetHighestBlockInBatch(batchNo uint64) (uint64, bool, error) {
+	// custom case for batch 0
+	if batchNo == 0 {
+		return 0, true, nil
+	}
 	blocks, err := db.GetL2BlockNosByBatch(batchNo)
 	if err != nil {
-		return 0, err
+		return 0, false, err
+	}
+
+	if len(blocks) == 0 {
+		return 0, false, nil
 	}
 
 	max := uint64(0)
@@ -216,10 +226,17 @@ func (db *HermezDbReader) GetHighestBlockInBatch(batchNo uint64) (uint64, error)
 		}
 	}
 
-	return max, nil
+	return max, true, nil
 }
 
+// returns 0 and true for batch 0 (custom case) even thou no block in the db for taht batch
+// returns 0 and false if no blocks found in the DB for that batch
 func (db *HermezDbReader) GetLowestBlockInBatch(batchNo uint64) (blockNo uint64, found bool, err error) {
+	// custom case for batch 0
+	if batchNo == 0 {
+		return 0, true, nil
+	}
+
 	blocks, err := db.GetL2BlockNosByBatch(batchNo)
 	if err != nil {
 		return 0, false, err
@@ -249,7 +266,7 @@ func (db *HermezDbReader) GetHighestVerifiedBlockNo() (uint64, error) {
 		return 0, nil
 	}
 
-	blockNo, err := db.GetHighestBlockInBatch(v.BatchNo)
+	blockNo, _, err := db.GetHighestBlockInBatch(v.BatchNo)
 	if err != nil {
 		return 0, err
 	}
@@ -1256,6 +1273,32 @@ func (db *HermezDbReader) GetBlockL1InfoTreeIndex(blockNumber uint64) (uint64, e
 	return BytesToUint64(v), nil
 }
 
+// gets the previous saved index and block for that index
+// uses current inex block as parameter
+func (db *HermezDbReader) GetPreviousIndexBlock(currentIndexBlockNumber uint64) (blockNum uint64, index uint64, found bool, err error) {
+	c, err := db.tx.Cursor(BLOCK_L1_INFO_TREE_INDEX)
+	if err != nil {
+		return
+	}
+	defer c.Close()
+
+	k, _, err := c.SeekExact(Uint64ToBytes(currentIndexBlockNumber))
+	if err != nil || k == nil {
+		return
+	}
+
+	k, v, err := c.Prev()
+	if err != nil || k == nil {
+		return
+	}
+
+	blockNum = BytesToUint64(k)
+	index = BytesToUint64(v)
+	found = true
+
+	return
+}
+
 func (db *HermezDb) WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error {
 	latestBlockNumber, latestL1Index, err := db.GetLatestBlockL1InfoTreeIndexProgress()
 	if err != nil {
@@ -1360,7 +1403,7 @@ func (db *HermezDbReader) GetWitness(batchNumber uint64) ([]byte, error) {
 	return v, nil
 }
 
-func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters map[string]int) error {
+func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters []int) error {
 	countersJson, err := json.Marshal(counters)
 	if err != nil {
 		return err
@@ -1368,7 +1411,7 @@ func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters map[string]i
 	return db.tx.Put(BATCH_COUNTERS, Uint64ToBytes(blockNumber), countersJson)
 }
 
-func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersMap map[string]int, found bool, err error) {
+func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersMap []int, found bool, err error) {
 	batchBlockNumbers, err := db.GetL2BlockNosByBatch(batchNumber)
 	if err != nil {
 		return nil, false, err
