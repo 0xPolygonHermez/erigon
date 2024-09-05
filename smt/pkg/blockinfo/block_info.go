@@ -87,11 +87,7 @@ func BuildBlockInfoTree(
 	keys = append(keys, key)
 	vals = append(vals, val)
 
-	insertBatchCfg := smt.InsertBatchConfig{
-		Ctx:                 context.Background(),
-		LogPrefix:           "block_info_tree",
-		ShouldPrintProgress: false,
-	}
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "block_info_tree", false)
 	root, err := infoTree.smt.InsertBatch(insertBatchCfg, keys, vals, nil, nil)
 	if err != nil {
 		return nil, err

@@ -69,11 +69,8 @@ func TestBatchSimpleInsert(t *testing.T) {
 
 		smtIncremental.InsertKA(k, valuesRaw[i])
 	}
-	insertBatchCfg := smt.InsertBatchConfig{
-		Ctx:                 context.Background(),
-		LogPrefix:           "",
-		ShouldPrintProgress: true,
-	}
+
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
 	_, err := smtBatch.InsertBatch(insertBatchCfg, keyPointers, valuePointers, nil, nil)
 	assert.NilError(t, err)
 
@@ -115,11 +112,7 @@ func batchInsert(tree *smt.SMT, key, val []*big.Int) {
 		keyPointers = append(keyPointers, &k)
 		valuePointers = append(valuePointers, v)
 	}
-	insertBatchCfg := smt.InsertBatchConfig{
-		Ctx:                 context.Background(),
-		LogPrefix:           "",
-		ShouldPrintProgress: true,
-	}
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
 	tree.InsertBatch(insertBatchCfg, keyPointers, valuePointers, nil, nil)
 }
 
@@ -368,11 +361,7 @@ func TestBatchWitness(t *testing.T) {
 
 	smtIncremental := smt.NewSMT(nil, false)
 	smtBatch := smt.NewSMT(nil, false)
-	insertBatchCfg := smt.InsertBatchConfig{
-		Ctx:                 context.Background(),
-		LogPrefix:           "",
-		ShouldPrintProgress: true,
-	}
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
 	for i, k := range keys {
 		smtIncremental.Insert(k, values[i])
 		_, err := smtBatch.InsertBatch(insertBatchCfg, []*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
@@ -436,11 +425,7 @@ func TestBatchDelete(t *testing.T) {
 
 	smtIncremental := smt.NewSMT(nil, false)
 	smtBatch := smt.NewSMT(nil, false)
-	insertBatchCfg := smt.InsertBatchConfig{
-		Ctx:                 context.Background(),
-		LogPrefix:           "",
-		ShouldPrintProgress: true,
-	}
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
 	for i, k := range keys {
 		smtIncremental.Insert(k, values[i])
 		_, err := smtBatch.InsertBatch(insertBatchCfg, []*utils.NodeKey{&k}, []*utils.NodeValue8{&values[i]}, nil, nil)
@@ -494,11 +479,8 @@ func TestBatchRawInsert(t *testing.T) {
 	t.Logf("Incremental insert %d values in %v\n", len(keysForIncremental), time.Since(startTime))
 
 	startTime = time.Now()
-	insertBatchCfg := smt.InsertBatchConfig{
-		Ctx:                 context.Background(),
-		LogPrefix:           "",
-		ShouldPrintProgress: true,
-	}
+
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
 	_, err := smtBatch.InsertBatch(insertBatchCfg, keysForBatch, valuesForBatch, nil, nil)
 	assert.NilError(t, err)
 	t.Logf("Batch insert %d values in %v\n", len(keysForBatch), time.Since(startTime))
