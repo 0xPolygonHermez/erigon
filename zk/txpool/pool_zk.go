@@ -265,7 +265,7 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 // deletes the discarded txs from the overflowZkCounters
 func (p *TxPool) discardOverflowZkCountersFromPending(pending *PendingPool, discard func(*metaTx, DiscardReason), sendersWithChangedState map[uint64]struct{}) {
 	for _, mt := range p.overflowZkCounters {
-		log.Debug("[tx_pool] Removing TX from pending due to counter overflow", "tx", mt.Tx.IDHash)
+		log.Info("[tx_pool] Removing TX from pending due to counter overflow", "tx", mt.Tx.IDHash)
 		pending.Remove(mt)
 		discard(mt, OverflowZkCounters)
 		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
