@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 )
 
 const (
@@ -107,12 +109,12 @@ func (srv *DataStreamServer) WriteBlocksToStreamConsecutively(
 	//////////
 
 	latestbatchNum, err := reader.GetBatchNoByL2Block(from - 1)
-	if err != nil {
+	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 		return err
 	}
 
 	batchNum, err := reader.GetBatchNoByL2Block(from)
-	if err != nil {
+	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 		return err
 	}
 
@@ -142,6 +144,11 @@ func (srv *DataStreamServer) WriteBlocksToStreamConsecutively(
 
 	entries := make([]DataStreamEntryProto, 0, insertEntryCount)
 	var forkId uint64
+
+	batchesProgress, err := stages.GetStageProgress(tx, stages.Batches)
+	if err != nil {
+		return err
+	}
 LOOP:
 	for currentBlockNumber := from; currentBlockNumber <= to; currentBlockNumber++ {
 		select {
@@ -160,7 +167,7 @@ LOOP:
 		}
 
 		batchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber)
-		if err != nil {
+		if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 			return err
 		}
 
@@ -172,7 +179,9 @@ LOOP:
 			}
 		}
 
-		blockEntries, err := createBlockWithBatchCheckStreamEntriesProto(reader, tx, block, lastBlock, batchNum, latestbatchNum, srv.chainId, forkId, islastEntrybatchEnd)
+		checkBatchEnd := currentBlockNumber == batchesProgress
+
+		blockEntries, err := createBlockWithBatchCheckStreamEntriesProto(reader, tx, block, lastBlock, batchNum, latestbatchNum, srv.chainId, forkId, islastEntrybatchEnd, checkBatchEnd)
 		if err != nil {
 			return err
 		}
@@ -358,7 +367,7 @@ func (srv *DataStreamServer) WriteGenesisToStream(
 	tx kv.Tx,
 ) error {
 	batchNo, err := reader.GetBatchNoByL2Block(0)
-	if err != nil {
+	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 		return err
 	}
 

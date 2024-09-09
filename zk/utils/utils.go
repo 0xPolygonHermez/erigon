@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -37,7 +38,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, er
 	}
 
 	executedBatch, err := hermezDb.GetBatchNoByL2Block(executedBlock)
-	if err != nil {
+	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 		return false, 0, err
 	}
 
@@ -77,8 +78,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, er
 }
 
 type ForkReader interface {
-	GetLowestBatchByFork(forkId uint64) (uint64, error)
-	GetLowestBlockInBatch(batchNo uint64) (blockNo uint64, found bool, err error)
+	GetForkIdBlock(forkId uint64) (uint64, bool, error)
 }
 
 type ForkConfigWriter interface {
@@ -94,11 +94,7 @@ func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix st
 	var foundAny bool = false
 
 	for _, forkId := range chain.ForkIdsOrdered {
-		batch, err := hermezDb.GetLowestBatchByFork(uint64(forkId))
-		if err != nil {
-			return err
-		}
-		blockNum, found, err := hermezDb.GetLowestBlockInBatch(batch)
+		blockNum, found, err := hermezDb.GetForkIdBlock(uint64(forkId))
 		if err != nil {
 			return err
 		}
