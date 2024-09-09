@@ -2,6 +2,7 @@ package txpool
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -79,15 +80,15 @@ func (_this *LimboSubPoolProcessor) run() {
 	// we just need some counter variable with large used values in order verify not to complain
 	batchCounters := vm.NewBatchCounterCollector(256, 1, _this.zkCfg.VirtualCountersSmtReduction, true, nil)
 	unlimitedCounters := batchCounters.NewCounters().UsedAsMap()
-	for i, _ := range unlimitedCounters {
-		unlimitedCounters[i] = math.MaxInt32
+	for mapKey := range unlimitedCounters {
+		unlimitedCounters[mapKey] = math.MaxInt32
 	}
 
 	blockNumbers := []uint64{1} // let's assume that there is a just single block number 1, because the number itself does not matter
 	invalidTxs := []*string{}
 
-	for _, limboBatch := range limboBatchDetails {
-		for _, limboTx := range limboBatch.Transactions {
+	for i, limboBatch := range limboBatchDetails {
+		for j, limboTx := range limboBatch.Transactions {
 			request := legacy_executor_verifier.NewVerifierRequest(limboBatch.ForkId, limboBatch.BatchNumber, blockNumbers, limboTx.Root, unlimitedCounters)
 			err := _this.verifier.VerifySync(tx, request, limboBatch.Witness, limboTx.StreamBytes, limboBatch.TimestampLimit, limboBatch.FirstBlockNumber, limboBatch.L1InfoTreeMinTimestamps)
 			if err != nil {
@@ -97,7 +98,7 @@ func (_this *LimboSubPoolProcessor) run() {
 				continue
 			}
 
-			log.Info("[Limbo pool processor]", "valid tx", limboTx.Hash)
+			log.Info("[Limbo pool processor]", "valid tx", limboTx.Hash, "progress", fmt.Sprintf("transactions: %d of %d, batches: %d of %d", j+1, len(limboBatch.Transactions), i+1, len(limboBatchDetails)))
 		}
 	}
 
