@@ -78,8 +78,7 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 		return err
 	}
 
-	blockNumber := request.GetLastBlockNumber()
-	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.ctx, blockNumber, blockNumber, false, batchContext.cfg.zk.WitnessFull)
+	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.ctx, request.GetFirstBlockNumber(), request.GetLastBlockNumber(), false, batchContext.cfg.zk.WitnessFull)
 	if err != nil {
 		return err
 	}
@@ -93,46 +92,56 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 	limboDetails.BatchNumber = request.BatchNumber
 	limboDetails.ForkId = request.ForkId
 
-	block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, blockNumber)
-	if err != nil {
-		return err
+	var lowestBlock, highestBlock *types.Block
+	for _, blockNumber := range request.BlockNumbers {
+		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, blockNumber)
+		if err != nil {
+			return err
+		}
+
+		highestBlock = block
+		if lowestBlock == nil {
+			// capture the first block, then we can set the bad block hash in the unwind to terminate the
+			// stage loop and broadcast the accumulator changes to the txpool before the next stage loop run
+			lowestBlock = block
+		}
+
+		for j, transaction := range block.Transactions() {
+			var b []byte
+			buffer := bytes.NewBuffer(b)
+			err = transaction.EncodeRLP(buffer)
+			if err != nil {
+				return err
+			}
+
+			signer := types.MakeSigner(batchContext.cfg.chainConfig, blockNumber)
+			sender, err := transaction.Sender(*signer)
+			if err != nil {
+				return err
+			}
+			senderMapKey := sender.Hex()
+
+			blocksForStreamBytes, transactionsToIncludeByIndex := limboStreamBytesBuilderHelper.append(senderMapKey, blockNumber, j)
+			streamBytes, err := legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blocksForStreamBytes, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
+			if err != nil {
+				return err
+			}
+
+			previousTxIndex, ok := limboSendersToPreviousTxMap[senderMapKey]
+			if !ok {
+				previousTxIndex = math.MaxUint32
+			}
+
+			hash := transaction.Hash()
+			limboTxCount := limboDetails.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender, previousTxIndex)
+			limboSendersToPreviousTxMap[senderMapKey] = limboTxCount - 1
+
+			log.Info(fmt.Sprintf("[%s] adding transaction to limbo", batchContext.s.LogPrefix()), "hash", hash)
+		}
 	}
 
-	for i, transaction := range block.Transactions() {
-		var b []byte
-		buffer := bytes.NewBuffer(b)
-		err = transaction.EncodeRLP(buffer)
-		if err != nil {
-			return err
-		}
-
-		signer := types.MakeSigner(batchContext.cfg.chainConfig, blockNumber)
-		sender, err := transaction.Sender(*signer)
-		if err != nil {
-			return err
-		}
-		senderMapKey := sender.Hex()
-
-		blocksForStreamBytes, transactionsToIncludeByIndex := limboStreamBytesBuilderHelper.append(senderMapKey, blockNumber, i)
-		streamBytes, err := legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blocksForStreamBytes, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, transactionsToIncludeByIndex)
-		if err != nil {
-			return err
-		}
-
-		previousTxIndex, ok := limboSendersToPreviousTxMap[senderMapKey]
-		if !ok {
-			previousTxIndex = math.MaxUint32
-		}
-
-		hash := transaction.Hash()
-		limboTxCount := limboDetails.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender, previousTxIndex)
-		limboSendersToPreviousTxMap[senderMapKey] = limboTxCount - 1
-
-		log.Info(fmt.Sprintf("[%s] adding transaction to limbo", batchContext.s.LogPrefix()), "hash", hash)
-	}
-
-	limboDetails.TimestampLimit = block.Time()
-	limboDetails.FirstBlockNumber = block.NumberU64()
+	limboDetails.TimestampLimit = highestBlock.Time()
+	limboDetails.FirstBlockNumber = lowestBlock.NumberU64()
 	batchContext.cfg.txPool.ProcessLimboBatchDetails(limboDetails)
 	return nil
 }
