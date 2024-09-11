@@ -65,7 +65,7 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBun
 			isCurrentBatchHigherThanLastInDatastream := request.BatchNumber > highestStartedBatch
 			isLastBatchInDatastremClosed := highestClosedBatch == highestStartedBatch
 			if isCurrentBatchHigherThanLastInDatastream && !isLastBatchInDatastremClosed {
-				if err := finalizeLastBatchInDatastream(sbc.batchContext, highestStartedBatch, request.GetLastBlockNumber()-1); err != nil {
+				if err := finalizeLastBatchInDatastream(sbc.batchContext, highestStartedBatch, request.GetFirstBlockNumber()-1); err != nil {
 					return checkedVerifierBundles, err
 				}
 			}
