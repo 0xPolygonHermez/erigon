@@ -40,7 +40,7 @@ func (h *LimboBlockPersistentHelper) setBlockIndex(unckeckedBlockIndex, invalidB
 }
 
 func (h *LimboBlockPersistentHelper) setTxIndex(txIndex int) {
-	binary.LittleEndian.PutUint32(h.keyBytesTx[13:17], uint32(txIndex))
+	binary.LittleEndian.PutUint32(h.keyBytesTx[9:13], uint32(txIndex))
 }
 
 func (p *TxPool) flushLockedLimbo(tx kv.RwTx) (err error) {
