@@ -97,7 +97,7 @@ func checkIfAccountHasPolicy(ctx context.Context, aclDB kv.RwDB, addr common.Add
 		policyBytes = value
 		if policyBytes != nil && containsPolicy(policyBytes, policy) {
 			// If address is in the allowlist and has the policy, return true
-			// If address is in the blacklist and has the policy, return false
+			// If address is in the blocklist and has the policy, return false
 			hasPolicy = true
 		}
 
