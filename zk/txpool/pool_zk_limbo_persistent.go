@@ -239,7 +239,7 @@ func (p *TxPool) fromDBLimbo(ctx context.Context, tx kv.Tx, cacheView kvcache.Ca
 		case DbKeyBlockWitnessPrefix:
 			fromDBLimboBlock(p, -1, k, v).Witness = v
 		case DbKeyBlockL1InfoTreePrefix:
-			l1InfoTreeKey := binary.LittleEndian.Uint64(k[5:13])
+			l1InfoTreeKey := binary.LittleEndian.Uint64(k[9:17])
 			fromDBLimboBlock(p, -1, k, v).L1InfoTreeMinTimestamps[l1InfoTreeKey] = binary.LittleEndian.Uint64(v)
 		case DbKeyBlockBlockTimestampPrefix:
 			fromDBLimboBlock(p, -1, k, v).BlockTimestamp = binary.LittleEndian.Uint64(v)
