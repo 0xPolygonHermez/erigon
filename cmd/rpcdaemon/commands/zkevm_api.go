@@ -311,7 +311,7 @@ func (api *ZkEvmAPIImpl) GetBatchDataByNumbers(ctx context.Context, batchNumbers
 
 	for _, batchNumber := range batchNumbers.Numbers {
 		bd := &types.BatchDataSlim{
-			Number: uint64(batchNumber.Int64()),
+			Number: types.ArgUint64(batchNumber.Int64()),
 			Empty:  false,
 		}
 
@@ -1460,7 +1460,7 @@ func populateBatchDataSlimDetails(batches []*types.BatchDataSlim) (json.RawMessa
 	jBatches := make([]map[string]interface{}, 0, len(batches))
 	for _, b := range batches {
 		jBatch := map[string]interface{}{}
-		jBatch["number"] = hexutil.EncodeUint64(b.Number)
+		jBatch["number"] = b.Number.Hex()
 		jBatch["empty"] = b.Empty
 		if !b.Empty {
 			jBatch["batchL2Data"] = b.BatchL2Data

@@ -580,12 +580,13 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	tx.Commit()
 	rawBatch, err := zkEvmImpl.GetBatchDataByNumbers(ctx, rpc.RpcNumberArray{Numbers: []rpc.BlockNumber{1, 2, 3, 4, 5, 6, 7}})
 	assert.NoError(err)
-	var batchesData []rpctypes.BatchDataSlim
-	err = json.Unmarshal(rawBatch, &batchesData)
+	var bData map[string][]rpctypes.BatchDataSlim
+	err = json.Unmarshal(rawBatch, &bData)
 	assert.NoError(err)
+	batchesData := bData["data"]
 	t.Logf("batch: %+v", batchesData)
 	for i, b := range batchesData {
-		assert.Equal(uint64(i+1), b.Number)
+		assert.Equal(rpctypes.ArgUint64(i+1), b.Number)
 		if i == 0 {
 			assert.Equal("0x0b66301478000000000b00000003000000000b00000003000000000b0000000300000000", b.BatchL2Data.Hex(), "Batch 1 doesn't match")
 		} else if i <= len(batchesData)-3 {
