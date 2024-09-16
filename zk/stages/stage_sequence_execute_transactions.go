@@ -49,14 +49,14 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 	return transactions, allConditionsOk, err
 }
 
-func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Transaction, error) {
+func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, blockNumber uint64, txHash *common.Hash) ([]types.Transaction, error) {
 	cfg.txPool.LockFlusher()
 	defer cfg.txPool.UnlockFlusher()
 
 	var transactions []types.Transaction
 	// ensure we don't spin forever looking for transactions, attempt for a while then exit up to the caller
 	if err := cfg.txPoolDb.View(ctx, func(poolTx kv.Tx) error {
-		slots, err := cfg.txPool.GetLimboTxRplsByHash(poolTx, txHash)
+		slots, err := cfg.txPool.GetLimboTxRplsByHash(poolTx, blockNumber, txHash)
 		if err != nil {
 			return err
 		}
@@ -133,6 +133,7 @@ func attemptAddTransaction(
 	}
 	anyOverflow := overflow || batchDataOverflow
 	if anyOverflow && !l1Recovery {
+		log.Debug("Transaction preexecute overflow detected", "txHash", transaction.Hash(), "coutners", batchCounters.CombineCollectorsNoChanges().UsedAsString())
 		return nil, nil, true, nil
 	}
 
@@ -177,10 +178,13 @@ func attemptAddTransaction(
 		return nil, nil, false, err
 	}
 
+	counters := batchCounters.CombineCollectorsNoChanges().UsedAsString()
 	if overflow {
+		log.Debug("Transaction overflow detected", "txHash", transaction.Hash(), "coutners", counters)
 		ibs.RevertToSnapshot(snapshot)
 		return nil, nil, true, nil
 	}
+	log.Debug("Transaction added", "txHash", transaction.Hash(), "coutners", counters)
 
 	// add the gas only if not reverted. This should not be moved above the overflow check
 	header.GasUsed = gasUsed

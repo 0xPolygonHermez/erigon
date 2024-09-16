@@ -18,6 +18,9 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
+// we must perform execution and datastream alignment only during first run of this stage
+var shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = true
+
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -68,7 +71,7 @@ func SpawnSequencingStage(
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
 	batchState := newBatchState(forkId, batchNumberForStateInitialization, cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool)
 	blockDataSizeChecker := newBlockDataChecker()
-	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState, lastBatch) // using lastBatch (rather than batchState.batchNumber) is not mistake
+	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
 	// injected batch
 	if executionAt == 0 {
@@ -86,20 +89,30 @@ func SpawnSequencingStage(
 		return sdb.tx.Commit()
 	}
 
-	// handle cases where the last batch wasn't committed to the data stream.
-	// this could occur because we're migrating from an RPC node to a sequencer
-	// or because the sequencer was restarted and not all processes completed (like waiting from remote executor)
-	// we consider the data stream as verified by the executor so treat it as "safe" and unwind blocks beyond there
-	// if we identify any.  During normal operation this function will simply check and move on without performing
-	// any action.
-	if !batchState.isAnyRecovery() {
-		isUnwinding, err := alignExecutionToDatastream(batchContext, batchState, executionAt, u)
-		if err != nil {
-			return err
+	if shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart {
+		// handle cases where the last batch wasn't committed to the data stream.
+		// this could occur because we're migrating from an RPC node to a sequencer
+		// or because the sequencer was restarted and not all processes completed (like waiting from remote executor)
+		// we consider the data stream as verified by the executor so treat it as "safe" and unwind blocks beyond there
+		// if we identify any.  During normal operation this function will simply check and move on without performing
+		// any action.
+		if !batchState.isAnyRecovery() {
+			isUnwinding, err := alignExecutionToDatastream(batchContext, batchState, executionAt, u)
+			if err != nil {
+				// do not set shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart=false because of the error
+				return err
+			}
+			if isUnwinding {
+				err = sdb.tx.Commit()
+				if err != nil {
+					// do not set shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart=false because of the error
+					return err
+				}
+				shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = false
+				return nil
+			}
 		}
-		if isUnwinding {
-			return sdb.tx.Commit()
-		}
+		shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = false
 	}
 
 	tryHaltSequencer(batchContext, batchState.batchNumber)
@@ -163,7 +176,7 @@ func SpawnSequencingStage(
 			}
 		}
 
-		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg))
+		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(blockNumber), batchState.forkId, batchState.getCoinbase(&cfg))
 		if err != nil {
 			return err
 		}
@@ -223,7 +236,7 @@ func SpawnSequencingStage(
 				}
 			default:
 				if batchState.isLimboRecovery() {
-					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash)
+					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, blockNumber, batchState.limboRecoveryData.limboTxHash)
 					if err != nil {
 						return err
 					}
@@ -317,7 +330,6 @@ func SpawnSequencingStage(
 				}
 
 				if batchState.isLimboRecovery() {
-					runLoopBlocks = false
 					break LOOP_TRANSACTIONS
 				}
 			}
@@ -330,6 +342,9 @@ func SpawnSequencingStage(
 		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()
 			cfg.txPool.UpdateLimboRootByTxHash(batchState.limboRecoveryData.limboTxHash, &stateRoot)
+			if batchState.limboRecoveryData.isThereAnyBlocksLeft(blockNumber) {
+				continue
+			}
 			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, batchState.limboRecoveryData.limboTxHash.Hex(), stateRoot.Hex())
 		}
 
@@ -341,9 +356,9 @@ func SpawnSequencingStage(
 		}
 
 		if gasPerSecond != 0 {
-			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)))
+			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)), "info-tree-index", infoTreeIndexProgress)
 		} else {
-			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions)))
+			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions)), "info-tree-index", infoTreeIndexProgress)
 		}
 
 		// add a check to the verifier and also check for responses
@@ -364,7 +379,7 @@ func SpawnSequencingStage(
 		if err != nil {
 			return err
 		}
-		cfg.legacyVerifier.StartAsyncVerification(batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout)
+		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout)
 
 		// check for new responses from the verifier
 		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
@@ -384,12 +399,6 @@ func SpawnSequencingStage(
 		}
 	}
 
-	cfg.legacyVerifier.Wait()
-	needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
-	if err != nil || needsUnwind {
-		return err
-	}
-
 	/*
 		if adding something below that line we must ensure
 		- it is also handled property in processInjectedInitialBatch
@@ -397,10 +406,6 @@ func SpawnSequencingStage(
 		- it is also handled property in doCheckForBadBatch
 		- it is unwound correctly
 	*/
-
-	if err := finalizeLastBatchInDatastream(batchContext, batchState.batchNumber, block.NumberU64()); err != nil {
-		return err
-	}
 
 	// TODO: It is 99% sure that there is no need to write this in any of processInjectedInitialBatch, alignExecutionToDatastream, doCheckForBadBatch but it is worth double checknig
 	// the unwind of this value is handed by UnwindExecutionStageDbWrites
