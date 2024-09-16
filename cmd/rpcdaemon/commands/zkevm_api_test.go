@@ -378,10 +378,10 @@ func TestGetBatchByNumber(t *testing.T) {
 	cfg := &ethconfig.Defaults
 	cfg.Zk.L1RollupId = 1
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
-	dbTx, err := db.BeginRw(ctx)
+	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(dbTx)
-	erigonDB := erigon_db.NewErigonDb(dbTx)
+	hDB := hermez_db.NewHermezDb(tx)
+	erigonDB := erigon_db.NewErigonDb(tx)
 
 	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
 	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
@@ -426,7 +426,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	assert.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		err = stages.SaveStageProgress(dbTx, stages.L1VerificationsBatchNo, uint64(i))
+		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
 		assert.NoError(err)
 	}
 
@@ -436,7 +436,7 @@ func TestGetBatchByNumber(t *testing.T) {
 		err = erigonDB.WriteBody(big.NewInt(int64(i+1)), hashes[i], txs[i])
 		assert.NoError(err)
 	}
-	dbTx.Commit()
+	tx.Commit()
 	var response []byte
 	accInputHash := common.HexToHash("0x1111111111111111111111111111111111111111111111111111111111111111")
 	response = append(response, accInputHash.Bytes()...)
@@ -485,10 +485,10 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
-	dbTx, err := db.BeginRw(ctx)
+	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(dbTx)
-	erigonDB := erigon_db.NewErigonDb(dbTx)
+	hDB := hermez_db.NewHermezDb(tx)
+	erigonDB := erigon_db.NewErigonDb(tx)
 
 	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
 	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
@@ -545,12 +545,12 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	}
 
 	for i := 1; i <= 2; i++ {
-		err = stages.SaveStageProgress(dbTx, stages.L1VerificationsBatchNo, uint64(i))
+		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
 		assert.NoError(err)
 	}
-	err = stages.SaveStageProgress(dbTx, stages.Execution, 9)
+	err = stages.SaveStageProgress(tx, stages.Execution, 9)
 	assert.NoError(err)
-	err = rawdb.WriteCanonicalHash(dbTx, common.Hash{}, 9)
+	err = rawdb.WriteCanonicalHash(tx, common.Hash{}, 9)
 	assert.NoError(err)
 
 	for i := 0; i < 4; i++ {
@@ -577,7 +577,7 @@ func TestGetBatchDataByNumber(t *testing.T) {
 		err = hDB.WriteL1BatchData(uint64(i+2), bd)
 		assert.NoError(err)
 	}
-	dbTx.Commit()
+	tx.Commit()
 	rawBatch, err := zkEvmImpl.GetBatchDataByNumbers(ctx, rpc.RpcNumberArray{Numbers: []rpc.BlockNumber{1, 2, 3, 4, 5, 6, 7}})
 	assert.NoError(err)
 	var batchesData []rpctypes.BatchDataSlim
@@ -632,9 +632,9 @@ func TestGetExitRootsByGER(t *testing.T) {
 		"latest",
 	)
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
-	dbTx, err := db.BeginRw(ctx)
+	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(dbTx)
+	hDB := hermez_db.NewHermezDb(tx)
 
 	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
 	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
@@ -666,7 +666,7 @@ func TestGetExitRootsByGER(t *testing.T) {
 	err = hDB.WriteSequence(4, 1, common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), stateRoots[len(stateRoots)-1])
 	assert.NoError(err)
 
-	dbTx.Commit()
+	tx.Commit()
 	for i, g := range gers {
 		exitRoots, err := zkEvmImpl.GetExitRootsByGER(ctx, g)
 		assert.NoError(err)
@@ -707,9 +707,9 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 		"latest",
 	)
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
-	dbTx, err := db.BeginRw(ctx)
+	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(dbTx)
+	hDB := hermez_db.NewHermezDb(tx)
 
 	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
 	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
@@ -743,7 +743,7 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 	err = hDB.WriteSequence(4, 1, common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), stateRoots[len(stateRoots)-1])
 	assert.NoError(err)
 
-	dbTx.Commit()
+	tx.Commit()
 	ger, err := zkEvmImpl.GetLatestGlobalExitRoot(ctx)
 	assert.NoError(err)
 	t.Logf("ger: %+v", ger)
@@ -808,9 +808,9 @@ func TestGetExitRootTable(t *testing.T) {
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
-	dbTx, err := db.BeginRw(ctx)
+	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(dbTx)
+	hDB := hermez_db.NewHermezDb(tx)
 
 	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
 	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
@@ -842,7 +842,7 @@ func TestGetExitRootTable(t *testing.T) {
 		err = hDB.WriteL1InfoTreeRoot(l1InfoRoots[i], l1InforTree.Index)
 		assert.NoError(err)
 	}
-	dbTx.Commit()
+	tx.Commit()
 
 	exitRootEntries, err := zkEvmImpl.GetExitRootTable(ctx)
 	assert.NoError(err)
@@ -882,10 +882,10 @@ func TestGetFullBlockByNumber(t *testing.T) {
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
-	dbTx, err := db.BeginRw(ctx)
+	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(dbTx)
-	erigonDB := erigon_db.NewErigonDb(dbTx)
+	hDB := hermez_db.NewHermezDb(tx)
+	erigonDB := erigon_db.NewErigonDb(tx)
 
 	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
 	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
@@ -963,7 +963,7 @@ func TestGetFullBlockByNumber(t *testing.T) {
 	err = erigonDB.WriteBody(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), []types.Transaction{})
 	assert.NoError(err)
 
-	dbTx.Commit()
+	tx.Commit()
 
 	// Block 1
 	block1, err := zkEvmImpl.GetFullBlockByNumber(ctx, rpc.BlockNumber(1), true)
@@ -1051,10 +1051,10 @@ func TestGetFullBlockByHash(t *testing.T) {
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, &ethconfig.Defaults)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
-	dbTx, err := db.BeginRw(ctx)
+	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(dbTx)
-	erigonDB := erigon_db.NewErigonDb(dbTx)
+	hDB := hermez_db.NewHermezDb(tx)
+	erigonDB := erigon_db.NewErigonDb(tx)
 
 	gers := []common.Hash{common.HexToHash("0xf010e584db63e18e207a2a2a09cfef322b8f8f185df5093ed17794ac365ef60e"), common.HexToHash("0x12021ea011bd6ebffee86ea47e2c3d08e4fe734ba7251f2ddbc9fa648af3b1e6"), common.HexToHash("0x055bbf062f8add981fd54801e5c36d404da37b8300a7babc2bd2585a54a2195a"), common.HexToHash("0x252feef2a0468f334e0efa3ec67ceb04dbe3d64204242b3774ce1850f8042760")}
 	parentHashes := []common.Hash{common.HexToHash("0x502b94aa765e198ecd736bcb3ec673e1fcb5985d8e610b1ba06bcf9fbdb965b2"), common.HexToHash("0x55a33ac3bf2cc61ceafdee10415448de84c2e64dc75b3f622fd61d250c1362ec"), common.HexToHash("0x88b7f001ebab21b77fe747af424320e23c039decd5e3f2bb2e074b6956079bdf"), common.HexToHash("0x89f4d0933bdcaf5a43266a701e081e4364e2f6d78ae8a82baea4b73e4531821e")}
@@ -1132,7 +1132,7 @@ func TestGetFullBlockByHash(t *testing.T) {
 	err = erigonDB.WriteBody(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), []types.Transaction{})
 	assert.NoError(err)
 
-	dbTx.Commit()
+	tx.Commit()
 
 	// Block 1
 	block1, err := zkEvmImpl.GetFullBlockByHash(ctx, hashes[0], true)

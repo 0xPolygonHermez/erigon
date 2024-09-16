@@ -71,7 +71,7 @@ func TestHeaderStorage(t *testing.T) {
 
 // Tests block body storage and retrieval operations.
 func TestBodyStorage(t *testing.T) {
-	_, dbTx := memdb.NewTestTx(t)
+	_, tx := memdb.NewTestTx(t)
 	require := require.New(t)
 
 	var testKey, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
@@ -98,16 +98,16 @@ func TestBodyStorage(t *testing.T) {
 	_ = rlp.Encode(hasher, body)
 	hash := libcommon.BytesToHash(hasher.Sum(nil))
 
-	if entry := ReadCanonicalBodyWithTransactions(dbTx, hash, 0); entry != nil {
+	if entry := ReadCanonicalBodyWithTransactions(tx, hash, 0); entry != nil {
 		t.Fatalf("Non existent body returned: %v", entry)
 	}
-	require.NoError(WriteBody(dbTx, hash, 0, body))
-	if entry := ReadCanonicalBodyWithTransactions(dbTx, hash, 0); entry == nil {
+	require.NoError(WriteBody(tx, hash, 0, body))
+	if entry := ReadCanonicalBodyWithTransactions(tx, hash, 0); entry == nil {
 		t.Fatalf("Stored body not found")
 	} else if types.DeriveSha(types.Transactions(entry.Transactions)) != types.DeriveSha(types.Transactions(body.Transactions)) || types.CalcUncleHash(entry.Uncles) != types.CalcUncleHash(body.Uncles) {
 		t.Fatalf("Retrieved body mismatch: have %v, want %v", entry, body)
 	}
-	if entry := ReadBodyRLP(dbTx, hash, 0); entry == nil {
+	if entry := ReadBodyRLP(tx, hash, 0); entry == nil {
 		t.Fatalf("Stored body RLP not found")
 	} else {
 		hasher := sha3.NewLegacyKeccak256()
@@ -118,8 +118,8 @@ func TestBodyStorage(t *testing.T) {
 		}
 	}
 	// Delete the body and verify the execution
-	deleteBody(dbTx, hash, 0)
-	if entry := ReadCanonicalBodyWithTransactions(dbTx, hash, 0); entry != nil {
+	deleteBody(tx, hash, 0)
+	if entry := ReadCanonicalBodyWithTransactions(tx, hash, 0); entry != nil {
 		t.Fatalf("Deleted body returned: %v", entry)
 	}
 }
