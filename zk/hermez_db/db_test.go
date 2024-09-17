@@ -3,6 +3,7 @@ package hermez_db
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -520,60 +521,6 @@ func TestBatchBlocks(t *testing.T) {
 	}
 }
 
-func TestFirstAndLastForkBatch(t *testing.T) {
-	assert := assert.New(t)
-
-	tx, cleanup := GetDbTx()
-	defer cleanup()
-
-	db := NewHermezDb(tx)
-
-	numberOfForks := 4
-	batchesPerBlock := 10
-
-	for f := 1; f <= numberOfForks; f++ {
-		forkId := uint64(f)
-		for b := 1; b <= batchesPerBlock; b++ {
-			batchNumber := uint64(((f - 1) * batchesPerBlock) + b)
-			err := db.WriteForkFirstBatchOnce(forkId, batchNumber)
-			require.NoError(t, err)
-			err = db.WriteForkLastBatch(forkId, batchNumber)
-			require.NoError(t, err)
-		}
-	}
-
-	testCases := []struct {
-		forkId             uint64
-		expectedFirstBatch uint64
-		expectedLastBatch  uint64
-		found              bool
-	}{
-		{1, 1, 10, true},
-		{2, 11, 20, true},
-		{3, 21, 30, true},
-		{4, 31, 40, true},
-		{5, 0, 0, false},
-	}
-
-	allForks, allFirstBatches, err := db.GetAllForkFirstBatch()
-	require.NoError(t, err)
-
-	assert.Equal(numberOfForks, len(allForks))
-	assert.Equal(numberOfForks, len(allFirstBatches))
-
-	for _, tc := range testCases {
-		batch, found, err := db.GetForkFirstBatch(tc.forkId)
-		require.NoError(t, err)
-		assert.Equal(tc.expectedFirstBatch, batch)
-		assert.Equal(tc.found, found)
-
-		batch, found, err = db.GetForkLastBatch(tc.forkId)
-		require.NoError(t, err)
-		assert.Equal(tc.expectedLastBatch, batch)
-		assert.Equal(tc.found, found)
-	}
-}
-
 func TestDeleteForkId(t *testing.T) {
 	type forkInterval struct {
 		ForkId          uint64
@@ -604,7 +551,7 @@ func TestDeleteForkId(t *testing.T) {
 			{4, 31, 40},
 			{5, 41, 50},
 			{6, 51, 60},
-			{7, 61, 69},
+			{7, 61, math.MaxUint64},
 		}},
 		{"delete fork id for batches that don't exist", 80, 90, nil, []forkInterval{
 			{1, 1, 10},
@@ -613,18 +560,18 @@ func TestDeleteForkId(t *testing.T) {
 			{4, 31, 40},
 			{5, 41, 50},
 			{6, 51, 60},
-			{7, 61, 70},
+			{7, 61, math.MaxUint64},
 		}},
 		{"delete fork id for batches that cross multiple forks from some point until the last one - unwind", 27, 70, []uint64{4, 5, 6, 7}, []forkInterval{
 			{1, 1, 10},
 			{2, 11, 20},
-			{3, 21, 26},
+			{3, 21, math.MaxUint64},
 		}},
 		{"delete fork id for batches that cross multiple forks from zero to some point - prune", 0, 36, []uint64{1, 2, 3}, []forkInterval{
 			{4, 37, 40},
 			{5, 41, 50},
 			{6, 51, 60},
-			{7, 61, 70},
+			{7, 61, math.MaxUint64},
 		}},
 		{"delete fork id for batches that cross multiple forks from some point after the beginning to some point before the end - hole", 23, 42, []uint64{4}, []forkInterval{
 			{1, 1, 10},
@@ -632,7 +579,7 @@ func TestDeleteForkId(t *testing.T) {
 			{3, 21, 22},
 			{5, 43, 50},
 			{6, 51, 60},
-			{7, 61, 70},
+			{7, 61, math.MaxUint64},
 		}},
 	}
 
@@ -646,12 +593,6 @@ func TestDeleteForkId(t *testing.T) {
 				for b := forkInterval.FromBatchNumber; b <= forkInterval.ToBatchNumber; b++ {
 					err := db.WriteForkId(b, forkInterval.ForkId)
 					require.NoError(t, err, "Failed to write ForkId")
-
-					err = db.WriteForkFirstBatchOnce(forkInterval.ForkId, b)
-					require.NoError(t, err, "Failed to write ForkId")
-
-					err = db.WriteForkLastBatch(forkInterval.ForkId, b)
-					require.NoError(t, err, "Failed to write fork last batch")
 				}
 			}
 
@@ -665,27 +606,18 @@ func TestDeleteForkId(t *testing.T) {
 			}
 
 			for _, forkId := range tc.expectedDeletedForksIds {
-				firstBatch, found, err := db.GetForkFirstBatch(forkId)
+				forkInterval, found, err := db.GetForkInterval(forkId)
 				require.NoError(t, err)
 				assert.False(t, found)
-				assert.Equal(t, uint64(0), firstBatch)
-
-				lastBatch, found, err := db.GetForkLastBatch(forkId)
-				require.NoError(t, err)
-				assert.False(t, found)
-				assert.Equal(t, uint64(0), lastBatch)
+				assert.Nil(t, forkInterval)
 			}
 
-			for _, fork := range tc.expectedRemainingForkIntervals {
-				firstForkId, found, err := db.GetForkFirstBatch(fork.ForkId)
+			for _, remainingForkInterval := range tc.expectedRemainingForkIntervals {
+				forkInterval, found, err := db.GetForkInterval(remainingForkInterval.ForkId)
 				require.NoError(t, err)
 				assert.True(t, found)
-				assert.Equal(t, fork.FromBatchNumber, firstForkId)
-
-				lastForkId, found, err := db.GetForkLastBatch(fork.ForkId)
-				require.NoError(t, err)
-				assert.True(t, found)
-				assert.Equal(t, fork.ToBatchNumber, lastForkId)
+				assert.Equal(t, remainingForkInterval.FromBatchNumber, forkInterval.FromBatchNumber)
+				assert.Equal(t, remainingForkInterval.ToBatchNumber, forkInterval.ToBatchNumber)
 			}
 		})
 	}

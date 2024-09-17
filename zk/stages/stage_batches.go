@@ -41,8 +41,6 @@ type ErigonDb interface {
 type HermezDb interface {
 	WriteForkId(batchNumber uint64, forkId uint64) error
 	WriteForkIdBlockOnce(forkId, blockNum uint64) error
-	WriteForkFirstBatchOnce(forkId, batchNo uint64) error
-	WriteForkLastBatch(forkId, batchNo uint64) error
 	WriteBlockBatch(l2BlockNumber uint64, batchNumber uint64) error
 	WriteEffectiveGasPricePercentage(txHash common.Hash, effectiveGasPricePercentage uint8) error
 	DeleteEffectiveGasPricePercentages(txHashes *[]common.Hash) error
@@ -246,15 +244,6 @@ LOOP:
 					// but, we need it re-populate our own stream
 					if err = hermezDb.WriteForkId(entry.Number, entry.ForkId); err != nil {
 						return err
-					}
-				}
-				if entry.Number > 0 {
-					if err := hermezDb.WriteForkFirstBatchOnce(entry.ForkId, entry.Number); err != nil {
-						return fmt.Errorf("write fork first batch error: %v", err)
-					}
-
-					if err := hermezDb.WriteForkLastBatch(entry.ForkId, entry.Number); err != nil {
-						return fmt.Errorf("write fork last batch error: %v", err)
 					}
 				}
 			case *types.BatchEnd:

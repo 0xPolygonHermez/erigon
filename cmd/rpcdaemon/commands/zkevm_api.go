@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 
 	"github.com/gateway-fm/cdk-erigon-lib/common"
@@ -1236,62 +1235,48 @@ func getForkIdByBatchNo(tx kv.Tx, batchNo uint64) (uint64, error) {
 	return reader.GetForkId(batchNo)
 }
 
-func getForkInterval(tx kv.Tx, forkId uint64) (rpc.ForkInterval, error) {
-	forkIntervals, err := getForkIntervals(tx)
+func getForkInterval(tx kv.Tx, forkId uint64) (*rpc.ForkInterval, error) {
+	reader := hermez_db.NewHermezDbReader(tx)
+
+	forkInterval, found, err := reader.GetForkInterval(forkId)
 	if err != nil {
-		return rpc.ForkInterval{}, err
+		return nil, err
+	} else if !found {
+		return nil, nil
 	}
 
-	forkIntervalsMap := map[uint64]rpc.ForkInterval{}
-	for _, forkInterval := range forkIntervals {
-		forkIntervalsMap[uint64(forkInterval.ForkId)] = forkInterval
+	result := rpc.ForkInterval{
+		ForkId:          hexutil.Uint64(forkInterval.ForkID),
+		FromBatchNumber: hexutil.Uint64(forkInterval.FromBatchNumber),
+		ToBatchNumber:   hexutil.Uint64(forkInterval.ToBatchNumber),
+		Version:         "",
+		BlockNumber:     hexutil.Uint64(forkInterval.BlockNumber),
 	}
 
-	forkInterval, found := forkIntervalsMap[forkId]
-	if !found {
-		return rpc.ForkInterval{}, nil
-	}
-
-	return forkInterval, nil
+	return &result, nil
 }
 
 func getForkIntervals(tx kv.Tx) ([]rpc.ForkInterval, error) {
 	reader := hermez_db.NewHermezDbReader(tx)
 
-	forkIds, firstBatchNos, err := reader.GetAllForkFirstBatch()
+	forkIntervals, err := reader.GetAllForkIntervals()
 	if err != nil {
 		return nil, err
 	}
 
-	forkIntervals := make([]rpc.ForkInterval, 0, len(forkIds))
-	for i, forkId := range forkIds {
-		lastBatchNo, found, err := reader.GetForkLastBatch(forkId)
+	result := make([]rpc.ForkInterval, 0, len(forkIntervals))
 
-		isLastForkId := i == len(forkIds)-1
-
-		if err != nil {
-			return nil, err
-		} else if !found || isLastForkId {
-			lastBatchNo = math.MaxUint64
-		}
-
-		blockNo, found, err := reader.GetForkIdBlock(forkId)
-		if err != nil {
-			return nil, err
-		} else if !found {
-			blockNo = 0
-		}
-
-		forkIntervals = append(forkIntervals, rpc.ForkInterval{
-			ForkId:          hexutil.Uint64(forkId),
-			FromBatchNumber: hexutil.Uint64(firstBatchNos[i]),
-			ToBatchNumber:   hexutil.Uint64(lastBatchNo),
+	for _, forkInterval := range forkIntervals {
+		result = append(result, rpc.ForkInterval{
+			ForkId:          hexutil.Uint64(forkInterval.ForkID),
+			FromBatchNumber: hexutil.Uint64(forkInterval.FromBatchNumber),
+			ToBatchNumber:   hexutil.Uint64(forkInterval.ToBatchNumber),
 			Version:         "",
-			BlockNumber:     hexutil.Uint64(blockNo),
+			BlockNumber:     hexutil.Uint64(forkInterval.BlockNumber),
 		})
 	}
 
-	return forkIntervals, nil
+	return result, nil
 }
 
 func convertTransactionsReceipts(
@@ -1757,6 +1742,10 @@ func (api *ZkEvmAPIImpl) GetForkById(ctx context.Context, forkId hexutil.Uint64)
 	forkInterval, err := getForkInterval(tx, uint64(forkId))
 	if err != nil {
 		return nil, err
+	}
+
+	if forkInterval == nil {
+		return nil, nil
 	}
 
 	forkJson, err := json.Marshal(forkInterval)

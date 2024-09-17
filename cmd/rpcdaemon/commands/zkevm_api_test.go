@@ -1322,9 +1322,7 @@ func TestGetForkById(t *testing.T) {
 		assert.NoError(err)
 		for i := uint64(1); i <= 10; i++ {
 			batchNumber := ((forkId - 1) * uint64(10)) + i
-			err = hDB.WriteForkFirstBatchOnce(forkId, batchNumber)
-			assert.NoError(err)
-			err = hDB.WriteForkLastBatch(forkId, batchNumber)
+			err = hDB.WriteForkId(batchNumber, forkId)
 			assert.NoError(err)
 		}
 	}
@@ -1336,31 +1334,31 @@ func TestGetForkById(t *testing.T) {
 	assert.NoError(err)
 	err = json.Unmarshal(forkIntervalJson, &forkInterval)
 	assert.NoError(err)
-	assert.Equal(forkInterval.ForkId, hexutil.Uint64(1))
-	assert.Equal(forkInterval.FromBatchNumber, hexutil.Uint64(1))
-	assert.Equal(forkInterval.ToBatchNumber, hexutil.Uint64(10))
-	assert.Equal(forkInterval.Version, "")
-	assert.Equal(forkInterval.BlockNumber, hexutil.Uint64(1000))
+	assert.Equal(hexutil.Uint64(1), forkInterval.ForkId)
+	assert.Equal(hexutil.Uint64(1), forkInterval.FromBatchNumber)
+	assert.Equal(hexutil.Uint64(10), forkInterval.ToBatchNumber)
+	assert.Equal("", forkInterval.Version)
+	assert.Equal(hexutil.Uint64(1000), forkInterval.BlockNumber)
 
 	forkIntervalJson, err = zkEvmImpl.GetForkById(ctx, 2)
 	assert.NoError(err)
 	err = json.Unmarshal(forkIntervalJson, &forkInterval)
 	assert.NoError(err)
-	assert.Equal(forkInterval.ForkId, hexutil.Uint64(2))
-	assert.Equal(forkInterval.FromBatchNumber, hexutil.Uint64(11))
-	assert.Equal(forkInterval.ToBatchNumber, hexutil.Uint64(20))
-	assert.Equal(forkInterval.Version, "")
-	assert.Equal(forkInterval.BlockNumber, hexutil.Uint64(2000))
+	assert.Equal(hexutil.Uint64(2), forkInterval.ForkId)
+	assert.Equal(hexutil.Uint64(11), forkInterval.FromBatchNumber)
+	assert.Equal(hexutil.Uint64(20), forkInterval.ToBatchNumber)
+	assert.Equal("", forkInterval.Version)
+	assert.Equal(hexutil.Uint64(2000), forkInterval.BlockNumber)
 
 	forkIntervalJson, err = zkEvmImpl.GetForkById(ctx, 3)
 	assert.NoError(err)
 	err = json.Unmarshal(forkIntervalJson, &forkInterval)
 	assert.NoError(err)
-	assert.Equal(forkInterval.ForkId, hexutil.Uint64(3))
-	assert.Equal(forkInterval.FromBatchNumber, hexutil.Uint64(21))
-	assert.Equal(forkInterval.ToBatchNumber, hexutil.Uint64(math.MaxUint64))
-	assert.Equal(forkInterval.Version, "")
-	assert.Equal(forkInterval.BlockNumber, hexutil.Uint64(3000))
+	assert.Equal(hexutil.Uint64(3), forkInterval.ForkId)
+	assert.Equal(hexutil.Uint64(21), forkInterval.FromBatchNumber)
+	assert.Equal(hexutil.Uint64(math.MaxUint64), forkInterval.ToBatchNumber)
+	assert.Equal("", forkInterval.Version)
+	assert.Equal(hexutil.Uint64(3000), forkInterval.BlockNumber)
 }
 
 func TestGetForks(t *testing.T) {
@@ -1391,9 +1389,7 @@ func TestGetForks(t *testing.T) {
 		assert.NoError(err)
 		for i := uint64(1); i <= 10; i++ {
 			batchNumber := ((forkId - 1) * uint64(10)) + i
-			err = hDB.WriteForkFirstBatchOnce(forkId, batchNumber)
-			assert.NoError(err)
-			err = hDB.WriteForkLastBatch(forkId, batchNumber)
+			err = hDB.WriteForkId(batchNumber, forkId)
 			assert.NoError(err)
 		}
 	}
