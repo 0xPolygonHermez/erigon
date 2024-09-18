@@ -1555,12 +1555,12 @@ func checkPortIsFree(addr string) (free bool) {
 }
 
 func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSyncer *syncer.L1Syncer) (bool, error) {
-	l1AddrRollup, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressRollup)
+	l1AddrRollupManager, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressRollup)
 	if err != nil {
 		return false, err
 	}
-	if l1AddrRollup != cfg.AddressRollupManager {
-		log.Warn("L1 contract address check failed (AddressRollupManager)", "expected", cfg.AddressRollupManager, "actual", l1AddrRollup)
+	if l1AddrRollupManager != cfg.AddressRollupManager {
+		log.Warn("L1 contract address check failed (AddressRollupManager)", "expected", cfg.AddressRollupManager, "actual", l1AddrRollupManager)
 		return false, nil
 	}
 
