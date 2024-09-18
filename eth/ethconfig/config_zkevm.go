@@ -19,7 +19,7 @@ type Zk struct {
 	AddressSequencer                       common.Address
 	AddressAdmin                           common.Address
 	AddressRollupManager                   common.Address
-	AddressZkevm                           common.Address
+	AddressRollup                          common.Address
 	AddressGerManager                      common.Address
 	L1ContractAddressCheck                 bool
 	L1RollupId                             uint64

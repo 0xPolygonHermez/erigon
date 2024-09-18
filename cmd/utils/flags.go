@@ -415,9 +415,9 @@ var (
 		Usage: "Rollup manager address",
 		Value: "",
 	}
-	AddressZkevmFlag = cli.StringFlag{
-		Name:  "zkevm.address-zkevm",
-		Usage: "Zkevm address",
+	AddressRollupFlag = cli.StringFlag{
+		Name:  "zkevm.address-rollup",
+		Usage: "Rollup address",
 		Value: "",
 	}
 	AddressGerManagerFlag = cli.StringFlag{

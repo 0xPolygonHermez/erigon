@@ -178,7 +178,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.AddressSequencerFlag,
 	&utils.AddressAdminFlag,
 	&utils.AddressRollupManagerFlag,
-	&utils.AddressZkevmFlag,
+	&utils.AddressRollupFlag,
 	&utils.AddressGerManagerFlag,
 	&utils.L1RollupIdFlag,
 	&utils.L1BlockRangeFlag,

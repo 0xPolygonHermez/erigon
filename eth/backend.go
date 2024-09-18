@@ -804,8 +804,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			contracts.VerificationTopicEtrog,
 			contracts.VerificationValidiumTopicEtrog,
 		}}
-
-		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollupManager, cfg.AddressAdmin, cfg.AddressZkevm}
+		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressAdmin, cfg.AddressRollupManager, cfg.AddressRollup}
 
 		var l1Topics [][]libcommon.Hash
 		var l1Contracts []libcommon.Address
@@ -816,7 +815,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				contracts.CreateNewRollupTopic,
 				contracts.UpdateRollupTopic,
 			}}
-			l1Contracts = []libcommon.Address{cfg.AddressZkevm, cfg.AddressRollupManager}
+			l1Contracts = []libcommon.Address{cfg.AddressRollupManager, cfg.AddressRollup}
 		} else {
 			l1Topics = seqAndVerifTopics
 			l1Contracts = seqAndVerifL1Contracts
@@ -918,7 +917,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,
 				ethermanClients,
-				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollupManager},
+				[]libcommon.Address{cfg.AddressRollup, cfg.AddressRollupManager},
 				[][]libcommon.Hash{{
 					contracts.SequenceBatchesTopic,
 				}},
@@ -1556,7 +1555,7 @@ func checkPortIsFree(addr string) (free bool) {
 }
 
 func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSyncer *syncer.L1Syncer) (bool, error) {
-	l1AddrRollup, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressZkevm)
+	l1AddrRollup, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressRollup)
 	if err != nil {
 		return false, err
 	}
@@ -1565,7 +1564,7 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 		return false, nil
 	}
 
-	l1AddrAdmin, err := l1BlockSyncer.CallAdmin(ctx, &cfg.AddressZkevm)
+	l1AddrAdmin, err := l1BlockSyncer.CallAdmin(ctx, &cfg.AddressRollup)
 	if err != nil {
 		return false, err
 	}
@@ -1574,7 +1573,7 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 		return false, nil
 	}
 
-	l1AddrGerManager, err := l1BlockSyncer.CallGlobalExitRootManager(ctx, &cfg.AddressZkevm)
+	l1AddrGerManager, err := l1BlockSyncer.CallGlobalExitRootManager(ctx, &cfg.AddressRollup)
 	if err != nil {
 		return false, err
 	}
@@ -1583,7 +1582,7 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 		return false, nil
 	}
 
-	l1AddrSequencer, err := l1BlockSyncer.CallTrustedSequencer(ctx, &cfg.AddressZkevm)
+	l1AddrSequencer, err := l1BlockSyncer.CallTrustedSequencer(ctx, &cfg.AddressRollup)
 	if err != nil {
 		return false, err
 	}
