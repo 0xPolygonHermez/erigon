@@ -447,8 +447,8 @@ var (
 		Value: "finalized",
 	}
 	L1MaticContractAddressFlag = cli.StringFlag{
-		Name:  "zkevm.l1-matic-contract-address",
-		Usage: "Ethereum L1 Matic contract address",
+		Name:  "zkevm.address-matic",
+		Usage: "Matic contract address",
 		Value: "0x0",
 	}
 	L1FirstBlockFlag = cli.Uint64Flag{
