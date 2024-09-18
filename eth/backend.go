@@ -805,7 +805,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			contracts.VerificationValidiumTopicEtrog,
 		}}
 
-		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin, cfg.AddressZkevm}
+		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollupManager, cfg.AddressAdmin, cfg.AddressZkevm}
 
 		var l1Topics [][]libcommon.Hash
 		var l1Contracts []libcommon.Address
@@ -816,7 +816,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				contracts.CreateNewRollupTopic,
 				contracts.UpdateRollupTopic,
 			}}
-			l1Contracts = []libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup}
+			l1Contracts = []libcommon.Address{cfg.AddressZkevm, cfg.AddressRollupManager}
 		} else {
 			l1Topics = seqAndVerifTopics
 			l1Contracts = seqAndVerifL1Contracts
@@ -918,7 +918,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,
 				ethermanClients,
-				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
+				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollupManager},
 				[][]libcommon.Hash{{
 					contracts.SequenceBatchesTopic,
 				}},
@@ -1037,7 +1037,7 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 		L1ChainID:                 cfg.L1ChainId,
 		L2ChainID:                 cfg.L2ChainId,
 		L2ChainName:               l2ChainName,
-		PoEAddr:                   cfg.AddressRollup,
+		PoEAddr:                   cfg.AddressRollupManager,
 		MaticAddr:                 cfg.L1MaticContractAddress,
 		GlobalExitRootManagerAddr: cfg.AddressGerManager,
 	}
@@ -1560,8 +1560,8 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 	if err != nil {
 		return false, err
 	}
-	if l1AddrRollup != cfg.AddressRollup {
-		log.Warn("L1 contract address check failed (AddressRollup)", "expected", cfg.AddressRollup, "actual", l1AddrRollup)
+	if l1AddrRollup != cfg.AddressRollupManager {
+		log.Warn("L1 contract address check failed (AddressRollupManager)", "expected", cfg.AddressRollupManager, "actual", l1AddrRollup)
 		return false, nil
 	}
 

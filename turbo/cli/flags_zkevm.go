@@ -120,7 +120,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1CachePort:                            ctx.Uint(utils.L1CachePortFlag.Name),
 		AddressSequencer:                       libcommon.HexToAddress(ctx.String(utils.AddressSequencerFlag.Name)),
 		AddressAdmin:                           libcommon.HexToAddress(ctx.String(utils.AddressAdminFlag.Name)),
-		AddressRollup:                          libcommon.HexToAddress(ctx.String(utils.AddressRollupFlag.Name)),
+		AddressRollupManager:                        libcommon.HexToAddress(ctx.String(utils.AddressRollupManagerFlag.Name)),
 		AddressZkevm:                           libcommon.HexToAddress(ctx.String(utils.AddressZkevmFlag.Name)),
 		AddressGerManager:                      libcommon.HexToAddress(ctx.String(utils.AddressGerManagerFlag.Name)),
 		L1RollupId:                             ctx.Uint64(utils.L1RollupIdFlag.Name),
@@ -211,7 +211,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 	checkFlag(utils.AddressSequencerFlag.Name, cfg.AddressSequencer)
 	checkFlag(utils.AddressAdminFlag.Name, cfg.AddressAdmin)
-	checkFlag(utils.AddressRollupFlag.Name, cfg.AddressRollup)
+	checkFlag(utils.AddressRollupManagerFlag.Name, cfg.AddressRollupManager)
 	checkFlag(utils.AddressZkevmFlag.Name, cfg.AddressZkevm)
 	checkFlag(utils.AddressGerManagerFlag.Name, cfg.AddressGerManager)
 
