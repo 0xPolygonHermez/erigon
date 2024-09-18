@@ -204,11 +204,6 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, erro
 		if err := hermezDb.WriteForkIdBlockOnce(latest, executionAt+1); err != nil {
 			return latest, err
 		}
-		// write the fork id for this batch now so that the remote executor receives
-		// the correct fork id for the batch
-		if err = hermezDb.WriteForkId(nextBatch, latest); err != nil {
-			return latest, err
-		}
 	}
 
 	return latest, nil
