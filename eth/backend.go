@@ -1037,7 +1037,7 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 		L2ChainID:                 cfg.L2ChainId,
 		L2ChainName:               l2ChainName,
 		PoEAddr:                   cfg.AddressRollupManager,
-		MaticAddr:                 cfg.L1MaticContractAddress,
+		MaticAddr:                 cfg.MaticContractAddress,
 		GlobalExitRootManagerAddr: cfg.AddressGerManager,
 	}
 

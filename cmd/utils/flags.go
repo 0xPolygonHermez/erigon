@@ -446,7 +446,7 @@ var (
 		Usage: "The type of the highest block in the L1 chain. latest, safe, or finalized",
 		Value: "finalized",
 	}
-	L1MaticContractAddressFlag = cli.StringFlag{
+	MaticContractAddressFlag = cli.StringFlag{
 		Name:  "zkevm.address-matic",
 		Usage: "The MATIC contract address on L1",
 		Value: "0x0",

@@ -26,7 +26,7 @@ type Zk struct {
 	L1BlockRange                           uint64
 	L1QueryDelay                           uint64
 	L1HighestBlockType                     string
-	L1MaticContractAddress                 common.Address
+	MaticContractAddress                   common.Address
 	L1FirstBlock                           uint64
 	L1FinalizedBlockRequirement            uint64
 	L1CacheEnabled                         bool

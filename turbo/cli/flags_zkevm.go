@@ -127,7 +127,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1BlockRange:                           ctx.Uint64(utils.L1BlockRangeFlag.Name),
 		L1QueryDelay:                           ctx.Uint64(utils.L1QueryDelayFlag.Name),
 		L1HighestBlockType:                     ctx.String(utils.L1HighestBlockTypeFlag.Name),
-		L1MaticContractAddress:                 libcommon.HexToAddress(ctx.String(utils.L1MaticContractAddressFlag.Name)),
+		MaticContractAddress:                   libcommon.HexToAddress(ctx.String(utils.MaticContractAddressFlag.Name)),
 		L1FirstBlock:                           ctx.Uint64(utils.L1FirstBlockFlag.Name),
 		L1FinalizedBlockRequirement:            ctx.Uint64(utils.L1FinalizedBlockRequirementFlag.Name),
 		L1ContractAddressCheck:                 ctx.Bool(utils.L1ContractAddressCheckFlag.Name),
@@ -217,7 +217,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 	checkFlag(utils.L1ChainIdFlag.Name, cfg.L1ChainId)
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.L1RpcUrl)
-	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.L1MaticContractAddress.Hex())
+	checkFlag(utils.MaticContractAddressFlag.Name, cfg.MaticContractAddress.Hex())
 	checkFlag(utils.L1FirstBlockFlag.Name, cfg.L1FirstBlock)
 	checkFlag(utils.RpcRateLimitsFlag.Name, cfg.RpcRateLimits)
 	checkFlag(utils.RpcGetBatchWitnessConcurrencyLimitFlag.Name, cfg.RpcGetBatchWitnessConcurrencyLimit)

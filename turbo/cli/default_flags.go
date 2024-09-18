@@ -184,7 +184,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.L1BlockRangeFlag,
 	&utils.L1QueryDelayFlag,
 	&utils.L1HighestBlockTypeFlag,
-	&utils.L1MaticContractAddressFlag,
+	&utils.MaticContractAddressFlag,
 	&utils.L1FirstBlockFlag,
 	&utils.L1FinalizedBlockRequirementFlag,
 	&utils.L1ContractAddressCheckFlag,
