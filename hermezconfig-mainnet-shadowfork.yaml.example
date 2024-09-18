@@ -9,7 +9,7 @@ zkevm.l1-chain-id: 11155111
 zkevm.l1-rpc-url: https://rpc.eu-central-1.gateway.fm/v4/ethereum/non-archival/sepolia?apikey=IkrTRMPAlsjfgTyKz1Xfa5ldS8XSc0PN.En5aU2Gwdxvf3zk2
 
 zkevm.address-sequencer: ""
-zkevm.address-zkevm: ""
+zkevm.address-rollup: ""
 zkevm.address-admin: "0x9fB0B4A5d4d60aaCfa8DC20B8DF5528Ab26848d3"
 zkevm.address-rollup-manager: "0x31A6ae85297DD0EeBD66D7556941c33Bd41d565C"
 zkevm.address-ger-manager: "0x76216E45Bdd20022eEcC07999e50228d7829534B"
