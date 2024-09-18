@@ -22,7 +22,7 @@ type Zk struct {
 	AddressRollup                          common.Address
 	AddressGerManager                      common.Address
 	L1ContractAddressCheck                 bool
-	L1RollupId                             uint64
+	RollupId                               uint64
 	L1BlockRange                           uint64
 	L1QueryDelay                           uint64
 	L1HighestBlockType                     string

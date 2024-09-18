@@ -139,12 +139,12 @@ Loop:
 		case logs := <-logsChan:
 			for _, l := range logs {
 				l := l
-				info, batchLogType := parseLogType(cfg.zkCfg.L1RollupId, &l)
+				info, batchLogType := parseLogType(cfg.zkCfg.RollupId, &l)
 				switch batchLogType {
 				case logSequence:
 				case logSequenceEtrog:
 					// prevent storing pre-etrog sequences for etrog rollups
-					if batchLogType == logSequence && cfg.zkCfg.L1RollupId > 1 {
+					if batchLogType == logSequence && cfg.zkCfg.RollupId > 1 {
 						continue
 					}
 					if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
@@ -166,7 +166,7 @@ Loop:
 				case logVerify:
 				case logVerifyEtrog:
 					// prevent storing pre-etrog verifications for etrog rollups
-					if batchLogType == logVerify && cfg.zkCfg.L1RollupId > 1 {
+					if batchLogType == logVerify && cfg.zkCfg.RollupId > 1 {
 						continue
 					}
 					if info.BatchNo > highestVerification.BatchNo {
@@ -251,7 +251,7 @@ var (
 	logIncompatible BatchLogType = 100
 )
 
-func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1BatchInfo, batchLogType BatchLogType) {
+func parseLogType(rollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1BatchInfo, batchLogType BatchLogType) {
 	var (
 		batchNum              uint64
 		stateRoot, l1InfoRoot common.Hash
@@ -270,7 +270,7 @@ func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1Bat
 		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
 		stateRoot = common.BytesToHash(log.Data[:32])
 	case contracts.VerificationValidiumTopicEtrog:
-		bigRollupId := new(big.Int).SetUint64(l1RollupId)
+		bigRollupId := new(big.Int).SetUint64(rollupId)
 		isRollupIdMatching := log.Topics[1] == common.BigToHash(bigRollupId)
 		if isRollupIdMatching {
 			batchLogType = logVerifyEtrog
@@ -280,7 +280,7 @@ func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1Bat
 			batchLogType = logIncompatible
 		}
 	case contracts.VerificationTopicEtrog:
-		bigRollupId := new(big.Int).SetUint64(l1RollupId)
+		bigRollupId := new(big.Int).SetUint64(rollupId)
 		isRollupIdMatching := log.Topics[1] == common.BigToHash(bigRollupId)
 		if isRollupIdMatching {
 			batchLogType = logVerifyEtrog

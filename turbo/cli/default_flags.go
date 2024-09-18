@@ -180,7 +180,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.AddressRollupManagerFlag,
 	&utils.AddressRollupFlag,
 	&utils.AddressGerManagerFlag,
-	&utils.L1RollupIdFlag,
+	&utils.RollupIdFlag,
 	&utils.L1BlockRangeFlag,
 	&utils.L1QueryDelayFlag,
 	&utils.L1HighestBlockTypeFlag,

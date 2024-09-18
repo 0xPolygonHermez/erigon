@@ -425,9 +425,9 @@ var (
 		Usage: "Ger Manager address",
 		Value: "",
 	}
-	L1RollupIdFlag = cli.Uint64Flag{
-		Name:  "zkevm.l1-rollup-id",
-		Usage: "Ethereum L1 Rollup ID",
+	RollupIdFlag = cli.Uint64Flag{
+		Name:  "zkevm.rollup-id",
+		Usage: "Rollup ID",
 		Value: 1,
 	}
 	L1BlockRangeFlag = cli.Uint64Flag{

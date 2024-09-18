@@ -123,7 +123,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		AddressRollupManager:                   libcommon.HexToAddress(ctx.String(utils.AddressRollupManagerFlag.Name)),
 		AddressRollup:                          libcommon.HexToAddress(ctx.String(utils.AddressRollupFlag.Name)),
 		AddressGerManager:                      libcommon.HexToAddress(ctx.String(utils.AddressGerManagerFlag.Name)),
-		L1RollupId:                             ctx.Uint64(utils.L1RollupIdFlag.Name),
+		RollupId:                               ctx.Uint64(utils.RollupIdFlag.Name),
 		L1BlockRange:                           ctx.Uint64(utils.L1BlockRangeFlag.Name),
 		L1QueryDelay:                           ctx.Uint64(utils.L1QueryDelayFlag.Name),
 		L1HighestBlockType:                     ctx.String(utils.L1HighestBlockTypeFlag.Name),

@@ -129,7 +129,7 @@ Loop:
 					}
 				case contracts.CreateNewRollupTopic:
 					rollupId := l.Topics[1].Big().Uint64()
-					if rollupId != cfg.zkCfg.L1RollupId {
+					if rollupId != cfg.zkCfg.RollupId {
 						continue
 					}
 					rollupTypeBytes := l.Data[0:32]
@@ -147,7 +147,7 @@ Loop:
 					}
 				case contracts.UpdateRollupTopic:
 					rollupId := l.Topics[1].Big().Uint64()
-					if rollupId != cfg.zkCfg.L1RollupId {
+					if rollupId != cfg.zkCfg.RollupId {
 						continue
 					}
 					newRollupBytes := l.Data[0:32]

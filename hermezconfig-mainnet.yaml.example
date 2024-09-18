@@ -18,7 +18,7 @@ zkevm.default-gas-price: 1000000000
 zkevm.max-gas-price: 0
 zkevm.gas-price-factor: 0.0375
 
-zkevm.l1-rollup-id: 1
+zkevm.rollup-id: 1
 zkevm.l1-block-range: 20000
 zkevm.l1-query-delay: 6000
 zkevm.l1-first-block: 16896700

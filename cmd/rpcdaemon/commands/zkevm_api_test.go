@@ -376,7 +376,7 @@ func TestGetBatchByNumber(t *testing.T) {
 		"latest",
 	)
 	cfg := &ethconfig.Defaults
-	cfg.Zk.L1RollupId = 1
+	cfg.Zk.RollupId = 1
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
