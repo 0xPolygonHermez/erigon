@@ -402,27 +402,27 @@ var (
 	}
 	AddressSequencerFlag = cli.StringFlag{
 		Name:  "zkevm.address-sequencer",
-		Usage: "Sequencer address",
+		Usage: "The sequencer EOA address on L1",
 		Value: "",
 	}
 	AddressAdminFlag = cli.StringFlag{
 		Name:  "zkevm.address-admin",
-		Usage: "Admin address",
+		Usage: "The admin EOA address on L1",
 		Value: "",
 	}
 	AddressRollupManagerFlag = cli.StringFlag{
 		Name:  "zkevm.address-rollup-manager",
-		Usage: "Rollup manager address",
+		Usage: "The rollup manager contract address",
 		Value: "",
 	}
 	AddressRollupFlag = cli.StringFlag{
 		Name:  "zkevm.address-rollup",
-		Usage: "Rollup address",
+		Usage: "The rollup contract address",
 		Value: "",
 	}
 	AddressGerManagerFlag = cli.StringFlag{
 		Name:  "zkevm.address-ger-manager",
-		Usage: "Ger Manager address",
+		Usage: "The gloabl exit root manager contract address",
 		Value: "",
 	}
 	RollupIdFlag = cli.Uint64Flag{
@@ -448,7 +448,7 @@ var (
 	}
 	L1MaticContractAddressFlag = cli.StringFlag{
 		Name:  "zkevm.address-matic",
-		Usage: "Matic contract address",
+		Usage: "The MATIC contract address on L1",
 		Value: "0x0",
 	}
 	L1FirstBlockFlag = cli.Uint64Flag{
