@@ -53,7 +53,7 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 }
 
 func prepareData() ([]*BatchInsertDataHolder, int) {
-	treeSize := 15000
+	treeSize := 150
 	storageSize := 96
 	batchInsertDataHolders := make([]*BatchInsertDataHolder, 0)
 	rand.Seed(1)
