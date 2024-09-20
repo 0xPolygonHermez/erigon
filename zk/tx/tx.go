@@ -137,18 +137,6 @@ func DecodeBatchL2Blocks(txsData []byte, forkID uint64) ([]DecodedBatchL2Data, e
 			return result, ErrInvalidData
 		}
 
-		if endPos < pos {
-			err := fmt.Errorf("endPos %d is smaller than pos %d", endPos, pos)
-			log.Debug("error parsing header: ", err)
-			return result, ErrInvalidData
-		}
-
-		if endPos < pos {
-			err := fmt.Errorf("endPos %d is smaller than pos %d", endPos, pos)
-			log.Debug("error parsing header: ", err)
-			return result, ErrInvalidData
-		}
-
 		fullDataTx := txsData[pos:endPos]
 		dataStart := pos + length + headerByteLength
 		txInfo := txsData[pos:dataStart]
