@@ -14,6 +14,7 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/kv/memdb"
 	jsoniter "github.com/json-iterator/go"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
+	"github.com/ledgerwatch/log/v3"
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/common/hexutil"
@@ -701,10 +702,10 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	if api.l1Syncer != nil {
 		accInputHash, err := api.getAccInputHash(ctx, hermezDb, batchNo)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get acc input hash for batch %d: %w", batchNo, err)
+			log.Error(fmt.Sprintf("failed to get acc input hash for batch %d: %w", batchNo, err))
 		}
 		if accInputHash == nil {
-			return nil, fmt.Errorf("acc input hash not found for batch %d", batchNo)
+			accInputHash = &common.Hash{}
 		}
 		batch.AccInputHash = *accInputHash
 	}
