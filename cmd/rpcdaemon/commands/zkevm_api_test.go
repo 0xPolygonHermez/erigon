@@ -453,7 +453,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	EthermanMock.EXPECT().TransactionByHash(ctx, common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97")).Return(txByHashResponse, true, nil).AnyTimes()
 
 	storageAtResponse := []byte{}
-	EthermanMock.EXPECT().StorageAt(ctx, common.HexToAddress("0x000"), common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), nil).Return(storageAtResponse, nil).AnyTimes()
+	EthermanMock.EXPECT().StorageAt(ctx, common.HexToAddress("0x000"), common.HexToHash("0xb5ad54240dc61c51d3a3e8d3f925722e010966ae263d67344c5fb60bddebddae"), nil).Return(storageAtResponse, nil).AnyTimes()
 
 	var response2 []byte
 	response2 = append(response2, accInputHash.Bytes()...)
@@ -476,7 +476,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	assert.Equal(gers[len(gers)-1], batch.GlobalExitRoot)
 	assert.Equal(mainnetExitRoots[len(mainnetExitRoots)-1], batch.MainnetExitRoot)
 	assert.Equal(rollupExitRoots[len(rollupExitRoots)-1], batch.RollupExitRoot)
-	assert.Equal(common.HexToHash("0x8f805e1fcb12750ccede8cb291b53865b536fe8734533a78185230965b32544c"), batch.AccInputHash)
+	assert.Equal(common.HexToHash("0x97d1524156ccb46723e5c3c87951da9a390499ba288161d879df1dbc03d49afc"), batch.AccInputHash)
 	assert.Equal(common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), *batch.SendSequencesTxHash)
 	assert.Equal(rpctypes.ArgUint64(1714427009), batch.Timestamp)
 	assert.Equal(true, batch.Closed)
@@ -1250,9 +1250,9 @@ func TestGetForkId(t *testing.T) {
 		err = hDB.WriteForkId(uint64(i), uint64(i))
 		assert.NoError(err)
 	}
-	err = hDB.WriteSequence(4, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"))
+	err = hDB.WriteSequence(4, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"), common.HexToHash("0x0"))
 	assert.NoError(err)
-	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"))
+	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"), common.HexToHash("0x0"))
 	assert.NoError(err)
 	for i := 1; i <= 4; i++ {
 		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
@@ -1292,9 +1292,9 @@ func TestGetForkIdByBatchNumber(t *testing.T) {
 		err = hDB.WriteForkId(uint64(i), uint64(i))
 		assert.NoError(err)
 	}
-	err = hDB.WriteSequence(4, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"))
+	err = hDB.WriteSequence(4, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"), common.HexToHash("0x0"))
 	assert.NoError(err)
-	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"))
+	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"), common.HexToHash("0x0"))
 	assert.NoError(err)
 	for i := 1; i <= 4; i++ {
 		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
