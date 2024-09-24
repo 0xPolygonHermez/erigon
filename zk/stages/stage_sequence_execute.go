@@ -298,12 +298,15 @@ func SpawnSequencingStage(
 									break LOOP_TRANSACTIONS
 								}
 							}
+
+							// move on to the next transaction to process
+							continue
 						}
-					} else {
-						if err == nil {
-							blockDataSizeChecker = &backupDataSizeChecker
-							batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
-						}
+					}
+
+					if err == nil {
+						blockDataSizeChecker = &backupDataSizeChecker
+						batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
 					}
 				}
 
