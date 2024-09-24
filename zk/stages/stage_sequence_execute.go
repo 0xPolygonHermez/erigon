@@ -432,8 +432,6 @@ func sequencingStageStep(
 						if batchState.isResequence() && cfg.zk.SequencerResequenceStrict {
 							return fmt.Errorf("strict mode enabled, but resequenced batch %d overflowed counters on block %d", batchState.batchNumber, blockNumber)
 						}
-
-						break LOOP_TRANSACTIONS
 					case overflowGas:
 						if batchState.isAnyRecovery() {
 							panic(fmt.Sprintf("block gas limit overflow in recovery block: %d", blockNumber))
@@ -444,7 +442,7 @@ func sequencingStageStep(
 					case overflowNone:
 					}
 
-					if err == nil {
+					if err == nil && anyOverflow == overflowNone {
 						blockDataSizeChecker = &backupDataSizeChecker
 						batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
 					}
