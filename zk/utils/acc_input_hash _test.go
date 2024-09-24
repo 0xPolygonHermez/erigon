@@ -44,7 +44,7 @@ func Test_CalculateEtrogAccInputHash(t *testing.T) {
 			forcedBlockHashL1,
 		)
 
-		require.Equal(t, common.HexToHash(tc.Expected), newAccInputHash)
+		require.Equal(t, common.HexToHash(tc.Expected), *newAccInputHash)
 	}
 }
 
@@ -81,7 +81,7 @@ func Test_CalculatePreEtrogAccInputHash(t *testing.T) {
 			sequencerAddress,
 		)
 
-		require.Equal(t, common.HexToHash(tc.Expected), newAccInputHash)
+		require.Equal(t, common.HexToHash(tc.Expected), *newAccInputHash)
 	}
 }
 
