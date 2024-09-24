@@ -145,7 +145,7 @@ func runBuildSmtLoop(s *SMT, logPrefix string, nodeKeys []utils.NodeKey, leafVal
 			return nil, fmt.Errorf("the actual error is returned by main DB thread")
 		}
 		v := *vPointer
-		leafValueMap.Store(k, v)
+		leafValueMap.Store(k, &v)
 
 		// find last node
 		siblings, level := rootNode.findLastNode(keys)
@@ -409,11 +409,11 @@ func (n *SmtNode) deleteTreeNoSave(keyPath []int, leafValueMap *sync.Map, kvMapO
 		if !ok {
 			return [4]uint64{}, fmt.Errorf("value not found for key %v", k)
 		}
-		accoutnValue := v.(utils.NodeValue8)
+		accoutnValue := v.(*utils.NodeValue8)
 
 		newKey := utils.RemoveKeyBits(k, len(keyPath))
 		//hash and save leaf
-		newValH, newValHV, newLeafHash, newLeafHashV := createNewLeafNoSave(&newKey, &accoutnValue)
+		newValH, newValHV, newLeafHash, newLeafHashV := createNewLeafNoSave(&newKey, accoutnValue)
 		kvMapOfValuesToSave[*newValH] = *newValHV
 		kvMapOfValuesToSave[*newLeafHash] = *newLeafHashV
 		kvMapOfLeafValuesToSave[*newLeafHash] = k
