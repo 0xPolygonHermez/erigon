@@ -427,6 +427,9 @@ func sequencingStageStep(
 									break LOOP_TRANSACTIONS
 								}
 							}
+
+							// continue on processing other transactions and skip this one
+							continue
 						}
 
 						if batchState.isResequence() && cfg.zk.SequencerResequenceStrict {
@@ -442,7 +445,7 @@ func sequencingStageStep(
 					case overflowNone:
 					}
 
-					if err == nil && anyOverflow == overflowNone {
+					if err == nil {
 						blockDataSizeChecker = &backupDataSizeChecker
 						batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
 					}
