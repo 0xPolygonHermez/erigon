@@ -1567,7 +1567,7 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 	}
 
 	if cfg.AddressAdmin != (libcommon.Address{}) {
-		log.Warn("🚨 AddressAdmin param is deprecated and it will be removed in upcoming releases")
+		log.Warn("🚨 zkevm.address-admin configuration parameter is deprecated and it will be removed in upcoming releases")
 	}
 
 	l1AddrGerManager, err := l1BlockSyncer.CallGlobalExitRootManager(ctx, &cfg.AddressZkevm)
