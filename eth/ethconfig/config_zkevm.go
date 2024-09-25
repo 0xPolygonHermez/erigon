@@ -17,7 +17,6 @@ type Zk struct {
 	L1ChainId                              uint64
 	L1RpcUrl                               string
 	AddressSequencer                       common.Address
-	AddressAdmin                           common.Address
 	AddressRollup                          common.Address
 	AddressZkevm                           common.Address
 	AddressGerManager                      common.Address

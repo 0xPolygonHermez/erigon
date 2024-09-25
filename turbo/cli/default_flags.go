@@ -176,7 +176,6 @@ var DefaultFlags = []cli.Flag{
 	&utils.L1CacheEnabledFlag,
 	&utils.L1CachePortFlag,
 	&utils.AddressSequencerFlag,
-	&utils.AddressAdminFlag,
 	&utils.AddressRollupFlag,
 	&utils.AddressZkevmFlag,
 	&utils.AddressGerManagerFlag,

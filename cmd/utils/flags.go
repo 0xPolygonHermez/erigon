@@ -405,11 +405,6 @@ var (
 		Usage: "Sequencer address",
 		Value: "",
 	}
-	AddressAdminFlag = cli.StringFlag{
-		Name:  "zkevm.address-admin",
-		Usage: "Admin address",
-		Value: "",
-	}
 	AddressRollupFlag = cli.StringFlag{
 		Name:  "zkevm.address-rollup",
 		Usage: "Rollup address",

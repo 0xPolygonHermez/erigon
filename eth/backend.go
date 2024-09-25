@@ -805,7 +805,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			contracts.VerificationValidiumTopicEtrog,
 		}}
 
-		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin, cfg.AddressZkevm}
+		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollup, cfg.AddressZkevm}
 
 		var l1Topics [][]libcommon.Hash
 		var l1Contracts []libcommon.Address
@@ -1558,19 +1558,11 @@ func checkPortIsFree(addr string) (free bool) {
 func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSyncer *syncer.L1Syncer) (bool, error) {
 	l1AddrRollup, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressZkevm)
 	if err != nil {
+		log.Warn("L1 contract address check failed (RollupManager)", "err", err)
 		return false, err
 	}
 	if l1AddrRollup != cfg.AddressRollup {
 		log.Warn("L1 contract address check failed (AddressRollup)", "expected", cfg.AddressRollup, "actual", l1AddrRollup)
-		return false, nil
-	}
-
-	l1AddrAdmin, err := l1BlockSyncer.CallAdmin(ctx, &cfg.AddressZkevm)
-	if err != nil {
-		return false, err
-	}
-	if l1AddrAdmin != cfg.AddressAdmin {
-		log.Warn("L1 contract address check failed (AddressAdmin)", "expected", cfg.AddressAdmin, "actual", l1AddrAdmin)
 		return false, nil
 	}
 
