@@ -805,7 +805,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			contracts.VerificationValidiumTopicEtrog,
 		}}
 
-		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollup, cfg.AddressZkevm}
+		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin, cfg.AddressZkevm}
 
 		var l1Topics [][]libcommon.Hash
 		var l1Contracts []libcommon.Address
