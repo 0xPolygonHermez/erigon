@@ -123,7 +123,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 
 		mt.subPool &^= NotTooMuchGas
 		// zk: here we don't care about block limits any more and care about only the transaction gas limit in ZK
-		if mt.Tx.Gas < transactionGasLimit {
+		if mt.Tx.Gas <= transactionGasLimit {
 			mt.subPool |= NotTooMuchGas
 		}
 
@@ -192,7 +192,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 			continue
 		}
 
-		if mt.Tx.Gas >= transactionGasLimit {
+		if mt.Tx.Gas > transactionGasLimit {
 			// Skip transactions with very large gas limit, these shouldn't enter the pool at all
 			log.Debug("found a transaction in the pending pool with too high gas for tx - clear the tx pool")
 			continue
@@ -257,6 +257,22 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 			break
 		}
 	}
+}
+
+// discards the transactions that are in overflowZkCoutners from pending
+// executes the discard function on them
+// deletes the tx from the sendersWithChangedState map
+// deletes the discarded txs from the overflowZkCounters
+func (p *TxPool) discardOverflowZkCountersFromPending(pending *PendingPool, discard func(*metaTx, DiscardReason), sendersWithChangedState map[uint64]struct{}) {
+	for _, mt := range p.overflowZkCounters {
+		log.Info("[tx_pool] Removing TX from pending due to counter overflow", "tx", mt.Tx.IDHash)
+		pending.Remove(mt)
+		discard(mt, OverflowZkCounters)
+		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
+		// do not hold on to the discard reason for an OOC issue
+		p.discardReasonsLRU.Remove(string(mt.Tx.IDHash[:]))
+	}
+	p.overflowZkCounters = p.overflowZkCounters[:0]
 }
 
 func (p *TxPool) StartIfNotStarted(ctx context.Context, txPoolDb kv.RoDB, coreTx kv.Tx) error {

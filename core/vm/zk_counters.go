@@ -67,38 +67,53 @@ func (c *Counter) AsMap() map[string]int {
 	}
 }
 
-type Counters map[CounterKey]*Counter
+type Counters []*Counter
 
-func NewCountersFromUsedMap(used map[string]int) *Counters {
+func NewCounters() Counters {
+	array := make(Counters, CounterTypesCount)
+	return array
+}
+
+func NewCountersFromUsedArray(used []int) *Counters {
 	res := Counters{}
 	for k, v := range used {
-		res[CounterKey(k)] = &Counter{used: v}
+		res[k] = &Counter{used: v}
 	}
 	return &res
 }
 
 func (c Counters) UsedAsString() string {
-	res := fmt.Sprintf("[SHA: %v]", c[SHA].used)
-	res += fmt.Sprintf("[A: %v]", c[A].used)
-	res += fmt.Sprintf("[B: %v]", c[B].used)
-	res += fmt.Sprintf("[K: %v]", c[K].used)
-	res += fmt.Sprintf("[M: %v]", c[M].used)
-	res += fmt.Sprintf("[P: %v]", c[P].used)
-	res += fmt.Sprintf("[S: %v]", c[S].used)
-	res += fmt.Sprintf("[D: %v]", c[D].used)
+	res := fmt.Sprintf("[%s: %v]", CounterKeyNames[SHA], c[SHA].used)
+	res += fmt.Sprintf("[%s: %v]", CounterKeyNames[A], c[A].used)
+	res += fmt.Sprintf("[%s: %v]", CounterKeyNames[B], c[B].used)
+	res += fmt.Sprintf("[%s: %v]", CounterKeyNames[K], c[K].used)
+	res += fmt.Sprintf("[%s: %v]", CounterKeyNames[M], c[M].used)
+	res += fmt.Sprintf("[%s: %v]", CounterKeyNames[P], c[P].used)
+	res += fmt.Sprintf("[%s: %v]", CounterKeyNames[S], c[S].used)
+	res += fmt.Sprintf("[%s: %v]", CounterKeyNames[D], c[D].used)
 	return res
+}
+
+func (c Counters) UsedAsArray() []int {
+	array := make([]int, len(c))
+
+	for i, v := range c {
+		array[i] = v.used
+	}
+
+	return array
 }
 
 func (c Counters) UsedAsMap() map[string]int {
 	return map[string]int{
-		"SHA": c[SHA].used,
-		"A":   c[A].used,
-		"B":   c[B].used,
-		"K":   c[K].used,
-		"M":   c[M].used,
-		"P":   c[P].used,
-		"S":   c[S].used,
-		"D":   c[D].used,
+		string(CounterKeyNames[S]):   c[S].used,
+		string(CounterKeyNames[A]):   c[A].used,
+		string(CounterKeyNames[B]):   c[B].used,
+		string(CounterKeyNames[M]):   c[M].used,
+		string(CounterKeyNames[K]):   c[K].used,
+		string(CounterKeyNames[D]):   c[D].used,
+		string(CounterKeyNames[P]):   c[P].used,
+		string(CounterKeyNames[SHA]): c[SHA].used,
 	}
 }
 
@@ -144,17 +159,25 @@ func (cc Counters) Clone() Counters {
 	return clonedCounters
 }
 
-type CounterKey string
+type CounterKey int
+type CounterName string
+
+const (
+	S   CounterKey = 0
+	A   CounterKey = 1
+	B   CounterKey = 2
+	M   CounterKey = 3
+	K   CounterKey = 4
+	D   CounterKey = 5
+	P   CounterKey = 6
+	SHA CounterKey = 7
+
+	CounterTypesCount = 8
+)
 
 var (
-	S   CounterKey = "S"
-	A   CounterKey = "A"
-	B   CounterKey = "B"
-	M   CounterKey = "M"
-	K   CounterKey = "K"
-	D   CounterKey = "D"
-	P   CounterKey = "P"
-	SHA CounterKey = "SHA"
+	// important!!! must match the indexes of the keys
+	CounterKeyNames = []CounterName{"S", "A", "B", "M", "K", "D", "P", "SHA"}
 )
 
 type CounterCollector struct {
@@ -347,7 +370,6 @@ func SimpleCounterOperations(cc *CounterCollector) *[256]executionFunc {
 		CREATE2:        cc.opCreate2,
 		RETURN:         cc.opReturn,
 		REVERT:         cc.opRevert,
-		SENDALL:        cc.opSendAll,
 		SELFDESTRUCT:   cc.opSendAll,
 		INVALID:        cc.opInvalid,
 		ADDRESS:        cc.opAddress,
@@ -580,7 +602,7 @@ func (cc *CounterCollector) finishBatchProcessing() {
 	cc.Deduct(S, 200)
 	cc.Deduct(K, 2)
 	cc.Deduct(P, cc.smtLevels)
-	cc.Deduct(B, 1)
+	cc.Deduct(B, 2)
 }
 
 func (cc *CounterCollector) isColdAddress() {
@@ -710,6 +732,7 @@ func (cc *CounterCollector) setupNewBlockInfoTree() {
 
 func (cc *CounterCollector) verifyMerkleProof() {
 	cc.Deduct(S, 250)
+	cc.Deduct(B, 1)
 	cc.Deduct(K, 33)
 }
 
@@ -764,9 +787,9 @@ func (cc *CounterCollector) decodeChangeL2BlockTx() {
 }
 
 func (cc *CounterCollector) ecAdd() {
-	cc.Deduct(S, 323)
-	cc.Deduct(B, 33)
-	cc.Deduct(A, 40)
+	cc.Deduct(S, 800)
+	cc.Deduct(B, 50)
+	cc.Deduct(A, 50)
 }
 
 func (cc *CounterCollector) preECMul() {
@@ -779,9 +802,9 @@ func (cc *CounterCollector) preECMul() {
 }
 
 func (cc *CounterCollector) ecMul() {
-	cc.Deduct(S, 162890)
-	cc.Deduct(B, 16395)
-	cc.Deduct(A, 19161)
+	cc.Deduct(S, 175000)
+	cc.Deduct(B, 20000)
+	cc.Deduct(A, 20000)
 }
 
 func (cc *CounterCollector) preECPairing(inputsCount int) {
@@ -795,9 +818,9 @@ func (cc *CounterCollector) preECPairing(inputsCount int) {
 }
 
 func (cc *CounterCollector) ecPairing(inputsCount int) {
-	cc.Deduct(S, 16+inputsCount*184017+171253)
-	cc.Deduct(B, inputsCount*3986+650)
-	cc.Deduct(A, inputsCount*13694+15411)
+	cc.Deduct(S, 16+inputsCount*200000+175000)
+	cc.Deduct(B, inputsCount*4100+750)
+	cc.Deduct(A, inputsCount*15000+17500)
 }
 
 func (cc *CounterCollector) preModExp(callDataLength, returnDataLength, bLen, mLen, eLen int, base, exponent, modulus *big.Int) {
@@ -855,7 +878,7 @@ func (cc *CounterCollector) multiCall(call func(), times int) {
 func (cc *CounterCollector) preSha256(callDataLength int) {
 	cc.Deduct(S, 100)
 	cc.Deduct(B, 1)
-	cc.Deduct(SHA, int(math.Ceil(float64(callDataLength+1)/64)))
+	cc.Deduct(SHA, int(math.Ceil(float64(callDataLength+8)/64)))
 	cc.multiCall(cc.divArith, 2)
 	cc.mStore32()
 	cc.mStoreX()

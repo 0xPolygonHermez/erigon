@@ -8,33 +8,40 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/erigon/zk/l1_data"
 	"github.com/ledgerwatch/log/v3"
 )
 
-func prepareBatchNumber(lastBatch uint64, isLastBatchPariallyProcessed bool) uint64 {
-	if isLastBatchPariallyProcessed {
-		return lastBatch
+func prepareBatchNumber(sdb *stageDb, forkId, lastBatch uint64, isL1Recovery bool) (uint64, error) {
+	if isL1Recovery {
+		recoveredBatchData, err := l1_data.BreakDownL1DataByBatch(lastBatch, forkId, sdb.hermezDb.HermezDbReader)
+		if err != nil {
+			return 0, err
+		}
+
+		blockNumbersInBatchSoFar, err := sdb.hermezDb.GetL2BlockNosByBatch(lastBatch)
+		if err != nil {
+			return 0, err
+		}
+
+		if len(blockNumbersInBatchSoFar) < len(recoveredBatchData.DecodedData) { // check if there are more blocks to process
+			isLastBatchBad, err := sdb.hermezDb.GetInvalidBatch(lastBatch)
+			if err != nil {
+				return 0, err
+			}
+
+			// if last batch is not bad then continue buildingin it, otherwise return lastBatch+1 (at the end of the function)
+			if !isLastBatchBad {
+				return lastBatch, nil
+			}
+		}
 	}
 
-	return lastBatch + 1
+	return lastBatch + 1, nil
 }
 
-func prepareBatchCounters(batchContext *BatchContext, batchState *BatchState, isLastBatchPariallyProcessed bool) (*vm.BatchCounterCollector, error) {
-	var intermediateUsedCounters *vm.Counters
-	if isLastBatchPariallyProcessed {
-		intermediateCountersMap, found, err := batchContext.sdb.hermezDb.GetLatestBatchCounters(batchState.batchNumber)
-		if err != nil {
-			return nil, err
-		}
-		if found {
-			intermediateUsedCounters = vm.NewCountersFromUsedMap(intermediateCountersMap)
-		} else {
-			log.Warn("intermediate counters not found for batch, initialising with empty counters", "batch", batchState.batchNumber)
-		}
-	}
-
-	return vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), intermediateUsedCounters), nil
+func prepareBatchCounters(batchContext *BatchContext, batchState *BatchState) (*vm.BatchCounterCollector, error) {
+	return vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), nil), nil
 }
 
 func doCheckForBadBatch(batchContext *BatchContext, batchState *BatchState, thisBlock uint64) (bool, error) {
@@ -63,10 +70,7 @@ func doCheckForBadBatch(batchContext *BatchContext, batchState *BatchState, this
 	if err = batchContext.sdb.hermezDb.WriteInvalidBatch(batchState.batchNumber); err != nil {
 		return false, err
 	}
-	if err = batchContext.sdb.hermezDb.WriteBatchCounters(currentBlock.NumberU64(), map[string]int{}); err != nil {
-		return false, err
-	}
-	if err = batchContext.sdb.hermezDb.DeleteIsBatchPartiallyProcessed(batchState.batchNumber); err != nil {
+	if err = batchContext.sdb.hermezDb.WriteBatchCounters(currentBlock.NumberU64(), []int{}); err != nil {
 		return false, err
 	}
 	if err = stages.SaveStageProgress(batchContext.sdb.tx, stages.HighestSeenBatchNumber, batchState.batchNumber); err != nil {
@@ -135,63 +139,4 @@ func updateStreamAndCheckRollback(
 	}
 
 	return false, nil
-}
-
-func runBatchLastSteps(
-	batchContext *BatchContext,
-	thisBatch uint64,
-	blockNumber uint64,
-	batchCounters *vm.BatchCounterCollector,
-) error {
-	l1InfoIndex, err := batchContext.sdb.hermezDb.GetBlockL1InfoTreeIndex(blockNumber)
-	if err != nil {
-		return err
-	}
-
-	counters, err := batchCounters.CombineCollectors(l1InfoIndex != 0)
-	if err != nil {
-		return err
-	}
-
-	log.Info(fmt.Sprintf("[%s] counters consumed", batchContext.s.LogPrefix()), "batch", thisBatch, "counts", counters.UsedAsString())
-
-	if err = batchContext.sdb.hermezDb.WriteBatchCounters(blockNumber, counters.UsedAsMap()); err != nil {
-		return err
-	}
-	if err := batchContext.sdb.hermezDb.DeleteIsBatchPartiallyProcessed(thisBatch); err != nil {
-		return err
-	}
-
-	// Local Exit Root (ler): read s/c storage every batch to store the LER for the highest block in the batch
-	ler, err := utils.GetBatchLocalExitRootFromSCStorage(thisBatch, batchContext.sdb.hermezDb.HermezDbReader, batchContext.sdb.tx)
-	if err != nil {
-		return err
-	}
-	// write ler to hermezdb
-	if err = batchContext.sdb.hermezDb.WriteLocalExitRootForBatchNo(thisBatch, ler); err != nil {
-		return err
-	}
-
-	lastBlock, err := batchContext.sdb.hermezDb.GetHighestBlockInBatch(thisBatch)
-	if err != nil {
-		return err
-	}
-	block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, lastBlock)
-	if err != nil {
-		return err
-	}
-	blockRoot := block.Root()
-	if err = batchContext.cfg.datastreamServer.WriteBatchEnd(batchContext.sdb.hermezDb, thisBatch, &blockRoot, &ler); err != nil {
-		return err
-	}
-
-	// the unwind of this value is handed by UnwindExecutionStageDbWrites
-	_, err = rawdb.IncrementStateVersionByBlockNumberIfNeeded(batchContext.sdb.tx, lastBlock)
-	if err != nil {
-		return fmt.Errorf("writing plain state version: %w", err)
-	}
-
-	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), thisBatch))
-
-	return nil
 }

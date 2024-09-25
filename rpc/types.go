@@ -80,6 +80,11 @@ const (
 	EarliestBlockNumber       = BlockNumber(0)
 )
 
+// Returns the block number as type uint64
+func (bn *BlockNumber) Uint64() uint64 {
+	return uint64(bn.Int64())
+}
+
 // UnmarshalJSON parses the given JSON fragment into a BlockNumber. It supports:
 // - "latest", "earliest", "pending", "safe", or "finalized" as string arguments
 // - the block number
@@ -312,4 +317,12 @@ func (ts *Timestamp) UnmarshalJSON(data []byte) error {
 	*ts = Timestamp(timestamp)
 	return nil
 
+}
+
+type ForkInterval struct {
+	ForkId          hexutil.Uint64 `json:"forkId"`
+	FromBatchNumber hexutil.Uint64 `json:"fromBatchNumber"`
+	ToBatchNumber   hexutil.Uint64 `json:"toBatchNumber"`
+	Version         string         `json:"version"`
+	BlockNumber     hexutil.Uint64 `json:"blockNumber"`
 }

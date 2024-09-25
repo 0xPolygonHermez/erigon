@@ -21,18 +21,19 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, error) {
+func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, bool, error) {
 	cfg.txPool.LockFlusher()
 	defer cfg.txPool.UnlockFlusher()
 
 	var transactions []types.Transaction
+	var allConditionsOk bool
 	var err error
 
 	gasLimit := utils.GetBlockGasLimitForFork(forkId)
 
 	if err := cfg.txPoolDb.View(ctx, func(poolTx kv.Tx) error {
 		slots := types2.TxsRlp{}
-		if _, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, alreadyYielded); err != nil {
+		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, alreadyYielded); err != nil {
 			return err
 		}
 		yieldedTxs, err := extractTransactionsFromSlot(&slots)
@@ -42,10 +43,10 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 		transactions = append(transactions, yieldedTxs...)
 		return nil
 	}); err != nil {
-		return nil, err
+		return nil, allConditionsOk, err
 	}
 
-	return transactions, err
+	return transactions, allConditionsOk, err
 }
 
 func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Transaction, error) {
@@ -97,6 +98,14 @@ func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, erro
 	return transactions, nil
 }
 
+type overflowType uint8
+
+const (
+	overflowNone overflowType = iota
+	overflowCounters
+	overflowGas
+)
+
 func attemptAddTransaction(
 	cfg SequenceBlockCfg,
 	sdb *stageDb,
@@ -109,7 +118,7 @@ func attemptAddTransaction(
 	l1Recovery bool,
 	forkId, l1InfoIndex uint64,
 	blockDataSizeChecker *BlockDataChecker,
-) (*types.Receipt, *core.ExecutionResult, bool, error) {
+) (*types.Receipt, *core.ExecutionResult, overflowType, error) {
 	var batchDataOverflow, overflow bool
 	var err error
 
@@ -120,7 +129,7 @@ func attemptAddTransaction(
 	if blockDataSizeChecker != nil {
 		txL2Data, err := txCounters.GetL2DataCache()
 		if err != nil {
-			return nil, nil, false, err
+			return nil, nil, overflowNone, err
 		}
 		batchDataOverflow = blockDataSizeChecker.AddTransactionData(txL2Data)
 		if batchDataOverflow {
@@ -128,11 +137,12 @@ func attemptAddTransaction(
 		}
 	}
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, overflowNone, err
 	}
 	anyOverflow := overflow || batchDataOverflow
 	if anyOverflow && !l1Recovery {
-		return nil, nil, true, nil
+		log.Debug("Transaction preexecute overflow detected", "txHash", transaction.Hash(), "coutners", batchCounters.CombineCollectorsNoChanges().UsedAsString())
+		return nil, nil, overflowCounters, nil
 	}
 
 	gasPool := new(core.GasPool).AddGas(transactionGasLimit)
@@ -163,23 +173,31 @@ func attemptAddTransaction(
 	)
 
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, overflowNone, err
 	}
 
 	if err = txCounters.ProcessTx(ibs, execResult.ReturnData); err != nil {
-		return nil, nil, false, err
+		return nil, nil, overflowNone, err
 	}
 
 	batchCounters.UpdateExecutionAndProcessingCountersCache(txCounters)
 	// now that we have executed we can check again for an overflow
 	if overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0); err != nil {
-		return nil, nil, false, err
+		return nil, nil, overflowNone, err
 	}
 
+	counters := batchCounters.CombineCollectorsNoChanges().UsedAsString()
 	if overflow {
+		log.Debug("Transaction overflow detected", "txHash", transaction.Hash(), "coutners", counters)
 		ibs.RevertToSnapshot(snapshot)
-		return nil, nil, true, nil
+		return nil, nil, overflowCounters, nil
 	}
+	if gasUsed > header.GasLimit {
+		log.Debug("Transaction overflows block gas limit", "txHash", transaction.Hash(), "txGas", receipt.GasUsed, "blockGasUsed", header.GasUsed)
+		ibs.RevertToSnapshot(snapshot)
+		return nil, nil, overflowGas, nil
+	}
+	log.Debug("Transaction added", "txHash", transaction.Hash(), "coutners", counters)
 
 	// add the gas only if not reverted. This should not be moved above the overflow check
 	header.GasUsed = gasUsed
@@ -187,10 +205,10 @@ func attemptAddTransaction(
 	// we need to keep hold of the effective percentage used
 	// todo [zkevm] for now we're hard coding to the max value but we need to calc this properly
 	if err = sdb.hermezDb.WriteEffectiveGasPricePercentage(transaction.Hash(), effectiveGasPrice); err != nil {
-		return nil, nil, false, err
+		return nil, nil, overflowNone, err
 	}
 
 	ibs.FinalizeTx(evm.ChainRules(), noop)
 
-	return receipt, execResult, false, nil
+	return receipt, execResult, overflowNone, nil
 }

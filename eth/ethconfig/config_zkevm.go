@@ -21,12 +21,14 @@ type Zk struct {
 	AddressRollup                          common.Address
 	AddressZkevm                           common.Address
 	AddressGerManager                      common.Address
+	L1ContractAddressCheck                 bool
 	L1RollupId                             uint64
 	L1BlockRange                           uint64
 	L1QueryDelay                           uint64
 	L1HighestBlockType                     string
 	L1MaticContractAddress                 common.Address
 	L1FirstBlock                           uint64
+	L1FinalizedBlockRequirement            uint64
 	L1CacheEnabled                         bool
 	L1CachePort                            uint
 	RpcRateLimits                          int
@@ -35,7 +37,11 @@ type Zk struct {
 	SequencerBlockSealTime                 time.Duration
 	SequencerBatchSealTime                 time.Duration
 	SequencerBatchVerificationTimeout      time.Duration
+	SequencerTimeoutOnEmptyTxPool          time.Duration
 	SequencerHaltOnBatchNumber             uint64
+	SequencerResequence                    bool
+	SequencerResequenceStrict              bool
+	SequencerResequenceReuseL1InfoIndex    bool
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
@@ -76,6 +82,8 @@ type Zk struct {
 	DisableVirtualCounters      bool
 	VirtualCountersSmtReduction float64
 	ExecutorPayloadOutput       string
+
+	TxPoolRejectSmartContractDeployments bool
 }
 
 var DefaultZkConfig = &Zk{}

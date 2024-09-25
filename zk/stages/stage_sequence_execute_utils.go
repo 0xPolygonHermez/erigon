@@ -29,6 +29,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
+	dsTypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/tx"
@@ -240,7 +241,12 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 	}, parentBlock, nil
 }
 
-func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, proposedTimestamp uint64) (
+func prepareL1AndInfoTreeRelatedStuff(
+	sdb *stageDb,
+	batchState *BatchState,
+	proposedTimestamp uint64,
+	reuseL1InfoIndex bool,
+) (
 	infoTreeIndexProgress uint64,
 	l1TreeUpdate *zktypes.L1InfoTreeUpdate,
 	l1TreeUpdateIndex uint64,
@@ -258,8 +264,17 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 		return
 	}
 
-	if batchState.isL1Recovery() {
-		l1TreeUpdateIndex = uint64(batchState.blockState.blockL1RecoveryData.L1InfoTreeIndex)
+	if batchState.isL1Recovery() || (batchState.isResequence() && reuseL1InfoIndex) {
+		if batchState.isL1Recovery() {
+			l1TreeUpdateIndex = uint64(batchState.blockState.blockL1RecoveryData.L1InfoTreeIndex)
+		} else {
+			// Resequence mode:
+			// If we are resequencing at the beginning (AtNewBlockBoundary->true) of a rolledback block, we need to reuse the l1TreeUpdateIndex from the block.
+			// If we are in the middle of a block (AtNewBlockBoundary -> false), it means the original block will be requenced into multiple blocks, so we will leave l1TreeUpdateIndex as 0 for the rest of blocks.
+			if batchState.resequenceBatchJob.AtNewBlockBoundary() {
+				l1TreeUpdateIndex = uint64(batchState.resequenceBatchJob.CurrentBlock().L1InfoTreeIndex)
+			}
+		}
 		if l1TreeUpdate, err = sdb.hermezDb.GetL1InfoTreeUpdate(l1TreeUpdateIndex); err != nil {
 			return
 		}
@@ -270,9 +285,10 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 		if l1TreeUpdateIndex, l1TreeUpdate, err = calculateNextL1TreeUpdateToUse(infoTreeIndexProgress, sdb.hermezDb, proposedTimestamp); err != nil {
 			return
 		}
-		if l1TreeUpdateIndex > 0 {
-			infoTreeIndexProgress = l1TreeUpdateIndex
-		}
+	}
+
+	if l1TreeUpdateIndex > 0 {
+		infoTreeIndexProgress = l1TreeUpdateIndex
 	}
 
 	// we only want GER and l1 block hash for indexes above 0 - 0 is a special case
@@ -297,20 +313,64 @@ func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ti
 // 0 index first before we can use 1+
 func calculateNextL1TreeUpdateToUse(lastInfoIndex uint64, hermezDb *hermez_db.HermezDb, proposedTimestamp uint64) (uint64, *zktypes.L1InfoTreeUpdate, error) {
 	// always default to 0 and only update this if the next available index has reached finality
-	var nextL1Index uint64 = 0
+	var (
+		nextL1Index uint64 = 0
+		l1Info      *zktypes.L1InfoTreeUpdate
+		err         error
+	)
 
-	// check if the next index is there and if it has reached finality or not
-	l1Info, err := hermezDb.GetL1InfoTreeUpdate(lastInfoIndex + 1)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	// ensure that we are above the min timestamp for this index to use it
-	if l1Info != nil && l1Info.Timestamp <= proposedTimestamp {
+	if lastInfoIndex == 0 {
+		// potentially at the start of the chain so get the latest info tree index in the DB and work
+		// backwards until we find a valid one to use
+		l1Info, err = getNetworkStartInfoTreeIndex(hermezDb, proposedTimestamp)
+		if err != nil || l1Info == nil {
+			return 0, nil, err
+		}
 		nextL1Index = l1Info.Index
+	} else {
+		// check if the next index is there and if it has reached finality or not
+		l1Info, err = hermezDb.GetL1InfoTreeUpdate(lastInfoIndex + 1)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		// ensure that we are above the min timestamp for this index to use it
+		if l1Info != nil && l1Info.Timestamp <= proposedTimestamp {
+			nextL1Index = l1Info.Index
+		}
 	}
 
 	return nextL1Index, l1Info, nil
+}
+
+func getNetworkStartInfoTreeIndex(hermezDb *hermez_db.HermezDb, proposedTimestamp uint64) (*zktypes.L1InfoTreeUpdate, error) {
+	l1Info, found, err := hermezDb.GetLatestL1InfoTreeUpdate()
+	if err != nil || !found || l1Info == nil {
+		return nil, err
+	}
+
+	if l1Info.Timestamp > proposedTimestamp {
+		// not valid so move back one index - we need one less than or equal to the proposed timestamp
+		lastIndex := l1Info.Index
+		for lastIndex > 0 {
+			lastIndex = lastIndex - 1
+			l1Info, err = hermezDb.GetL1InfoTreeUpdate(lastIndex)
+			if err != nil {
+				return nil, err
+			}
+			if l1Info != nil && l1Info.Timestamp <= proposedTimestamp {
+				break
+			}
+		}
+	}
+
+	// final check that the l1Info is actually valid before returning, index 0 or 1 might be invalid for
+	// some strange reason so just use index 0 in this case - it is always safer to use a 0 index
+	if l1Info == nil || l1Info.Timestamp > proposedTimestamp {
+		return nil, nil
+	}
+
+	return l1Info, nil
 }
 
 func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, unwinding bool) error {
@@ -443,4 +503,79 @@ func (bdc *BlockDataChecker) AddTransactionData(txL2Data []byte) bool {
 	bdc.counter += encodedLen
 
 	return false
+}
+
+type txMatadata struct {
+	blockNum int
+	txIndex  int
+}
+
+type ResequenceBatchJob struct {
+	batchToProcess  []*dsTypes.FullL2Block
+	StartBlockIndex int
+	StartTxIndex    int
+	txIndexMap      map[common.Hash]txMatadata
+}
+
+func NewResequenceBatchJob(batch []*dsTypes.FullL2Block) *ResequenceBatchJob {
+	return &ResequenceBatchJob{
+		batchToProcess:  batch,
+		StartBlockIndex: 0,
+		StartTxIndex:    0,
+		txIndexMap:      make(map[common.Hash]txMatadata),
+	}
+}
+
+func (r *ResequenceBatchJob) HasMoreBlockToProcess() bool {
+	return r.StartBlockIndex < len(r.batchToProcess)
+}
+
+func (r *ResequenceBatchJob) AtNewBlockBoundary() bool {
+	return r.StartTxIndex == 0
+}
+
+func (r *ResequenceBatchJob) CurrentBlock() *dsTypes.FullL2Block {
+	if r.HasMoreBlockToProcess() {
+		return r.batchToProcess[r.StartBlockIndex]
+	}
+	return nil
+}
+
+func (r *ResequenceBatchJob) YieldNextBlockTransactions(decoder zktx.TxDecoder) ([]types.Transaction, error) {
+	blockTransactions := make([]types.Transaction, 0)
+	if r.HasMoreBlockToProcess() {
+		block := r.CurrentBlock()
+		r.txIndexMap[block.L2Blockhash] = txMatadata{r.StartBlockIndex, 0}
+
+		for i := r.StartTxIndex; i < len(block.L2Txs); i++ {
+			transaction := block.L2Txs[i]
+			tx, _, err := decoder(transaction.Encoded, transaction.EffectiveGasPricePercentage, block.ForkId)
+			if err != nil {
+				return nil, fmt.Errorf("decode tx error: %v", err)
+			}
+			r.txIndexMap[tx.Hash()] = txMatadata{r.StartBlockIndex, i}
+			blockTransactions = append(blockTransactions, tx)
+		}
+	}
+
+	return blockTransactions, nil
+}
+
+func (r *ResequenceBatchJob) UpdateLastProcessedTx(h common.Hash) {
+	if idx, ok := r.txIndexMap[h]; ok {
+		block := r.batchToProcess[idx.blockNum]
+
+		if idx.txIndex >= len(block.L2Txs)-1 {
+			// we've processed all the transactions in this block
+			// move to the next block
+			r.StartBlockIndex = idx.blockNum + 1
+			r.StartTxIndex = 0
+		} else {
+			// move to the next transaction in the block
+			r.StartBlockIndex = idx.blockNum
+			r.StartTxIndex = idx.txIndex + 1
+		}
+	} else {
+		log.Warn("tx hash not found in tx index map", "hash", h)
+	}
 }

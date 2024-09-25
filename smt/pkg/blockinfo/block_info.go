@@ -94,7 +94,8 @@ func BuildBlockInfoTree(
 	keys = append(keys, key)
 	vals = append(vals, val)
 
-	root, err := infoTree.smt.InsertBatch(context.Background(), "", keys, vals, nil, nil)
+	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "block_info_tree", false)
+	root, err := infoTree.smt.InsertBatch(insertBatchCfg, keys, vals, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -331,11 +332,7 @@ func (b *BlockInfoTree) GenerateBlockTxKeysVals(
 
 		logToEncode := "0x" + hex.EncodeToString(rLog.Data) + reducedTopics
 
-		hash, err := utils.HashContractBytecode(logToEncode)
-		if err != nil {
-			return nil, nil, err
-		}
-
+		hash := utils.HashContractBytecode(logToEncode)
 		logEncodedBig := utils.ConvertHexToBigInt(hash)
 		key, val, err = generateTxLog(txIndexBig, big.NewInt(logIndex), logEncodedBig)
 		if err != nil {

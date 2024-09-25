@@ -117,34 +117,36 @@ const (
 type DiscardReason uint8
 
 const (
-	NotSet                 DiscardReason = 0 // analog of "nil-value", means it will be set in future
-	Success                DiscardReason = 1
-	AlreadyKnown           DiscardReason = 2
-	Mined                  DiscardReason = 3
-	ReplacedByHigherTip    DiscardReason = 4
-	UnderPriced            DiscardReason = 5
-	ReplaceUnderpriced     DiscardReason = 6 // if a transaction is attempted to be replaced with a different one without the required price bump.
-	FeeTooLow              DiscardReason = 7
-	OversizedData          DiscardReason = 8
-	InvalidSender          DiscardReason = 9
-	NegativeValue          DiscardReason = 10 // ensure no one is able to specify a transaction with a negative value.
-	Spammer                DiscardReason = 11
-	PendingPoolOverflow    DiscardReason = 12
-	BaseFeePoolOverflow    DiscardReason = 13
-	QueuedPoolOverflow     DiscardReason = 14
-	GasUintOverflow        DiscardReason = 15
-	IntrinsicGas           DiscardReason = 16
-	RLPTooLong             DiscardReason = 17
-	NonceTooLow            DiscardReason = 18
-	InsufficientFunds      DiscardReason = 19
-	NotReplaced            DiscardReason = 20 // There was an existing transaction with the same sender and nonce, not enough price bump to replace
-	DuplicateHash          DiscardReason = 21 // There was an existing transaction with the same hash
-	InitCodeTooLarge       DiscardReason = 22 // EIP-3860 - transaction init code is too large
-	UnsupportedTx          DiscardReason = 23 // unsupported transaction type
-	OverflowZkCounters     DiscardReason = 24 // unsupported transaction type
-	SenderDisallowedSendTx DiscardReason = 25 // sender is not allowed to send transactions by ACL policy
-	SenderDisallowedDeploy DiscardReason = 26 // sender is not allowed to deploy contracts by ACL policy
-	DiscardByLimbo         DiscardReason = 27
+	NotSet                          DiscardReason = 0 // analog of "nil-value", means it will be set in future
+	Success                         DiscardReason = 1
+	AlreadyKnown                    DiscardReason = 2
+	Mined                           DiscardReason = 3
+	ReplacedByHigherTip             DiscardReason = 4
+	UnderPriced                     DiscardReason = 5
+	ReplaceUnderpriced              DiscardReason = 6 // if a transaction is attempted to be replaced with a different one without the required price bump.
+	FeeTooLow                       DiscardReason = 7
+	OversizedData                   DiscardReason = 8
+	InvalidSender                   DiscardReason = 9
+	NegativeValue                   DiscardReason = 10 // ensure no one is able to specify a transaction with a negative value.
+	Spammer                         DiscardReason = 11
+	PendingPoolOverflow             DiscardReason = 12
+	BaseFeePoolOverflow             DiscardReason = 13
+	QueuedPoolOverflow              DiscardReason = 14
+	GasUintOverflow                 DiscardReason = 15
+	IntrinsicGas                    DiscardReason = 16
+	RLPTooLong                      DiscardReason = 17
+	NonceTooLow                     DiscardReason = 18
+	InsufficientFunds               DiscardReason = 19
+	NotReplaced                     DiscardReason = 20 // There was an existing transaction with the same sender and nonce, not enough price bump to replace
+	DuplicateHash                   DiscardReason = 21 // There was an existing transaction with the same hash
+	InitCodeTooLarge                DiscardReason = 22 // EIP-3860 - transaction init code is too large
+	UnsupportedTx                   DiscardReason = 23 // unsupported transaction type
+	OverflowZkCounters              DiscardReason = 24 // unsupported transaction type
+	SenderDisallowedSendTx          DiscardReason = 25 // sender is not allowed to send transactions by ACL policy
+	SenderDisallowedDeploy          DiscardReason = 26 // sender is not allowed to deploy contracts by ACL policy
+	DiscardByLimbo                  DiscardReason = 27
+	SmartContractDeploymentDisabled DiscardReason = 28 // to == null not allowed, config set to block smart contract deployment
+	GasLimitTooHigh                 DiscardReason = 29 // gas limit is too high
 )
 
 func (r DiscardReason) String() string {
@@ -205,6 +207,10 @@ func (r DiscardReason) String() string {
 		return "sender disallowed to deploy contract by ACL policy"
 	case DiscardByLimbo:
 		return "limbo error"
+	case SmartContractDeploymentDisabled:
+		return "smart contract deployment disabled"
+	case GasLimitTooHigh:
+		return fmt.Sprintf("gas limit too high. Max: %d", transactionGasLimit)
 	default:
 		panic(fmt.Sprintf("discard reason: %d", r))
 	}
@@ -706,6 +712,12 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 		}
 	}
 
+	if p.ethCfg.Zk.TxPoolRejectSmartContractDeployments {
+		if txn.To == (common.Address{}) {
+			return SmartContractDeploymentDisabled
+		}
+	}
+
 	isLondon := p.isLondon()
 	if !isLondon && txn.Type == 0x2 {
 		return UnsupportedTx
@@ -734,6 +746,13 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 		}
 		return IntrinsicGas
 	}
+	if txn.Gas > transactionGasLimit {
+		if txn.Traced {
+			log.Info(fmt.Sprintf("TX TRACING: validateTx gas limit too high idHash=%x gas=%d, limit=%d", txn.IDHash, txn.Gas, transactionGasLimit))
+		}
+		return GasLimitTooHigh
+	}
+
 	if !isLocal && uint64(p.all.count(txn.SenderID)) > p.cfg.AccountSlots {
 		if txn.Traced {
 			log.Info(fmt.Sprintf("TX TRACING: validateTx marked as spamming idHash=%x slots=%d, limit=%d", txn.IDHash, p.all.count(txn.SenderID), p.cfg.AccountSlots))
@@ -763,7 +782,7 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 	switch resolvePolicy(txn) {
 	case SendTx:
 		var allow bool
-		allow, err := p.checkPolicy(context.TODO(), from, SendTx)
+		allow, err := p.isActionAllowed(context.TODO(), from, SendTx)
 		if err != nil {
 			panic(err)
 		}
@@ -773,7 +792,7 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 	case Deploy:
 		var allow bool
 		// check that sender may deploy contracts
-		allow, err := p.checkPolicy(context.TODO(), from, Deploy)
+		allow, err := p.isActionAllowed(context.TODO(), from, Deploy)
 		if err != nil {
 			panic(err)
 		}
@@ -1033,12 +1052,7 @@ func (p *TxPool) addTxs(blockNum uint64, cacheView kvcache.CacheView, senders *s
 		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
 	}
 
-	for _, mt := range p.overflowZkCounters {
-		pending.Remove(mt)
-		discard(mt, OverflowZkCounters)
-		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
-	}
-	p.overflowZkCounters = p.overflowZkCounters[:0]
+	p.discardOverflowZkCountersFromPending(pending, discard, sendersWithChangedState)
 
 	for senderID := range sendersWithChangedState {
 		nonce, balance, err := senders.info(cacheView, senderID)
@@ -1128,12 +1142,7 @@ func (p *TxPool) addTxsOnNewBlock(
 		}
 	}
 
-	for _, mt := range p.overflowZkCounters {
-		pending.Remove(mt)
-		discard(mt, OverflowZkCounters)
-		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
-	}
-	p.overflowZkCounters = p.overflowZkCounters[:0]
+	p.discardOverflowZkCountersFromPending(pending, discard, sendersWithChangedState)
 
 	for senderID := range sendersWithChangedState {
 		nonce, balance, err := senders.info(cacheView, senderID)

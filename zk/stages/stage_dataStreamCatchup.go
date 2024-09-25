@@ -11,6 +11,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -80,12 +81,33 @@ func CatchupDatastream(ctx context.Context, logPrefix string, tx kv.RwTx, stream
 	srv := server.NewDataStreamServer(stream, chainId)
 	reader := hermez_db.NewHermezDbReader(tx)
 
-	finalBlockNumber, err := stages.GetStageProgress(tx, stages.Execution)
-	if err != nil {
-		return 0, err
+	var (
+		err              error
+		finalBlockNumber uint64
+	)
+
+	if sequencer.IsSequencer() {
+		finalBlockNumber, err = stages.GetStageProgress(tx, stages.DataStream)
+		if err != nil {
+			return 0, err
+		}
+
+		// this handles a case where the node was synced in RPC mode without a datastream
+		// in this case the datastream progress will be 0 but it still should catch up
+		if finalBlockNumber == 0 {
+			finalBlockNumber, err = stages.GetStageProgress(tx, stages.Execution)
+			if err != nil {
+				return 0, err
+			}
+		}
+	} else {
+		finalBlockNumber, err = stages.GetStageProgress(tx, stages.Execution)
+		if err != nil {
+			return 0, err
+		}
 	}
 
-	previousProgress, err := stages.GetStageProgress(tx, stages.DataStream)
+	previousProgress, err := srv.GetHighestBlockNumber()
 	if err != nil {
 		return 0, err
 	}

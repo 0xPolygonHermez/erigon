@@ -33,6 +33,7 @@ type JsonStreamLogger_ZkEvm struct {
 
 	counterCollector *vm.CounterCollector
 	stateClosed      bool
+	memSize          int
 }
 
 // NewStructLogger returns a new logger
@@ -86,9 +87,7 @@ func (l *JsonStreamLogger_ZkEvm) CaptureState(pc uint64, op vm.OpCode, gas, cost
 	}
 
 	if !l.stateClosed {
-		l.stream.WriteObjectEnd()
-		_ = l.stream.Flush()
-		l.stateClosed = true
+		l.writeStateClose()
 	}
 	if !l.firstCapture {
 		l.stream.WriteMore()
@@ -115,9 +114,6 @@ func (l *JsonStreamLogger_ZkEvm) CaptureState(pc uint64, op vm.OpCode, gas, cost
 	}
 
 	l.writeCounters()
-
-	// l.stream.WriteObjectEnd()
-	// _ = l.stream.Flush()
 }
 
 func (l *JsonStreamLogger_ZkEvm) prepareStorage(scope *vm.ScopeContext, contract *vm.Contract, op vm.OpCode) bool {
@@ -209,36 +205,23 @@ func (l *JsonStreamLogger_ZkEvm) writeMemory(memory *vm.Memory) {
 	if !l.cfg.DisableMemory {
 		memData := memory.Data()
 
-		//[zkevm] don't print empty bytes in memory array after the last non-empty byte line
-		filteredByteLines := [][]byte{}
-		foundValueLine := false
-		for i := len(memData); i-32 >= 0; i -= 32 {
-			bytes := memData[i-32 : i]
-
-			isEmpty := true
-			if !foundValueLine {
-				for _, b := range bytes {
-					if b != 0 {
-						isEmpty = false
-						foundValueLine = true
-						break
-					}
-				}
-			}
-
-			if !isEmpty || foundValueLine {
-				filteredByteLines = append(filteredByteLines, bytes)
-			}
+		// on first occurance don't expand memory
+		// this is because in interpreter we expand the memory before we execute the opcode
+		// and the state for traced opcode should be before the execution of the opcode
+		if l.memSize < len(memData) {
+			size := len(memData)
+			memData = memData[:l.memSize]
+			l.memSize = size
 		}
 
 		l.stream.WriteMore()
 		l.stream.WriteObjectField("memory")
 		l.stream.WriteArrayStart()
-		for i := len(filteredByteLines) - 1; i >= 0; i-- {
-			if i != len(filteredByteLines)-1 {
+		for i := len(memData); i-32 >= 0; i -= 32 {
+			if i != len(memData) { // first 32 bytes, don't add a comma
 				l.stream.WriteMore()
 			}
-			l.stream.WriteString(string(l.hexEncodeBuf[0:hex.Encode(l.hexEncodeBuf[:], filteredByteLines[i])]))
+			l.stream.WriteString(string(l.hexEncodeBuf[0:hex.Encode(l.hexEncodeBuf[:], memData[i-32:i])]))
 		}
 
 		l.stream.WriteArrayEnd()
@@ -289,22 +272,26 @@ func (l *JsonStreamLogger_ZkEvm) writeCounters() {
 	}
 }
 
+func (l *JsonStreamLogger_ZkEvm) writeStateClose() {
+	l.stream.WriteObjectEnd()
+	_ = l.stream.Flush()
+	l.stateClosed = true
+}
+
 // CaptureFault implements the Tracer interface to trace an execution fault
 // while running an opcode.
 func (l *JsonStreamLogger_ZkEvm) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, depth int, err error) {
 	if !l.stateClosed {
-		l.stream.WriteMore()
-		l.stream.WriteObjectField("error")
-		l.stream.WriteString(err.Error())
-		l.stream.WriteObjectEnd()
-		_ = l.stream.Flush()
-		l.stateClosed = true
+		l.writeError(err)
+		l.writeStateClose()
 	}
 }
 
 // CaptureEnd is called after the call finishes to finalize the tracing.
 func (l *JsonStreamLogger_ZkEvm) CaptureEnd(output []byte, usedGas uint64, err error) {
-	// not needed for this tracer
+	if !l.stateClosed {
+		l.writeStateClose()
+	}
 }
 
 // not needed for this tracer
