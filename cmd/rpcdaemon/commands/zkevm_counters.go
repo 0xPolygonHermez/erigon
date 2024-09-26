@@ -9,7 +9,6 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/holiman/uint256"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/ledgerwatch/erigon/chain"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/eth/tracers"
@@ -24,8 +23,16 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
-	"github.com/ledgerwatch/erigon/turbo/transactions"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+)
+
+const (
+	//used if address not specified
+	defaultSenderAddress = "0x1111111111111111111111111111111111111111"
+
+	defaultV = "0x1c"
+	defaultR = "0xa54492cfacf71aef702421b7fbc70636537a7b2fbe5718c5ed970a001bb7756b"
+	defaultS = "0x2e9fb27acc75955b898f0b12ec52aa34bf08f01db654374484b80bf12f0d841e"
 )
 
 type zkevmRPCTransaction struct {
@@ -36,53 +43,75 @@ type zkevmRPCTransaction struct {
 	To       *common.Address  `json:"to"`
 	From     *common.Address  `json:"from"`
 	Value    *hexutil.Big     `json:"value"`
-	V        *hexutil.Big     `json:"v"`
-	R        *hexutil.Big     `json:"r"`
-	S        *hexutil.Big     `json:"s"`
+	Data     hexutility.Bytes `json:"data"`
 }
 
 // Tx return types.Transaction from rpcTransaction
-func (tx *zkevmRPCTransaction) Tx() types.Transaction {
+func (tx *zkevmRPCTransaction) Tx(sr state.StateReader) (types.Transaction, error) {
 	if tx == nil {
-		return nil
+		return nil, nil
+	}
+
+	sender := common.HexToAddress(defaultSenderAddress)
+	if tx.From != nil {
+		sender = *tx.From
+	}
+	nonce := uint64(0)
+
+	ad, err := sr.ReadAccountData(sender)
+	if err != nil {
+		return nil, err
+	}
+	if ad != nil {
+		nonce = ad.Nonce
+	}
+
+	if tx.Value == nil {
+		// set this to something non nil
+		tx.Value = &hexutil.Big{}
 	}
 
 	gasPrice := uint256.NewInt(1)
 	if tx.GasPrice != nil {
 		gasPrice = uint256.MustFromBig(tx.GasPrice.ToInt())
 	}
+
+	var data []byte
+	if tx.Data != nil {
+		data = tx.Data
+	} else if tx.Input != nil {
+		data = tx.Input
+	} else if tx.To == nil {
+		return nil, fmt.Errorf("contract creation without data provided")
+	}
+
 	var legacy *types.LegacyTx
 	if tx.To == nil {
 		legacy = types.NewContractCreation(
-			uint64(tx.Nonce),
+			nonce,
 			uint256.MustFromBig(tx.Value.ToInt()),
 			uint64(tx.Gas),
 			gasPrice,
-			tx.Input,
+			data,
 		)
 	} else {
 		legacy = types.NewTransaction(
-			uint64(tx.Nonce),
+			nonce,
 			*tx.To,
 			uint256.MustFromBig(tx.Value.ToInt()),
 			uint64(tx.Gas),
 			gasPrice,
-			tx.Input,
+			data,
 		)
 	}
 
-	if tx.From != nil {
-		legacy.SetSender(*tx.From)
-	}
+	legacy.SetSender(sender)
 
-	if tx.V != nil && tx.R != nil && tx.S != nil {
-		// parse signature raw values V, R, S from local hex strings
-		legacy.V = *uint256.MustFromBig(tx.V.ToInt())
-		legacy.R = *uint256.MustFromBig(tx.R.ToInt())
-		legacy.S = *uint256.MustFromBig(tx.S.ToInt())
-	}
+	legacy.V = *uint256.MustFromHex(defaultV)
+	legacy.R = *uint256.MustFromHex(defaultR)
+	legacy.S = *uint256.MustFromHex(defaultS)
 
-	return legacy
+	return legacy, nil
 }
 
 // EstimateGas implements eth_estimateGas. Returns an estimate of how much gas is necessary to allow the transaction to complete. The transaction will not be added to the blockchain.
@@ -94,13 +123,6 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 		return nil, err
 	}
 	defer dbtx.Rollback()
-
-	if rpcTx.Value == nil {
-		// set this to something non nil
-		rpcTx.Value = &hexutil.Big{}
-	}
-
-	tx := rpcTx.Tx()
 
 	chainConfig, err := api.chainConfig(dbtx)
 	if err != nil {
@@ -138,6 +160,11 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 	rules := chainConfig.Rules(block.NumberU64(), header.Time)
 
 	signer := types.MakeSigner(chainConfig, header.Number.Uint64())
+
+	tx, err := rpcTx.Tx(stateReader)
+	if err != nil {
+		return nil, err
+	}
 
 	msg, err := tx.AsMessage(*signer, header.BaseFee, rules)
 	if err != nil {
@@ -270,121 +297,6 @@ func populateCounters(collected *vm.Counters, execResult *core.ExecutionResult, 
 		return nil, err
 	}
 	return resJson, nil
-}
-
-// TraceTransaction implements debug_traceTransaction. Returns Geth style transaction traces.
-func (api *ZkEvmAPIImpl) TraceTransactionCounters(ctx context.Context, hash common.Hash, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	defer tx.Rollback()
-	chainConfig, err := api.ethApi.chainConfig(tx)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	// Retrieve the transaction and assemble its EVM context
-	blockNum, ok, err := api.ethApi.txnLookup(ctx, tx, hash)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	if !ok {
-		stream.WriteNil()
-		return nil
-	}
-
-	// check pruning to ensure we have history at this block level
-	if err = api.ethApi.BaseAPI.checkPruneHistory(tx, blockNum); err != nil {
-		stream.WriteNil()
-		return err
-	}
-
-	// Private API returns 0 if transaction is not found.
-	if blockNum == 0 && chainConfig.Bor != nil {
-		blockNumPtr, err := rawdb.ReadBorTxLookupEntry(tx, hash)
-		if err != nil {
-			stream.WriteNil()
-			return err
-		}
-		if blockNumPtr == nil {
-			stream.WriteNil()
-			return nil
-		}
-		blockNum = *blockNumPtr
-	}
-	block, err := api.ethApi.blockByNumberWithSenders(tx, blockNum)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	if block == nil {
-		stream.WriteNil()
-		return nil
-	}
-	var txnIndex uint64
-	var txn types.Transaction
-	for i, transaction := range block.Transactions() {
-		if transaction.Hash() == hash {
-			txnIndex = uint64(i)
-			txn = transaction
-			break
-		}
-	}
-	if txn == nil {
-		borTx, _, _, _, err := rawdb.ReadBorTransaction(tx, hash)
-		if err != nil {
-			stream.WriteNil()
-			return err
-		}
-
-		if borTx != nil {
-			stream.WriteNil()
-			return nil
-		}
-		stream.WriteNil()
-		return fmt.Errorf("transaction %#x not found", hash)
-	}
-	engine := api.ethApi.engine()
-
-	txEnv, err := transactions.ComputeTxEnv_ZkEvm(ctx, engine, block, chainConfig, api.ethApi._blockReader, tx, int(txnIndex), api.ethApi.historyV3(tx))
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-
-	// counters work
-	hermezDb := hermez_db.NewHermezDbReader(tx)
-	forkId, err := hermezDb.GetForkIdByBlockNum(blockNum)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-
-	smtDepth, err := getSmtDepth(hermezDb, blockNum, config)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-
-	txCounters := vm.NewTransactionCounter(txn, int(smtDepth), uint16(forkId), api.config.Zk.VirtualCountersSmtReduction, false)
-	batchCounters := vm.NewBatchCounterCollector(int(smtDepth), uint16(forkId), api.config.Zk.VirtualCountersSmtReduction, false, nil)
-
-	if _, err = batchCounters.AddNewTransactionCounters(txCounters); err != nil {
-		stream.WriteNil()
-		return err
-	}
-
-	// set tracer to counter tracer
-	if config == nil {
-		config = &tracers.TraceConfig_ZkEvm{}
-	}
-	config.CounterCollector = txCounters.ExecutionCounters()
-
-	// Trace the transaction and return
-	return transactions.TraceTx(ctx, txEnv.Msg, txEnv.BlockContext, txEnv.TxContext, txEnv.Ibs, config, chainConfig, stream, api.ethApi.evmCallTimeout)
 }
 
 func getSmtDepth(hermezDb *hermez_db.HermezDbReader, blockNum uint64, config *tracers.TraceConfig_ZkEvm) (int, error) {

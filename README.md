@@ -40,7 +40,6 @@ base and run `go run cmd/hack/allocs/main.go [your-file-name]` to convert it to 
 **Tip**: the contract addresses in the `dynamic-{network}.yaml` can be found in the files output when launching the network:
 - zkevm.address-sequencer => create_rollup_output.json => `sequencer`
 - zkevm.address-zkevm => create_rollup_output.json => `rollupAddress`
-- zkevm.address-admin => deploy_output.json => `admin`
 - zkevm.address-rollup => deploy_output.json => `polygonRollupManagerAddress`
 - zkevm.address-ger-manager => deploy_output.json => `polygonZkEVMGlobalExitRootAddress`
 
@@ -192,7 +191,6 @@ For a full explanation of the config options, see below:
 - `zkevm.l1-rpc-url`: L1 Ethereum RPC URL.
 - `zkevm.address-sequencer`: The contract address for the sequencer
 - `zkevm.address-zkevm`: The address for the zkevm contract
-- `zkevm.address-admin`: The address for the admin contract
 - `zkevm.address-rollup`: The address for the rollup contract
 - `zkevm.address-ger-manager`: The address for the GER manager contract
 - `zkevm.rpc-ratelimit`: Rate limit for RPC calls.
@@ -226,6 +224,13 @@ Useful config entries:
 | zkEVM Cardona | 2442     | 9      | [Link](https://hackmd.io/Ug9pB613SvevJgnXRC4YJA) | [Cardona RPC](https://rpc.cardona.zkevm-rpc.com/) | Sepolia          | `0x32d33D5137a7cFFb54c5Bf8371172bcEc5f310ff` |
 
 ***
+
+## Health Checks
+
+- Node version: `curl -X POST --data '{"jsonrpc":"2.0","method":"web3_clientVersion","params":[],"id":1}' {{node url}}` - returns cdk-erigon version
+- Node syncing status: `curl -X POST --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}' {{node url}}` - returns stages process or false
+- Health check: GET request with header `X-ERIGON-HEALTHCHECK: synced` - returns 200 response if OK
+
 
 ## Additional Resources
 

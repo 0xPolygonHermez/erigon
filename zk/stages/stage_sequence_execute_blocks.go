@@ -198,7 +198,7 @@ func finaliseBlock(
 
 	finalHeader := finalBlock.HeaderNoCopy()
 	finalHeader.Root = newRoot
-	finalHeader.Coinbase = batchContext.cfg.zk.AddressSequencer
+	finalHeader.Coinbase = batchState.getCoinbase(batchContext.cfg)
 	finalHeader.GasLimit = utils.GetBlockGasLimitForFork(batchState.forkId)
 	finalHeader.ReceiptHash = types.DeriveSha(builtBlockElements.receipts)
 	finalHeader.Bloom = types.CreateBloom(builtBlockElements.receipts)
@@ -244,7 +244,7 @@ func finaliseBlock(
 	}
 
 	// write batch counters
-	err = batchContext.sdb.hermezDb.WriteBatchCounters(newNum.Uint64(), batchCounters.CombineCollectorsNoChanges().UsedAsMap())
+	err = batchContext.sdb.hermezDb.WriteBatchCounters(newNum.Uint64(), batchCounters.CombineCollectorsNoChanges().UsedAsArray())
 	if err != nil {
 		return nil, err
 	}

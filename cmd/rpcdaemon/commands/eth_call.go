@@ -207,7 +207,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 			if transfer == nil {
 				transfer = new(hexutil.Big)
 			}
-			log.Warn("Gas estimation capped by limited funds", "original", hi, "balance", balance,
+			log.Debug("Gas estimation capped by limited funds", "original", hi, "balance", balance,
 				"sent", transfer.ToInt(), "maxFeePerGas", feeCap, "fundable", allowance)
 			hi = allowance.Uint64()
 		}
@@ -215,7 +215,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 
 	// Recap the highest gas allowance with specified gascap.
 	if hi > api.GasCap {
-		log.Warn("Caller gas above allowance, capping", "requested", hi, "cap", api.GasCap)
+		log.Debug("Caller gas above allowance, capping", "requested", hi, "cap", api.GasCap)
 		hi = api.GasCap
 	}
 	gasCap = hi
@@ -249,7 +249,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	}
 	header := block.HeaderNoCopy()
 
-	caller, err := transactions.NewReusableCaller(engine, stateReader, nil, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction)
+	caller, err := transactions.NewReusableCaller(engine, stateReader, nil, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, false)
 	if err != nil {
 		return 0, err
 	}
@@ -340,7 +340,7 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 		return nil, err
 	}
 
-	latestBlock, err := rpchelper.GetLatestBlockNumber(tx)
+	latestBlock, err := rpchelper.GetLatestFinishedBlockNumber(tx)
 	if err != nil {
 		return nil, err
 	}
@@ -384,6 +384,9 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 	a, err := reader.ReadAccountData(address)
 	if err != nil {
 		return nil, err
+	}
+	if a == nil {
+		return nil, nil
 	}
 	pr, err := trie.NewProofRetainer(address, a, storageKeys, rl)
 	if err != nil {

@@ -760,9 +760,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		// entering ZK territory!
 		cfg := backend.config
 
-		// update the chain config with the zero gas from the flags
-		backend.chainConfig.SupportGasless = cfg.Gasless
-
+		backend.chainConfig.AllowFreeTransactions = cfg.AllowFreeTransactions
 		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
 
 		if cfg.Zk.L1CacheEnabled {
@@ -799,6 +797,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		seqAndVerifTopics := [][]libcommon.Hash{{
 			contracts.SequencedBatchTopicPreEtrog,
 			contracts.SequencedBatchTopicEtrog,
+			contracts.RollbackBatchesTopic,
 			contracts.VerificationTopicPreEtrog,
 			contracts.VerificationTopicEtrog,
 			contracts.VerificationValidiumTopicEtrog,
@@ -845,6 +844,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			cfg.L1QueryDelay,
 			cfg.L1HighestBlockType,
 		)
+
+		log.Info("Rollup ID", "rollupId", cfg.L1RollupId)
 
 		// check contract addresses in config against L1
 		if cfg.Zk.L1ContractAddressCheck {
@@ -1555,6 +1556,7 @@ func checkPortIsFree(addr string) (free bool) {
 func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSyncer *syncer.L1Syncer) (bool, error) {
 	l1AddrRollup, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressZkevm)
 	if err != nil {
+		log.Warn("L1 contract address check failed (RollupManager)", "err", err)
 		return false, err
 	}
 	if l1AddrRollup != cfg.AddressRollup {
@@ -1562,13 +1564,8 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 		return false, nil
 	}
 
-	l1AddrAdmin, err := l1BlockSyncer.CallAdmin(ctx, &cfg.AddressZkevm)
-	if err != nil {
-		return false, err
-	}
-	if l1AddrAdmin != cfg.AddressAdmin {
-		log.Warn("L1 contract address check failed (AddressAdmin)", "expected", cfg.AddressAdmin, "actual", l1AddrAdmin)
-		return false, nil
+	if cfg.AddressAdmin != (libcommon.Address{}) {
+		log.Warn("🚨 zkevm.address-admin configuration parameter is deprecated and it will be removed in upcoming releases")
 	}
 
 	l1AddrGerManager, err := l1BlockSyncer.CallGlobalExitRootManager(ctx, &cfg.AddressZkevm)

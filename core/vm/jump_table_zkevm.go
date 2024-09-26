@@ -38,8 +38,15 @@ func newForkID4InstructionSet() JumpTable {
 
 	instructionSet[EXTCODEHASH].execute = opExtCodeHash_zkevm
 
+	instructionSet[SENDALL] = instructionSet[INVALID]
+
 	// SELFDESTRUCT is replaces by SENDALL
-	instructionSet[SELFDESTRUCT].execute = opSendAll_zkevm
+	instructionSet[SELFDESTRUCT] = &operation{
+		execute:    opSendAll_zkevm,
+		dynamicGas: gasSelfdestruct_zkevm,
+		numPop:     1,
+		numPush:    0,
+	}
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
@@ -72,4 +79,20 @@ func newForkID8InstructionSet() JumpTable {
 
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
+}
+
+func overrideJumpTableForLastOpcodeForkId12(jt *JumpTable) {
+	jt[BLOCKHASH].execute = opBlockhash_zkevm_lastOpCode
+	jt[CODESIZE].execute = opCodeSize_lastOpCode
+	jt[EXTCODESIZE].execute = opExtCodeSize_lastOpCode
+	jt[EXTCODECOPY].execute = opExtCodeCopy_lastOpCode
+	jt[EXTCODEHASH].execute = opExtCodeHash_zkevm_lastOpCode
+	jt[SELFBALANCE].execute = opSelfBalance_lastOpCode
+	jt[BALANCE].execute = opBalance_lastOpCode
+	jt[CREATE].execute = opCreate_zkevm_lastOpCode
+	jt[RETURN].execute = opReturn_lastOpCode
+	jt[CREATE2].execute = opCreate2_zkevm_lastOpCode
+	jt[SENDALL].execute = opUndefined_lastOpCode
+	jt[SLOAD].execute = opSload_lastOpCode
+	jt[SSTORE].execute = opSstore_lastOpCode
 }

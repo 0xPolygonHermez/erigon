@@ -1,16 +1,21 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
+	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -33,7 +38,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, er
 	}
 
 	executedBatch, err := hermezDb.GetBatchNoByL2Block(executedBlock)
-	if err != nil {
+	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 		return false, 0, err
 	}
 
@@ -61,7 +66,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, er
 		}
 
 		// we've got the highest batch to execute to, now get it's highest block
-		shortCircuitBlock, err = hermezDb.GetHighestBlockInBatch(shortCircuitBatch)
+		shortCircuitBlock, _, err = hermezDb.GetHighestBlockInBatch(shortCircuitBatch)
 		if err != nil {
 			return false, 0, err
 		}
@@ -73,8 +78,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, er
 }
 
 type ForkReader interface {
-	GetLowestBatchByFork(forkId uint64) (uint64, error)
-	GetLowestBlockInBatch(batchNo uint64) (blockNo uint64, found bool, err error)
+	GetForkIdBlock(forkId uint64) (uint64, bool, error)
 }
 
 type ForkConfigWriter interface {
@@ -82,7 +86,7 @@ type ForkConfigWriter interface {
 }
 
 type DbReader interface {
-	GetHighestBlockInBatch(batchNo uint64) (uint64, error)
+	GetHighestBlockInBatch(batchNo uint64) (uint64, bool, error)
 }
 
 func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix string) error {
@@ -90,11 +94,7 @@ func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix st
 	var foundAny bool = false
 
 	for _, forkId := range chain.ForkIdsOrdered {
-		batch, err := hermezDb.GetLowestBatchByFork(uint64(forkId))
-		if err != nil {
-			return err
-		}
-		blockNum, found, err := hermezDb.GetLowestBlockInBatch(batch)
+		blockNum, found, err := hermezDb.GetForkIdBlock(uint64(forkId))
 		if err != nil {
 			return err
 		}
@@ -133,7 +133,7 @@ func RecoverySetBlockConfigForks(blockNum uint64, forkId uint64, cfg ForkConfigW
 
 func GetBatchLocalExitRootFromSCStorageForLatestBlock(batchNo uint64, db DbReader, tx kv.Tx) (libcommon.Hash, error) {
 	if batchNo > 0 {
-		blockNo, err := db.GetHighestBlockInBatch(batchNo)
+		blockNo, _, err := db.GetHighestBlockInBatch(batchNo)
 		if err != nil {
 			return libcommon.Hash{}, err
 		}
@@ -157,4 +157,52 @@ func GetBatchLocalExitRootFromSCStorageByBlock(blockNumber uint64, db DbReader, 
 	}
 
 	return libcommon.Hash{}, nil
+}
+
+func GenerateBatchData(
+	tx kv.Tx,
+	hermezDb state.ReadOnlyHermezDb,
+	batchBlocks []*eritypes.Block,
+	forkId uint64,
+) (batchL2Data []byte, err error) {
+	lastBlockNoInPreviousBatch := uint64(0)
+	firstBlockInBatch := batchBlocks[0]
+	if firstBlockInBatch.NumberU64() != 0 {
+		lastBlockNoInPreviousBatch = firstBlockInBatch.NumberU64() - 1
+	}
+
+	lastBlockInPreviousBatch, err := rawdb.ReadBlockByNumber(tx, lastBlockNoInPreviousBatch)
+	if err != nil {
+		return nil, err
+	}
+
+	batchL2Data = []byte{}
+	for i := 0; i < len(batchBlocks); i++ {
+		var dTs uint32
+		if i == 0 {
+			dTs = uint32(batchBlocks[i].Time() - lastBlockInPreviousBatch.Time())
+		} else {
+			dTs = uint32(batchBlocks[i].Time() - batchBlocks[i-1].Time())
+		}
+		iti, err := hermezDb.GetBlockL1InfoTreeIndex(batchBlocks[i].NumberU64())
+		if err != nil {
+			return nil, err
+		}
+		egTx := make(map[common.Hash]uint8)
+		for _, txn := range batchBlocks[i].Transactions() {
+			eg, err := hermezDb.GetEffectiveGasPricePercentage(txn.Hash())
+			if err != nil {
+				return nil, err
+			}
+			egTx[txn.Hash()] = eg
+		}
+
+		bl2d, err := zktx.GenerateBlockBatchL2Data(uint16(forkId), dTs, uint32(iti), batchBlocks[i].Transactions(), egTx)
+		if err != nil {
+			return nil, err
+		}
+		batchL2Data = append(batchL2Data, bl2d...)
+	}
+
+	return batchL2Data, err
 }

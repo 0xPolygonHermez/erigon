@@ -42,13 +42,14 @@ func SpawnL1SequencerSyncStage(
 	cfg L1SequencerSyncCfg,
 	ctx context.Context,
 	quiet bool,
-) (err error) {
+) (funcErr error) {
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting L1 Sequencer sync stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished L1 Sequencer sync stage", logPrefix))
 
 	freshTx := tx == nil
 	if freshTx {
+		var err error
 		tx, err = cfg.db.BeginRw(ctx)
 		if err != nil {
 			return err
@@ -66,12 +67,37 @@ func SpawnL1SequencerSyncStage(
 	}
 	if progress == 0 {
 		progress = cfg.zkCfg.L1FirstBlock - 1
+
+	}
+
+	// if the flag is set - wait for that block to be finalized on L1 before continuing
+	if progress <= cfg.zkCfg.L1FinalizedBlockRequirement && cfg.zkCfg.L1FinalizedBlockRequirement > 0 {
+		for {
+			finalized, finalizedBn, err := cfg.syncer.CheckL1BlockFinalized(cfg.zkCfg.L1FinalizedBlockRequirement)
+			if err != nil {
+				// we shouldn't just throw the error, because it could be a timeout, or "too many requests" error and we could jsut retry
+				log.Error(fmt.Sprintf("[%s] Error checking if L1 block %v is finalized: %v", logPrefix, cfg.zkCfg.L1FinalizedBlockRequirement, err))
+			}
+
+			if finalized {
+				break
+			}
+			log.Info(fmt.Sprintf("[%s] Waiting for L1 block %v to be correctly checked for \"finalized\" before continuing. Current finalized is %d", logPrefix, cfg.zkCfg.L1FinalizedBlockRequirement, finalizedBn))
+			time.Sleep(1 * time.Minute) // sleep could be even bigger since finalization takes more than 10 minutes
+		}
 	}
 
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	if !cfg.syncer.IsSyncStarted() {
-		cfg.syncer.Run(progress)
+		cfg.syncer.RunQueryBlocks(progress)
+		defer func() {
+			if funcErr != nil {
+				cfg.syncer.StopQueryBlocks()
+				cfg.syncer.ConsumeQueryBlocks()
+				cfg.syncer.WaitQueryBlocksToFinish()
+			}
+		}()
 	}
 
 	logChan := cfg.syncer.GetLogsChan()
@@ -83,22 +109,23 @@ Loop:
 		case logs := <-logChan:
 			headersMap, err := cfg.syncer.L1QueryHeaders(logs)
 			if err != nil {
-				return err
+				funcErr = err
+				return funcErr
 			}
 
 			for _, l := range logs {
 				header := headersMap[l.BlockNumber]
 				switch l.Topics[0] {
 				case contracts.InitialSequenceBatchesTopic:
-					if err := HandleInitialSequenceBatches(cfg.syncer, hermezDb, l, header); err != nil {
-						return err
+					if funcErr = HandleInitialSequenceBatches(cfg.syncer, hermezDb, l, header); funcErr != nil {
+						return funcErr
 					}
 				case contracts.AddNewRollupTypeTopic:
 					rollupType := l.Topics[1].Big().Uint64()
 					forkIdBytes := l.Data[64:96] // 3rd positioned item in the log data
 					forkId := new(big.Int).SetBytes(forkIdBytes).Uint64()
-					if err := hermezDb.WriteRollupType(rollupType, forkId); err != nil {
-						return err
+					if funcErr = hermezDb.WriteRollupType(rollupType, forkId); funcErr != nil {
+						return funcErr
 					}
 				case contracts.CreateNewRollupTopic:
 					rollupId := l.Topics[1].Big().Uint64()
@@ -109,13 +136,14 @@ Loop:
 					rollupType := new(big.Int).SetBytes(rollupTypeBytes).Uint64()
 					fork, err := hermezDb.GetForkFromRollupType(rollupType)
 					if err != nil {
-						return err
+						funcErr = err
+						return funcErr
 					}
 					if fork == 0 {
 						log.Error("received CreateNewRollupTopic for unknown rollup type", "rollupType", rollupType)
 					}
-					if err := hermezDb.WriteNewForkHistory(fork, 0); err != nil {
-						return err
+					if funcErr = hermezDb.WriteNewForkHistory(fork, 0); funcErr != nil {
+						return funcErr
 					}
 				case contracts.UpdateRollupTopic:
 					rollupId := l.Topics[1].Big().Uint64()
@@ -126,15 +154,17 @@ Loop:
 					newRollup := new(big.Int).SetBytes(newRollupBytes).Uint64()
 					fork, err := hermezDb.GetForkFromRollupType(newRollup)
 					if err != nil {
-						return err
+						funcErr = err
+						return funcErr
 					}
 					if fork == 0 {
-						return fmt.Errorf("received UpdateRollupTopic for unknown rollup type: %v", newRollup)
+						funcErr = fmt.Errorf("received UpdateRollupTopic for unknown rollup type: %v", newRollup)
+						return funcErr
 					}
 					latestVerifiedBytes := l.Data[32:64]
 					latestVerified := new(big.Int).SetBytes(latestVerifiedBytes).Uint64()
-					if err := hermezDb.WriteNewForkHistory(fork, latestVerified); err != nil {
-						return err
+					if funcErr = hermezDb.WriteNewForkHistory(fork, latestVerified); funcErr != nil {
+						return funcErr
 					}
 				default:
 					log.Warn("received unexpected topic from l1 sequencer sync stage", "topic", l.Topics[0])
@@ -150,21 +180,19 @@ Loop:
 		}
 	}
 
-	cfg.syncer.Stop()
-
 	progress = cfg.syncer.GetLastCheckedL1Block()
 	if progress >= cfg.zkCfg.L1FirstBlock {
 		// do not save progress if progress less than L1FirstBlock
-		if err = stages.SaveStageProgress(tx, stages.L1SequencerSync, progress); err != nil {
-			return err
+		if funcErr = stages.SaveStageProgress(tx, stages.L1SequencerSync, progress); funcErr != nil {
+			return funcErr
 		}
 	}
 
 	log.Info(fmt.Sprintf("[%s] L1 Sequencer sync finished", logPrefix))
 
 	if freshTx {
-		if err = tx.Commit(); err != nil {
-			return err
+		if funcErr = tx.Commit(); funcErr != nil {
+			return funcErr
 		}
 	}
 
