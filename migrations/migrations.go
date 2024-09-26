@@ -39,6 +39,8 @@ var migrations = map[kv.Label][]Migration{
 		ProhibitNewDownloadsLock,
 		refactorTableLastRoot,
 		ProhibitNewDownloadsLock2,
+		countersToArray,
+		resetL1Sequences,
 	},
 	kv.TxPoolDB: {},
 	kv.SentryDB: {},

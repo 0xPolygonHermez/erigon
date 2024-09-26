@@ -16,6 +16,10 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+var DeprecatedFlags = map[string]string{
+	"zkevm.gasless": "zkevm.allow-free-transactions",
+}
+
 func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag := func(flagName string, value interface{}) {
 		switch v := value.(type) {
@@ -129,6 +133,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1HighestBlockType:                     ctx.String(utils.L1HighestBlockTypeFlag.Name),
 		L1MaticContractAddress:                 libcommon.HexToAddress(ctx.String(utils.L1MaticContractAddressFlag.Name)),
 		L1FirstBlock:                           ctx.Uint64(utils.L1FirstBlockFlag.Name),
+		L1FinalizedBlockRequirement:            ctx.Uint64(utils.L1FinalizedBlockRequirementFlag.Name),
 		L1ContractAddressCheck:                 ctx.Bool(utils.L1ContractAddressCheckFlag.Name),
 		RpcRateLimits:                          ctx.Int(utils.RpcRateLimitsFlag.Name),
 		RpcGetBatchWitnessConcurrencyLimit:     ctx.Int(utils.RpcGetBatchWitnessConcurrencyLimitFlag.Name),
@@ -141,6 +146,9 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SequencerBatchVerificationTimeout:      sequencerBatchVerificationTimeout,
 		SequencerTimeoutOnEmptyTxPool:          sequencerTimeoutOnEmptyTxPool,
 		SequencerHaltOnBatchNumber:             ctx.Uint64(utils.SequencerHaltOnBatchNumber.Name),
+		SequencerResequence:                    ctx.Bool(utils.SequencerResequence.Name),
+		SequencerResequenceStrict:              ctx.Bool(utils.SequencerResequenceStrict.Name),
+		SequencerResequenceReuseL1InfoIndex:    ctx.Bool(utils.SequencerResequenceReuseL1InfoIndex.Name),
 		ExecutorUrls:                           strings.Split(strings.ReplaceAll(ctx.String(utils.ExecutorUrls.Name), " ", ""), ","),
 		ExecutorStrictMode:                     ctx.Bool(utils.ExecutorStrictMode.Name),
 		ExecutorRequestTimeout:                 ctx.Duration(utils.ExecutorRequestTimeout.Name),
@@ -159,7 +167,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		GasPriceFactor:                         ctx.Float64(utils.GasPriceFactor.Name),
 		WitnessFull:                            ctx.Bool(utils.WitnessFullFlag.Name),
 		SyncLimit:                              ctx.Uint64(utils.SyncLimit.Name),
-		Gasless:                                ctx.Bool(utils.SupportGasless.Name),
 		DebugTimers:                            ctx.Bool(utils.DebugTimers.Name),
 		DebugNoSync:                            ctx.Bool(utils.DebugNoSync.Name),
 		DebugLimit:                             ctx.Uint64(utils.DebugLimit.Name),

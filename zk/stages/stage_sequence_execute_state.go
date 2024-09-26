@@ -16,6 +16,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/txpool"
 )
 
+const maximumOverflowTransactionAttempts = 5
+
 type BatchContext struct {
 	ctx        context.Context
 	cfg        *SequenceBlockCfg
@@ -45,9 +47,11 @@ type BatchState struct {
 	blockState                    *BlockState
 	batchL1RecoveryData           *BatchL1RecoveryData
 	limboRecoveryData             *LimboRecoveryData
+	resequenceBatchJob            *ResequenceBatchJob
+	overflowTransactions          int
 }
 
-func newBatchState(forkId, batchNumber uint64, hasExecutorForThisBatch, l1Recovery bool, txPool *txpool.TxPool) *BatchState {
+func newBatchState(forkId, batchNumber, blockNumber uint64, hasExecutorForThisBatch, l1Recovery bool, txPool *txpool.TxPool, resequenceBatchJob *ResequenceBatchJob) *BatchState {
 	batchState := &BatchState{
 		forkId:                        forkId,
 		batchNumber:                   batchNumber,
@@ -58,15 +62,32 @@ func newBatchState(forkId, batchNumber uint64, hasExecutorForThisBatch, l1Recove
 		blockState:                    newBlockState(),
 		batchL1RecoveryData:           nil,
 		limboRecoveryData:             nil,
+		resequenceBatchJob:            resequenceBatchJob,
 	}
 
-	if l1Recovery {
-		batchState.batchL1RecoveryData = newBatchL1RecoveryData(batchState)
-	}
+	if batchNumber != injectedBatchBatchNumber { // process injected batch regularly, no matter if it is in any recovery
+		if l1Recovery {
+			batchState.batchL1RecoveryData = newBatchL1RecoveryData(batchState)
+		}
 
-	limboHeaderTimestamp, limboTxHash := txPool.GetLimboTxHash(batchState.batchNumber)
-	if limboTxHash != nil {
-		batchState.limboRecoveryData = newLimboRecoveryData(limboHeaderTimestamp, limboTxHash)
+		limboBlock, limboTxHash := txPool.GetLimboDetailsForRecovery(blockNumber)
+		if limboTxHash != nil {
+			// batchNumber == limboBlock.BatchNumber then we've unwound to the very beginning of the batch. 'limboBlock.BlockNumber' is the 1st block of 'batchNumber' batch. Everything is fine.
+
+			// batchNumber - 1 == limboBlock.BatchNumber then we've unwound to the middle of a batch. We must set in 'batchState' that we're going to resume a batch build rather than starting a new one. Everything is fine.
+			if batchNumber-1 == limboBlock.BatchNumber {
+				batchState.batchNumber = limboBlock.BatchNumber
+			} else if batchNumber != limboBlock.BatchNumber {
+				// in any other configuration rather than (batchNumber or batchNumber - 1) == limboBlock.BatchNumber we can only panic
+				panic(fmt.Errorf("requested batch %d while the network is already on %d", limboBlock.BatchNumber, batchNumber))
+			}
+
+			batchState.limboRecoveryData = newLimboRecoveryData(limboBlock.BlockTimestamp, limboTxHash)
+		}
+
+		if batchState.isL1Recovery() && batchState.isLimboRecovery() {
+			panic("Both recoveries cannot be active simultaneously")
+		}
 	}
 
 	return batchState
@@ -80,8 +101,12 @@ func (bs *BatchState) isLimboRecovery() bool {
 	return bs.limboRecoveryData != nil
 }
 
+func (bs *BatchState) isResequence() bool {
+	return bs.resequenceBatchJob != nil
+}
+
 func (bs *BatchState) isAnyRecovery() bool {
-	return bs.isL1Recovery() || bs.isLimboRecovery()
+	return bs.isL1Recovery() || bs.isLimboRecovery() || bs.isResequence()
 }
 
 func (bs *BatchState) isThereAnyTransactionsToRecover() bool {
@@ -104,6 +129,10 @@ func (bs *BatchState) getBlockHeaderForcedTimestamp() uint64 {
 		return bs.limboRecoveryData.limboHeaderTimestamp
 	}
 
+	if bs.isResequence() {
+		return uint64(bs.resequenceBatchJob.CurrentBlock().Timestamp)
+	}
+
 	return math.MaxUint64
 }
 
@@ -122,6 +151,14 @@ func (bs *BatchState) onAddedTransaction(transaction types.Transaction, receipt 
 
 func (bs *BatchState) onBuiltBlock(blockNumber uint64) {
 	bs.builtBlocks = append(bs.builtBlocks, blockNumber)
+}
+
+func (bs *BatchState) newOverflowTransaction() {
+	bs.overflowTransactions++
+}
+
+func (bs *BatchState) reachedOverflowTransactionLimit() bool {
+	return bs.overflowTransactions >= maximumOverflowTransactionAttempts
 }
 
 // TYPE BATCH L1 RECOVERY DATA

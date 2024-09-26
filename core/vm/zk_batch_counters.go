@@ -22,10 +22,6 @@ type BatchCounterCollector struct {
 	rlpCombinedCounters        Counters
 	executionCombinedCounters  Counters
 	processingCombinedCounters Counters
-
-	rlpCombinedCountersCache        Counters
-	executionCombinedCountersCache  Counters
-	processingCombinedCountersCache Counters
 }
 
 func NewBatchCounterCollector(smtMaxLevel int, forkId uint16, mcpReduction float64, unlimitedCounters bool, addonCounters *Counters) *BatchCounterCollector {
@@ -90,6 +86,12 @@ func (bcc *BatchCounterCollector) AddNewTransactionCounters(txCounters *Transact
 	bcc.UpdateRlpCountersCache(txCounters)
 
 	return bcc.CheckForOverflow(false) //no need to calculate the merkle proof here
+}
+
+func (bcc *BatchCounterCollector) RemovePreviousTransactionCounters() {
+	lastTx := bcc.transactions[len(bcc.transactions)-1]
+	bcc.UndoTransactionCountersCache(lastTx)
+	bcc.transactions = bcc.transactions[:len(bcc.transactions)-1]
 }
 
 func (bcc *BatchCounterCollector) ClearTransactionCounters() {
@@ -158,7 +160,7 @@ func (bcc *BatchCounterCollector) CheckForOverflow(verifyMerkleProof bool) (bool
 		for _, v := range combined {
 			logText += fmt.Sprintf(" %s: initial: %v used: %v (remaining: %v)", v.name, v.initialAmount, v.used, v.remaining)
 		}
-		log.Info(logText)
+		log.Debug(logText)
 	}
 
 	return overflow, nil
@@ -221,7 +223,7 @@ func (bcc *BatchCounterCollector) CombineCollectors(verifyMerkleProof bool) (Cou
 		}
 	}
 
-	for k, _ := range combined {
+	for k := range combined {
 		val := bcc.rlpCombinedCounters[k].used + bcc.executionCombinedCounters[k].used + bcc.processingCombinedCounters[k].used
 		combined[k].used += val
 		combined[k].remaining -= val
@@ -254,15 +256,8 @@ func (bcc *BatchCounterCollector) CombineCollectorsNoChanges() Counters {
 	}
 
 	for _, tx := range bcc.transactions {
-		for k, v := range tx.rlpCounters.counters {
-			combined[k].used += v.used
-			combined[k].remaining -= v.used
-		}
-		for k, v := range tx.executionCounters.counters {
-			combined[k].used += v.used
-			combined[k].remaining -= v.used
-		}
-		for k, v := range tx.processingCounters.counters {
+		txCounters := tx.CombineCounters()
+		for k, v := range txCounters {
 			combined[k].used += v.used
 			combined[k].remaining -= v.used
 		}
@@ -284,5 +279,17 @@ func (bcc *BatchCounterCollector) UpdateExecutionAndProcessingCountersCache(txCo
 
 	for k, v := range txCounters.processingCounters.counters {
 		bcc.processingCombinedCounters[k].used += v.used
+	}
+}
+
+func (bcc *BatchCounterCollector) UndoTransactionCountersCache(txCounters *TransactionCounter) {
+	for k, v := range txCounters.rlpCounters.counters {
+		bcc.rlpCombinedCounters[k].used -= v.used
+	}
+	for k, v := range txCounters.executionCounters.counters {
+		bcc.executionCombinedCounters[k].used -= v.used
+	}
+	for k, v := range txCounters.processingCounters.counters {
+		bcc.processingCombinedCounters[k].used -= v.used
 	}
 }

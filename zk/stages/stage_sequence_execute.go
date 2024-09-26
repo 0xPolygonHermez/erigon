@@ -15,6 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
+	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -28,6 +29,78 @@ func SpawnSequencingStage(
 	cfg SequenceBlockCfg,
 	historyCfg stagedsync.HistoryCfg,
 	quiet bool,
+) (err error) {
+	roTx, err := cfg.db.BeginRo(ctx)
+	if err != nil {
+		return err
+	}
+	defer roTx.Rollback()
+
+	lastBatch, err := stages.GetStageProgress(roTx, stages.HighestSeenBatchNumber)
+	if err != nil {
+		return err
+	}
+
+	highestBatchInDS, err := cfg.datastreamServer.GetHighestBatchNumber()
+	if err != nil {
+		return err
+	}
+
+	if !cfg.zk.SequencerResequence || lastBatch >= highestBatchInDS {
+		if cfg.zk.SequencerResequence {
+			log.Info(fmt.Sprintf("[%s] Resequencing completed. Please restart sequencer without resequence flag.", s.LogPrefix()))
+			time.Sleep(10 * time.Second)
+			return nil
+		}
+
+		err = sequencingStageStep(s, u, ctx, cfg, historyCfg, quiet, nil)
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Info(fmt.Sprintf("[%s] Last batch %d is lower than highest batch in datastream %d, resequencing...", s.LogPrefix(), lastBatch, highestBatchInDS))
+
+		batches, err := cfg.datastreamServer.ReadBatches(lastBatch+1, highestBatchInDS)
+		if err != nil {
+			return err
+		}
+
+		err = cfg.datastreamServer.UnwindToBatchStart(lastBatch + 1)
+		if err != nil {
+			return err
+		}
+
+		log.Info(fmt.Sprintf("[%s] Resequence from batch %d to %d in data stream", s.LogPrefix(), lastBatch+1, highestBatchInDS))
+
+		for _, batch := range batches {
+			batchJob := NewResequenceBatchJob(batch)
+			subBatchCount := 0
+			for batchJob.HasMoreBlockToProcess() {
+				if err = sequencingStageStep(s, u, ctx, cfg, historyCfg, quiet, batchJob); err != nil {
+					return err
+				}
+
+				subBatchCount += 1
+			}
+
+			log.Info(fmt.Sprintf("[%s] Resequenced original batch %d with %d batches", s.LogPrefix(), batchJob.batchToProcess[0].BatchNumber, subBatchCount))
+			if cfg.zk.SequencerResequenceStrict && subBatchCount != 1 {
+				return fmt.Errorf("strict mode enabled, but resequenced batch %d has %d sub-batches", batchJob.batchToProcess[0].BatchNumber, subBatchCount)
+			}
+		}
+	}
+
+	return nil
+}
+
+func sequencingStageStep(
+	s *stagedsync.StageState,
+	u stagedsync.Unwinder,
+	ctx context.Context,
+	cfg SequenceBlockCfg,
+	historyCfg stagedsync.HistoryCfg,
+	quiet bool,
+	resequenceBatchJob *ResequenceBatchJob,
 ) (err error) {
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
@@ -69,9 +142,9 @@ func SpawnSequencingStage(
 	var block *types.Block
 	runLoopBlocks := true
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
-	batchState := newBatchState(forkId, batchNumberForStateInitialization, cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool)
+	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool, resequenceBatchJob)
 	blockDataSizeChecker := NewBlockDataChecker(cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()))
-	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState, lastBatch) // using lastBatch (rather than batchState.batchNumber) is not mistake
+	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
 	// injected batch
 	if executionAt == 0 {
@@ -121,7 +194,7 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	batchCounters, err := prepareBatchCounters(batchContext, batchState, nil)
+	batchCounters, err := prepareBatchCounters(batchContext, batchState)
 	if err != nil {
 		return err
 	}
@@ -176,6 +249,18 @@ func SpawnSequencingStage(
 			}
 		}
 
+		if batchState.isResequence() {
+			if !batchState.resequenceBatchJob.HasMoreBlockToProcess() {
+				for streamWriter.legacyVerifier.HasPendingVerifications() {
+					streamWriter.CommitNewUpdates()
+					time.Sleep(1 * time.Second)
+				}
+
+				runLoopBlocks = false
+				break
+			}
+		}
+
 		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
 		if err != nil {
 			return err
@@ -189,7 +274,7 @@ func SpawnSequencingStage(
 		// timer: evm + smt
 		t := utils.StartTimer("stage_sequence_execute", "evm", "smt")
 
-		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(sdb, batchState, header.Time)
+		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex)
 		if err != nil {
 			return err
 		}
@@ -198,7 +283,7 @@ func SpawnSequencingStage(
 		if err != nil {
 			return err
 		}
-		if !batchState.isAnyRecovery() && overflowOnNewBlock {
+		if (!batchState.isAnyRecovery() || batchState.isResequence()) && overflowOnNewBlock {
 			break
 		}
 
@@ -240,7 +325,7 @@ func SpawnSequencingStage(
 					if err != nil {
 						return err
 					}
-				} else if !batchState.isL1Recovery() {
+				} else if !batchState.isL1Recovery() && !batchState.isResequence() {
 					var allConditionsOK bool
 					batchState.blockState.transactionsForInclusion, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 					if err != nil {
@@ -256,6 +341,17 @@ func SpawnSequencingStage(
 					} else {
 						log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 					}
+				} else if batchState.isResequence() {
+					batchState.blockState.transactionsForInclusion, err = batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
+					if err != nil {
+						return err
+					}
+				}
+
+				if len(batchState.blockState.transactionsForInclusion) == 0 {
+					time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
+				} else {
+					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 				}
 
 				for i, transaction := range batchState.blockState.transactionsForInclusion {
@@ -268,6 +364,18 @@ func SpawnSequencingStage(
 					if err != nil {
 						if batchState.isLimboRecovery() {
 							panic("limbo transaction has already been executed once so they must not fail while re-executing")
+						}
+
+						if batchState.isResequence() {
+							if cfg.zk.SequencerResequenceStrict {
+								return fmt.Errorf("strict mode enabled, but resequenced batch %d failed to add transaction %s: %v", batchState.batchNumber, txHash, err)
+							} else {
+								log.Warn(fmt.Sprintf("[%s] error adding transaction to batch during resequence: %v", logPrefix, err),
+									"hash", txHash,
+									"to", transaction.GetTo(),
+								)
+								continue
+							}
 						}
 
 						// if we are in recovery just log the error as a warning.  If the data is on the L1 then we should consider it as confirmed.
@@ -285,37 +393,83 @@ func SpawnSequencingStage(
 						// Each transaction in yielded will be reevaluated at the end of each batch
 					}
 
-					if anyOverflow {
+					switch anyOverflow {
+					case overflowCounters:
+						// remove the last attempted counters as we may want to continue processing this batch with other transactions
+						batchCounters.RemovePreviousTransactionCounters()
+
 						if batchState.isLimboRecovery() {
 							panic("limbo transaction has already been executed once so they must not overflow counters while re-executing")
 						}
 
 						if !batchState.isL1Recovery() {
-							log.Info(fmt.Sprintf("[%s] overflowed adding transaction to batch", logPrefix), "batch", batchState.batchNumber, "tx-hash", txHash, "has-any-transactions-in-this-batch", batchState.hasAnyTransactionsInThisBatch)
 							/*
 								There are two cases when overflow could occur.
-								1. The block DOES not contains any transactions.
+								1. The block DOES not contain any transactions.
 									In this case it means that a single tx overflow entire zk-counters.
 									In this case we mark it so. Once marked it will be discarded from the tx-pool async (once the tx-pool process the creation of a new batch)
+									Block production then continues as normal looking for more suitable transactions
 									NB: The tx SHOULD not be removed from yielded set, because if removed, it will be picked again on next block. That's why there is i++. It ensures that removing from yielded will start after the problematic tx
 								2. The block contains transactions.
-									In this case, we just have to remove the transaction that overflowed the zk-counters and all transactions after it, from the yielded set.
-									This removal will ensure that these transaction could be added in the next block(s)
+									In this case we make note that we have had a transaction that overflowed and continue attempting to process transactions
+									Once we reach the cap for these attempts we will stop producing blocks and consider the batch done
 							*/
 							if !batchState.hasAnyTransactionsInThisBatch {
+								// mark the transaction to be removed from the pool
 								cfg.txPool.MarkForDiscardFromPendingBest(txHash)
-								log.Info(fmt.Sprintf("single transaction %s overflow counters", txHash))
+								log.Info(fmt.Sprintf("[%s] single transaction %s cannot fit into batch", logPrefix, txHash))
+							} else {
+								batchState.newOverflowTransaction()
+								log.Info(fmt.Sprintf("[%s] transaction %s overflow counters", logPrefix, txHash), "count", batchState.overflowTransactions)
+								if batchState.reachedOverflowTransactionLimit() {
+									log.Info(fmt.Sprintf("[%s] closing batch due to counters", logPrefix), "count", batchState.overflowTransactions)
+									runLoopBlocks = false
+									break LOOP_TRANSACTIONS
+								}
 							}
 
-							runLoopBlocks = false
-							break LOOP_TRANSACTIONS
+							// continue on processing other transactions and skip this one
+							continue
 						}
 
+						if batchState.isResequence() && cfg.zk.SequencerResequenceStrict {
+							return fmt.Errorf("strict mode enabled, but resequenced batch %d overflowed counters on block %d", batchState.batchNumber, blockNumber)
+						}
+					case overflowGas:
+						if batchState.isAnyRecovery() {
+							panic(fmt.Sprintf("block gas limit overflow in recovery block: %d", blockNumber))
+						}
+						log.Info(fmt.Sprintf("[%s] gas overflowed adding transaction to block", logPrefix), "block", blockNumber, "tx-hash", txHash)
+						runLoopBlocks = false
+						break LOOP_TRANSACTIONS
+					case overflowNone:
 					}
 
 					if err == nil {
 						blockDataSizeChecker = &backupDataSizeChecker
 						batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
+					}
+
+					// We will only update the processed index in resequence job if there isn't overflow
+					if batchState.isResequence() {
+						batchState.resequenceBatchJob.UpdateLastProcessedTx(txHash)
+					}
+				}
+
+				if batchState.isResequence() {
+					if len(batchState.blockState.transactionsForInclusion) == 0 {
+						// We need to jump to the next block here if there are no transactions in current block
+						batchState.resequenceBatchJob.UpdateLastProcessedTx(batchState.resequenceBatchJob.CurrentBlock().L2Blockhash)
+						break LOOP_TRANSACTIONS
+					}
+
+					if batchState.resequenceBatchJob.AtNewBlockBoundary() {
+						// We need to jump to the next block here if we are at the end of the current block
+						break LOOP_TRANSACTIONS
+					} else {
+						if cfg.zk.SequencerResequenceStrict {
+							return fmt.Errorf("strict mode enabled, but resequenced batch %d has transactions that overflowed counters or failed transactions", batchState.batchNumber)
+						}
 					}
 				}
 
@@ -354,9 +508,9 @@ func SpawnSequencingStage(
 		}
 
 		if gasPerSecond != 0 {
-			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)))
+			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)), "info-tree-index", infoTreeIndexProgress)
 		} else {
-			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions)))
+			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions)), "info-tree-index", infoTreeIndexProgress)
 		}
 
 		// add a check to the verifier and also check for responses
@@ -377,7 +531,7 @@ func SpawnSequencingStage(
 		if err != nil {
 			return err
 		}
-		cfg.legacyVerifier.StartAsyncVerification(batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout)
+		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout)
 
 		// check for new responses from the verifier
 		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
@@ -397,12 +551,6 @@ func SpawnSequencingStage(
 		}
 	}
 
-	cfg.legacyVerifier.Wait()
-	needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
-	if err != nil || needsUnwind {
-		return err
-	}
-
 	/*
 		if adding something below that line we must ensure
 		- it is also handled property in processInjectedInitialBatch
@@ -410,10 +558,6 @@ func SpawnSequencingStage(
 		- it is also handled property in doCheckForBadBatch
 		- it is unwound correctly
 	*/
-
-	if err := finalizeLastBatchInDatastream(batchContext, batchState.batchNumber, block.NumberU64()); err != nil {
-		return err
-	}
 
 	// TODO: It is 99% sure that there is no need to write this in any of processInjectedInitialBatch, alignExecutionToDatastream, doCheckForBadBatch but it is worth double checknig
 	// the unwind of this value is handed by UnwindExecutionStageDbWrites

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -50,7 +51,7 @@ const FORK_HISTORY = "fork_history"                                     // index
 const JUST_UNWOUND = "just_unwound"                                     // batch number -> true
 const PLAIN_STATE_VERSION = "plain_state_version"                       // batch number -> true
 const ERIGON_VERSIONS = "erigon_versions"                               // erigon version -> timestamp of startup
-const BATCH_ENDS = "batch_ends"
+const BATCH_ENDS = "batch_ends"                                         //
 
 var HermezDbTables = []string{
 	L1VERIFICATIONS,
@@ -294,6 +295,10 @@ func (db *HermezDbReader) GetSequenceByBatchNo(batchNo uint64) (*types.L1BatchIn
 	return db.getByBatchNo(L1SEQUENCES, batchNo)
 }
 
+func (db *HermezDbReader) GetRangeSequencesByBatch(batchNo uint64) (*types.L1BatchInfo, *types.L1BatchInfo, error) {
+	return db.getPrevAndCurrentForBatch(L1SEQUENCES, batchNo)
+}
+
 func (db *HermezDbReader) GetSequenceByBatchNoOrHighest(batchNo uint64) (*types.L1BatchInfo, error) {
 	seq, err := db.GetSequenceByBatchNo(batchNo)
 	if err != nil {
@@ -323,25 +328,29 @@ func (db *HermezDbReader) GetSequenceByBatchNoOrHighest(batchNo uint64) (*types.
 		}
 
 		if batch > batchNo {
-			if len(v) != 64 {
-				return nil, fmt.Errorf("invalid hash length")
-			}
-
-			l1TxHash := common.BytesToHash(v[:32])
-			stateRoot := common.BytesToHash(v[32:64])
-
-			return &types.L1BatchInfo{
-				BatchNo:   batch,
-				L1BlockNo: l1Block,
-				StateRoot: stateRoot,
-				L1TxHash:  l1TxHash,
-			}, nil
+			return parseL1BatchInfo(l1Block, batch, v)
 		}
 	}
 
 	return nil, nil
 }
+func parseL1BatchInfo(l1BlockN, batchN uint64, v []byte) (*types.L1BatchInfo, error) {
+	if len(v) != 96 && len(v) != 64 {
+		return nil, fmt.Errorf("invalid hash length")
+	}
 
+	l1TxHash := common.BytesToHash(v[:32])
+	stateRoot := common.BytesToHash(v[32:64])
+	l1InfoRoot := common.BytesToHash(v[64:])
+
+	return &types.L1BatchInfo{
+		BatchNo:    batchN,
+		L1BlockNo:  l1BlockN,
+		StateRoot:  stateRoot,
+		L1TxHash:   l1TxHash,
+		L1InfoRoot: l1InfoRoot,
+	}, nil
+}
 func (db *HermezDbReader) GetVerificationByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
 	return db.getByL1Block(L1VERIFICATIONS, l1BlockNo)
 }
@@ -422,23 +431,62 @@ func (db *HermezDbReader) getByL1Block(table string, l1BlockNo uint64) (*types.L
 		}
 
 		if l1Block == l1BlockNo {
-			if len(v) != 96 && len(v) != 64 {
-				return nil, fmt.Errorf("invalid hash length")
-			}
-
-			l1TxHash := common.BytesToHash(v[:32])
-			stateRoot := common.BytesToHash(v[32:64])
-
-			return &types.L1BatchInfo{
-				BatchNo:   batchNo,
-				L1BlockNo: l1Block,
-				StateRoot: stateRoot,
-				L1TxHash:  l1TxHash,
-			}, nil
+			return parseL1BatchInfo(l1Block, batchNo, v)
 		}
 	}
 
 	return nil, nil
+}
+
+func (db *HermezDbReader) getPrevAndCurrentForBatch(table string, batchNo uint64) (prev *types.L1BatchInfo, current *types.L1BatchInfo, err error) {
+	c, err := db.tx.Cursor(table)
+	if err != nil {
+		return
+	}
+	defer c.Close()
+
+	var k, v []byte
+	for k, v, err = c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			return
+		}
+
+		l1Block, batch, err1 := SplitKey(k)
+		if err1 != nil {
+			err = err1
+			return
+		}
+
+		// found the current one
+		if batch >= batchNo {
+			current, err = parseL1BatchInfo(l1Block, batch, v)
+			if err != nil {
+				return
+			}
+			break
+		}
+	}
+
+	k, v, err = c.Prev()
+	if err != nil {
+		return
+	}
+	if len(v) == 0 {
+		prev = &types.L1BatchInfo{}
+		return
+	}
+
+	l1Block, prevBatch, err := SplitKey(k)
+	if err != nil {
+		return
+	}
+
+	prev, err = parseL1BatchInfo(l1Block, prevBatch, v)
+	if err != nil {
+		return
+	}
+
+	return
 }
 
 func (db *HermezDbReader) getByBatchNo(table string, batchNo uint64) (*types.L1BatchInfo, error) {
@@ -460,24 +508,7 @@ func (db *HermezDbReader) getByBatchNo(table string, batchNo uint64) (*types.L1B
 		}
 
 		if batch == batchNo {
-			if len(v) != 96 && len(v) != 64 {
-				return nil, fmt.Errorf("invalid hash length")
-			}
-
-			l1TxHash := common.BytesToHash(v[:32])
-			stateRoot := common.BytesToHash(v[32:64])
-			var l1InfoRoot common.Hash
-			if len(v) > 64 {
-				l1InfoRoot = common.BytesToHash(v[64:])
-			}
-
-			return &types.L1BatchInfo{
-				BatchNo:    batchNo,
-				L1BlockNo:  l1Block,
-				StateRoot:  stateRoot,
-				L1TxHash:   l1TxHash,
-				L1InfoRoot: l1InfoRoot,
-			}, nil
+			return parseL1BatchInfo(l1Block, batch, v)
 		}
 	}
 
@@ -521,29 +552,14 @@ func (db *HermezDbReader) getLatest(table string) (*types.L1BatchInfo, error) {
 	if len(value) == 0 {
 		return nil, nil
 	}
-
-	if len(value) != 96 && len(value) != 64 {
-		return nil, fmt.Errorf("invalid hash length")
-	}
-
-	l1TxHash := common.BytesToHash(value[:32])
-	stateRoot := common.BytesToHash(value[32:64])
-	var l1InfoRoot common.Hash
-	if len(value) > 64 {
-		l1InfoRoot = common.BytesToHash(value[64:])
-	}
-
-	return &types.L1BatchInfo{
-		BatchNo:    batchNo,
-		L1BlockNo:  l1BlockNo,
-		L1TxHash:   l1TxHash,
-		StateRoot:  stateRoot,
-		L1InfoRoot: l1InfoRoot,
-	}, nil
+	return parseL1BatchInfo(l1BlockNo, batchNo, value)
 }
 
-func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash, stateRoot common.Hash) error {
-	val := append(l1TxHash.Bytes(), stateRoot.Bytes()...)
+func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash, stateRoot, l1InfoRoot common.Hash) error {
+	val := make([]byte, 0, 96)
+	val = append(val, l1TxHash.Bytes()...)
+	val = append(val, stateRoot.Bytes()...)
+	val = append(val, l1InfoRoot.Bytes()...)
 	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), val)
 }
 
@@ -559,8 +575,7 @@ func (db *HermezDb) RollbackSequences(batchNo uint64) error {
 			break
 		}
 
-		err = db.tx.Delete(L1SEQUENCES, ConcatKey(latestSequence.L1BlockNo, latestSequence.BatchNo))
-		if err != nil {
+		if err = db.tx.Delete(L1SEQUENCES, ConcatKey(latestSequence.L1BlockNo, latestSequence.BatchNo)); err != nil {
 			return err
 		}
 	}
@@ -599,8 +614,7 @@ func (db *HermezDb) TruncateSequences(l2BlockNo uint64) error {
 			continue
 		}
 		// delete seq
-		err = db.tx.Delete(L1SEQUENCES, ConcatKey(seq.L1BlockNo, seq.BatchNo))
-		if err != nil {
+		if err = db.tx.Delete(L1SEQUENCES, ConcatKey(seq.L1BlockNo, seq.BatchNo)); err != nil {
 			return err
 		}
 	}
@@ -1016,6 +1030,9 @@ func (db *HermezDb) deleteFromBucketWithUintKeysRange(bucket string, fromBlockNu
 }
 
 func (db *HermezDbReader) GetForkId(batchNo uint64) (uint64, error) {
+	if batchNo == 0 {
+		batchNo = 1
+	}
 	v, err := db.tx.GetOne(FORKIDS, Uint64ToBytes(batchNo))
 	if err != nil {
 		return 0, err
@@ -1413,7 +1430,7 @@ func (db *HermezDb) WriteBatchCounters(blockNumber uint64, counters []int) error
 	return db.tx.Put(BATCH_COUNTERS, Uint64ToBytes(blockNumber), countersJson)
 }
 
-func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersMap []int, found bool, err error) {
+func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersArray []int, found bool, err error) {
 	batchBlockNumbers, err := db.GetL2BlockNosByBatch(batchNumber)
 	if err != nil {
 		return nil, false, err
@@ -1426,12 +1443,12 @@ func (db *HermezDbReader) GetLatestBatchCounters(batchNumber uint64) (countersMa
 	found = len(v) > 0
 
 	if found {
-		if err = json.Unmarshal(v, &countersMap); err != nil {
+		if err = json.Unmarshal(v, &countersArray); err != nil {
 			return nil, false, err
 		}
 	}
 
-	return countersMap, found, nil
+	return countersArray, found, nil
 }
 
 func (db *HermezDb) DeleteBatchCounters(fromBlockNum, toBlockNum uint64) error {
@@ -1762,4 +1779,91 @@ func (db *HermezDbReader) GetBatchEnd(blockNo uint64) (bool, error) {
 
 func (db *HermezDb) DeleteBatchEnds(from, to uint64) error {
 	return db.deleteFromBucketWithUintKeysRange(BATCH_ENDS, from, to)
+}
+
+func (db *HermezDbReader) GetAllForkIntervals() ([]types.ForkInterval, error) {
+	return db.getForkIntervals(nil)
+}
+
+func (db *HermezDbReader) GetForkInterval(forkID uint64) (*types.ForkInterval, bool, error) {
+	forkIntervals, err := db.getForkIntervals(&forkID)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if len(forkIntervals) == 0 {
+		return nil, false, err
+	}
+
+	forkInterval := forkIntervals[0]
+	return &forkInterval, true, nil
+}
+
+func (db *HermezDbReader) getForkIntervals(forkIdFilter *uint64) ([]types.ForkInterval, error) {
+	mapForkIntervals := map[uint64]types.ForkInterval{}
+
+	c, err := db.tx.Cursor(FORKIDS)
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+
+	lastForkId := uint64(0)
+	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			return nil, err
+		}
+
+		batchNumber := BytesToUint64(k)
+		forkID := BytesToUint64(v)
+
+		if forkID > lastForkId {
+			lastForkId = forkID
+		}
+
+		if forkIdFilter != nil && *forkIdFilter != forkID {
+			continue
+		}
+
+		mapInterval, found := mapForkIntervals[forkID]
+		if !found {
+			mapInterval = types.ForkInterval{
+				ForkID:          forkID,
+				FromBatchNumber: batchNumber,
+				ToBatchNumber:   batchNumber,
+			}
+		}
+
+		if batchNumber < mapInterval.FromBatchNumber {
+			mapInterval.FromBatchNumber = batchNumber
+		}
+
+		if batchNumber > mapInterval.ToBatchNumber {
+			mapInterval.ToBatchNumber = batchNumber
+		}
+
+		mapForkIntervals[forkID] = mapInterval
+	}
+
+	forkIntervals := make([]types.ForkInterval, 0, len(mapForkIntervals))
+	for forkId, forkInterval := range mapForkIntervals {
+		blockNumber, found, err := db.GetForkIdBlock(forkInterval.ForkID)
+		if err != nil {
+			return nil, err
+		} else if found {
+			forkInterval.BlockNumber = blockNumber
+		}
+
+		if forkId == lastForkId {
+			forkInterval.ToBatchNumber = math.MaxUint64
+		}
+
+		forkIntervals = append(forkIntervals, forkInterval)
+	}
+
+	sort.Slice(forkIntervals, func(i, j int) bool {
+		return forkIntervals[i].FromBatchNumber < forkIntervals[j].FromBatchNumber
+	})
+
+	return forkIntervals, nil
 }
