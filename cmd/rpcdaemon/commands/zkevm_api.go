@@ -478,7 +478,7 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 	}
 	// collect blocks in batch
 	batch.Blocks = make([]interface{}, 0, len(batchBlocks))
-	batch.Transactions = []interface{}
+	batch.Transactions = []interface{}{}
 	var batchTxs []eritypes.Transaction
 	for _, batchBlock := range batchBlocks {
 		batch.Blocks = append(batch.Blocks, batchBlock.Hash())
