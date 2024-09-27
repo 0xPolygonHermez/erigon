@@ -385,7 +385,7 @@ func GetDecodedV(tx types.Transaction, v *uint256.Int) *uint256.Int {
 }
 
 type BatchTxData struct {
-	Transaction                 *types.Transaction
+	Transaction                 types.Transaction
 	EffectiveGasPricePercentage uint8
 }
 
@@ -396,7 +396,7 @@ func GenerateBlockBatchL2Data(forkId uint16, deltaTimestamp uint32, l1InfoTreeIn
 		result = GenerateStartBlockBatchL2Data(deltaTimestamp, l1InfoTreeIndex)
 	}
 	for _, transactionData := range transactionsData {
-		encoded, err := TransactionToL2Data(*transactionData.Transaction, forkId, transactionData.EffectiveGasPricePercentage)
+		encoded, err := TransactionToL2Data(transactionData.Transaction, forkId, transactionData.EffectiveGasPricePercentage)
 		if err != nil {
 			return nil, err
 		}

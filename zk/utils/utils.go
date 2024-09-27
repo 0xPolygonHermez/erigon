@@ -15,7 +15,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/tx"
-	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -196,7 +195,7 @@ func GenerateBatchDataFromDb(
 				return nil, err
 			}
 			txData = append(txData, tx.BatchTxData{
-				Transaction:                 &txn,
+				Transaction:                 txn,
 				EffectiveGasPricePercentage: eg,
 			})
 		}
@@ -220,7 +219,7 @@ type BatchBlockData struct {
 
 func CalculateBatchData(batchBlockData []BatchBlockData) (batchL2Data []byte, err error) {
 	for i := 0; i < len(batchBlockData); i++ {
-		bl2d, err := zktx.GenerateBlockBatchL2Data(batchBlockData[i].ForkId, batchBlockData[i].DeltaTimestamp, batchBlockData[i].L1InfoTreeIndex, batchBlockData[i].Transactions)
+		bl2d, err := tx.GenerateBlockBatchL2Data(batchBlockData[i].ForkId, batchBlockData[i].DeltaTimestamp, batchBlockData[i].L1InfoTreeIndex, batchBlockData[i].Transactions)
 		if err != nil {
 			return nil, err
 		}
