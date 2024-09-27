@@ -226,7 +226,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	}
 	engine := api.engine()
 
-	latestCanBlockNumber, latestCanHash, isLatest, err := rpchelper.GetCanonicalBlockNumber(latestNumOrHash, dbtx, api.filters) // DoCall cannot be executed on non-canonical blocks
+	latestCanBlockNumber, latestCanHash, isLatest, err := rpchelper.GetCanonicalBlockNumber(bNrOrHash, dbtx, api.filters) // DoCall cannot be executed on non-canonical blocks
 	if err != nil {
 		return 0, err
 	}
@@ -384,6 +384,9 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 	a, err := reader.ReadAccountData(address)
 	if err != nil {
 		return nil, err
+	}
+	if a == nil {
+		return nil, nil
 	}
 	pr, err := trie.NewProofRetainer(address, a, storageKeys, rl)
 	if err != nil {
