@@ -135,9 +135,9 @@ func SpawnStageBatches(
 	var err error
 	for {
 		err = spawnStageBatches(s, u, ctx, tx, cfg, quiet)
-		if checkNeedLoop(ctx, tx, cfg) {
+		if checkNeedLoop(ctx, tx, cfg, s.LogPrefix()) {
 			time.Sleep(100 * time.Millisecond)
-			log.Info("Loop to continue stage batches")
+			log.Info(fmt.Sprintf("[%s] Loop to continue stage batches", s.LogPrefix()))
 			continue
 		} else {
 			break
@@ -147,12 +147,12 @@ func SpawnStageBatches(
 	return err
 }
 
-func checkNeedLoop(ctx context.Context, tx kv.RwTx, cfg BatchesCfg) bool {
+func checkNeedLoop(ctx context.Context, tx kv.RwTx, cfg BatchesCfg, logPrefix string) bool {
 	if tx == nil {
 		var err error
 		tx, err = cfg.db.BeginRw(ctx)
 		if err != nil {
-			log.Error(fmt.Sprintf("failed to open tx, %v", err))
+			log.Error(fmt.Sprintf("[%s] Failed to open tx, %v", logPrefix, err))
 			return false
 		}
 		defer tx.Rollback()
@@ -160,36 +160,36 @@ func checkNeedLoop(ctx context.Context, tx kv.RwTx, cfg BatchesCfg) bool {
 
 	stageProgressBlockNo, err := stages.GetStageProgress(tx, stages.Batches)
 	if err != nil {
-		log.Error(fmt.Sprintf("Check need loop, GetStageProgress:%v", err))
+		log.Error(fmt.Sprintf("[%s] Check need loop, get stage progress error:%v", logPrefix, err))
 		return false
 	}
 
 	res, err := jsoncli.JSONRPCCall(cfg.zkCfg.L2RpcUrl, "eth_blockNumber")
 	if err != nil {
-		log.Error(fmt.Sprintf("Check need loop, JSONRPCCall:%v", err))
+		log.Error(fmt.Sprintf("[%s] Check need loop, json rpc call error:%v", logPrefix, err))
 		return false
 	}
 	if res.Error != nil {
-		log.Error(fmt.Sprintf("Check need loop, JSONRPCCall:%v", res.Error))
+		log.Error(fmt.Sprintf("[%s] Check need loop, json rpc call error:%v", logPrefix, res.Error))
 		return false
 	}
 
 	var resultString string
 	if err = json.Unmarshal(res.Result, &resultString); err != nil {
-		log.Error(fmt.Sprintf("Check need loop, Unmarshal:%v", err))
+		log.Error(fmt.Sprintf("[%s] Check need loop, unmarshal error:%v", logPrefix, err))
 		return false
 	}
 
 	block, ok := big.NewInt(0).SetString(resultString[2:], 16)
 	if !ok {
-		log.Error(fmt.Sprintf("Check need loop, SetString:%v", err))
+		log.Error(fmt.Sprintf("[%s] Check need loop, set string error:%v", logPrefix, err))
 		return false
 	}
 
 	if stageProgressBlockNo+1 >= block.Uint64() {
 		return false
 	}
-	log.Info(fmt.Sprintf("Check need loop, stageProgressBlockNo:%v, block:%v", stageProgressBlockNo, block.Uint64()))
+	log.Info(fmt.Sprintf("[%s] Check need loop, progress block:%v, latest block:%v", logPrefix, stageProgressBlockNo, block.Uint64()))
 	return true
 }
 
@@ -528,7 +528,7 @@ LOOP:
 				atLeastOneBlockWritten = true
 				lastBlockHeight = entry.L2BlockNumber
 				blocksWritten++
-				progressChan <- blocksWritten
+				progressChan <- fmt.Sprintf("written count %d, block %d", blocksWritten, lastBlockHeight)
 
 				if endLoop && cfg.zkCfg.DebugLimit > 0 {
 					break LOOP
