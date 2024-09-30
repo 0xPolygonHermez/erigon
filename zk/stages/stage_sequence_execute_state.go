@@ -309,7 +309,7 @@ func (bbe *BuiltBlockElements) onFinishAddingTransaction(transaction types.Trans
 	bbe.effectiveGases = append(bbe.effectiveGases, effectiveGas)
 }
 
-type resequenceTxMatadata struct {
+type resequenceTxMetadata struct {
 	blockNum int
 	txIndex  int
 }
@@ -318,7 +318,7 @@ type ResequenceBatchJob struct {
 	batchToProcess  []*dsTypes.FullL2Block
 	StartBlockIndex int
 	StartTxIndex    int
-	txIndexMap      map[common.Hash]resequenceTxMatadata
+	txIndexMap      map[common.Hash]resequenceTxMetadata
 }
 
 func NewResequenceBatchJob(batch []*dsTypes.FullL2Block) *ResequenceBatchJob {
@@ -326,7 +326,7 @@ func NewResequenceBatchJob(batch []*dsTypes.FullL2Block) *ResequenceBatchJob {
 		batchToProcess:  batch,
 		StartBlockIndex: 0,
 		StartTxIndex:    0,
-		txIndexMap:      make(map[common.Hash]resequenceTxMatadata),
+		txIndexMap:      make(map[common.Hash]resequenceTxMetadata),
 	}
 }
 
@@ -349,7 +349,7 @@ func (r *ResequenceBatchJob) YieldNextBlockTransactions(decoder zktx.TxDecoder) 
 	blockTransactions := make([]types.Transaction, 0)
 	if r.HasMoreBlockToProcess() {
 		block := r.CurrentBlock()
-		r.txIndexMap[block.L2Blockhash] = resequenceTxMatadata{r.StartBlockIndex, 0}
+		r.txIndexMap[block.L2Blockhash] = resequenceTxMetadata{r.StartBlockIndex, 0}
 
 		for i := r.StartTxIndex; i < len(block.L2Txs); i++ {
 			transaction := block.L2Txs[i]
@@ -357,7 +357,7 @@ func (r *ResequenceBatchJob) YieldNextBlockTransactions(decoder zktx.TxDecoder) 
 			if err != nil {
 				return nil, fmt.Errorf("decode tx error: %v", err)
 			}
-			r.txIndexMap[tx.Hash()] = resequenceTxMatadata{r.StartBlockIndex, i}
+			r.txIndexMap[tx.Hash()] = resequenceTxMetadata{r.StartBlockIndex, i}
 			blockTransactions = append(blockTransactions, tx)
 		}
 	}
