@@ -92,6 +92,11 @@ func NewBatchesProcessor(
 		return nil, errors.New("could not retrieve l1 verifications batch no progress")
 	}
 
+	lastForkId, err := stages.GetStageProgress(tx, stages.ForkId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last fork id, %w", err)
+	}
+
 	return &BatchesProcessor{
 		ctx:                  ctx,
 		logPrefix:            logPrefix,
@@ -110,6 +115,7 @@ func NewBatchesProcessor(
 		progressChan:         progressChan,
 		lastBlockHash:        emptyHash,
 		lastBlockRoot:        emptyHash,
+		lastForkId:           lastForkId,
 	}, nil
 }
 
@@ -438,4 +444,27 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 
 func (p *BatchesProcessor) AtLeastOneBlockWritten() bool {
 	return p.lastBlockHeight > 0
+}
+
+func (p *BatchesProcessor) LastBlockHeight() uint64 {
+	return p.lastBlockHeight
+}
+
+func (p *BatchesProcessor) HighestSeenBatchNumber() uint64 {
+	return p.highestSeenBatchNo
+}
+func (p *BatchesProcessor) LastForkId() uint64 {
+	return p.lastForkId
+}
+
+func (p *BatchesProcessor) TotalBlocksWritten() uint64 {
+	return p.blocksWritten
+}
+
+func (p *BatchesProcessor) HighestHashableL2BlockNo() uint64 {
+	return p.highestHashableL2BlockNo
+}
+
+func (p *BatchesProcessor) SetNewTx(tx kv.RwTx) {
+	p.tx = tx
 }
