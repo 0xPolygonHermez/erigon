@@ -762,6 +762,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 		// update the chain config with the zero gas from the flags
 		backend.chainConfig.SupportGasless = cfg.Gasless
+		backend.chainConfig.ZkDefaultGasPrice = cfg.DefaultGasPrice
 
 		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
 

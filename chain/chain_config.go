@@ -102,7 +102,8 @@ type Config struct {
 	ForkID11                *big.Int `json:"forkID11,omitempty"`
 	ForkID12BananaBlock     *big.Int `json:"forkID12BananaBlock,omitempty"`
 
-	SupportGasless bool `json:"supportGasless,omitempty"`
+	SupportGasless    bool   `json:"supportGasless,omitempty"`
+	ZkDefaultGasPrice uint64 `json:"zkDefaultGasFee,omitempty"`
 }
 
 func (c *Config) String() string {
