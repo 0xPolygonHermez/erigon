@@ -75,6 +75,7 @@ type BatchesProcessor struct {
 	lastBlockHash common.Hash
 	dsQueryClient DsQueryClient
 	progressChan  chan uint64
+	unwindFn      func(uint64) error
 }
 
 func NewBatchesProcessor(
@@ -86,6 +87,7 @@ func NewBatchesProcessor(
 	syncBlockLimit, debugBlockLimit, debugStepAfter, debugStep, stageProgressBlockNo, stageProgressBatchNo uint64,
 	dsQueryClient DsQueryClient,
 	progressChan chan uint64,
+	unwindFn func(uint64) error,
 ) (*BatchesProcessor, error) {
 	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
@@ -116,6 +118,7 @@ func NewBatchesProcessor(
 		lastBlockHash:        emptyHash,
 		lastBlockRoot:        emptyHash,
 		lastForkId:           lastForkId,
+		unwindFn:             unwindFn,
 	}, nil
 }
 
@@ -176,7 +179,7 @@ func (p *BatchesProcessor) processBatchStartEntry(batchStart *types.BatchStart) 
 	return nil
 }
 
-func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (rollbackBlock uint64, endLoop bool, err error) {
+func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (restartStreamFromBlock uint64, endLoop bool, err error) {
 	log.Debug(fmt.Sprintf("[%s] Retrieved %d (%s) block from stream", p.logPrefix, blockEntry.L2BlockNumber, blockEntry.L2Blockhash.String()))
 	if p.syncBlockLimit > 0 && blockEntry.L2BlockNumber >= p.syncBlockLimit {
 		// stop the node going into a crazy loop
@@ -223,7 +226,9 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (roll
 			// if the batch number is higher than the one we know about, it means that we need to trigger an unwinding of blocks
 			log.Warn(fmt.Sprintf("[%s] Batch number mismatch detected. Triggering unwind...", p.logPrefix),
 				"block", blockEntry.L2BlockNumber, "ds batch", blockEntry.BatchNumber, "db batch", dbBatchNum)
-			return blockEntry.L2BlockNumber, false, nil
+			if err := p.unwindFn(blockEntry.L2BlockNumber); err != nil {
+				return blockEntry.L2BlockNumber, false, err
+			}
 		}
 		return 0, false, nil
 	}
@@ -253,19 +258,21 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (roll
 		// unwind/rollback blocks until the latest common ancestor block
 		log.Warn(fmt.Sprintf("[%s] Parent block hashes mismatch on block %d. Triggering unwind...", p.logPrefix, blockEntry.L2BlockNumber),
 			"db parent block hash", dbParentBlockHash, "ds parent block hash", dsParentBlockHash)
-		return blockEntry.L2BlockNumber, false, nil
+		//parent blockhash is wrong, so unwind to it, then restat stream from it to get the correct one
+		p.unwindFn(blockEntry.L2BlockNumber - 1)
+		return blockEntry.L2BlockNumber - 1, false, nil
 	}
 
 	// skip if we already have this block
 	if blockEntry.L2BlockNumber < p.lastBlockHeight+1 {
-		log.Warn(fmt.Sprintf("[%s] Skipping block %d, already processed", p.logPrefix, blockEntry.L2BlockNumber))
-		return 0, false, nil
+		log.Warn(fmt.Sprintf("[%s] Skipping block %d, already processed unwinding...", p.logPrefix, blockEntry.L2BlockNumber))
+		p.unwindFn(blockEntry.L2BlockNumber)
 	}
 
 	// check for sequential block numbers
 	if blockEntry.L2BlockNumber > p.lastBlockHeight+1 {
-		log.Warn(fmt.Sprintf("[%s] Stream skipped ahead, unwinding to block %d", p.logPrefix, blockEntry.L2BlockNumber))
-		return blockEntry.L2BlockNumber, false, nil
+		log.Warn(fmt.Sprintf("[%s] Stream skipped ahead, restarting datastream to block %d", p.logPrefix, blockEntry.L2BlockNumber))
+		return p.lastBlockHeight + 1, false, nil
 	}
 
 	// batch boundary - record the highest hashable block number (last block in last full batch)

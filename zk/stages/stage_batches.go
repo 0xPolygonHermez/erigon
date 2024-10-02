@@ -59,15 +59,20 @@ type HermezDb interface {
 
 type DatastreamClient interface {
 	ReadAllEntriesToChannel() error
-	GetEntryChan() chan interface{}
+	GetEntryChan() *chan interface{}
 	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, int, error)
 	GetLatestL2Block() (*types.FullL2Block, error)
-	GetLastWrittenTimeAtomic() *atomic.Int64
 	GetStreamingAtomic() *atomic.Bool
 	GetProgressAtomic() *atomic.Uint64
 	EnsureConnected() (bool, error)
 	Start() error
 	Stop()
+}
+
+type DatastreamReadRunner interface {
+	StartRead()
+	StopRead()
+	RestartReadFromBlock(fromBlock uint64)
 }
 
 type dsClientCreatorHandler func(context.Context, *ethconfig.Zk, uint64) (DatastreamClient, error)
@@ -180,9 +185,6 @@ func SpawnStageBatches(
 	dsClientProgress := cfg.dsClient.GetProgressAtomic()
 	dsClientProgress.Store(stageProgressBlockNo)
 
-	// start routine to download blocks and push them in a channel
-	connectDatastreamClient(&cfg, logPrefix, latestForkId, stageProgressBlockNo)
-
 	// start a routine to print blocks written progress
 	progressChan, stopProgressPrinter := zk.ProgressPrinterWithoutTotal(fmt.Sprintf("[%s] Downloaded blocks from datastream progress", logPrefix))
 	defer stopProgressPrinter()
@@ -205,13 +207,23 @@ func SpawnStageBatches(
 
 	log.Info(fmt.Sprintf("[%s] Reading blocks from the datastream.", logPrefix))
 
-	entryChan := cfg.dsClient.GetEntryChan()
+	unwindFn := func(unwindBlock uint64) error {
+		return rollback(logPrefix, eriDb, hermezDb, dsQueryClient, unwindBlock, tx, u)
+	}
 
-	batchProcessor, err := NewBatchesProcessor(ctx, logPrefix, tx, hermezDb, eriDb, cfg.zkCfg.SyncLimit, cfg.zkCfg.DebugLimit, cfg.zkCfg.DebugStepAfter, cfg.zkCfg.DebugStep, stageProgressBlockNo, stageProgressBatchNo, dsQueryClient, progressChan)
+	batchProcessor, err := NewBatchesProcessor(ctx, logPrefix, tx, hermezDb, eriDb, cfg.zkCfg.SyncLimit, cfg.zkCfg.DebugLimit, cfg.zkCfg.DebugStepAfter, cfg.zkCfg.DebugStep, stageProgressBlockNo, stageProgressBatchNo, dsQueryClient, progressChan, unwindFn)
 	if err != nil {
 		return err
 	}
-	prevAmountBlocksWritten, unwindBlock := uint64(0), uint64(0)
+
+	// start routine to download blocks and push them in a channel
+	dsClientRunner := NewDatastreamClientRunner(cfg.dsClient, logPrefix)
+	dsClientRunner.StartRead()
+	defer dsClientRunner.StartRead()
+
+	entryChan := cfg.dsClient.GetEntryChan()
+
+	prevAmountBlocksWritten, restartDatastreamBlock := uint64(0), uint64(0)
 	endLoop := false
 
 	for {
@@ -221,16 +233,14 @@ func SpawnStageBatches(
 		// if download routine finished, should continue to read from channel until it's empty
 		// if both download routine stopped and channel empty - stop loop
 		select {
-		case entry := <-entryChan:
-			if unwindBlock, endLoop, err = batchProcessor.ProcessEntry(entry); err != nil {
+		case entry := <-*entryChan:
+			if restartDatastreamBlock, endLoop, err = batchProcessor.ProcessEntry(entry); err != nil {
 				return err
 			}
-			if unwindBlock > 0 {
-				if err := rollback(logPrefix, eriDb, hermezDb, dsQueryClient, unwindBlock, tx, u); err != nil {
-					return err
-				}
-				cfg.dsClient.Stop()
-				return nil
+			dsClientProgress.Store(batchProcessor.LastBlockHeight())
+
+			if restartDatastreamBlock > 0 {
+				dsClientRunner.RestartReadFromBlock(restartDatastreamBlock)
 			}
 		case <-ctx.Done():
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
@@ -308,42 +318,6 @@ func SpawnStageBatches(
 	}
 
 	return nil
-}
-
-func connectDatastreamClient(cfg *BatchesCfg, logPrefix string, latestForkId, stageProgressBlockNo uint64) {
-	// start routine to download blocks and push them in a channel
-	if !cfg.dsClient.GetStreamingAtomic().Load() {
-		log.Info(fmt.Sprintf("[%s] Starting stream", logPrefix), "startBlock", stageProgressBlockNo)
-		// this will download all blocks from datastream and push them in a channel
-		// if no error, break, else continue trying to get them
-		// Create bookmark
-
-		connected := false
-		var err error
-		for i := 0; i < 5; i++ {
-			connected, err = cfg.dsClient.EnsureConnected()
-			if err != nil {
-				log.Error(fmt.Sprintf("[%s] Error connecting to datastream", logPrefix), "error", err)
-				continue
-			}
-			if connected {
-				break
-			}
-		}
-
-		if !connected {
-			return
-		}
-
-		go func() {
-			log.Info(fmt.Sprintf("[%s] Started downloading L2Blocks routine", logPrefix))
-			defer log.Info(fmt.Sprintf("[%s] Finished downloading L2Blocks routine", logPrefix))
-
-			if err := cfg.dsClient.ReadAllEntriesToChannel(); err != nil {
-				log.Error(fmt.Sprintf("[%s] Error downloading blocks from datastream", logPrefix), "error", err)
-			}
-		}()
-	}
 }
 
 func saveStageProgress(tx kv.RwTx, logPrefix string, highestHashableL2BlockNo, highestSeenBatchNo, lastBlockHeight, lastForkId uint64) error {
