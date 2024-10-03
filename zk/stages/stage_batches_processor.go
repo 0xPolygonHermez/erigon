@@ -234,8 +234,8 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (rest
 	}
 
 	var dbParentBlockHash common.Hash
-	if blockEntry.L2BlockNumber > 0 {
-		dbParentBlockHash, err = p.eriDb.ReadCanonicalHash(blockEntry.L2BlockNumber - 1)
+	if blockEntry.L2BlockNumber > 1 {
+		dbParentBlockHash, err = p.eriDb.ReadCanonicalHash(p.lastBlockHeight)
 		if err != nil {
 			return 0, false, fmt.Errorf("failed to retrieve parent block hash for datastream block %d: %w",
 				blockEntry.L2BlockNumber, err)
@@ -243,6 +243,7 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (rest
 	}
 
 	dsParentBlockHash := p.lastBlockHash
+	dsBlockNumber := p.lastBlockHeight
 	if dsParentBlockHash == emptyHash {
 		parentBlockDS, _, err := p.dsQueryClient.GetL2BlockByNumber(blockEntry.L2BlockNumber - 1)
 		if err != nil {
@@ -251,13 +252,20 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (rest
 
 		if parentBlockDS != nil {
 			dsParentBlockHash = parentBlockDS.L2Blockhash
+			if parentBlockDS.L2BlockNumber > 0 {
+				dsBlockNumber = parentBlockDS.L2BlockNumber
+			}
 		}
 	}
 
-	if dbParentBlockHash != dsParentBlockHash {
+	if blockEntry.L2BlockNumber > 1 && dbParentBlockHash != dsParentBlockHash {
 		// unwind/rollback blocks until the latest common ancestor block
 		log.Warn(fmt.Sprintf("[%s] Parent block hashes mismatch on block %d. Triggering unwind...", p.logPrefix, blockEntry.L2BlockNumber),
-			"db parent block hash", dbParentBlockHash, "ds parent block hash", dsParentBlockHash)
+			"db parent block hash", dbParentBlockHash,
+			"ds parent block number", dsBlockNumber,
+			"ds parent block hash", dsParentBlockHash,
+			"ds parent block number", blockEntry.L2BlockNumber-1,
+		)
 		//parent blockhash is wrong, so unwind to it, then restat stream from it to get the correct one
 		p.unwindFn(blockEntry.L2BlockNumber - 1)
 		return blockEntry.L2BlockNumber - 1, false, nil

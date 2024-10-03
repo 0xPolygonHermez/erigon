@@ -326,8 +326,12 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 }
 
 func (c *StreamClient) clearEntryCHannel() {
-	close(c.entryChan)
-	for range c.entryChan {
+	select {
+	case <-c.entryChan:
+		close(c.entryChan)
+		for range c.entryChan {
+		}
+	default:
 	}
 }
 
