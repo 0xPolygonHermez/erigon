@@ -388,10 +388,15 @@ func SpawnSequencingStage(
 		}
 	}
 
-	cfg.legacyVerifier.Wait()
-	needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
-	if err != nil || needsUnwind {
-		return err
+	for {
+		cfg.legacyVerifier.Wait()
+		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
+		if err != nil || needsUnwind {
+			return err
+		}
+		if !cfg.legacyVerifier.HasPendingVerifications() {
+			break
+		}
 	}
 
 	/*

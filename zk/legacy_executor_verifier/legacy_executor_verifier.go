@@ -313,6 +313,13 @@ func (v *LegacyExecutorVerifier) VerifyWithoutExecutor(request *VerifierRequest,
 	return promise
 }
 
+func (v *LegacyExecutorVerifier) HasPendingVerifications() bool {
+	v.mtxPromises.Lock()
+	defer v.mtxPromises.Unlock()
+
+	return len(v.promises) > 0
+}
+
 func (v *LegacyExecutorVerifier) ProcessResultsSequentially() ([]*VerifierBundle, error) {
 	v.mtxPromises.Lock()
 	defer v.mtxPromises.Unlock()
