@@ -37,7 +37,7 @@ require (
 	github.com/emicklei/dot v1.0.0
 	github.com/emirpasic/gods v1.18.1
 	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
-	github.com/gateway-fm/cdk-erigon-lib v0.0.0-20241004104722-f8fd79a58182
+	github.com/gateway-fm/cdk-erigon-lib v0.0.0-20241004145804-75fb2f0a851d
 	github.com/gateway-fm/vectorized-poseidon-gold v1.0.0
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35
 	github.com/go-stack/stack v1.8.1
