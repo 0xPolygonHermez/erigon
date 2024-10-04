@@ -35,13 +35,10 @@ func newSequencerBatchStreamWriter(batchContext *BatchContext, batchState *Batch
 	}
 }
 
-func (sbc *SequencerBatchStreamWriter) CommitNewUpdates() ([]*verifier.VerifierBundle, error) {
-	verifierBundles, err := sbc.legacyVerifier.ProcessResultsSequentially()
-	if err != nil {
-		return nil, err
-	}
-
-	return sbc.writeBlockDetailsToDatastream(verifierBundles)
+func (sbc *SequencerBatchStreamWriter) CommitNewUpdates() ([]*verifier.VerifierBundle, *verifier.VerifierBundle, error) {
+	verifierBundles, verifierBundleForUnwind := sbc.legacyVerifier.ProcessResultsSequentially()
+	checkedVerifierBundles, err := sbc.writeBlockDetailsToDatastream(verifierBundles)
+	return checkedVerifierBundles, verifierBundleForUnwind, err
 }
 
 func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBundles []*verifier.VerifierBundle) ([]*verifier.VerifierBundle, error) {
