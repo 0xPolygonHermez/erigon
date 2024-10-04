@@ -552,6 +552,11 @@ var (
 		Usage: "The maximum number of concurrent requests to the executor",
 		Value: 1,
 	}
+	RpcRateLimitsFlag = cli.IntFlag{
+		Name:  "zkevm.rpc-ratelimit",
+		Usage: "RPC rate limit in requests per second.",
+		Value: 0,
+	}
 	RpcGetBatchWitnessConcurrencyLimitFlag = cli.IntFlag{
 		Name:  "zkevm.rpc-get-batch-witness-concurrency-limit",
 		Usage: "The maximum number of concurrent requests to the executor for getBatchWitness.",
