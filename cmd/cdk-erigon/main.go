@@ -150,14 +150,14 @@ func setMultiValueFlag(ctx *cli.Context, key string, value interface{}) error {
 		slice[i] = fmt.Sprintf("%v", v)
 	}
 
-	return applyFlag(ctx, key, strings.Join(slice, ","))
+	return setFlagInContext(ctx, key, strings.Join(slice, ","))
 }
 
 func setSingleValueFlag(ctx *cli.Context, key string, value interface{}) error {
-	return applyFlag(ctx, key, fmt.Sprintf("%v", value))
+	return setFlagInContext(ctx, key, fmt.Sprintf("%v", value))
 }
 
-func applyFlag(ctx *cli.Context, key, value string) error {
+func setFlagInContext(ctx *cli.Context, key, value string) error {
 	if err := ctx.Set(key, value); err != nil {
 		return handleFlagError(key, value, err)
 	}
@@ -171,5 +171,12 @@ func handleFlagError(key, value string, err error) error {
 		}
 		return fmt.Errorf("failed setting %s flag: it is deprecated, use %s instead", key, deprecatedFlag)
 	}
+
+	errUnknownFlag := fmt.Errorf("no such flag -%s", key)
+	if err.Error() == errUnknownFlag.Error() {
+		log.Warn("🚨 failed setting flag", "key", key, "value", value)
+		return nil
+	}
+
 	return fmt.Errorf("failed setting %s flag with value=%s, error=%s", key, value, err)
 }
