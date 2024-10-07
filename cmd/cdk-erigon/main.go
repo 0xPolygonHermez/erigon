@@ -174,7 +174,7 @@ func handleFlagError(key, value string, err error) error {
 
 	errUnknownFlag := fmt.Errorf("no such flag -%s", key)
 	if err.Error() == errUnknownFlag.Error() {
-		log.Warn("🚨 failed setting flag", "key", key, "value", value)
+		log.Warn("🚨 failed setting flag: unknown flag provided", "key", key, "value", value)
 		return nil
 	}
 
