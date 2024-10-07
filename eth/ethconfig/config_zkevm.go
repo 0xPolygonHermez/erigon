@@ -38,6 +38,7 @@ type Zk struct {
 	SequencerBlockSealTime                 time.Duration
 	SequencerBatchSealTime                 time.Duration
 	SequencerBatchVerificationTimeout      time.Duration
+	SequencerBatchVerificationRetries      int
 	SequencerTimeoutOnEmptyTxPool          time.Duration
 	SequencerHaltOnBatchNumber             uint64
 	SequencerResequence                    bool
