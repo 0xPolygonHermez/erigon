@@ -234,6 +234,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.DebugLimit,
 	&utils.DebugStep,
 	&utils.DebugStepAfter,
+	&utils.DebugUtilitiesMode,
+	&utils.DebugUtilitiesMethod,
 	&utils.PoolManagerUrl,
 	&utils.TxPoolRejectSmartContractDeployments,
 	&utils.DisableVirtualCounters,
