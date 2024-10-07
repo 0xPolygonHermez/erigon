@@ -21,6 +21,7 @@ type Zk struct {
 	AddressRollup                          common.Address
 	AddressZkevm                           common.Address
 	AddressGerManager                      common.Address
+	EnableL1AddressRetrieval               bool
 	L1ContractAddressCheck                 bool
 	L1RollupId                             uint64
 	L1BlockRange                           uint64

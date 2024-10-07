@@ -1555,6 +1555,40 @@ func checkPortIsFree(addr string) (free bool) {
 }
 
 func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSyncer *syncer.L1Syncer) (bool, error) {
+	if !cfg.EnableL1AddressRetrieval {
+		return performOldAddressChecks(ctx, cfg, l1BlockSyncer)
+	}
+
+	l1AddrRollup, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressZkevm)
+	if err != nil {
+		log.Warn("Failed to retrieve RollupManager address", "err", err)
+		return false, err
+	}
+	cfg.AddressRollup = l1AddrRollup
+
+	l1AddrGerManager, err := l1BlockSyncer.CallGlobalExitRootManager(ctx, &cfg.AddressZkevm)
+	if err != nil {
+		log.Warn("Failed to retrieve GlobalExitRootManager address", "err", err)
+		return false, err
+	}
+	cfg.AddressGerManager = l1AddrGerManager
+
+	l1AddrSequencer, err := l1BlockSyncer.CallTrustedSequencer(ctx, &cfg.AddressZkevm)
+	if err != nil {
+		log.Warn("Failed to retrieve TrustedSequencer address", "err", err)
+		return false, err
+	}
+	cfg.AddressSequencer = l1AddrSequencer
+
+	log.Info("L1 contract addresses retrieved successfully",
+		"AddressRollup", cfg.AddressRollup,
+		"AddressGerManager", cfg.AddressGerManager,
+		"AddressSequencer", cfg.AddressSequencer)
+
+	return true, nil
+}
+
+func performOldAddressChecks(ctx context.Context, cfg *ethconfig.Zk, l1BlockSyncer *syncer.L1Syncer) (bool, error) {
 	l1AddrRollup, err := l1BlockSyncer.CallRollupManager(ctx, &cfg.AddressZkevm)
 	if err != nil {
 		log.Warn("L1 contract address check failed (RollupManager)", "err", err)
@@ -1586,5 +1620,6 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 		log.Warn("L1 contract address check failed (AddressSequencer)", "expected", cfg.AddressSequencer, "actual", l1AddrSequencer)
 		return false, nil
 	}
+
 	return true, nil
 }
