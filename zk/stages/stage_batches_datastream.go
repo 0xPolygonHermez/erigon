@@ -71,10 +71,10 @@ func (r *DatastreamClientRunner) StopRead() {
 func (r *DatastreamClientRunner) RestartReadFromBlock(fromBlock uint64) error {
 	r.StopRead()
 
-	//wait for te old routine to be finished before continuing
+	//wait for the old routine to be finished before continuing
 	counter := 0
 	for {
-		if r.isReading.Load() == false {
+		if !r.isReading.Load() {
 			break
 		}
 		counter++
