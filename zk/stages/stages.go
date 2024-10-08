@@ -108,6 +108,7 @@ func SequencerZkStages(
 				if sequencerErr != nil || u.IsUnwindSet() {
 					exec.legacyVerifier.CancelAllRequests()
 					// on the begining of next iteration the EXECUTION will be aligned to DS
+					shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = true
 				}
 				return sequencerErr
 			},
