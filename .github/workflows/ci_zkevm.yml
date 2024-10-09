@@ -3,9 +3,11 @@ on:
   push:
     branches:
       - zkevm
+      - fork12
   pull_request:
     branches:
       - zkevm
+      - fork12
     types:
       - opened
       - reopened

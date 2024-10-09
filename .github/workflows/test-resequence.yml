@@ -3,31 +3,20 @@ on:
   push:
     branches:
       - zkevm
-      - zkevm-2.60
       - fork12
   pull_request:
     branches:
       - zkevm
-      - zkevm-2.60
       - fork12
     types:
       - opened
       - reopened
       - synchronize
       - ready_for_review
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
-  kurtosis-cdk:
+  test-resequence:
     runs-on: ubuntu-latest
-    # TODO: Add "cdk-validium" once it's ready
-    # strategy:
-    #   matrix:
-    #     da-mode: [ "rollup" ]
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
