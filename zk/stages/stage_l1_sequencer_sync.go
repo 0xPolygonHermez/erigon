@@ -278,11 +278,7 @@ func HandleInitialSequenceBatches(
 		Transaction:        txData,
 	}
 
-	if err = db.WriteL1InjectedBatch(ib); err != nil {
-		return err
-	}
-
-	return nil
+	return db.WriteL1InjectedBatch(ib)
 }
 
 func UnwindL1SequencerSyncStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg L1SequencerSyncCfg, ctx context.Context) error {

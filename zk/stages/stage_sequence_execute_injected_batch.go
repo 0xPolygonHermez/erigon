@@ -1,7 +1,10 @@
 package stages
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
+	"os"
 
 	"errors"
 
@@ -26,6 +29,25 @@ func processInjectedInitialBatch(
 	batchContext *BatchContext,
 	batchState *BatchState,
 ) error {
+	var (
+		injected *zktypes.L1InjectedBatch
+		err      error
+	)
+
+	if injectedBatchFileName := batchContext.cfg.zk.SovereignChainInitParams; injectedBatchFileName != "" {
+		// import injected batch from file
+		injected, err = loadInjectedBatchDataFromFile(injectedBatchFileName)
+		if err != nil {
+			return err
+		}
+	} else {
+		// retrieve injected batch from the database
+		injected, err = batchContext.sdb.hermezDb.GetL1InjectedBatch(0)
+		if err != nil {
+			return err
+		}
+	}
+
 	// set the block height for the fork we're running at to ensure contract interactions are correct
 	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, batchState.forkId, batchContext.cfg.chainConfig, batchContext.s.LogPrefix()); err != nil {
 		return err
@@ -41,11 +63,6 @@ func processInjectedInitialBatch(
 	}
 	getHashFn := core.GetHashFn(header, getHeader)
 	blockContext := core.NewEVMBlockContext(header, getHashFn, batchContext.cfg.engine, &batchContext.cfg.zk.AddressSequencer)
-
-	injected, err := batchContext.sdb.hermezDb.GetL1InjectedBatch(0)
-	if err != nil {
-		return err
-	}
 
 	fakeL1TreeUpdate := &zktypes.L1InfoTreeUpdate{
 		GER:        injected.LastGlobalExitRoot,
@@ -80,7 +97,7 @@ func processInjectedInitialBatch(
 		return err
 	}
 
-	return err
+	return nil
 }
 
 func handleInjectedBatch(
@@ -113,4 +130,32 @@ func handleInjectedBatch(
 	}
 
 	return &decodedBlocks[0].Transactions[0], receipt, execResult, effectiveGas, nil
+}
+
+// loadInjectedBatchDataFromFile loads data from a file, unmarshals it, and converts it to L1InjectedBatch
+func loadInjectedBatchDataFromFile(fileName string) (*zktypes.L1InjectedBatch, error) {
+	// Check if the file exists
+	fileInfo, err := os.Stat(fileName)
+	if os.IsNotExist(err) {
+		return nil, fmt.Errorf("file %s does not exist", fileName)
+	}
+
+	if fileInfo.IsDir() {
+		return nil, fmt.Errorf("%s is a directory, not a file", fileName)
+	}
+
+	// Open the file
+	file, err := os.ReadFile(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %s: %v", fileName, err)
+	}
+
+	// Unmarshal the JSON into InjectedBatch
+	var injectedBatch zktypes.L1InjectedBatch
+	err = json.Unmarshal(file, &injectedBatch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON from file %s: %v", fileName, err)
+	}
+
+	return &injectedBatch, nil
 }

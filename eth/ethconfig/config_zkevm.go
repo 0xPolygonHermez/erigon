@@ -86,6 +86,8 @@ type Zk struct {
 	ExecutorPayloadOutput       string
 
 	TxPoolRejectSmartContractDeployments bool
+
+	SovereignChainInitParams string
 }
 
 var DefaultZkConfig = &Zk{}
