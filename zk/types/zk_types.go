@@ -122,6 +122,17 @@ func (ib *L1InjectedBatch) Unmarshall(input []byte) error {
 	return nil
 }
 
+func (ib *L1InjectedBatch) MarshalJSON() ([]byte, error) {
+	type Alias L1InjectedBatch
+	return json.Marshal(&struct {
+		BatchL2Data string `json:"batchL2Data"`
+		*Alias
+	}{
+		BatchL2Data: hex.EncodeToString(ib.Transaction),
+		Alias:       (*Alias)(ib),
+	})
+}
+
 func (ib *L1InjectedBatch) UnmarshalJSON(data []byte) error {
 	type Alias L1InjectedBatch
 	aux := &struct {
@@ -136,12 +147,12 @@ func (ib *L1InjectedBatch) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	decodedData, err := hex.DecodeString(strings.TrimPrefix(aux.BatchL2Data, "0x"))
+	decodedTxData, err := hex.DecodeString(strings.TrimPrefix(aux.BatchL2Data, "0x"))
 	if err != nil {
 		return err
 	}
 
-	ib.Transaction = decodedData
+	ib.Transaction = decodedTxData
 
 	return nil
 }
