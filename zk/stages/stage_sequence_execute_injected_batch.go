@@ -151,11 +151,11 @@ func loadInjectedBatchDataFromFile(fileName string) (*zktypes.L1InjectedBatch, e
 	}
 
 	// Unmarshal the JSON into InjectedBatch
-	var injectedBatch zktypes.L1InjectedBatch
-	err = json.Unmarshal(file, &injectedBatch)
+	var rollupMetadata zktypes.RollupMetadata
+	err = json.Unmarshal(file, &rollupMetadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON from file %s: %v", fileName, err)
 	}
 
-	return &injectedBatch, nil
+	return rollupMetadata.FirstBatchData, nil
 }

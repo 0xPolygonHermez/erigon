@@ -157,6 +157,15 @@ func (ib *L1InjectedBatch) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type RollupMetadata struct {
+	FirstBatchData          *L1InjectedBatch `json:"firstBatchData"`
+	Genesis                 common.Hash      `json:"genesis"`
+	CreateRollupBlockNumber uint64           `json:"createRollupBlockNumber"`
+	RollupAddress           common.Address   `json:"rollupAddress"`
+	VerifierAddress         common.Address   `json:"verifierAddress"`
+	ConsensusContract       string           `json:"consensusContract"`
+}
+
 type ForkInterval struct {
 	ForkID          uint64
 	FromBatchNumber uint64

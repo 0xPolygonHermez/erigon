@@ -53,7 +53,7 @@ func Test_L1InjectedBatchMarshallUnmarshall(t *testing.T) {
 	require.Equal(t, input, result)
 }
 
-func Test_L1InjectedBatch_UnmarshalJSON(t *testing.T) {
+func Test_RollupMetadata_UnmarshalJSON(t *testing.T) {
 	txData, err := hex.DecodeString("f9010380808401c9c38094af97e3fe01decff90f26d266668be9f49d8df0d880b8e4f811bff7000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a40d5f56745a118d0906a34e69aec8c0db1cb8fa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005ca1ab1e0000000000000000000000000000000000000000000000000000000005ca1ab1e1bff")
 	require.NoError(t, err)
 
@@ -66,7 +66,10 @@ func Test_L1InjectedBatch_UnmarshalJSON(t *testing.T) {
 	ger, err := hex.DecodeString("ad3228b676f7d3cd4284a5443f17f1962b36e491b30a40b2405849e597ba5fb5")
 	require.NoError(t, err)
 
-	expectedInjectedBatch := &L1InjectedBatch{
+	genesisRoot, err := hex.DecodeString("97990623d36acf94eaffb0965558b8f07664d21ecad5497a57fd538b8a777d1a")
+	require.NoError(t, err)
+
+	injectedBatch := &L1InjectedBatch{
 		L1BlockNumber:      68,
 		Timestamp:          1728653072,
 		L1BlockHash:        libcommon.BytesToHash(l1BlockHash),
@@ -76,11 +79,20 @@ func Test_L1InjectedBatch_UnmarshalJSON(t *testing.T) {
 		Transaction:        txData,
 	}
 
-	injectedBatchDataJSON, err := json.Marshal(expectedInjectedBatch)
+	expectedRollupData := &RollupMetadata{
+		FirstBatchData:          injectedBatch,
+		Genesis:                 libcommon.Hash(genesisRoot),
+		CreateRollupBlockNumber: 66,
+		RollupAddress:           libcommon.HexToAddress("0x8dAF17A20c9DBA35f005b6324F493785D239719d"),
+		VerifierAddress:         libcommon.HexToAddress("0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0"),
+		ConsensusContract:       "PolygonPessimisticConsensus",
+	}
+
+	rollupJSON, err := json.Marshal(expectedRollupData)
 	require.NoError(t, err)
 
-	injectedBatch := &L1InjectedBatch{}
-	err = injectedBatch.UnmarshalJSON(injectedBatchDataJSON)
+	var rollupData RollupMetadata
+	err = json.Unmarshal(rollupJSON, &rollupData)
 	require.NoError(t, err)
-	require.Equal(t, expectedInjectedBatch, injectedBatch)
+	require.Equal(t, expectedRollupData, &rollupData)
 }
