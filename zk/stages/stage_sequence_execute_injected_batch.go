@@ -29,6 +29,11 @@ func processInjectedInitialBatch(
 	batchContext *BatchContext,
 	batchState *BatchState,
 ) error {
+	// set the block height for the fork we're running at to ensure contract interactions are correct
+	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, batchState.forkId, batchContext.cfg.chainConfig, batchContext.s.LogPrefix()); err != nil {
+		return err
+	}
+
 	var (
 		injected *zktypes.L1InjectedBatch
 		err      error
@@ -36,21 +41,22 @@ func processInjectedInitialBatch(
 
 	if injectedBatchFileName := batchContext.cfg.zk.SovereignChainInitParams; injectedBatchFileName != "" {
 		// import injected batch from file
-		injected, err = loadInjectedBatchDataFromFile(injectedBatchFileName)
+		importResult, err := loadInjectedBatchDataFromFile(injectedBatchFileName)
 		if err != nil {
 			return err
 		}
+
+		if importResult.isPartOfGenesis {
+			return nil
+		}
+
+		injected = importResult.injectedBatch
 	} else {
 		// retrieve injected batch from the database
 		injected, err = batchContext.sdb.hermezDb.GetL1InjectedBatch(0)
 		if err != nil {
 			return err
 		}
-	}
-
-	// set the block height for the fork we're running at to ensure contract interactions are correct
-	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, batchState.forkId, batchContext.cfg.chainConfig, batchContext.s.LogPrefix()); err != nil {
-		return err
 	}
 
 	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64, batchState.forkId, batchContext.cfg.zk.AddressSequencer, batchContext.cfg.chainConfig, batchContext.cfg.miningConfig)
@@ -132,8 +138,13 @@ func handleInjectedBatch(
 	return &decodedBlocks[0].Transactions[0], receipt, execResult, effectiveGas, nil
 }
 
+type injectedBatchImportResult struct {
+	injectedBatch   *zktypes.L1InjectedBatch
+	isPartOfGenesis bool
+}
+
 // loadInjectedBatchDataFromFile loads data from a file, unmarshals it, and converts it to L1InjectedBatch
-func loadInjectedBatchDataFromFile(fileName string) (*zktypes.L1InjectedBatch, error) {
+func loadInjectedBatchDataFromFile(fileName string) (*injectedBatchImportResult, error) {
 	// Check if the file exists
 	fileInfo, err := os.Stat(fileName)
 	if os.IsNotExist(err) {
@@ -144,18 +155,21 @@ func loadInjectedBatchDataFromFile(fileName string) (*zktypes.L1InjectedBatch, e
 		return nil, fmt.Errorf("%s is a directory, not a file", fileName)
 	}
 
-	// Open the file
-	file, err := os.ReadFile(fileName)
+	rawBytes, err := os.ReadFile(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %v", fileName, err)
 	}
 
+	if len(rawBytes) == 0 {
+		return &injectedBatchImportResult{isPartOfGenesis: true}, nil
+	}
+
 	// Unmarshal the JSON into InjectedBatch
 	var rollupMetadata zktypes.RollupMetadata
-	err = json.Unmarshal(file, &rollupMetadata)
+	err = json.Unmarshal(rawBytes, &rollupMetadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON from file %s: %v", fileName, err)
 	}
 
-	return rollupMetadata.FirstBatchData, nil
+	return &injectedBatchImportResult{injectedBatch: rollupMetadata.FirstBatchData}, nil
 }
