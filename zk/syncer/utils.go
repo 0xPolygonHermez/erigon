@@ -13,7 +13,7 @@ import (
 
 const (
 	sequenceBatchesMethodName         = "sequenceBatches"
-	sequenceBatchesValidiumMethodName = "validiumSequenceBatches"
+	sequenceBatchesValidiumMethodName = "sequenceBatchesValidium"
 )
 
 func GetAccInputDataCalcFunction(l1InfoRoot common.Hash, decodedSequenceInteerface interface{}) (accInputHashCalcFn func(prevAccInputHash common.Hash, index int) *common.Hash, totalSequenceBatches int, err error) {
