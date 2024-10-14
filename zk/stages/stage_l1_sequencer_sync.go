@@ -120,12 +120,7 @@ Loop:
 						return funcErr
 					}
 				case contracts.AddNewRollupTypeTopic:
-					rollupType := l.Topics[1].Big().Uint64()
-					forkIdBytes := l.Data[64:96] // 3rd positioned item in the log data
-					forkId := new(big.Int).SetBytes(forkIdBytes).Uint64()
-					if funcErr = hermezDb.WriteRollupType(rollupType, forkId); funcErr != nil {
-						return funcErr
-					}
+					fallthrough
 				case contracts.AddNewRollupTypeTopicBanana:
 					rollupType := l.Topics[1].Big().Uint64()
 					forkIdBytes := l.Data[64:96] // 3rd positioned item in the log data
