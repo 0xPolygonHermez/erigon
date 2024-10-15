@@ -39,11 +39,9 @@ func processInjectedInitialBatch(
 		err           error
 	)
 
-	isPessimisticProofs := batchContext.cfg.zk.IsPessimisticProofsConsensus()
-	if isPessimisticProofs {
-		pessimisticProofsCfg := batchContext.cfg.zk.PessimisticProofsCfgFile
+	if batchContext.cfg.zk.IsPessimisticProofsConsensus() {
 		// import injected batch from file
-		importResult, err := loadInjectedBatchDataFromFile(pessimisticProofsCfg)
+		importResult, err := loadInjectedBatchDataFromFile(batchContext.cfg.zk.PessimisticProofsCfgFile)
 		if err != nil {
 			return err
 		}
