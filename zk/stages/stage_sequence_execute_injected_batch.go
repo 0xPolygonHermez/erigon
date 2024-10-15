@@ -35,31 +35,36 @@ func processInjectedInitialBatch(
 	}
 
 	var (
-		injected *zktypes.L1InjectedBatch
-		err      error
+		injectedBatch *zktypes.L1InjectedBatch
+		err           error
 	)
 
-	if injectedBatchFileName := batchContext.cfg.zk.SovereignChainInitParams; injectedBatchFileName != "" {
+	isPessimisticProofs := batchContext.cfg.zk.IsPessimisticProofsConsensus()
+	if isPessimisticProofs {
+		pessimisticProofsCfg := batchContext.cfg.zk.PessimisticProofsCfgFile
 		// import injected batch from file
-		importResult, err := loadInjectedBatchDataFromFile(injectedBatchFileName)
+		importResult, err := loadInjectedBatchDataFromFile(pessimisticProofsCfg)
 		if err != nil {
 			return err
 		}
 
+		// injected batch transactions are already baked in the genesis file
+		// (no need to do anything at this point)
 		if importResult.isPartOfGenesis {
 			return nil
 		}
 
-		injected = importResult.injectedBatch
+		injectedBatch = importResult.injectedBatch
 	} else {
 		// retrieve injected batch from the database
-		injected, err = batchContext.sdb.hermezDb.GetL1InjectedBatch(0)
+		injectedBatch, err = batchContext.sdb.hermezDb.GetL1InjectedBatch(0)
 		if err != nil {
 			return err
 		}
 	}
 
-	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64, batchState.forkId, batchContext.cfg.zk.AddressSequencer, batchContext.cfg.chainConfig, batchContext.cfg.miningConfig)
+	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64,
+		batchState.forkId, batchContext.cfg.zk.AddressSequencer, batchContext.cfg.chainConfig, batchContext.cfg.miningConfig)
 	if err != nil {
 		return err
 	}
@@ -71,22 +76,24 @@ func processInjectedInitialBatch(
 	blockContext := core.NewEVMBlockContext(header, getHashFn, batchContext.cfg.engine, &batchContext.cfg.zk.AddressSequencer)
 
 	fakeL1TreeUpdate := &zktypes.L1InfoTreeUpdate{
-		GER:        injected.LastGlobalExitRoot,
-		ParentHash: injected.L1ParentHash,
-		Timestamp:  injected.Timestamp,
+		GER:        injectedBatch.LastGlobalExitRoot,
+		ParentHash: injectedBatch.L1ParentHash,
+		Timestamp:  injectedBatch.Timestamp,
 	}
 
 	ibs := state.New(batchContext.sdb.stateReader)
 
 	// the injected batch block timestamp should also match that of the injected batch
-	header.Time = injected.Timestamp
+	header.Time = injectedBatch.Timestamp
 
 	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(batchContext, ibs, injectedBatchBlockNumber, injectedBatchBatchNumber, injected.Timestamp, &parentRoot, fakeL1TreeUpdate, true); err != nil {
+	if err = handleStateForNewBlockStarting(batchContext, ibs, injectedBatchBlockNumber,
+		injectedBatchBatchNumber, injectedBatch.Timestamp, &parentRoot, fakeL1TreeUpdate, true); err != nil {
 		return err
 	}
 
-	txn, receipt, execResult, effectiveGas, err := handleInjectedBatch(batchContext, ibs, &blockContext, injected, header, parentBlock, batchState.forkId)
+	txn, receipt, execResult, effectiveGas, err := handleInjectedBatch(batchContext, ibs, &blockContext,
+		injectedBatch, header, parentBlock, batchState.forkId)
 	if err != nil {
 		return err
 	}
@@ -97,9 +104,10 @@ func processInjectedInitialBatch(
 		executionResults: []*core.ExecutionResult{execResult},
 		effectiveGases:   []uint8{effectiveGas},
 	}
-	batchCounters := vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), nil)
+	batchCounters := vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction,
+		batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), nil)
 
-	if _, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injected.LastGlobalExitRoot, injected.L1ParentHash, 0, 0, batchCounters); err != nil {
+	if _, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injectedBatch.LastGlobalExitRoot, injectedBatch.L1ParentHash, 0, 0, batchCounters); err != nil {
 		return err
 	}
 
@@ -139,7 +147,9 @@ func handleInjectedBatch(
 }
 
 type injectedBatchImportResult struct {
-	injectedBatch   *zktypes.L1InjectedBatch
+	// injectedBatch is unmarshaled injected batch definition from the provided JSON file
+	injectedBatch *zktypes.L1InjectedBatch
+	// isPartOfGenesis indicates that the injected batch is already part of the genesis spec
 	isPartOfGenesis bool
 }
 
@@ -164,7 +174,7 @@ func loadInjectedBatchDataFromFile(fileName string) (*injectedBatchImportResult,
 		return &injectedBatchImportResult{isPartOfGenesis: true}, nil
 	}
 
-	// Unmarshal the JSON into InjectedBatch
+	// Unmarshal the JSON into RollupMetadata
 	var rollupMetadata zktypes.RollupMetadata
 	err = json.Unmarshal(rawBytes, &rollupMetadata)
 	if err != nil {

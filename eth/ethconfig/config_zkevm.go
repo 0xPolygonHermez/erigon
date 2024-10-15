@@ -87,7 +87,7 @@ type Zk struct {
 
 	TxPoolRejectSmartContractDeployments bool
 
-	SovereignChainInitParams string
+	PessimisticProofsCfgFile string
 }
 
 var DefaultZkConfig = &Zk{}
@@ -98,4 +98,9 @@ func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
 
 func (c *Zk) HasExecutors() bool {
 	return len(c.ExecutorUrls) > 0 && c.ExecutorUrls[0] != ""
+}
+
+// IsPessimisticProofsConsensus returns true in case pesimisstic proofs config file is non-empty string.
+func (c *Zk) IsPessimisticProofsConsensus() bool {
+	return c.PessimisticProofsCfgFile != ""
 }

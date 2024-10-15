@@ -733,9 +733,9 @@ var (
 		Usage: "The multiplier to reduce the SMT depth by when calculating virtual counters",
 		Value: 0.6,
 	}
-	SovereignChainInitParams = cli.StringFlag{
-		Name:  "zkevm.sovereign-chain.init-params",
-		Usage: "The file name that contains the initial (injected) batch data. It is applicable only for sovereign chains.",
+	PessimisticProofsCfgFile = cli.StringFlag{
+		Name:  "zkevm.pessimistic-proofs.config",
+		Usage: "The file that contains the initial (injected) batch data for pessimistic proofs consensus.",
 		Value: "",
 	}
 	DebugTimers = cli.BoolFlag{
