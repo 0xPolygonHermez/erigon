@@ -40,6 +40,8 @@ func processInjectedInitialBatch(
 	)
 
 	if batchContext.cfg.zk.IsPessimisticProofsConsensus() {
+		// TODO: REMOVE, DEBUG LOG
+		fmt.Println("PP consensus ", batchContext.cfg.zk.PessimisticProofsCfgFile)
 		// import injected batch from file
 		importResult, err := loadInjectedBatchDataFromFile(batchContext.cfg.zk.PessimisticProofsCfgFile)
 		if err != nil {
@@ -173,11 +175,14 @@ func loadInjectedBatchDataFromFile(fileName string) (*injectedBatchImportResult,
 	}
 
 	// Unmarshal the JSON into RollupMetadata
-	var rollupMetadata zktypes.RollupMetadata
+	var rollupMetadata zktypes.L1InjectedBatch
 	err = json.Unmarshal(rawBytes, &rollupMetadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON from file %s: %v", fileName, err)
 	}
 
-	return &injectedBatchImportResult{injectedBatch: rollupMetadata.FirstBatchData}, nil
+	// TODO: REMOVE, DEBUG LOG
+	fmt.Println("Rollup metadata", string(rawBytes))
+
+	return &injectedBatchImportResult{injectedBatch: &rollupMetadata}, nil
 }
