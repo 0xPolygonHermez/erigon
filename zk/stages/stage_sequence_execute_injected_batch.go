@@ -18,6 +18,7 @@ import (
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
 )
 
 const (
@@ -40,8 +41,7 @@ func processInjectedInitialBatch(
 	)
 
 	if batchContext.cfg.zk.IsPessimisticProofsConsensus() {
-		// TODO: REMOVE, DEBUG LOG
-		fmt.Println("PP consensus ", batchContext.cfg.zk.PessimisticProofsCfgFile)
+		log.Debug(fmt.Sprintf("Pessimistic proofs consensus. Config: %s", batchContext.cfg.zk.PessimisticProofsCfgFile))
 		// import injected batch from file
 		importResult, err := loadInjectedBatchDataFromFile(batchContext.cfg.zk.PessimisticProofsCfgFile)
 		if err != nil {
@@ -174,15 +174,14 @@ func loadInjectedBatchDataFromFile(fileName string) (*injectedBatchImportResult,
 		return &injectedBatchImportResult{isPartOfGenesis: true}, nil
 	}
 
-	// Unmarshal the JSON into RollupMetadata
-	var rollupMetadata zktypes.L1InjectedBatch
-	err = json.Unmarshal(rawBytes, &rollupMetadata)
+	// Unmarshal the JSON into L1InjectedBatch
+	var injectedBatch zktypes.L1InjectedBatch
+	err = json.Unmarshal(rawBytes, &injectedBatch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON from file %s: %v", fileName, err)
 	}
 
-	// TODO: REMOVE, DEBUG LOG
-	fmt.Println("Rollup metadata", string(rawBytes))
+	log.Debug(fmt.Sprintf("Initializing with first batch data...\n%s", string(rawBytes)))
 
-	return &injectedBatchImportResult{injectedBatch: &rollupMetadata}, nil
+	return &injectedBatchImportResult{injectedBatch: &injectedBatch}, nil
 }
