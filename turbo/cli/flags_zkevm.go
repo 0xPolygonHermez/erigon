@@ -184,7 +184,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DataStreamWriteTimeout:                 ctx.Duration(utils.DataStreamWriteTimeout.Name),
 		DataStreamInactivityTimeout:            ctx.Duration(utils.DataStreamInactivityTimeout.Name),
 		VirtualCountersSmtReduction:            ctx.Float64(utils.VirtualCountersSmtReduction.Name),
-		PessimisticProofsCfgFile:               ctx.String(utils.PessimisticProofsCfgFile.Name),
+		InitialBatchCfgFile:                    ctx.String(utils.InitialBatchCfgFile.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

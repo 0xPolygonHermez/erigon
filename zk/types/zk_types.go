@@ -81,13 +81,13 @@ func (l *L1InfoTreeUpdate) Unmarshall(input []byte) {
 }
 
 type L1InjectedBatch struct {
-	L1BlockNumber      uint64         `json:"l1BlockNumber"`
-	Timestamp          uint64         `json:"timestamp"`
-	L1BlockHash        common.Hash    `json:"l1BlockHash"`
-	L1ParentHash       common.Hash    `json:"l1ParentHash"`
-	LastGlobalExitRoot common.Hash    `json:"globalExitRoot"`
-	Sequencer          common.Address `json:"sequencer"`
-	Transaction        []byte         `json:"batchL2Data"`
+	L1BlockNumber      uint64         `json:"l1BlockNumber,omitempty"`
+	Timestamp          uint64         `json:"timestamp,omitempty"`
+	L1BlockHash        common.Hash    `json:"l1BlockHash,omitempty"`
+	L1ParentHash       common.Hash    `json:"l1ParentHash,omitempty"`
+	LastGlobalExitRoot common.Hash    `json:"globalExitRoot,omitempty"`
+	Sequencer          common.Address `json:"sequencer,omitempty"`
+	Transaction        []byte         `json:"batchL2Data,omitempty"`
 }
 
 func (ib *L1InjectedBatch) Marshall() []byte {
@@ -135,7 +135,7 @@ func (ib *L1InjectedBatch) MarshalJSON() ([]byte, error) {
 
 func (ib *L1InjectedBatch) UnmarshalJSON(data []byte) error {
 	type Alias L1InjectedBatch
-	aux := &struct {
+	aux := struct {
 		BatchL2Data string `json:"batchL2Data"`
 		*Alias
 	}{
@@ -143,8 +143,13 @@ func (ib *L1InjectedBatch) UnmarshalJSON(data []byte) error {
 	}
 
 	// Unmarshal into the intermediate struct first
-	if err := json.Unmarshal(data, aux); err != nil {
+	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
+	}
+
+	if aux.BatchL2Data == "" {
+		ib.Transaction = nil
+		return nil
 	}
 
 	decodedTxData, err := hex.DecodeString(strings.TrimPrefix(aux.BatchL2Data, "0x"))

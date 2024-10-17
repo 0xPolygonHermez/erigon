@@ -40,10 +40,10 @@ func processInjectedInitialBatch(
 		err           error
 	)
 
-	if batchContext.cfg.zk.IsPessimisticProofsConsensus() {
-		log.Debug(fmt.Sprintf("Pessimistic proofs consensus. Config: %s", batchContext.cfg.zk.PessimisticProofsCfgFile))
+	if batchContext.cfg.zk.ShouldImportInitialBatch() {
+		log.Debug(fmt.Sprintf("Initial batch is provided in the file '%s'", batchContext.cfg.zk.InitialBatchCfgFile))
 		// import injected batch from file
-		importResult, err := loadInjectedBatchDataFromFile(batchContext.cfg.zk.PessimisticProofsCfgFile)
+		importResult, err := loadInjectedBatchDataFromFile(batchContext.cfg.zk.InitialBatchCfgFile)
 		if err != nil {
 			return err
 		}
