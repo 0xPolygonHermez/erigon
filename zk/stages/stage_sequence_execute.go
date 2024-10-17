@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/core"
@@ -19,8 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
-// we must perform execution and datastream alignment only during first run of this stage
-var shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = true
+var shouldCheckForExecutionAndDataStreamAlighment = true
 
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
@@ -41,70 +40,40 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	highestBatchInDS, err := cfg.datastreamServer.GetHighestBatchNumber()
+	highestBatchInDs, err := cfg.datastreamServer.GetHighestBatchNumber()
 	if err != nil {
 		return err
 	}
 
-	if !cfg.zk.SequencerResequence || lastBatch >= highestBatchInDS {
-		if cfg.zk.SequencerResequence {
-			log.Info(fmt.Sprintf("[%s] Resequencing completed. Please restart sequencer without resequence flag.", s.LogPrefix()))
-			time.Sleep(10 * time.Second)
-			return nil
-		}
-
-		err = sequencingStageStep(s, u, ctx, cfg, historyCfg, quiet, nil)
-		if err != nil {
-			return err
-		}
-	} else {
-		log.Info(fmt.Sprintf("[%s] Last batch %d is lower than highest batch in datastream %d, resequencing...", s.LogPrefix(), lastBatch, highestBatchInDS))
-
-		batches, err := cfg.datastreamServer.ReadBatches(lastBatch+1, highestBatchInDS)
-		if err != nil {
-			return err
-		}
-
-		err = cfg.datastreamServer.UnwindToBatchStart(lastBatch + 1)
-		if err != nil {
-			return err
-		}
-
-		log.Info(fmt.Sprintf("[%s] Resequence from batch %d to %d in data stream", s.LogPrefix(), lastBatch+1, highestBatchInDS))
-
-		for _, batch := range batches {
-			batchJob := NewResequenceBatchJob(batch)
-			subBatchCount := 0
-			for batchJob.HasMoreBlockToProcess() {
-				if err = sequencingStageStep(s, u, ctx, cfg, historyCfg, quiet, batchJob); err != nil {
-					return err
-				}
-
-				subBatchCount += 1
-			}
-
-			log.Info(fmt.Sprintf("[%s] Resequenced original batch %d with %d batches", s.LogPrefix(), batchJob.batchToProcess[0].BatchNumber, subBatchCount))
-			if cfg.zk.SequencerResequenceStrict && subBatchCount != 1 {
-				return fmt.Errorf("strict mode enabled, but resequenced batch %d has %d sub-batches", batchJob.batchToProcess[0].BatchNumber, subBatchCount)
-			}
-		}
+	if lastBatch < highestBatchInDs {
+		return resequence(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
 	}
 
-	return nil
+	if cfg.zk.SequencerResequence {
+		log.Info(fmt.Sprintf("[%s] Resequencing completed. Please restart sequencer without resequence flag.", s.LogPrefix()))
+		time.Sleep(10 * time.Minute)
+		return nil
+	}
+
+	return sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil)
 }
 
-func sequencingStageStep(
+func sequencingBatchStep(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
 	historyCfg stagedsync.HistoryCfg,
-	quiet bool,
 	resequenceBatchJob *ResequenceBatchJob,
 ) (err error) {
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished sequencing stage", logPrefix))
+
+	// at this point of time the datastream could not be ahead of the executor
+	if err = validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
+		return err
+	}
 
 	sdb, err := newStageDb(ctx, cfg.db)
 	if err != nil {
@@ -143,7 +112,7 @@ func sequencingStageStep(
 	runLoopBlocks := true
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
 	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool, resequenceBatchJob)
-	blockDataSizeChecker := newBlockDataChecker()
+	blockDataSizeChecker := NewBlockDataChecker(cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()))
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
 	// injected batch
@@ -162,7 +131,7 @@ func sequencingStageStep(
 		return sdb.tx.Commit()
 	}
 
-	if shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart {
+	if shouldCheckForExecutionAndDataStreamAlighment {
 		// handle cases where the last batch wasn't committed to the data stream.
 		// this could occur because we're migrating from an RPC node to a sequencer
 		// or because the sequencer was restarted and not all processes completed (like waiting from remote executor)
@@ -170,22 +139,22 @@ func sequencingStageStep(
 		// if we identify any.  During normal operation this function will simply check and move on without performing
 		// any action.
 		if !batchState.isAnyRecovery() {
-			isUnwinding, err := alignExecutionToDatastream(batchContext, batchState, executionAt, u)
+			isUnwinding, err := alignExecutionToDatastream(batchContext, executionAt, u)
 			if err != nil {
-				// do not set shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart=false because of the error
+				// do not set shouldCheckForExecutionAndDataStreamAlighment=false because of the error
 				return err
 			}
 			if isUnwinding {
 				err = sdb.tx.Commit()
 				if err != nil {
-					// do not set shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart=false because of the error
+					// do not set shouldCheckForExecutionAndDataStreamAlighment=false because of the error
 					return err
 				}
-				shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = false
+				shouldCheckForExecutionAndDataStreamAlighment = false
 				return nil
 			}
 		}
-		shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = false
+		shouldCheckForExecutionAndDataStreamAlighment = false
 	}
 
 	tryHaltSequencer(batchContext, batchState.batchNumber)
@@ -231,7 +200,14 @@ func sequencingStageStep(
 
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
 
+	// once the batch ticker has ticked we need a signal to close the batch after the next block is done
+	batchTimedOut := false
+
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
+		if batchTimedOut {
+			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
+			break
+		}
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
 		logTicker.Reset(10 * time.Second)
 		blockTicker.Reset(cfg.zk.SequencerBlockSealTime)
@@ -261,7 +237,7 @@ func sequencingStageStep(
 			}
 		}
 
-		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg))
+		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
 		if err != nil {
 			return err
 		}
@@ -290,7 +266,7 @@ func sequencingStageStep(
 		ibs := state.New(sdb.stateReader)
 		getHashFn := core.GetHashFn(header, func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) })
 		coinbase := batchState.getCoinbase(&cfg)
-		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &coinbase, parentBlock.ExcessDataGas())
+		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &coinbase)
 		batchState.blockState.builtBlockElements.resetBlockBuildingArrays()
 
 		parentRoot := parentBlock.Root()
@@ -316,8 +292,8 @@ func sequencingStageStep(
 				}
 			case <-batchTicker.C:
 				if !batchState.isAnyRecovery() {
-					runLoopBlocks = false
-					break LOOP_TRANSACTIONS
+					log.Debug(fmt.Sprintf("[%s] Batch timeout reached", logPrefix))
+					batchTimedOut = true
 				}
 			default:
 				if batchState.isLimboRecovery() {
@@ -325,7 +301,12 @@ func sequencingStageStep(
 					if err != nil {
 						return err
 					}
-				} else if !batchState.isL1Recovery() && !batchState.isResequence() {
+				} else if batchState.isResequence() {
+					batchState.blockState.transactionsForInclusion, err = batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
+					if err != nil {
+						return err
+					}
+				} else if !batchState.isL1Recovery() {
 					var allConditionsOK bool
 					batchState.blockState.transactionsForInclusion, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 					if err != nil {
@@ -340,11 +321,6 @@ func sequencingStageStep(
 						}
 					} else {
 						log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
-					}
-				} else if batchState.isResequence() {
-					batchState.blockState.transactionsForInclusion, err = batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
-					if err != nil {
-						return err
 					}
 				}
 
@@ -531,7 +507,7 @@ func sequencingStageStep(
 		if err != nil {
 			return err
 		}
-		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout)
+		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
 
 		// check for new responses from the verifier
 		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)

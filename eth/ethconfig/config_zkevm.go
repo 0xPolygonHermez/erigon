@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common"
 )
 
 type Zk struct {
@@ -22,6 +22,7 @@ type Zk struct {
 	AddressZkevm                           common.Address
 	AddressGerManager                      common.Address
 	L1ContractAddressCheck                 bool
+	L1ContractAddressRetrieve              bool
 	L1RollupId                             uint64
 	L1BlockRange                           uint64
 	L1QueryDelay                           uint64
@@ -37,6 +38,7 @@ type Zk struct {
 	SequencerBlockSealTime                 time.Duration
 	SequencerBatchSealTime                 time.Duration
 	SequencerBatchVerificationTimeout      time.Duration
+	SequencerBatchVerificationRetries      int
 	SequencerTimeoutOnEmptyTxPool          time.Duration
 	SequencerHaltOnBatchNumber             uint64
 	SequencerResequence                    bool
@@ -89,7 +91,7 @@ type Zk struct {
 var DefaultZkConfig = &Zk{}
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
-	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && len(c.ExecutorUrls) != 0)
+	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors())
 }
 
 func (c *Zk) HasExecutors() bool {

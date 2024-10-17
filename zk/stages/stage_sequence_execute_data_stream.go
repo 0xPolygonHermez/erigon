@@ -37,13 +37,10 @@ func newSequencerBatchStreamWriter(batchContext *BatchContext, batchState *Batch
 	}
 }
 
-func (sbc *SequencerBatchStreamWriter) CommitNewUpdates() ([]*verifier.VerifierBundle, error) {
-	verifierBundles, err := sbc.legacyVerifier.ProcessResultsSequentially(sbc.logPrefix)
-	if err != nil {
-		return nil, err
-	}
-
-	return sbc.writeBlockDetailsToDatastream(verifierBundles)
+func (sbc *SequencerBatchStreamWriter) CommitNewUpdates() ([]*verifier.VerifierBundle, *verifier.VerifierBundle, error) {
+	verifierBundles, verifierBundleForUnwind := sbc.legacyVerifier.ProcessResultsSequentially(sbc.logPrefix)
+	checkedVerifierBundles, err := sbc.writeBlockDetailsToDatastream(verifierBundles)
+	return checkedVerifierBundles, verifierBundleForUnwind, err
 }
 
 func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBundles []*verifier.VerifierBundle) ([]*verifier.VerifierBundle, error) {
@@ -109,7 +106,7 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBun
 	return checkedVerifierBundles, nil
 }
 
-func alignExecutionToDatastream(batchContext *BatchContext, batchState *BatchState, lastExecutedBlock uint64, u stagedsync.Unwinder) (bool, error) {
+func alignExecutionToDatastream(batchContext *BatchContext, lastExecutedBlock uint64, u stagedsync.Unwinder) (bool, error) {
 	lastStartedDatastreamBatch, err := batchContext.cfg.datastreamServer.GetHighestBatchNumber()
 	if err != nil {
 		return false, err
@@ -131,15 +128,19 @@ func alignExecutionToDatastream(batchContext *BatchContext, batchState *BatchSta
 		}
 	}
 
-	if lastExecutedBlock != lastDatastreamBlock {
+	if lastExecutedBlock > lastDatastreamBlock {
 		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, lastDatastreamBlock)
 		if err != nil {
 			return false, err
 		}
 
 		log.Warn(fmt.Sprintf("[%s] Unwinding due to a datastream gap", batchContext.s.LogPrefix()), "streamHeight", lastDatastreamBlock, "sequencerHeight", lastExecutedBlock)
-		u.UnwindTo(lastDatastreamBlock, block.Hash())
+		u.UnwindTo(lastDatastreamBlock, stagedsync.BadBlock(block.Hash(), fmt.Errorf("received bad block")))
 		return true, nil
+	}
+
+	if lastExecutedBlock < lastDatastreamBlock {
+		panic(fmt.Errorf("[%s] Datastream is ahead of sequencer. Re-sequencing should have handled this case before even comming to this point", batchContext.s.LogPrefix()))
 	}
 
 	return false, nil

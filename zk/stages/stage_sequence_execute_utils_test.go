@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	dsTypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
@@ -321,7 +321,7 @@ func TestResequenceBatchJob_YieldNextBlockTransactions(t *testing.T) {
 				},
 				StartBlockIndex: 0,
 				StartTxIndex:    0,
-				txIndexMap:      make(map[common.Hash]txMatadata),
+				txIndexMap:      make(map[common.Hash]resequenceTxMetadata),
 			},
 			expectedTxCount: 2,
 			expectedError:   false,
@@ -332,7 +332,7 @@ func TestResequenceBatchJob_YieldNextBlockTransactions(t *testing.T) {
 				batchToProcess:  []*dsTypes.FullL2Block{{}},
 				StartBlockIndex: 1,
 				StartTxIndex:    0,
-				txIndexMap:      make(map[common.Hash]txMatadata),
+				txIndexMap:      make(map[common.Hash]resequenceTxMetadata),
 			},
 			expectedTxCount: 0,
 			expectedError:   false,
@@ -366,7 +366,7 @@ func TestResequenceBatchJob_YieldAndUpdate(t *testing.T) {
 		batchToProcess:  batch,
 		StartBlockIndex: 0,
 		StartTxIndex:    1, // Start at block 0, index 1
-		txIndexMap:      make(map[common.Hash]txMatadata),
+		txIndexMap:      make(map[common.Hash]resequenceTxMetadata),
 	}
 
 	processTransactions := func(txs []types.Transaction) {
@@ -443,7 +443,7 @@ func TestResequenceBatchJob_YieldAndUpdate(t *testing.T) {
 	}
 
 	// Verify txIndexMap
-	expectedTxIndexMap := map[common.Hash]txMatadata{
+	expectedTxIndexMap := map[common.Hash]resequenceTxMetadata{
 		common.HexToHash("0"): {0, 0},
 		common.HexToHash("1"): {1, 0},
 		common.HexToHash("2"): {2, 0},

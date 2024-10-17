@@ -6,8 +6,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
-	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 
 	"encoding/json"
 
@@ -110,6 +110,11 @@ func NewHermezDb(tx kv.RwTx) *HermezDb {
 	db.HermezDbReader = NewHermezDbReader(tx)
 
 	return db
+}
+
+func (db *HermezDb) SetNewTx(tx kv.RwTx) {
+	db.tx = tx
+	db.HermezDbReader.tx = tx
 }
 
 func CreateHermezBuckets(tx kv.RwTx) error {

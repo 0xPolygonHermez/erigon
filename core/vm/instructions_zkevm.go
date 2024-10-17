@@ -3,9 +3,8 @@ package vm
 import (
 	"math/big"
 
-	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/params"
@@ -102,7 +101,7 @@ func opStaticCall_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCon
 	}
 	stack.Push(&temp)
 	if err == nil || IsErrTypeRevert(err) {
-		ret = common.CopyBytes(ret)
+		ret = libcommon.CopyBytes(ret)
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
 
@@ -169,7 +168,7 @@ func makeLog_zkevm(size int, logIndexPerTx bool) executionFunc {
 			Data:    d,
 			// This is a non-consensus field, but assigned here because
 			// core/state doesn't know the current block number.
-			BlockNumber: interpreter.evm.Context().BlockNumber,
+			BlockNumber: interpreter.evm.Context.BlockNumber,
 		}
 		if logIndexPerTx {
 			interpreter.evm.IntraBlockState().AddLog_zkEvm(&log)
@@ -240,7 +239,7 @@ func opCreate2_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContex
 	scope.Contract.UseGas(gas)
 	// reuse size int for stackvalue
 	stackValue := size
-	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas, &endowment, &salt)
+	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas, &endowment, &salt, gas)
 
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
@@ -288,7 +287,7 @@ func opCall_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 	}
 	stack.Push(&temp)
 	if err == nil || IsErrTypeRevert(err) {
-		ret = common.CopyBytes(ret)
+		ret = libcommon.CopyBytes(ret)
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
 
@@ -322,7 +321,7 @@ func opCallCode_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeConte
 	}
 	stack.Push(&temp)
 	if err == nil || IsErrTypeRevert(err) {
-		ret = common.CopyBytes(ret)
+		ret = libcommon.CopyBytes(ret)
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
 
@@ -352,7 +351,7 @@ func opDelegateCall_zkevm(pc *uint64, interpreter *EVMInterpreter, scope *ScopeC
 	}
 	stack.Push(&temp)
 	if err == nil || IsErrTypeRevert(err) {
-		ret = common.CopyBytes(ret)
+		ret = libcommon.CopyBytes(ret)
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
 
@@ -451,8 +450,18 @@ func opCreate2_zkevm_lastOpCode(pc *uint64, interpreter *EVMInterpreter, scope *
 		endowment    = scope.Stack.Pop()
 		offset, size = scope.Stack.Pop(), scope.Stack.Pop()
 		salt         = scope.Stack.Pop()
-		input        = scope.Memory.GetCopy(int64(offset.Uint64()), int64(size.Uint64()))
 	)
+
+	if size.Uint64() > params.MaxInitCodeSize {
+		// if we are over the maximum size this instruction is invalid and we could be open
+		// to trying to allocate too much memory causing a panic.  Because the address never
+		// actually gets created in this insance because of out of gas we can just spam
+		// a random address by cutting the size down to maximum
+		newSize := uint256.NewInt(params.MaxInitCodeSize)
+		size = *newSize
+	}
+
+	input := scope.Memory.GetCopy(int64(offset.Uint64()), int64(size.Uint64()))
 
 	caller := scope.Contract
 	codeAndHash := &codeAndHash{code: input}

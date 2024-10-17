@@ -6,13 +6,13 @@ import (
 	"math/big"
 
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon-lib/common"
 )
 
 type ExecutedTxInfo struct {
@@ -325,8 +325,7 @@ func (b *BlockInfoTree) GenerateBlockTxKeysVals(
 
 		logToEncode := "0x" + hex.EncodeToString(rLog.Data) + reducedTopics
 
-		hash := utils.HashContractBytecode(logToEncode)
-		logEncodedBig := utils.ConvertHexToBigInt(hash)
+		logEncodedBig := utils.HashContractBytecodeBigInt(logToEncode)
 		key, val, err = generateTxLog(txIndexBig, big.NewInt(logIndex), logEncodedBig)
 		if err != nil {
 			return nil, nil, err

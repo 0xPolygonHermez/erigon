@@ -10,10 +10,10 @@ import (
 
 	"encoding/binary"
 
-	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/holiman/uint256"
+	constants "github.com/ledgerwatch/erigon-lib/chain"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zk/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -444,7 +444,14 @@ func Test_BlockBatchL2DataEncode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	batchL2Data, err := GenerateBlockBatchL2Data(7, 1, 2, []types.Transaction{tx}, map[common.Hash]uint8{tx.Hash(): 255})
+	batchTransactionData := []BatchTxData{
+		{
+			Transaction:                 tx,
+			EffectiveGasPricePercentage: 255,
+		},
+	}
+
+	batchL2Data, err := GenerateBlockBatchL2Data(7, 1, 2, batchTransactionData)
 	if err != nil {
 		t.Fatal(err)
 	}

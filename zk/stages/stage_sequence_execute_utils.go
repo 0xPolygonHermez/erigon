@@ -1,22 +1,24 @@
 package stages
 
 import (
+	"context"
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/gateway-fm/cdk-erigon-lib/common"
-	"github.com/gateway-fm/cdk-erigon-lib/common/datadir"
-	"github.com/gateway-fm/cdk-erigon-lib/kv"
-	libstate "github.com/gateway-fm/cdk-erigon-lib/state"
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common/datadir"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	libstate "github.com/ledgerwatch/erigon-lib/state"
 
 	"math/big"
 
 	"fmt"
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
-	"github.com/ledgerwatch/erigon/chain"
+	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
+	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -25,14 +27,13 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
+	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
-	dsTypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
-	"github.com/ledgerwatch/erigon/zk/tx"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
@@ -72,10 +73,11 @@ type SequenceBlockCfg struct {
 	historyV3        bool
 	syncCfg          ethconfig.Sync
 	genesis          *types.Genesis
-	agg              *libstate.AggregatorV3
+	agg              *libstate.Aggregator
 	stream           *datastreamer.StreamServer
 	datastreamServer *server.DataStreamServer
 	zk               *ethconfig.Zk
+	miningConfig     *params.MiningConfig
 
 	txPool   *txpool.TxPool
 	txPoolDb kv.RwDB
@@ -101,9 +103,10 @@ func StageSequenceBlocksCfg(
 	blockReader services.FullBlockReader,
 	genesis *types.Genesis,
 	syncCfg ethconfig.Sync,
-	agg *libstate.AggregatorV3,
+	agg *libstate.Aggregator,
 	stream *datastreamer.StreamServer,
 	zk *ethconfig.Zk,
+	miningConfig *params.MiningConfig,
 
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
@@ -131,6 +134,7 @@ func StageSequenceBlocksCfg(
 		stream:           stream,
 		datastreamServer: server.NewDataStreamServer(stream, chainConfig.ChainID.Uint64()),
 		zk:               zk,
+		miningConfig:     miningConfig,
 		txPool:           txPool,
 		txPoolDb:         txPoolDb,
 		legacyVerifier:   legacyVerifier,
@@ -153,12 +157,43 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 		sCfg.historyV3,
 		sCfg.dirs,
 		sCfg.blockReader,
-		headerdownload.NewHeaderDownload(1, 1, sCfg.engine, sCfg.blockReader),
+		headerdownload.NewHeaderDownload(1, 1, sCfg.engine, sCfg.blockReader, nil),
 		sCfg.genesis,
 		sCfg.syncCfg,
 		sCfg.agg,
 		sCfg.zk,
+		nil,
 	)
+}
+
+func validateIfDatastreamIsAheadOfExecution(
+	s *stagedsync.StageState,
+	// u stagedsync.Unwinder,
+	ctx context.Context,
+	cfg SequenceBlockCfg,
+	// historyCfg stagedsync.HistoryCfg,
+) error {
+	roTx, err := cfg.db.BeginRo(ctx)
+	if err != nil {
+		return err
+	}
+	defer roTx.Rollback()
+
+	executionAt, err := s.ExecutionAt(roTx)
+	if err != nil {
+		return err
+	}
+
+	lastDatastreamBlock, err := cfg.datastreamServer.GetHighestBlockNumber()
+	if err != nil {
+		return err
+	}
+
+	if executionAt < lastDatastreamBlock {
+		panic(fmt.Errorf("[%s] Last block in the datastream (%d) is higher than last executed block (%d)", s.LogPrefix(), lastDatastreamBlock, executionAt))
+	}
+
+	return nil
 }
 
 type forkDb interface {
@@ -210,7 +245,7 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, erro
 	return latest, nil
 }
 
-func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimestamp, forkId uint64, coinbase common.Address) (*types.Header, *types.Block, error) {
+func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimestamp, forkId uint64, coinbase common.Address, chainConfig *chain.Config, miningConfig *params.MiningConfig) (*types.Header, *types.Block, error) {
 	parentBlock, err := rawdb.ReadBlockByNumber(tx, previousBlockNumber)
 	if err != nil {
 		return nil, nil, err
@@ -231,22 +266,23 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 		}
 	}
 
-	return &types.Header{
-		ParentHash: parentBlock.Hash(),
-		Coinbase:   coinbase,
-		Difficulty: blockDifficulty,
-		Number:     new(big.Int).SetUint64(previousBlockNumber + 1),
-		GasLimit:   utils.GetBlockGasLimitForFork(forkId),
-		Time:       newBlockTimestamp,
-	}, parentBlock, nil
+	var targetGas uint64
+
+	if chainConfig.IsNormalcy(previousBlockNumber + 1) {
+		targetGas = miningConfig.GasLimit
+	}
+
+	header := core.MakeEmptyHeader(parentBlock.Header(), chainConfig, newBlockTimestamp, &targetGas)
+
+	if !chainConfig.IsNormalcy(previousBlockNumber + 1) {
+		header.GasLimit = utils.GetBlockGasLimitForFork(forkId)
+	}
+
+	header.Coinbase = coinbase
+	return header, parentBlock, nil
 }
 
-func prepareL1AndInfoTreeRelatedStuff(
-	sdb *stageDb,
-	batchState *BatchState,
-	proposedTimestamp uint64,
-	reuseL1InfoIndex bool,
-) (
+func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, proposedTimestamp uint64, reuseL1InfoIndex bool) (
 	infoTreeIndexProgress uint64,
 	l1TreeUpdate *zktypes.L1InfoTreeUpdate,
 	l1TreeUpdateIndex uint64,
@@ -473,9 +509,16 @@ type BlockDataChecker struct {
 	counter uint64 // counter amount of bytes
 }
 
-func newBlockDataChecker() *BlockDataChecker {
+func NewBlockDataChecker(unlimitedData bool) *BlockDataChecker {
+	var limit uint64
+	if unlimitedData {
+		limit = math.MaxUint64
+	} else {
+		limit = LIMIT_120_KB
+	}
+
 	return &BlockDataChecker{
-		limit:   LIMIT_120_KB,
+		limit:   limit,
 		counter: 0,
 	}
 }
@@ -483,7 +526,7 @@ func newBlockDataChecker() *BlockDataChecker {
 // adds bytes amounting to the block data and checks if the limit is reached
 // if the limit is reached, the data is not added, so this can be reused again for next check
 func (bdc *BlockDataChecker) AddBlockStartData() bool {
-	blockStartBytesAmount := tx.START_BLOCK_BATCH_L2_DATA_SIZE // tx.GenerateStartBlockBatchL2Data(deltaTimestamp, l1InfoTreeIndex) returns 65 long byte array
+	blockStartBytesAmount := zktx.START_BLOCK_BATCH_L2_DATA_SIZE // tx.GenerateStartBlockBatchL2Data(deltaTimestamp, l1InfoTreeIndex) returns 65 long byte array
 	// add in the changeL2Block transaction
 	if bdc.counter+blockStartBytesAmount > bdc.limit {
 		return true
@@ -503,79 +546,4 @@ func (bdc *BlockDataChecker) AddTransactionData(txL2Data []byte) bool {
 	bdc.counter += encodedLen
 
 	return false
-}
-
-type txMatadata struct {
-	blockNum int
-	txIndex  int
-}
-
-type ResequenceBatchJob struct {
-	batchToProcess  []*dsTypes.FullL2Block
-	StartBlockIndex int
-	StartTxIndex    int
-	txIndexMap      map[common.Hash]txMatadata
-}
-
-func NewResequenceBatchJob(batch []*dsTypes.FullL2Block) *ResequenceBatchJob {
-	return &ResequenceBatchJob{
-		batchToProcess:  batch,
-		StartBlockIndex: 0,
-		StartTxIndex:    0,
-		txIndexMap:      make(map[common.Hash]txMatadata),
-	}
-}
-
-func (r *ResequenceBatchJob) HasMoreBlockToProcess() bool {
-	return r.StartBlockIndex < len(r.batchToProcess)
-}
-
-func (r *ResequenceBatchJob) AtNewBlockBoundary() bool {
-	return r.StartTxIndex == 0
-}
-
-func (r *ResequenceBatchJob) CurrentBlock() *dsTypes.FullL2Block {
-	if r.HasMoreBlockToProcess() {
-		return r.batchToProcess[r.StartBlockIndex]
-	}
-	return nil
-}
-
-func (r *ResequenceBatchJob) YieldNextBlockTransactions(decoder zktx.TxDecoder) ([]types.Transaction, error) {
-	blockTransactions := make([]types.Transaction, 0)
-	if r.HasMoreBlockToProcess() {
-		block := r.CurrentBlock()
-		r.txIndexMap[block.L2Blockhash] = txMatadata{r.StartBlockIndex, 0}
-
-		for i := r.StartTxIndex; i < len(block.L2Txs); i++ {
-			transaction := block.L2Txs[i]
-			tx, _, err := decoder(transaction.Encoded, transaction.EffectiveGasPricePercentage, block.ForkId)
-			if err != nil {
-				return nil, fmt.Errorf("decode tx error: %v", err)
-			}
-			r.txIndexMap[tx.Hash()] = txMatadata{r.StartBlockIndex, i}
-			blockTransactions = append(blockTransactions, tx)
-		}
-	}
-
-	return blockTransactions, nil
-}
-
-func (r *ResequenceBatchJob) UpdateLastProcessedTx(h common.Hash) {
-	if idx, ok := r.txIndexMap[h]; ok {
-		block := r.batchToProcess[idx.blockNum]
-
-		if idx.txIndex >= len(block.L2Txs)-1 {
-			// we've processed all the transactions in this block
-			// move to the next block
-			r.StartBlockIndex = idx.blockNum + 1
-			r.StartTxIndex = 0
-		} else {
-			// move to the next transaction in the block
-			r.StartBlockIndex = idx.blockNum
-			r.StartTxIndex = idx.txIndex + 1
-		}
-	} else {
-		log.Warn("tx hash not found in tx index map", "hash", h)
-	}
 }

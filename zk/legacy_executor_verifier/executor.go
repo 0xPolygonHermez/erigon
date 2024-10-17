@@ -3,22 +3,22 @@ package legacy_executor_verifier
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
-	"time"
-
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path"
+	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/ledgerwatch/log/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"github.com/google/uuid"
 )
 
 var (
@@ -162,9 +162,18 @@ func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot com
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	correlation := uuid.New().String()
 	witnessSize := humanize.Bytes(uint64(len(p.Witness)))
 	dataStreamSize := humanize.Bytes(uint64(len(p.DataStream)))
-	log.Info("Sending request to grpc server", "grpcUrl", e.grpcUrl, "ourRoot", request.StateRoot, "oldRoot", oldStateRoot, "batch", request.BatchNumber, "witness-size", witnessSize, "data-stream-size", dataStreamSize)
+	log.Info("Sending request to grpc server",
+		"grpcUrl", e.grpcUrl,
+		"ourRoot", request.StateRoot,
+		"oldRoot", oldStateRoot,
+		"batch", request.BatchNumber,
+		"witness-size", witnessSize,
+		"data-stream-size", dataStreamSize,
+		"blocks-count", len(request.BlockNumbers),
+		"correlation", correlation)
 
 	size := 1024 * 1024 * 256 // 256mb maximum size - hack for now until trimmed witness is proved off
 
@@ -239,7 +248,8 @@ func (e *Executor) Verify(p *Payload, request *VerifierRequest, oldStateRoot com
 		"exec-root", common.BytesToHash(resp.NewStateRoot),
 		"our-root", request.StateRoot,
 		"exec-old-root", common.BytesToHash(resp.OldStateRoot),
-		"our-old-root", oldStateRoot)
+		"our-old-root", oldStateRoot,
+		"correlation", correlation)
 
 	for addr, all := range resp.ReadWriteAddresses {
 		log.Debug("executor result",
