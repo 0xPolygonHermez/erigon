@@ -115,8 +115,10 @@ func SpawnSequencingStage(
 		shouldCheckForExecutionAndDataStreamAlighmentOnNodeStart = false
 	}
 
-	tryHaltSequencer(batchContext, batchState.batchNumber)
-
+	needsUnwind, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt)
+	if needsUnwind || err != nil {
+		return err
+	}
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
 		return err
 	}

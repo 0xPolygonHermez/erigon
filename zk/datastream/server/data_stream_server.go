@@ -523,6 +523,18 @@ func (srv *DataStreamServer) GetHighestClosedBatch() (uint64, error) {
 	if srv.highestClosedBatchWritten != nil {
 		return *srv.highestClosedBatchWritten, nil
 	}
+
+	number, err := srv.GetHighestClosedBatchNoCache()
+	if err != nil {
+		return 0, err
+	}
+
+	srv.highestClosedBatchWritten = &number
+
+	return number, nil
+}
+
+func (srv *DataStreamServer) GetHighestClosedBatchNoCache() (uint64, error) {
 	entry, found, err := srv.getLastEntryOfType(datastreamer.EntryType(types.EntryTypeBatchEnd))
 	if err != nil {
 		return 0, err
