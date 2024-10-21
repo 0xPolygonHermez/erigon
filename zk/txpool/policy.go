@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -607,19 +606,6 @@ func SetMode(ctx context.Context, aclDB kv.RwDB, mode string) error {
 
 	return aclDB.Update(ctx, func(tx kv.RwTx) error {
 		return tx.Put(Config, []byte(modeKey), []byte(m))
-	})
-}
-
-// SetLogCount sets the mode of the ACL
-func SetLogCount(ctx context.Context, aclDB kv.RwDB, logCount string) error {
-
-	_, err := strconv.Atoi(logCount)
-	if err != nil {
-		return fmt.Errorf("invalid log count, nan: %s", logCount)
-	}
-
-	return aclDB.Update(ctx, func(tx kv.RwTx) error {
-		return tx.Put(Config, []byte(logCountPolicyTransactions), []byte(logCount))
 	})
 }
 
