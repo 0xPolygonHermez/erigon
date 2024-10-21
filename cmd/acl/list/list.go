@@ -28,7 +28,7 @@ func run(cliCtx *cli.Context) error {
 
 	content, _ := txpool.ListContentAtACL(cliCtx.Context, aclDB)
 	log.Info(content)
-	pts, _ := txpool.LastPolicyTransactions(cliCtx.Context, aclDB)
+	pts, _ := txpool.LastPolicyTransactions(cliCtx.Context, aclDB, 10)
 	if len(pts) == 0 {
 		log.Info("No policy transactions found")
 		return nil
