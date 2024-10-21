@@ -282,4 +282,6 @@ var DefaultFlags = []cli.Flag{
 	&utils.DAUrl,
 	&utils.VirtualCountersSmtReduction,
 	&utils.InitialBatchCfgFile,
+
+	&utils.ACLPrintHistory,
 }

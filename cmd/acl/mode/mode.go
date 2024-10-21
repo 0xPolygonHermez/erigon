@@ -5,7 +5,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/zk/txpool"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -38,7 +38,7 @@ func run(cliCtx *cli.Context) error {
 
 	dataDir := cliCtx.String(utils.DataDirFlag.Name)
 
-	log.Info("Setting mode", "mode", mode, "dataDir", dataDir)
+	log.Info("Setting mode ", "mode - ", mode, "dataDir - ", dataDir)
 
 	aclDB, err := txpool.OpenACLDB(cliCtx.Context, dataDir)
 	if err != nil {
@@ -50,8 +50,6 @@ func run(cliCtx *cli.Context) error {
 		log.Error("Failed to set acl mode", "err", err)
 		return err
 	}
-
-	log.Info("ACL Mode set", "mode", mode)
 
 	return nil
 }
