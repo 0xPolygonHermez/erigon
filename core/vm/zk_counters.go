@@ -1926,10 +1926,10 @@ func (cc *CounterCollector) p256verify(r, s, x, y *big.Int) {
 		cc.Deduct(S, 29)
 		cc.Deduct(B, 8)
 	} else {
-		aux_x3 := x.Exp(x, big.NewInt(3), SECP256R1_P)
-		aux_ax_b := x.Mul(x, SECP256R1_A).Add(x, SECP256R1_B)
+		aux_x3 := new(big.Int).Exp(x, big.NewInt(3), SECP256R1_P)
+		aux_ax_b := new(big.Int).Mul(x, SECP256R1_A).Add(x, SECP256R1_B)
 		aux_x3_ax_b := aux_x3.Add(aux_x3, aux_ax_b).Mod(aux_x3, SECP256R1_P)
-		aux_y2 := y.Exp(y, big.NewInt(2), SECP256R1_P)
+		aux_y2 := new(big.Int).Exp(y, big.NewInt(2), SECP256R1_P)
 		if aux_y2.Cmp(aux_x3_ax_b) != 0 {
 			cc.Deduct(S, 104)
 			cc.Deduct(B, 15)
