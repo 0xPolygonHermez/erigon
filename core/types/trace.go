@@ -88,6 +88,7 @@ type TxnInfo struct {
 	Meta   TxnMeta                         `json:"meta,omitempty"`
 }
 
+// TODO: @Stefan-Ethernal unused, should we remove it?
 type BlockUsedCodeHashes []libcommon.Hash
 
 type CombinedPreImages struct {
