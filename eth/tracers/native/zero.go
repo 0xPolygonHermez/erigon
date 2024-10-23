@@ -311,16 +311,6 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 		return
 	}
 
-	t.tx.Meta.NewTxnTrieNode = txBuffer.Bytes()
-
-	err = t.ctx.Txn.MarshalBinary(txBuffer)
-	if err != nil {
-		log.Error("failed to encode transaction", "err", err)
-		return
-	}
-
-	// TODO: @Stefan-Ethernal is this correct? I would expect bytecode of contract to be retrieved differently
-	// (from the account?) At least the naming is misleading.
 	t.tx.Meta.ByteCode = txBuffer.Bytes()
 }
 
