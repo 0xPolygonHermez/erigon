@@ -15,8 +15,8 @@ dataPath="./datadir"
 firstStop=11204
 stopBlock=11315
 unwindBatch=70
-firstTimeout=120s
-secondTimeout=60s
+firstTimeout=150s
+secondTimeout=150s
 
 rm -rf "$dataPath/rpc-datadir"
 rm -rf "$dataPath/phase1-dump1"

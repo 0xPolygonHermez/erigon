@@ -260,7 +260,7 @@ func SpawnStageBatches(
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
 			endLoop = true
 		default:
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(1 * time.Second)
 		}
 
 		// if ds end reached check again for new blocks in the stream
