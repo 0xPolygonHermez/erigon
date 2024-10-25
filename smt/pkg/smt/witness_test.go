@@ -16,6 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/stretchr/testify/require"
 )
 
 func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
@@ -156,5 +157,97 @@ func TestSMTWitnessRetainListEmptyVal(t *testing.T) {
 	// Nonce should not be in witness
 	if foundNonce != nil {
 		t.Errorf("witness contains unexpected operator")
+	}
+}
+
+// TestWitnessToSMT tests that the SMT built from a witness matches the original SMT
+func TestWitnessToSMT(t *testing.T) {
+	smtTrie, rl := prepareSMT(t)
+
+	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
+	if err != nil {
+		t.Errorf("error building witness: %v", err)
+	}
+
+	newSMT, err := smt.BuildSMTfromWitness(witness)
+	if err != nil {
+		t.Errorf("error building SMT from witness: %v", err)
+	}
+
+	root, err := newSMT.Db.GetLastRoot()
+	if err != nil {
+		t.Errorf("error getting last root: %v", err)
+	}
+
+	// newSMT.Traverse(context.Background(), root, func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) (bool, error) {
+	// 	fmt.Printf("[After] path: %v, hash: %x\n", prefix, libcommon.BigToHash(k.ToBigInt()))
+	// 	return true, nil
+	// })
+
+	expectedRoot, err := smtTrie.Db.GetLastRoot()
+	require.NoError(t, err, "error getting last root")
+
+	// assert that the roots are the same
+	if expectedRoot.Cmp(root) != 0 {
+		t.Errorf(fmt.Sprintf("SMT root mismatch, expected %x, got %x", expectedRoot.Bytes(), root.Bytes()))
+	}
+}
+
+// TestWitnessToSMTStateReader tests that the SMT built from a witness matches the state
+func TestWitnessToSMTStateReader(t *testing.T) {
+	smtTrie, rl := prepareSMT(t)
+
+	sKey := libcommon.HexToHash("0x5")
+
+	expectedRoot, err := smtTrie.Db.GetLastRoot()
+	if err != nil {
+		t.Errorf("error getting last root: %v", err)
+	}
+
+	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
+	if err != nil {
+		t.Errorf("error building witness: %v", err)
+	}
+
+	newSMT, err := smt.BuildSMTfromWitness(witness)
+	if err != nil {
+		t.Errorf("error building SMT from witness: %v", err)
+	}
+	root, err := newSMT.Db.GetLastRoot()
+	if err != nil {
+		t.Errorf("error building SMT from witness: %v", err)
+	}
+
+	if expectedRoot.Cmp(root) != 0 {
+		t.Errorf(fmt.Sprintf("SMT root mismatch, expected %x, got %x", expectedRoot.Bytes(), root.Bytes()))
+	}
+
+	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
+
+	expectedAcc, _ := smtTrie.ReadAccountData(contract)
+	newAcc, _ := newSMT.ReadAccountData(contract)
+
+	expectedAccCode, _ := smtTrie.ReadAccountCode(contract, 0, expectedAcc.CodeHash)
+	newAccCode, _ := newSMT.ReadAccountCode(contract, 0, newAcc.CodeHash)
+	expectedAccCodeSize, _ := smtTrie.ReadAccountCodeSize(contract, 0, expectedAcc.CodeHash)
+	newAccCodeSize, _ := newSMT.ReadAccountCodeSize(contract, 0, newAcc.CodeHash)
+	expectedStorageValue, _ := smtTrie.ReadAccountStorage(contract, 0, &sKey)
+	newStorageValue, _ := newSMT.ReadAccountStorage(contract, 0, &sKey)
+	// assert that the account data is the same
+	require.Equal(t, expectedAcc, newAcc)
+
+	require.Equal(t, expectedAccCode, newAccCode)
+	// TODO: @Stefan-Ethernal Check and remove
+	// // assert that the account code is the same
+	// if !bytes.Equal(expectedAccCode, newAccCode) {
+	// 	t.Error("Account Code Mismatch")
+	// }
+
+	// assert that the account code size is the same
+	require.Equal(t, expectedAccCodeSize, newAccCodeSize)
+
+	// assert that the storage value is the same
+	if !bytes.Equal(expectedStorageValue, newStorageValue) {
+		t.Error("Storage Value Mismatch")
 	}
 }
