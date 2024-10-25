@@ -668,6 +668,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsForkId10:           c.IsForkID10(num),
 		IsForkId11:           c.IsForkID11(num),
 		IsForkID12Banana:     c.IsForkID12Banana(num),
+		IsForkID13Durian:     c.IsForkID13Durian(num),
 	}
 }
 
