@@ -30,7 +30,6 @@ import (
 )
 
 const (
-	HIGHEST_KNOWN_FORK     = 12
 	STAGE_PROGRESS_SAVE    = 3000000
 	NEW_BLOCKS_ON_DS_LIMIT = 10000
 )
@@ -281,7 +280,7 @@ func SpawnStageBatches(
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
 			endLoop = true
 		default:
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(1 * time.Second)
 		}
 
 		// if ds end reached check again for new blocks in the stream
