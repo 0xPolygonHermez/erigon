@@ -833,14 +833,16 @@ func (c *StreamClient) readPacketAndDecodeResultEntry() (*types.ResultEntry, err
 }
 
 func (c *StreamClient) readBuffer(amount uint32) ([]byte, error) {
-	c.resetReadTimeout()
+	if err := c.resetReadTimeout(); err != nil {
+		return nil, fmt.Errorf("failed to reset read timeout: %v", err)
+	}
 	return readBuffer(c.conn, amount)
 }
 
-type writeType uint8
-
 func (c *StreamClient) writeToConn(data interface{}) error {
-	c.resetWriteTimeout()
+	if err := c.resetWriteTimeout(); err != nil {
+		return fmt.Errorf("failed to reset write timeout: %v", err)
+	}
 	switch parsed := data.(type) {
 	case []byte:
 		return writeBytesToConn(c.conn, parsed)
@@ -853,10 +855,12 @@ func (c *StreamClient) writeToConn(data interface{}) error {
 	}
 }
 
-func (c *StreamClient) resetWriteTimeout() {
-	c.conn.SetWriteDeadline(time.Now().Add(c.checkTimeout))
+func (c *StreamClient) resetWriteTimeout() error {
+	a := time.Now().Add(c.checkTimeout)
+	log.Error("setting write timeout", "time", a, "flag", c.checkTimeout)
+	return c.conn.SetWriteDeadline(time.Now().Add(c.checkTimeout))
 }
 
-func (c *StreamClient) resetReadTimeout() {
-	c.conn.SetReadDeadline(time.Now().Add(c.checkTimeout))
+func (c *StreamClient) resetReadTimeout() error {
+	return c.conn.SetReadDeadline(time.Now().Add(c.checkTimeout))
 }
