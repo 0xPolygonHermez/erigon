@@ -856,11 +856,15 @@ func (c *StreamClient) writeToConn(data interface{}) error {
 }
 
 func (c *StreamClient) resetWriteTimeout() error {
-	a := time.Now().Add(c.checkTimeout)
-	log.Error("setting write timeout", "time", a, "flag", c.checkTimeout)
+	if c.checkTimeout == 0 {
+		return nil
+	}
 	return c.conn.SetWriteDeadline(time.Now().Add(c.checkTimeout))
 }
 
 func (c *StreamClient) resetReadTimeout() error {
+	if c.checkTimeout == 0 {
+		return nil
+	}
 	return c.conn.SetReadDeadline(time.Now().Add(c.checkTimeout))
 }
