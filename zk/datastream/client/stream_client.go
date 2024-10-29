@@ -275,7 +275,7 @@ func (c *StreamClient) Stop() {
 		return
 	}
 	if err := c.sendStopCmd(); err != nil {
-		log.Warn(fmt.Sprintf("send stop command: %w", err))
+		log.Warn(fmt.Sprintf("send stop command: %v", err))
 	}
 	// c.conn.Close()
 	// c.conn = nil
@@ -430,10 +430,10 @@ func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
 
 func (c *StreamClient) handleSocketError(socketErr error) bool {
 	if socketErr != nil {
-		log.Warn(fmt.Sprintf("Socket error: %w", socketErr))
+		log.Warn(fmt.Sprintf("Socket error: %v", socketErr))
 	}
 	if err := c.tryReConnect(); err != nil {
-		log.Warn(fmt.Sprintf("try reconnect: %w", err))
+		log.Warn(fmt.Sprintf("try reconnect: %v", err))
 		return false
 	}
 
@@ -545,7 +545,7 @@ LOOP:
 			parsedProto.ForkId = c.currentFork
 			log.Trace("writing block to channel", "blockNumber", parsedProto.L2BlockNumber, "batchNumber", parsedProto.BatchNumber)
 		default:
-			return fmt.Errorf("unexpected entry type: %w", parsedProto)
+			return fmt.Errorf("unexpected entry type: %v", parsedProto)
 		}
 		select {
 		case c.entryChan <- parsedProto:
@@ -569,13 +569,13 @@ LOOP:
 func (c *StreamClient) tryReConnect() (err error) {
 	if c.conn != nil {
 		if err := c.conn.Close(); err != nil {
-			log.Warn(fmt.Sprintf("close DS connection: %w", err))
+			log.Warn(fmt.Sprintf("close DS connection: %v", err))
 			return err
 		}
 		c.conn = nil
 	}
 	if err = c.Start(); err != nil {
-		log.Warn(fmt.Sprintf("start DS connection: %w", err))
+		log.Warn(fmt.Sprintf("start DS connection: %v", err))
 	}
 
 	return err
@@ -654,7 +654,7 @@ func ReadParsedProto(iterator FileEntryIterator) (
 				if bookmark.BookmarkType() == datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK {
 					break LOOP
 				} else {
-					err = fmt.Errorf("unexpected bookmark type inside block: %w", bookmark.Type())
+					err = fmt.Errorf("unexpected bookmark type inside block: %v", bookmark.Type())
 					return
 				}
 			} else if innerFile.IsBatchEnd() {
@@ -792,7 +792,7 @@ func (c *StreamClient) readResultEntry(packet []byte) (re *types.ResultEntry, er
 	// Read variable field (errStr)
 	length := binary.BigEndian.Uint32(buffer[1:5])
 	if length < types.ResultEntryMinSize {
-		return re, errors.New("Error reading result entry")
+		return re, errors.New("failed reading result entry")
 	}
 
 	// read the rest of the result
