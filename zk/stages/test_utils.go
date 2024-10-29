@@ -40,6 +40,8 @@ func (c *TestDatastreamClient) ReadAllEntriesToChannel() error {
 		c.entriesChan <- &c.gerUpdates[i]
 	}
 
+	c.entriesChan <- nil // needed to stop processing
+
 	for {
 		if c.stopReadingToChannel.Load() {
 			break
