@@ -199,6 +199,9 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 			return nil, errors.New("failed to get the latest L2 block within 5 attempts")
 		}
 		if connected {
+			if err := c.stopStreamingIfStarted(); err != nil {
+				return nil, err
+			}
 			if l2Block, err, socketErr = c.getLatestL2Block(); err != nil {
 				return nil, err
 			}
@@ -212,6 +215,23 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 		count++
 	}
 	return l2Block, nil
+}
+
+// don't check for errors here, we just need to empty the socket for next reads
+func (c *StreamClient) stopStreamingIfStarted() error {
+	if c.streaming.Load() {
+		c.sendStopCmd()
+		c.streaming.Store(false)
+
+		for {
+			c.conn.SetReadDeadline(time.Now().Add(100))
+			if _, err := c.readBuffer(100); err != nil {
+				break
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *StreamClient) getLatestL2Block() (l2Block *types.FullL2Block, err, socketErr error) {
@@ -447,7 +467,6 @@ func (c *StreamClient) handleSocketError(socketErr error) bool {
 func (c *StreamClient) readAllEntriesToChannel() (err, socketErr error) {
 	c.streaming.Store(true)
 	c.stopReadingToChannel.Store(false)
-	defer c.streaming.Store(false)
 
 	var bookmark *types.BookmarkProto
 	progress := c.progress.Load()
@@ -555,10 +574,7 @@ LOOP:
 		}
 
 		if c.header.TotalEntries == entryNum+1 {
-			log.Trace("[Datastream client] reached the end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
-			if err = c.sendStopCmd(); err != nil {
-				return fmt.Errorf("send stop command: %w", err)
-			}
+			log.Trace("[Datastream client] reached the current end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
 
 			retries := 0
 		INTERNAL_LOOP:

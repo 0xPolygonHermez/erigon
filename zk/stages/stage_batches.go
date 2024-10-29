@@ -185,6 +185,7 @@ func SpawnStageBatches(
 	defer stopDsClient()
 
 	var highestDSL2Block *types.FullL2Block
+	newBlockCheckStartTIme := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -204,8 +205,10 @@ func SpawnStageBatches(
 			log.Info(fmt.Sprintf("[%s] Highest block in datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "stageProgressBlockNo", stageProgressBlockNo)
 			break
 		}
-
-		log.Info(fmt.Sprintf("[%s] Waiting for at least one new block in datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "last processed block", stageProgressBlockNo)
+		if time.Since(newBlockCheckStartTIme) > 10*time.Second {
+			log.Info(fmt.Sprintf("[%s] Waiting for at least one new block in datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "last processed block", stageProgressBlockNo)
+			newBlockCheckStartTIme = time.Now()
+		}
 		time.Sleep(1 * time.Second)
 	}
 

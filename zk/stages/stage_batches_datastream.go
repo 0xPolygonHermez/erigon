@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync/atomic"
-	"time"
 
 	"github.com/ledgerwatch/log/v3"
 )
@@ -51,8 +50,4 @@ func (r *DatastreamClientRunner) StartRead() error {
 func (r *DatastreamClientRunner) StopRead() {
 	r.stopRunner.Swap(true)
 	r.dsClient.StopReadingToChannel()
-	//wait for the read to stop, otherwise panic occurs
-	for r.dsClient.GetStreamingAtomic().Load() {
-		time.Sleep(10 * time.Microsecond)
-	}
 }
