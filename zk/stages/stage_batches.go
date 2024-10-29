@@ -273,6 +273,10 @@ func SpawnStageBatches(
 		select {
 		case entry := <-*entryChan:
 			if endLoop, err = batchProcessor.ProcessEntry(entry); err != nil {
+				// if we triggered an unwind somewhere we need to return from the stage
+				if err == ErrorTriggeredUnwind {
+					return nil
+				}
 				return err
 			}
 			dsClientProgress.Store(batchProcessor.LastBlockHeight())
