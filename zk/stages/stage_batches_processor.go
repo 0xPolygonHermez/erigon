@@ -252,8 +252,6 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 			if _, err := p.unwind(blockEntry.L2BlockNumber); err != nil {
 				return false, err
 			}
-
-			return false, ErrorTriggeredUnwind
 		}
 		return false, nil
 	}
