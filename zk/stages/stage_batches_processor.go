@@ -147,8 +147,8 @@ func (p *BatchesProcessor) ProcessEntry(entry interface{}) (endLoop bool, err er
 		return p.processFullBlock(entry)
 	case *types.GerUpdate:
 		return false, p.processGerUpdate(entry)
-	case nil:
-		return false, nil
+	case nil: // we use nil to indicate the end of stream read
+		return true, nil
 	default:
 		return false, fmt.Errorf("unknown entry type: %T", entry)
 	}

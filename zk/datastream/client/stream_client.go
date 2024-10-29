@@ -543,7 +543,7 @@ LOOP:
 		case *types.BatchEnd:
 		case *types.FullL2Block:
 			parsedProto.ForkId = c.currentFork
-			log.Trace("writing block to channel", "blockNumber", parsedProto.L2BlockNumber, "batchNumber", parsedProto.BatchNumber)
+			log.Trace("[Datastream client] writing block to channel", "blockNumber", parsedProto.L2BlockNumber, "batchNumber", parsedProto.BatchNumber)
 		default:
 			return fmt.Errorf("unexpected entry type: %v", parsedProto)
 		}
@@ -555,9 +555,25 @@ LOOP:
 		}
 
 		if c.header.TotalEntries == entryNum+1 {
-			log.Trace("reached the end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
+			log.Trace("[Datastream client] reached the end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
 			if err = c.sendStopCmd(); err != nil {
 				return fmt.Errorf("send stop command: %w", err)
+			}
+
+			retries := 0
+		INTERNAL_LOOP:
+			for {
+				select {
+				case c.entryChan <- nil:
+					break INTERNAL_LOOP
+				default:
+					if retries > 5 {
+						return errors.New("[Datastream client] failed to write final entry to channel after 5 retries")
+					}
+					retries++
+					log.Warn("[Datastream client] Channel is full, waiting to write nil and end stream client read")
+					time.Sleep(1 * time.Second)
+				}
 			}
 			break LOOP
 		}
@@ -676,6 +692,7 @@ func ReadParsedProto(iterator FileEntryIterator) (
 		return
 	case types.EntryTypeL2BlockEnd:
 		log.Debug(fmt.Sprintf("retrieved EntryTypeL2BlockEnd: %+v", file))
+		parsedEntry, err = types.UnmarshalL2BlockEnd(file.Data)
 		return
 	case types.EntryTypeL2Tx:
 		err = errors.New("unexpected L2 tx entry, found outside of block")

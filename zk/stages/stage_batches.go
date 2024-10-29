@@ -287,13 +287,6 @@ func SpawnStageBatches(
 			time.Sleep(1 * time.Second)
 		}
 
-		// if ds end reached check again for new blocks in the stream
-		// if there are too many new blocks get them as well before ending stage
-		if batchProcessor.LastBlockHeight() >= highestDSL2Block.L2BlockNumber {
-			log.Info(fmt.Sprintf("[%s] Reached the end of the datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "lastWrittenBlock", batchProcessor.LastBlockHeight())
-			endLoop = true
-		}
-
 		if endLoop {
 			log.Info(fmt.Sprintf("[%s] Total blocks written: %d", logPrefix, batchProcessor.TotalBlocksWritten()))
 			break
