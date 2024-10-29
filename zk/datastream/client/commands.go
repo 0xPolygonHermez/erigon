@@ -1,9 +1,5 @@
 package client
 
-import (
-	"fmt"
-)
-
 const (
 	// Commands
 	CmdUnknown Command = iota
@@ -17,12 +13,7 @@ const (
 
 // sendHeaderCmd sends the header command to the server.
 func (c *StreamClient) sendHeaderCmd() error {
-	err := c.sendCommand(CmdHeader)
-	if err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
-	}
-
-	return nil
+	return c.sendCommand(CmdHeader)
 }
 
 // sendBookmarkCmd sends either CmdStartBookmark or CmdBookmark for the provided bookmark value.
@@ -51,8 +42,7 @@ func (c *StreamClient) sendBookmarkCmd(bookmark []byte, streaming bool) error {
 // sendStartCmd sends a start command to the server, indicating
 // that the client wishes to start streaming from the given entry number.
 func (c *StreamClient) sendStartCmd(from uint64) error {
-	err := c.sendCommand(CmdStart)
-	if err != nil {
+	if err := c.sendCommand(CmdStart); err != nil {
 		return err
 	}
 
@@ -73,25 +63,16 @@ func (c *StreamClient) sendEntryCmd(entryNum uint64) error {
 
 // sendHeaderCmd sends the header command to the server.
 func (c *StreamClient) sendStopCmd() error {
-	err := c.sendCommand(CmdStop)
-	if err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
-	}
-
-	return nil
+	return c.sendCommand(CmdStop)
 }
 
 func (c *StreamClient) sendCommand(cmd Command) error {
 
 	// Send command
 	if err := c.writeToConn(uint64(cmd)); err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
+		return err
 	}
 
 	// Send stream type
-	if err := c.writeToConn(uint64(c.streamType)); err != nil {
-		return fmt.Errorf("%s %v", c.id, err)
-	}
-
-	return nil
+	return c.writeToConn(uint64(c.streamType))
 }
