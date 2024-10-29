@@ -37,7 +37,7 @@ func BuildWitness(s *SMT, rd trie.RetainDecider, ctx context.Context) (*trie.Wit
 				This algorithm adds a little bit more nodes to the witness but it ensures that all requiring nodes are included.
 			*/
 
-			retain := false
+			var retain bool
 
 			prefixLen := len(prefix)
 			if prefixLen > 0 {
