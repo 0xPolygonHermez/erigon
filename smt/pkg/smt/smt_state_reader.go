@@ -154,12 +154,12 @@ func (s *SMT) getValueInBytes(nodeKey utils.NodeKey) ([]byte, error) {
 
 	keyPath := nodeKey.GetPath()
 
-	keyPathBytes := make([]byte, 0)
-	for _, k := range keyPath {
-		keyPathBytes = append(keyPathBytes, byte(k))
+	keyPathBytes := make([]byte, len(keyPath))
+	for i, k := range keyPath {
+		keyPathBytes[i] = byte(k)
 	}
 
-	action := func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) (bool, error) {
+	action := func(prefix []byte, _ utils.NodeKey, v utils.NodeValue12) (bool, error) {
 		if !bytes.HasPrefix(keyPathBytes, prefix) {
 			return false, nil
 		}
