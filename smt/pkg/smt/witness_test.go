@@ -139,10 +139,7 @@ func TestSMTWitnessRetainListEmptyVal(t *testing.T) {
 	require.NoError(t, err)
 
 	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
-
-	if err != nil {
-		t.Errorf("error building witness: %v", err)
-	}
+	require.NoError(t, err, "error building witness")
 
 	foundCode := findNode(t, witness, contract, libcommon.Hash{}, utils.SC_CODE)
 	foundBalance := findNode(t, witness, contract, libcommon.Hash{}, utils.KEY_BALANCE)
@@ -205,18 +202,34 @@ func TestWitnessToSMTStateReader(t *testing.T) {
 
 	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
 
-	expectedAcc, _ := smtTrie.ReadAccountData(contract)
-	newAcc, _ := newSMT.ReadAccountData(contract)
+	expectedAcc, err := smtTrie.ReadAccountData(contract)
+	require.NoError(t, err)
 
-	expectedAccCode, _ := smtTrie.ReadAccountCode(contract, 0, expectedAcc.CodeHash)
-	newAccCode, _ := newSMT.ReadAccountCode(contract, 0, newAcc.CodeHash)
-	expectedAccCodeSize, _ := smtTrie.ReadAccountCodeSize(contract, 0, expectedAcc.CodeHash)
-	newAccCodeSize, _ := newSMT.ReadAccountCodeSize(contract, 0, newAcc.CodeHash)
-	expectedStorageValue, _ := smtTrie.ReadAccountStorage(contract, 0, &sKey)
-	newStorageValue, _ := newSMT.ReadAccountStorage(contract, 0, &sKey)
+	newAcc, err := newSMT.ReadAccountData(contract)
+	require.NoError(t, err)
+
+	expectedAccCode, err := smtTrie.ReadAccountCode(contract, 0, expectedAcc.CodeHash)
+	require.NoError(t, err)
+
+	newAccCode, err := newSMT.ReadAccountCode(contract, 0, newAcc.CodeHash)
+	require.NoError(t, err)
+
+	expectedAccCodeSize, err := smtTrie.ReadAccountCodeSize(contract, 0, expectedAcc.CodeHash)
+	require.NoError(t, err)
+
+	newAccCodeSize, err := newSMT.ReadAccountCodeSize(contract, 0, newAcc.CodeHash)
+	require.NoError(t, err)
+
+	expectedStorageValue, err := smtTrie.ReadAccountStorage(contract, 0, &sKey)
+	require.NoError(t, err)
+
+	newStorageValue, err := newSMT.ReadAccountStorage(contract, 0, &sKey)
+	require.NoError(t, err)
+
 	// assert that the account data is the same
 	require.Equal(t, expectedAcc, newAcc)
 
+	// assert that account code is the same
 	require.Equal(t, expectedAccCode, newAccCode)
 
 	// assert that the account code size is the same
