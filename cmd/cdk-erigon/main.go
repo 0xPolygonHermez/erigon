@@ -42,7 +42,7 @@ func main() {
 		fmt.Println(common.MakeName("cdk-erigon", version))
 	}
 
-	app := erigonapp.MakeApp("cdk-erigon", runErigon, erigoncli.DefaultFlags)
+	app := erigonapp.MakeApp_zkEvm("cdk-erigon", runErigon, erigoncli.DefaultFlags)
 	if err := app.Run(os.Args); err != nil {
 		_, printErr := fmt.Fprintln(os.Stderr, err)
 		if printErr != nil {
