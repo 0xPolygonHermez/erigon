@@ -247,7 +247,7 @@ func SpawnStageBatches(
 		return rollback(logPrefix, eriDb, hermezDb, dsQueryClient, unwindBlock, tx, u)
 	}
 
-	lastProcessedBlockHash, err := eriDb.ReadCanonicalHash(stageProgressBlockNo - 1)
+	lastProcessedBlockHash, err := eriDb.ReadCanonicalHash(stageProgressBlockNo)
 	if err != nil {
 		return fmt.Errorf("failed to read canonical hash for block %d: %w", stageProgressBlockNo, err)
 	}
