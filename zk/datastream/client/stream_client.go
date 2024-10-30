@@ -428,9 +428,6 @@ func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
 			return fmt.Errorf("[Datastream client] Context done - stopping")
 		default:
 		}
-		if count > 5 {
-			return errors.New("failed to read all entries within 5 attempts")
-		}
 		if connected {
 			if err, socketErr = c.readAllEntriesToChannel(); err != nil {
 				return err
@@ -457,6 +454,7 @@ func (c *StreamClient) handleSocketError(socketErr error) bool {
 		return false
 	}
 
+	c.streaming.Store(false)
 	c.RenewEntryChannel()
 
 	return true

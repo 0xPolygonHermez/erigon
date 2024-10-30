@@ -212,11 +212,15 @@ func SpawnStageBatches(
 		time.Sleep(1 * time.Second)
 	}
 
-	if highestDSL2Block.L2BlockNumber < stageProgressBlockNo {
-		stageProgressBlockNo = highestDSL2Block.L2BlockNumber
-	}
-
 	log.Debug(fmt.Sprintf("[%s] Highest block in db and datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "dbBlock", stageProgressBlockNo)
+	unwindFn := func(unwindBlock uint64) (uint64, error) {
+		return rollback(logPrefix, eriDb, hermezDb, dsQueryClient, unwindBlock, tx, u)
+	}
+	if highestDSL2Block.L2BlockNumber < stageProgressBlockNo {
+		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding", logPrefix))
+		unwindFn(highestDSL2Block.L2BlockNumber)
+		return nil
+	}
 
 	dsClientProgress := dsQueryClient.GetProgressAtomic()
 	dsClientProgress.Swap(stageProgressBlockNo)
@@ -242,10 +246,6 @@ func SpawnStageBatches(
 	}
 
 	log.Info(fmt.Sprintf("[%s] Reading blocks from the datastream.", logPrefix))
-
-	unwindFn := func(unwindBlock uint64) (uint64, error) {
-		return rollback(logPrefix, eriDb, hermezDb, dsQueryClient, unwindBlock, tx, u)
-	}
 
 	lastProcessedBlockHash, err := eriDb.ReadCanonicalHash(stageProgressBlockNo)
 	if err != nil {

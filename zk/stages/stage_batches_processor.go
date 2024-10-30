@@ -234,26 +234,25 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 	}
 	// skip but warn on already processed blocks
 	if blockEntry.L2BlockNumber <= p.stageProgressBlockNo {
-		if blockEntry.L2BlockNumber < p.stageProgressBlockNo {
-			// only warn if the block is very old, we expect the very latest block to be requested
-			// when the stage is fired up for the first time
-			log.Warn(fmt.Sprintf("[%s] Skipping block %d, already processed", p.logPrefix, blockEntry.L2BlockNumber))
-		}
-
 		dbBatchNum, err := p.hermezDb.GetBatchNoByL2Block(blockEntry.L2BlockNumber)
 		if err != nil {
 			return false, err
 		}
 
-		if blockEntry.BatchNumber > dbBatchNum {
-			// if the batch number is higher than the one we know about, it means that we need to trigger an unwinding of blocks
-			log.Warn(fmt.Sprintf("[%s] Batch number mismatch detected. Triggering unwind...", p.logPrefix),
-				"block", blockEntry.L2BlockNumber, "ds batch", blockEntry.BatchNumber, "db batch", dbBatchNum)
-			if _, err := p.unwind(blockEntry.L2BlockNumber); err != nil {
-				return false, err
-			}
+		if blockEntry.L2BlockNumber == p.stageProgressBlockNo && dbBatchNum == blockEntry.BatchNumber {
+			// only warn if the block is very old, we expect the very latest block to be requested
+			// when the stage is fired up for the first time
+			log.Warn(fmt.Sprintf("[%s] Skipping block %d, already processed", p.logPrefix, blockEntry.L2BlockNumber))
+			return false, nil
 		}
-		return false, nil
+
+		// if the block is older or the batch number is different, we need to unwind because the block has definately changed
+		log.Warn(fmt.Sprintf("[%s] Block already processed. Triggering unwind...", p.logPrefix),
+			"block", blockEntry.L2BlockNumber, "ds batch", blockEntry.BatchNumber, "db batch", dbBatchNum)
+		if _, err := p.unwind(blockEntry.L2BlockNumber); err != nil {
+			return false, err
+		}
+		return false, ErrorTriggeredUnwind
 	}
 
 	var dbParentBlockHash common.Hash
