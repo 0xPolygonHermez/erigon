@@ -13,4 +13,9 @@ const (
 	ForkID10
 	ForkID11
 	ForkID12Banana
+	ForkId13Durian
+
+	// ImpossibleForkId is a fork ID that is greater than any possible fork ID
+	// Nothing should be added after this line
+	ImpossibleForkId
 )

@@ -16,6 +16,7 @@ import (
 
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
+	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
@@ -29,9 +30,10 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/rpc"
 	smtDb "github.com/ledgerwatch/erigon/smt/pkg/db"
-	smt "github.com/ledgerwatch/erigon/smt/pkg/smt"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	smtUtils "github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
+	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
@@ -84,12 +86,13 @@ const getBatchWitness = "getBatchWitness"
 type ZkEvmAPIImpl struct {
 	ethApi *APIImpl
 
-	db              kv.RoDB
-	ReturnDataLimit int
-	config          *ethconfig.Config
-	l1Syncer        *syncer.L1Syncer
-	l2SequencerUrl  string
-	semaphores      map[string]chan struct{}
+	db               kv.RoDB
+	ReturnDataLimit  int
+	config           *ethconfig.Config
+	l1Syncer         *syncer.L1Syncer
+	l2SequencerUrl   string
+	semaphores       map[string]chan struct{}
+	datastreamServer *server.DataStreamServer
 }
 
 func (api *ZkEvmAPIImpl) initializeSemaphores(functionLimits map[string]int) {
@@ -110,15 +113,22 @@ func NewZkEvmAPI(
 	zkConfig *ethconfig.Config,
 	l1Syncer *syncer.L1Syncer,
 	l2SequencerUrl string,
+	datastreamServer *datastreamer.StreamServer,
 ) *ZkEvmAPIImpl {
 
+	var streamServer *server.DataStreamServer
+	if datastreamServer != nil {
+		streamServer = server.NewDataStreamServer(datastreamServer, zkConfig.Zk.L2ChainId)
+	}
+
 	a := &ZkEvmAPIImpl{
-		ethApi:          base,
-		db:              db,
-		ReturnDataLimit: returnDataLimit,
-		config:          zkConfig,
-		l1Syncer:        l1Syncer,
-		l2SequencerUrl:  l2SequencerUrl,
+		ethApi:           base,
+		db:               db,
+		ReturnDataLimit:  returnDataLimit,
+		config:           zkConfig,
+		l1Syncer:         l1Syncer,
+		l2SequencerUrl:   l2SequencerUrl,
+		datastreamServer: streamServer,
 	}
 
 	a.initializeSemaphores(map[string]int{
@@ -535,11 +545,30 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, batchNumber rpc.B
 		batch.Timestamp = types.ArgUint64(block.Time())
 	}
 
-	if _, found, err = hermezDb.GetLowestBlockInBatch(batchNo + 1); err != nil {
-		return nil, err
+	// if we don't have a datastream available to verify that a batch is actually
+	// closed then we fall back to existing behaviour of checking if the next batch
+	// has any blocks in it
+	if api.datastreamServer != nil {
+		highestClosed, err := api.datastreamServer.GetHighestClosedBatchNoCache()
+		if err != nil {
+			return nil, err
+		}
+
+		// sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed, if next batch has blocks, bn must be closed
+		batch.Closed = batchNo == 0 || batchNo == 1 || batchNo <= highestClosed
+	} else {
+		latestClosedBlock, err := hermezDb.GetLatestBatchEndBlock()
+		if err != nil {
+			return nil, err
+		}
+
+		latestClosedbatchNum, err := hermezDb.GetBatchNoByL2Block(latestClosedBlock)
+		if err != nil {
+			return nil, err
+		}
+
+		batch.Closed = batchNo <= latestClosedbatchNum
 	}
-	// sequenced, genesis or injected batch 1 - special batches 0,1 will always be closed, if next batch has blocks, bn must be closed
-	batch.Closed = seq != nil || batchNo == 0 || batchNo == 1 || found
 
 	// verification - if we can't find one, maybe this batch was verified along with a higher batch number
 	ver, err := hermezDb.GetVerificationByBatchNoOrHighest(batchNo)
@@ -1575,7 +1604,7 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		return nil, err
 	}
 
-	latestBlock, err := rpchelper.GetLatestBlockNumber(tx)
+	latestBlock, err := rpchelper.GetLatestFinishedBlockNumber(tx)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
@@ -185,6 +186,7 @@ type CounterCollector struct {
 	smtLevels   int
 	isDeploy    bool
 	transaction types.Transaction
+	forkId      uint16
 }
 
 func (cc *CounterCollector) isOverflown() bool {
@@ -226,6 +228,7 @@ func NewCounterCollector(smtLevels int, forkId uint16) *CounterCollector {
 	return &CounterCollector{
 		counters:  *getCounterLimits(forkId),
 		smtLevels: smtLevels,
+		forkId:    forkId,
 	}
 }
 
@@ -607,7 +610,11 @@ func (cc *CounterCollector) finishBatchProcessing() {
 
 func (cc *CounterCollector) isColdAddress() {
 	cc.Deduct(S, 100)
-	cc.Deduct(B, 2+1)
+	if cc.forkId >= uint16(chain.ForkId13Durian) {
+		cc.Deduct(B, 3+1)
+	} else {
+		cc.Deduct(B, 2+1)
+	}
 	cc.Deduct(P, 2*MCPL)
 }
 
@@ -842,14 +849,26 @@ func (cc *CounterCollector) preModExp(callDataLength, returnDataLength, bLen, mL
 }
 
 func (cc *CounterCollector) modExp(bLen, mLen, eLen int, base, exponent, modulus *big.Int) {
-	steps, binary, arith := expectedModExpCounters(
-		int(math.Ceil(float64(bLen)/32)),
-		int(math.Ceil(float64(mLen)/32)),
-		int(math.Ceil(float64(eLen)/32)),
-		base,
-		exponent,
-		modulus,
-	)
+	var steps, binary, arith *big.Int
+	if cc.forkId >= uint16(chain.ForkId13Durian) {
+		steps, binary, arith = expectedModExpCounters(
+			int(math.Ceil(float64(bLen)/32)),
+			int(math.Ceil(float64(eLen)/32)),
+			int(math.Ceil(float64(mLen)/32)),
+			base,
+			exponent,
+			modulus,
+		)
+	} else {
+		steps, binary, arith = expectedModExpCounters(
+			int(math.Ceil(float64(bLen)/32)),
+			int(math.Ceil(float64(mLen)/32)),
+			int(math.Ceil(float64(eLen)/32)),
+			base,
+			exponent,
+			modulus,
+		)
+	}
 	cc.Deduct(S, int(steps.Int64()))
 	cc.Deduct(B, int(binary.Int64()))
 	cc.Deduct(A, int(arith.Int64()))
@@ -1882,4 +1901,62 @@ func getRelevantNumberBytes(input []byte) int {
 		break
 	}
 	return totalLength - rel
+}
+
+func (cc *CounterCollector) preP256Verify(r, s, x, y *big.Int) {
+	cc.Deduct(S, 50)
+	cc.Deduct(B, 1)
+	cc.multiCall(cc.readFromCallDataOffset, 5)
+	cc.p256verify(r, s, x, y)
+	cc.mStore32()
+	cc.mStoreX()
+
+}
+
+var (
+	SECP256R1_N           = uint256.MustFromHex("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551").ToBig()
+	SECP256R1_N_MINUS_ONE = SECP256R1_N.Sub(SECP256R1_N, big.NewInt(1))
+	SECP256R1_P           = uint256.MustFromHex("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff").ToBig()
+	SECP256R1_P_MINUS_ONE = SECP256R1_N.Sub(SECP256R1_P, big.NewInt(1))
+	SECP256R1_A           = uint256.MustFromHex("0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc").ToBig()
+	SECP256R1_B           = uint256.MustFromHex("0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b").ToBig()
+)
+
+func (cc *CounterCollector) p256verify(r, s, x, y *big.Int) {
+	if r.Cmp(big.NewInt(0)) == 0 {
+		cc.Deduct(S, 13)
+		cc.Deduct(B, 1)
+	} else if SECP256R1_N_MINUS_ONE.Cmp(r) == -1 {
+		cc.Deduct(S, 15)
+		cc.Deduct(B, 2)
+	} else if s.Cmp(big.NewInt(0)) == 0 {
+		cc.Deduct(S, 17)
+		cc.Deduct(B, 3)
+	} else if SECP256R1_N_MINUS_ONE.Cmp(s) == -1 {
+		cc.Deduct(S, 19)
+		cc.Deduct(B, 4)
+	} else if SECP256R1_P_MINUS_ONE.Cmp(x) == -1 {
+		cc.Deduct(S, 22)
+		cc.Deduct(B, 5)
+	} else if SECP256R1_P_MINUS_ONE.Cmp(y) == -1 {
+		cc.Deduct(S, 24)
+		cc.Deduct(B, 6)
+	} else if x.Cmp(big.NewInt(0)) == 0 && y.Cmp(big.NewInt(0)) == 0 {
+		cc.Deduct(S, 29)
+		cc.Deduct(B, 8)
+	} else {
+		aux_x3 := new(big.Int).Exp(x, big.NewInt(3), SECP256R1_P)
+		aux_ax_b := new(big.Int).Mul(x, SECP256R1_A).Add(x, SECP256R1_B)
+		aux_x3_ax_b := aux_x3.Add(aux_x3, aux_ax_b).Mod(aux_x3, SECP256R1_P)
+		aux_y2 := new(big.Int).Exp(y, big.NewInt(2), SECP256R1_P)
+		if aux_y2.Cmp(aux_x3_ax_b) != 0 {
+			cc.Deduct(S, 104)
+			cc.Deduct(B, 15)
+			cc.Deduct(A, 12)
+			return
+		}
+		cc.Deduct(S, 7718)
+		cc.Deduct(B, 22)
+		cc.Deduct(A, 531)
+	}
 }

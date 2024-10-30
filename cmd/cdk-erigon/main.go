@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/gateway-fm/vectorized-poseidon-gold/src/vectorizedposeidongold"
+	"github.com/ledgerwatch/erigon/common"
+	zkutils "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/pelletier/go-toml"
 	"github.com/urfave/cli/v2"
@@ -35,7 +37,12 @@ func main() {
 		*/
 	}()
 
-	app := erigonapp.MakeApp("cdk-erigon", runErigon, erigoncli.DefaultFlags)
+	cli.VersionPrinter = func(cCtx *cli.Context) {
+		version := zkutils.GetVersion()
+		fmt.Println(common.MakeName("cdk-erigon", version))
+	}
+
+	app := erigonapp.MakeApp_zkEvm("cdk-erigon", runErigon, erigoncli.DefaultFlags)
 	if err := app.Run(os.Args); err != nil {
 		_, printErr := fmt.Fprintln(os.Stderr, err)
 		if printErr != nil {

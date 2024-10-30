@@ -75,7 +75,7 @@ func TestLatestConsolidatedBlockNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -108,7 +108,7 @@ func TestIsBlockConsolidated(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, 11)
 	assert.NoError(err)
 	t.Logf("blockNumber: 11 -> %v", isConsolidated)
@@ -150,7 +150,7 @@ func TestIsBlockVirtualized(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	isVirtualized, err := zkEvmImpl.IsBlockVirtualized(ctx, 50)
 	assert.NoError(err)
 	t.Logf("blockNumber: 50 -> %v", isVirtualized)
@@ -198,7 +198,7 @@ func TestBatchNumberByBlockNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	batchNumber, err := zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(10))
 	assert.Error(err)
 	tx, err := db.BeginRw(ctx)
@@ -253,7 +253,7 @@ func TestBatchNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -290,7 +290,7 @@ func TestVirtualBatchNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -327,7 +327,7 @@ func TestVerifiedBatchNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -379,7 +379,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	)
 	cfg := &ethconfig.Defaults
 	cfg.Zk.L1RollupId = 1
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -416,6 +416,9 @@ func TestGetBatchByNumber(t *testing.T) {
 		err = hDB.WriteL1InfoTreeUpdateToGer(l1InforTree)
 		assert.NoError(err)
 	}
+
+	err = hDB.WriteBatchEnd(4)
+	assert.NoError(err)
 
 	err = hDB.WriteBlockBatch(5, 2)
 	assert.NoError(err)
@@ -503,7 +506,7 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -540,6 +543,8 @@ func TestGetBatchDataByNumber(t *testing.T) {
 		err = hDB.WriteL1InfoTreeUpdateToGer(l1InforTree)
 		assert.NoError(err)
 	}
+	err = hDB.WriteBatchEnd(4)
+	assert.NoError(err)
 
 	err = hDB.WriteSequence(4, 1, common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), stateRoots[len(stateRoots)-1], common.HexToHash("0x0"))
 	assert.NoError(err)
@@ -651,7 +656,7 @@ func TestGetExitRootsByGER(t *testing.T) {
 		0,
 		"latest",
 	)
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -726,7 +731,7 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 		0,
 		"latest",
 	)
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -785,7 +790,7 @@ func TestGetVersionHistory(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
@@ -827,7 +832,7 @@ func TestGetExitRootTable(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -901,7 +906,7 @@ func TestGetFullBlockByNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -982,6 +987,11 @@ func TestGetFullBlockByNumber(t *testing.T) {
 	assert.NoError(err)
 	err = erigonDB.WriteBody(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), []types.Transaction{})
 	assert.NoError(err)
+
+	for i := 1; i <= 4; i++ {
+		err = stages.SaveStageProgress(tx, stages.Finish, uint64(i))
+		assert.NoError(err)
+	}
 
 	tx.Commit()
 
@@ -1070,7 +1080,7 @@ func TestGetFullBlockByHash(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -1240,7 +1250,7 @@ func TestGetForkId(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -1282,7 +1292,7 @@ func TestGetForkIdByBatchNumber(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -1328,7 +1338,7 @@ func TestGetForkById(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)
@@ -1395,7 +1405,7 @@ func TestGetForks(t *testing.T) {
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
 	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "")
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
 	hDB := hermez_db.NewHermezDb(tx)

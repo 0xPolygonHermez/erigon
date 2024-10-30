@@ -442,7 +442,11 @@ func setEmbeddedRpcDaemon(ctx *cli.Context, cfg *nodecfg.Config, logger log.Logg
 	apis := ctx.String(utils.HTTPApiFlag.Name)
 
 	wsEnabled := ctx.IsSet(utils.WSEnabledFlag.Name)
-	wsApis := strings.Split(ctx.String(utils.WSApiFlag.Name), ",")
+	wsApisCtx := ctx.String(utils.WSApiFlag.Name)
+	wsApis := []string{}
+	if len(wsApisCtx) > 0 {
+		wsApis = strings.Split(wsApisCtx, ",")
+	}
 	if wsEnabled {
 		log.Info("starting WS APIs", "APIs", wsApis)
 	}
@@ -489,6 +493,9 @@ func setEmbeddedRpcDaemon(ctx *cli.Context, cfg *nodecfg.Config, logger log.Logg
 		WebsocketPort:                     ctx.Int(utils.WSPortFlag.Name),
 		WebsocketEnabled:                  ctx.IsSet(utils.WSEnabledFlag.Name),
 		WebsocketSubscribeLogsChannelSize: ctx.Int(utils.WSSubscribeLogsChannelSize.Name),
+		WebsocketListenAddress:            ctx.String(utils.WSListenAddrFlag.Name),
+		WebsocketCORSDomain:               strings.Split(ctx.String(utils.WSAllowedOriginsFlag.Name), ","),
+		WebsocketApi:                      wsApis,
 		RpcBatchConcurrency:               ctx.Uint(utils.RpcBatchConcurrencyFlag.Name),
 		RpcStreamingDisable:               ctx.Bool(utils.RpcStreamingDisableFlag.Name),
 		DBReadConcurrency:                 ctx.Int(utils.DBReadConcurrencyFlag.Name),
@@ -501,10 +508,6 @@ func setEmbeddedRpcDaemon(ctx *cli.Context, cfg *nodecfg.Config, logger log.Logg
 		ReturnDataLimit:                   ctx.Int(utils.RpcReturnDataLimit.Name),
 		AllowUnprotectedTxs:               ctx.Bool(utils.AllowUnprotectedTxs.Name),
 		MaxGetProofRewindBlockCount:       ctx.Int(utils.RpcMaxGetProofRewindBlockCount.Name),
-
-		WebSocketListenAddress: ctx.String(utils.WSListenAddrFlag.Name),
-		WebsocketCORSDomain:    strings.Split(ctx.String(utils.WSAllowedOriginsFlag.Name), ","),
-		WebSocketApi:           wsApis,
 
 		TxPoolApiAddr: ctx.String(utils.TxpoolApiAddrFlag.Name),
 
