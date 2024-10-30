@@ -299,6 +299,22 @@ func (c *bigModExp_zkevm) RequiredGas(input []byte) uint64 {
 	} else {
 		input = input[:0]
 	}
+
+	// Retrieve the operands and execute the exponentiation
+	var (
+		base = new(big.Int).SetBytes(getData(input, 0, baseLen.Uint64()))
+		exp  = new(big.Int).SetBytes(getData(input, baseLen.Uint64(), expLen.Uint64()))
+		mod  = new(big.Int).SetBytes(getData(input, baseLen.Uint64()+expLen.Uint64(), modLen.Uint64()))
+	)
+
+	// limit to 8192 bits for base, exp, and mod in ZK - revert if we go over
+	baseBitLen := base.BitLen()
+	expBitLen := exp.BitLen()
+	modBitLen := mod.BitLen()
+	if baseBitLen > 8192 || expBitLen > 8192 || modBitLen > 8192 {
+		return 0
+	}
+
 	// Retrieve the head 32 bytes of exp for the adjusted exponent length
 	var expHead *big.Int
 	if big.NewInt(int64(len(input))).Cmp(baseLen) <= 0 {
@@ -384,6 +400,15 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 		mod  = new(big.Int).SetBytes(getData(input, baseLen+expLen, modLen))
 		v    []byte
 	)
+
+	// limit to 8192 bits for base, exp, and mod in ZK
+	baseBitLen := base.BitLen()
+	expBitLen := exp.BitLen()
+	modBitLen := mod.BitLen()
+	if baseBitLen > 8192 || expBitLen > 8192 || modBitLen > 8192 {
+		return nil, ErrExecutionReverted
+	}
+
 	switch {
 	case mod.BitLen() == 0:
 		// Modulo 0 is undefined, return zero
