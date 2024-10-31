@@ -407,7 +407,6 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 	)
 
 	if modBitLen == 0 {
-		// Modulo 0 is undefined, return zero
 		return common.LeftPadBytes([]byte{}, int(modLen)), nil
 	}
 
