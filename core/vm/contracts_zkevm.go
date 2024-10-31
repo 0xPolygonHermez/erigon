@@ -395,10 +395,6 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 		input = input[:0]
 	}
 
-	if modLen == 0 {
-		return []byte{}, nil
-	}
-
 	// Retrieve the operands and execute the exponentiation
 	var (
 		base       = new(big.Int).SetBytes(getData(input, 0, baseLen))
@@ -409,6 +405,11 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 		expBitLen  = exp.BitLen()
 		modBitLen  = mod.BitLen()
 	)
+
+	if modBitLen == 0 {
+		// Modulo 0 is undefined, return zero
+		return common.LeftPadBytes([]byte{}, int(modLen)), nil
+	}
 
 	if baseBitLen == 0 {
 		if modBitLen > 8192 {
@@ -424,9 +425,6 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 	}
 
 	switch {
-	case mod.BitLen() == 0:
-		// Modulo 0 is undefined, return zero
-		return common.LeftPadBytes([]byte{}, int(modLen)), nil
 	case base.Cmp(libcommon.Big1) == 0:
 		//If base == 1, then we can just return base % mod (if mod >= 1, which it is)
 		v = base.Mod(base, mod).Bytes()
