@@ -56,7 +56,7 @@ type ProcessorHermezDb interface {
 }
 
 type DsQueryClient interface {
-	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, int, error)
+	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, error)
 	GetProgressAtomic() *atomic.Uint64
 }
 
@@ -162,7 +162,7 @@ func (p *BatchesProcessor) processGerUpdate(gerUpdate *types.GerUpdate) error {
 
 	// NB: we won't get these post Etrog (fork id 7)
 	if err := p.hermezDb.WriteBatchGlobalExitRoot(gerUpdate.BatchNumber, gerUpdate); err != nil {
-		return fmt.Errorf("write batch global exit root error: %v", err)
+		return fmt.Errorf("write batch global exit root error: %w", err)
 	}
 
 	return nil
@@ -215,15 +215,15 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 
 	if blockEntry.BatchNumber > p.highestSeenBatchNo && p.lastForkId < blockEntry.ForkId {
 		if blockEntry.ForkId >= uint64(chain.ImpossibleForkId) {
-			message := fmt.Sprintf("unsupported fork id %v received from the data stream", blockEntry.ForkId)
+			message := fmt.Sprintf("unsupported fork id %d received from the data stream", blockEntry.ForkId)
 			panic(message)
 		}
 		if err = stages.SaveStageProgress(p.tx, stages.ForkId, blockEntry.ForkId); err != nil {
-			return false, fmt.Errorf("save stage progress error: %v", err)
+			return false, fmt.Errorf("save stage progress error: %w", err)
 		}
 		p.lastForkId = blockEntry.ForkId
 		if err = p.hermezDb.WriteForkId(blockEntry.BatchNumber, blockEntry.ForkId); err != nil {
-			return false, fmt.Errorf("write fork id error: %v", err)
+			return false, fmt.Errorf("write fork id error: %w", err)
 		}
 		// NOTE (RPC): avoided use of 'writeForkIdBlockOnce' by reading instead batch by forkId, and then lowest block number in batch
 	}
@@ -327,13 +327,13 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 		// first block in the loop so read the parent hash
 		previousHash, err := p.eriDb.ReadCanonicalHash(blockEntry.L2BlockNumber - 1)
 		if err != nil {
-			return false, fmt.Errorf("failed to get genesis header: %v", err)
+			return false, fmt.Errorf("failed to get genesis header: %w", err)
 		}
 		blockEntry.ParentHash = previousHash
 	}
 
 	if err := p.writeL2Block(blockEntry); err != nil {
-		return false, fmt.Errorf("writeL2Block error: %v", err)
+		return false, fmt.Errorf("writeL2Block error: %w", err)
 	}
 
 	p.dsQueryClient.GetProgressAtomic().Store(blockEntry.L2BlockNumber)
@@ -364,20 +364,20 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 	for _, transaction := range l2Block.L2Txs {
 		ltx, _, err := txtype.DecodeTx(transaction.Encoded, transaction.EffectiveGasPricePercentage, l2Block.ForkId)
 		if err != nil {
-			return fmt.Errorf("decode tx error: %v", err)
+			return fmt.Errorf("decode tx error: %w", err)
 		}
 		txs = append(txs, ltx)
 
 		if err := p.hermezDb.WriteEffectiveGasPricePercentage(ltx.Hash(), transaction.EffectiveGasPricePercentage); err != nil {
-			return fmt.Errorf("write effective gas price percentage error: %v", err)
+			return fmt.Errorf("write effective gas price percentage error: %w", err)
 		}
 
 		if err := p.hermezDb.WriteStateRoot(l2Block.L2BlockNumber, transaction.IntermediateStateRoot); err != nil {
-			return fmt.Errorf("write rpc root error: %v", err)
+			return fmt.Errorf("write rpc root error: %w", err)
 		}
 
 		if err := p.hermezDb.WriteIntermediateTxStateRoot(l2Block.L2BlockNumber, ltx.Hash(), transaction.IntermediateStateRoot); err != nil {
-			return fmt.Errorf("write rpc root error: %v", err)
+			return fmt.Errorf("write rpc root error: %w", err)
 		}
 	}
 	txCollection := ethTypes.Transactions(txs)
@@ -391,7 +391,7 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 	}
 
 	if _, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, p.chainConfig); err != nil {
-		return fmt.Errorf("write header error: %v", err)
+		return fmt.Errorf("write header error: %w", err)
 	}
 
 	didStoreGer := false
@@ -400,16 +400,16 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 	if l2Block.GlobalExitRoot != emptyHash {
 		gerWritten, err := p.hermezDb.CheckGlobalExitRootWritten(l2Block.GlobalExitRoot)
 		if err != nil {
-			return fmt.Errorf("get global exit root error: %v", err)
+			return fmt.Errorf("get global exit root error: %w", err)
 		}
 
 		if !gerWritten {
 			if err := p.hermezDb.WriteBlockGlobalExitRoot(l2Block.L2BlockNumber, l2Block.GlobalExitRoot); err != nil {
-				return fmt.Errorf("write block global exit root error: %v", err)
+				return fmt.Errorf("write block global exit root error: %w", err)
 			}
 
 			if err := p.hermezDb.WriteGlobalExitRoot(l2Block.GlobalExitRoot); err != nil {
-				return fmt.Errorf("write global exit root error: %v", err)
+				return fmt.Errorf("write global exit root error: %w", err)
 			}
 			didStoreGer = true
 		}
@@ -417,7 +417,7 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 
 	if l2Block.L1BlockHash != emptyHash {
 		if err := p.hermezDb.WriteBlockL1BlockHash(l2Block.L2BlockNumber, l2Block.L1BlockHash); err != nil {
-			return fmt.Errorf("write block global exit root error: %v", err)
+			return fmt.Errorf("write block global exit root error: %w", err)
 		}
 	}
 
@@ -455,19 +455,19 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 	}
 
 	if err := p.eriDb.WriteBody(bn, l2Block.L2Blockhash, txs); err != nil {
-		return fmt.Errorf("write body error: %v", err)
+		return fmt.Errorf("write body error: %w", err)
 	}
 
 	if err := p.hermezDb.WriteForkId(l2Block.BatchNumber, l2Block.ForkId); err != nil {
-		return fmt.Errorf("write block batch error: %v", err)
+		return fmt.Errorf("write block batch error: %w", err)
 	}
 
 	if err := p.hermezDb.WriteForkIdBlockOnce(l2Block.ForkId, l2Block.L2BlockNumber); err != nil {
-		return fmt.Errorf("write fork id block error: %v", err)
+		return fmt.Errorf("write fork id block error: %w", err)
 	}
 
 	if err := p.hermezDb.WriteBlockBatch(l2Block.L2BlockNumber, l2Block.BatchNumber); err != nil {
-		return fmt.Errorf("write block batch error: %v", err)
+		return fmt.Errorf("write block batch error: %w", err)
 	}
 
 	return nil

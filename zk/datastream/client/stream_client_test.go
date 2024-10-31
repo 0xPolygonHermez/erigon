@@ -45,7 +45,7 @@ func TestStreamClientReadHeaderEntry(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{20, 21, 22, 23, 24, 20},
 			expectedResult: nil,
-			expectedError:  "read header bytes reading from server: unexpected EOF",
+			expectedError:  "read header bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
 		},
 	}
 
@@ -107,13 +107,13 @@ func TestStreamClientReadResultEntry(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{20, 21, 22, 23, 24, 20},
 			expectedResult: nil,
-			expectedError:  "read main result bytes reading from server: unexpected EOF",
+			expectedError:  "read main result bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
 		},
 		{
 			name:           "Invalid error length",
 			input:          []byte{0, 0, 0, 12, 0, 0, 0, 0, 20, 21},
 			expectedResult: nil,
-			expectedError:  "read result errStr bytes reading from server: unexpected EOF",
+			expectedError:  "read result errStr bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
 		},
 	}
 
@@ -182,12 +182,12 @@ func TestStreamClientReadFileEntry(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{2, 21, 22, 23, 24, 20},
 			expectedResult: nil,
-			expectedError:  "reading file bytes: reading from server: unexpected EOF",
+			expectedError:  "reading file bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
 		}, {
 			name:           "Invalid data length",
 			input:          []byte{2, 0, 0, 0, 31, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 64},
 			expectedResult: nil,
-			expectedError:  "reading file data bytes: reading from server: unexpected EOF",
+			expectedError:  "reading file data bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
 		},
 	}
 	for _, testCase := range testCases {
@@ -492,9 +492,8 @@ func TestStreamClientGetL2BlockByNumber(t *testing.T) {
 
 	go createServerResponses(t, serverConn, bookmarkRaw, l2BlockRaw, l2TxsRaw, l2BlockEndRaw, errCh)
 
-	l2Block, errCode, err := c.GetL2BlockByNumber(blockNum)
+	l2Block, err := c.GetL2BlockByNumber(blockNum)
 	require.NoError(t, err)
-	require.Equal(t, types.CmdErrOK, errCode)
 
 	var serverErr error
 	select {

@@ -62,7 +62,7 @@ type DatastreamClient interface {
 	ReadAllEntriesToChannel() error
 	StopReadingToChannel()
 	GetEntryChan() *chan interface{}
-	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, int, error)
+	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, error)
 	GetLatestL2Block() (*types.FullL2Block, error)
 	GetStreamingAtomic() *atomic.Bool
 	GetProgressAtomic() *atomic.Uint64
@@ -666,21 +666,21 @@ func findCommonAncestor(
 		}
 
 		midBlockNum := (startBlockNum + endBlockNum) / 2
-		midBlockDataStream, errCode, err := dsClient.GetL2BlockByNumber(midBlockNum)
+		midBlockDataStream, err := dsClient.GetL2BlockByNumber(midBlockNum)
 		if err != nil &&
 			// the required block might not be in the data stream, so ignore that error
-			errCode != types.CmdErrBadFromBookmark {
-			return 0, emptyHash, err
+			!errors.Is(err, types.ErrBadFromBookmark) {
+			return 0, emptyHash, fmt.Errorf("GetL2BlockByNumber: failed to get l2 block %d from datastream: %w", midBlockNum, err)
 		}
 
 		midBlockDbHash, err := db.ReadCanonicalHash(midBlockNum)
 		if err != nil {
-			return 0, emptyHash, err
+			return 0, emptyHash, fmt.Errorf("ReadCanonicalHash: failed to get canonical hash for block %d: %w", midBlockNum, err)
 		}
 
 		dbBatchNum, err := hermezDb.GetBatchNoByL2Block(midBlockNum)
 		if err != nil {
-			return 0, emptyHash, err
+			return 0, emptyHash, fmt.Errorf("GetBatchNoByL2Block: failed to get batch number for block %d: %w", midBlockNum, err)
 		}
 
 		if midBlockDataStream != nil &&
@@ -716,12 +716,12 @@ func getUnwindPoint(eriDb erigon_db.ReadOnlyErigonDb, hermezDb state.ReadOnlyHer
 
 	unwindBlockNum, _, err := hermezDb.GetHighestBlockInBatch(batchNum - 1)
 	if err != nil {
-		return 0, emptyHash, 0, err
+		return 0, emptyHash, 0, fmt.Errorf("GetHighestBlockInBatch: batch %d: %w", batchNum-1, err)
 	}
 
 	unwindBlockHash, err := eriDb.ReadCanonicalHash(unwindBlockNum)
 	if err != nil {
-		return 0, emptyHash, 0, err
+		return 0, emptyHash, 0, fmt.Errorf("ReadCanonicalHash: block %d: %w", unwindBlockNum, err)
 	}
 
 	return unwindBlockNum, unwindBlockHash, batchNum, nil
@@ -732,10 +732,10 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 	if cfg.dsQueryClientCreator != nil {
 		dsClient, err = cfg.dsQueryClientCreator(ctx, cfg.zkCfg, latestForkId)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create a datastream client. Reason: %w", err)
+			return nil, nil, fmt.Errorf("dsQueryClientCreator: %w", err)
 		}
 		if err := dsClient.Start(); err != nil {
-			return nil, nil, fmt.Errorf("failed to start a datastream client. Reason: %w", err)
+			return nil, nil, fmt.Errorf("dsClient.Start: %w", err)
 		}
 		stopFn = func() {
 			dsClient.Stop()
