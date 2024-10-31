@@ -651,7 +651,7 @@ var (
 	WitnessFullFlag = cli.BoolFlag{
 		Name:  "zkevm.witness-full",
 		Usage: "Enable/Diable witness full",
-		Value: true,
+		Value: false,
 	}
 	SyncLimit = cli.UintFlag{
 		Name:  "zkevm.sync-limit",
@@ -1168,6 +1168,7 @@ func setNodeUserIdent(ctx *cli.Context, cfg *nodecfg.Config) {
 		cfg.UserIdent = identity
 	}
 }
+
 func setNodeUserIdentCobra(f *pflag.FlagSet, cfg *nodecfg.Config) {
 	if identity := f.String(IdentityFlag.Name, IdentityFlag.Value, IdentityFlag.Usage); identity != nil && len(*identity) > 0 {
 		cfg.UserIdent = *identity
@@ -1485,7 +1486,7 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config, nodeName, datadir string) {
 
 	if ctx.String(ChainFlag.Name) == networkname.DevChainName {
 		// --dev mode can't use p2p networking.
-		//cfg.MaxPeers = 0 // It can have peers otherwise local sync is not possible
+		// cfg.MaxPeers = 0 // It can have peers otherwise local sync is not possible
 		if !ctx.IsSet(ListenPortFlag.Name) {
 			cfg.ListenAddr = ":0"
 		}
@@ -1506,7 +1507,7 @@ func SetNodeConfig(ctx *cli.Context, cfg *nodecfg.Config) {
 
 func SetNodeConfigCobra(cmd *cobra.Command, cfg *nodecfg.Config) {
 	flags := cmd.Flags()
-	//SetP2PConfig(ctx, &cfg.P2P)
+	// SetP2PConfig(ctx, &cfg.P2P)
 	setNodeUserIdentCobra(flags, cfg)
 	setDataDirCobra(flags, cfg)
 }
@@ -1536,7 +1537,7 @@ func setDataDir(ctx *cli.Context, cfg *nodecfg.Config) {
 }
 
 func isPowerOfTwo(n uint64) bool {
-	if n == 0 { //corner case: if n is zero it will also consider as power 2
+	if n == 0 { // corner case: if n is zero it will also consider as power 2
 		return true
 	}
 	return n&(n-1) == 0
@@ -1835,7 +1836,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	cfg.SentinelPort = ctx.Uint64(SentinelPortFlag.Name)
 
 	cfg.Sync.UseSnapshots = ethconfig.UseSnapshotsByChainName(ctx.String(ChainFlag.Name))
-	if ctx.IsSet(SnapshotFlag.Name) { //force override default by cli
+	if ctx.IsSet(SnapshotFlag.Name) { // force override default by cli
 		cfg.Sync.UseSnapshots = ctx.Bool(SnapshotFlag.Name)
 	}
 
