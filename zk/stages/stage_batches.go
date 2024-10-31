@@ -287,7 +287,6 @@ func SpawnStageBatches(
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
 			endLoop = true
 		default:
-			time.Sleep(1 * time.Second)
 		}
 
 		if endLoop {
