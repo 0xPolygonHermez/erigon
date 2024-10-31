@@ -121,6 +121,10 @@ func (c *StreamClient) GetL2BlockByNumber(blockNum uint64) (fullBLock *types.Ful
 			return nil, ErrFailedAttempts
 		}
 		if connected {
+			if err := c.stopStreamingIfStarted(); err != nil {
+				return nil, fmt.Errorf("stopStreamingIfStarted: %w", err)
+			}
+
 			if fullBLock, err = c.getL2BlockByNumber(blockNum); err == nil {
 				break
 			}
@@ -217,13 +221,13 @@ func (c *StreamClient) stopStreamingIfStarted() error {
 	if c.streaming.Load() {
 		c.sendStopCmd()
 		c.streaming.Store(false)
+	}
 
-		// empty the socket buffer
-		for {
-			c.conn.SetReadDeadline(time.Now().Add(100))
-			if _, err := c.readBuffer(100); err != nil {
-				break
-			}
+	// empty the socket buffer
+	for {
+		c.conn.SetReadDeadline(time.Now().Add(100))
+		if _, err := c.readBuffer(100); err != nil {
+			break
 		}
 	}
 

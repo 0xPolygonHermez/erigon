@@ -217,7 +217,9 @@ func SpawnStageBatches(
 	}
 	if highestDSL2Block.L2BlockNumber < stageProgressBlockNo {
 		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding", logPrefix))
-		unwindFn(highestDSL2Block.L2BlockNumber)
+		if _, err := unwindFn(highestDSL2Block.L2BlockNumber); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -619,8 +621,15 @@ func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx
 // 1. queries the latest common ancestor for datastream and db,
 // 2. resolves the unwind block (as the latest block in the previous batch, comparing to the found ancestor block)
 // 3. triggers the unwinding
-func rollback(logPrefix string, eriDb *erigon_db.ErigonDb, hermezDb *hermez_db.HermezDb,
-	dsQueryClient DatastreamClient, latestDSBlockNum uint64, tx kv.RwTx, u stagedsync.Unwinder) (uint64, error) {
+func rollback(
+	logPrefix string,
+	eriDb *erigon_db.ErigonDb,
+	hermezDb *hermez_db.HermezDb,
+	dsQueryClient DatastreamClient,
+	latestDSBlockNum uint64,
+	tx kv.RwTx,
+	u stagedsync.Unwinder,
+) (uint64, error) {
 	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestor(eriDb, hermezDb, dsQueryClient, latestDSBlockNum)
 	if err != nil {
 		return 0, err
