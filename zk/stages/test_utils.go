@@ -87,10 +87,6 @@ func (c *TestDatastreamClient) GetLastWrittenTimeAtomic() *atomic.Int64 {
 	return &c.lastWrittenTimeAtomic
 }
 
-func (c *TestDatastreamClient) GetStreamingAtomic() *atomic.Bool {
-	return &c.streamingAtomic
-}
-
 func (c *TestDatastreamClient) GetProgressAtomic() *atomic.Uint64 {
 	return &c.progress
 }

@@ -218,6 +218,7 @@ func (c *StreamClient) stopStreamingIfStarted() error {
 		c.sendStopCmd()
 		c.streaming.Store(false)
 
+		// empty the socket buffer
 		for {
 			c.conn.SetReadDeadline(time.Now().Add(100))
 			if _, err := c.readBuffer(100); err != nil {
@@ -266,9 +267,7 @@ func (c *StreamClient) getLatestL2Block() (l2Block *types.FullL2Block, err error
 func (c *StreamClient) GetLastWrittenTimeAtomic() *atomic.Int64 {
 	return &c.lastWrittenTime
 }
-func (c *StreamClient) GetStreamingAtomic() *atomic.Bool {
-	return &c.streaming
-}
+
 func (c *StreamClient) GetProgressAtomic() *atomic.Uint64 {
 	return &c.progress
 }
@@ -300,6 +299,10 @@ func (c *StreamClient) Stop() {
 // Returns the current status of the header.
 // If started, terminate the connection.
 func (c *StreamClient) GetHeader() (*types.HeaderEntry, error) {
+	if err := c.stopStreamingIfStarted(); err != nil {
+		return nil, fmt.Errorf("stopStreamingIfStarted: %w", err)
+	}
+
 	if err := c.sendHeaderCmd(); err != nil {
 		return nil, fmt.Errorf("sendHeaderCmd: %w", err)
 	}
@@ -417,6 +420,10 @@ func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
 		default:
 		}
 		if connected {
+			if err := c.stopStreamingIfStarted(); err != nil {
+				return fmt.Errorf("stopStreamingIfStarted: %w", err)
+			}
+
 			if err = c.readAllEntriesToChannel(); err == nil {
 				break
 			}
@@ -442,7 +449,6 @@ func (c *StreamClient) handleSocketError(socketErr error) bool {
 		return false
 	}
 
-	c.streaming.Store(false)
 	c.RenewEntryChannel()
 
 	return true

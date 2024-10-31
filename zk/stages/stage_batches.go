@@ -64,7 +64,6 @@ type DatastreamClient interface {
 	GetEntryChan() *chan interface{}
 	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, error)
 	GetLatestL2Block() (*types.FullL2Block, error)
-	GetStreamingAtomic() *atomic.Bool
 	GetProgressAtomic() *atomic.Uint64
 	Start() error
 	Stop()
