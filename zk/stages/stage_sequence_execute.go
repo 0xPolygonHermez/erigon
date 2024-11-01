@@ -81,6 +81,10 @@ func sequencingBatchStep(
 	}
 	defer sdb.tx.Rollback()
 
+	if err = cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
+		return err
+	}
+
 	executionAt, err := s.ExecutionAt(sdb.tx)
 	if err != nil {
 		return err
@@ -196,10 +200,11 @@ func sequencingBatchStep(
 		}
 	}
 
-	batchTicker, logTicker, blockTicker := prepareTickers(batchContext.cfg)
+	batchTicker, logTicker, blockTicker, infoTreeTicker := prepareTickers(batchContext.cfg)
 	defer batchTicker.Stop()
 	defer logTicker.Stop()
 	defer blockTicker.Stop()
+	defer infoTreeTicker.Stop()
 
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
 
@@ -301,6 +306,17 @@ func sequencingBatchStep(
 				if !batchState.isAnyRecovery() {
 					log.Debug(fmt.Sprintf("[%s] Batch timeout reached", logPrefix))
 					batchTimedOut = true
+				}
+			case <-infoTreeTicker.C:
+				newLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
+				if err != nil {
+					return err
+				}
+				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs))
+				var updatedIndex uint64
+				if len(newLogs) > 1 {
+					updatedIndex = uint64(newLogs[len(newLogs)-1].Index)
+					log.Info(fmt.Sprintf("[%s] Info tree updated to index %d", logPrefix, updatedIndex))
 				}
 			default:
 				if batchState.isLimboRecovery() {

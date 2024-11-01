@@ -11,16 +11,16 @@ import (
 )
 
 type L1InfoTreeCfg struct {
-	db     kv.RwDB
-	zkCfg  *ethconfig.Zk
-	syncer IL1Syncer
+	db      kv.RwDB
+	zkCfg   *ethconfig.Zk
+	updater *l1infotree.Updater
 }
 
-func StageL1InfoTreeCfg(db kv.RwDB, zkCfg *ethconfig.Zk, sync IL1Syncer) L1InfoTreeCfg {
+func StageL1InfoTreeCfg(db kv.RwDB, zkCfg *ethconfig.Zk, updater *l1infotree.Updater) L1InfoTreeCfg {
 	return L1InfoTreeCfg{
-		db:     db,
-		zkCfg:  zkCfg,
-		syncer: sync,
+		db:      db,
+		zkCfg:   zkCfg,
+		updater: updater,
 	}
 }
 
@@ -46,20 +46,11 @@ func SpawnL1InfoTreeStage(
 		defer tx.Rollback()
 	}
 
-	updater := l1infotree.NewUpdater(cfg.zkCfg, cfg.syncer)
-	if err := updater.WarmUp(tx); err != nil {
+	if err := cfg.updater.WarmUp(tx); err != nil {
 		return err
 	}
 
-	defer func() {
-		if funcErr != nil {
-			cfg.syncer.StopQueryBlocks()
-			cfg.syncer.ConsumeQueryBlocks()
-			cfg.syncer.WaitQueryBlocksToFinish()
-		}
-	}()
-
-	allLogs, err := updater.CheckForInfoTreeUpdates(logPrefix, tx)
+	allLogs, err := cfg.updater.CheckForInfoTreeUpdates(logPrefix, tx)
 	if err != nil {
 		return err
 	}

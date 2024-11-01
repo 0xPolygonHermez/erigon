@@ -25,6 +25,9 @@ type Syncer interface {
 	IsDownloading() bool
 	GetHeader(blockNumber uint64) (*types.Header, error)
 	L1QueryHeaders(logs []types.Log) (map[uint64]*types.Header, error)
+	StopQueryBlocks()
+	ConsumeQueryBlocks()
+	WaitQueryBlocksToFinish()
 }
 
 type Updater struct {
@@ -45,7 +48,15 @@ func (u *Updater) GetProgress() uint64 {
 	return u.progress
 }
 
-func (u *Updater) WarmUp(tx kv.RwTx) error {
+func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
+	defer func() {
+		if err != nil {
+			u.syncer.StopQueryBlocks()
+			u.syncer.ConsumeQueryBlocks()
+			u.syncer.WaitQueryBlocksToFinish()
+		}
+	}()
+
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
@@ -72,13 +83,20 @@ func (u *Updater) WarmUp(tx kv.RwTx) error {
 	return nil
 }
 
-func (u *Updater) CheckForInfoTreeUpdates(logPrefix string, tx kv.RwTx) ([]types.Log, error) {
+func (u *Updater) CheckForInfoTreeUpdates(logPrefix string, tx kv.RwTx) (allLogs []types.Log, err error) {
+	defer func() {
+		if err != nil {
+			u.syncer.StopQueryBlocks()
+			u.syncer.ConsumeQueryBlocks()
+			u.syncer.WaitQueryBlocksToFinish()
+		}
+	}()
+
 	hermezDb := hermez_db.NewHermezDb(tx)
 	logChan := u.syncer.GetLogsChan()
 	progressChan := u.syncer.GetProgressMessageChan()
 
 	// first get all the logs we need to process
-	var allLogs []types.Log
 LOOP:
 	for {
 		select {
