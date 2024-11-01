@@ -55,7 +55,12 @@ func SpawnL1InfoTreeStage(
 		return err
 	}
 
-	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(allLogs))
+	var latestIndex uint64
+	latestUpdate := cfg.updater.GetLatestUpdate()
+	if latestUpdate != nil {
+		latestIndex = latestUpdate.Index
+	}
+	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(allLogs), "latestIndex", latestIndex)
 
 	if freshTx {
 		if funcErr = tx.Commit(); funcErr != nil {

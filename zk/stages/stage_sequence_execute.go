@@ -312,12 +312,12 @@ func sequencingBatchStep(
 				if err != nil {
 					return err
 				}
-				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs))
-				var updatedIndex uint64
-				if len(newLogs) > 1 {
-					updatedIndex = uint64(newLogs[len(newLogs)-1].Index)
-					log.Info(fmt.Sprintf("[%s] Info tree updated to index %d", logPrefix, updatedIndex))
+				var latestIndex uint64
+				latest := cfg.infoTreeUpdater.GetLatestUpdate()
+				if latest != nil {
+					latestIndex = latest.Index
 				}
+				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs), "latestIndex", latestIndex)
 			default:
 				if batchState.isLimboRecovery() {
 					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash)

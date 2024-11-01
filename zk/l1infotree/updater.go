@@ -48,6 +48,10 @@ func (u *Updater) GetProgress() uint64 {
 	return u.progress
 }
 
+func (u *Updater) GetLatestUpdate() *zkTypes.L1InfoTreeUpdate {
+	return u.latestUpdate
+}
+
 func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 	defer func() {
 		if err != nil {
