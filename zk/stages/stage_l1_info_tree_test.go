@@ -86,7 +86,8 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	EthermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 
 	l1Syncer := syncer.NewL1Syncer(ctx, []syncer.IEtherman{EthermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
-	cfg := StageL1InfoTreeCfg(db1, &ethconfig.Zk{}, l1Syncer)
+	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer)
+	cfg := StageL1InfoTreeCfg(db1, &ethconfig.Zk{}, updater)
 
 	// act
 	err = SpawnL1InfoTreeStage(s, u, tx, cfg, ctx, log.New())
@@ -94,7 +95,7 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 
 	// assert
 	// check tree
-	tree, err := InitialiseL1InfoTree(hDB)
+	tree, err := l1infotree.InitialiseL1InfoTree(hDB)
 	require.NoError(t, err)
 
 	combined := append(mainnetExitRoot.Bytes(), rollupExitRoot.Bytes()...)
@@ -146,6 +147,5 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	// check SaveStageProgress
 	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
 	require.NoError(t, err)
-
 	assert.Equal(t, latestBlockNumber.Uint64()+1, progress)
 }

@@ -733,14 +733,24 @@ var (
 		Usage: "The multiplier to reduce the SMT depth by when calculating virtual counters",
 		Value: 0.6,
 	}
+	BadBatches = cli.StringFlag{
+		Name:  "zkevm.bad-batches",
+		Usage: "A comma separated list of batch numbers that are known bad on the L1. These will automatically be marked as bad during L1 recovery",
+		Value: "",
+	}
 	InitialBatchCfgFile = cli.StringFlag{
 		Name:  "zkevm.initial-batch.config",
 		Usage: "The file that contains the initial (injected) batch data.",
 		Value: "",
 	}
+	InfoTreeUpdateInterval = cli.DurationFlag{
+		Name:  "zkevm.info-tree-update-interval",
+		Usage: "The interval at which the sequencer checks the L1 for new GER information",
+		Value: 1 * time.Minute,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
-		Usage: "Number of entries to print from the ACL history on node startup",
+		Usage: "Number of entries to print from the ACL history on node start up",
 		Value: 10,
 	}
 	DebugTimers = cli.BoolFlag{
