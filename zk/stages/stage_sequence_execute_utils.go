@@ -37,6 +37,7 @@ import (
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/zk/l1infotree"
 )
 
 const (
@@ -81,6 +82,8 @@ type SequenceBlockCfg struct {
 
 	legacyVerifier *verifier.LegacyExecutorVerifier
 	yieldSize      uint16
+
+	infoTreeUpdater *l1infotree.Updater
 }
 
 func StageSequenceBlocksCfg(
@@ -108,6 +111,7 @@ func StageSequenceBlocksCfg(
 	txPoolDb kv.RwDB,
 	legacyVerifier *verifier.LegacyExecutorVerifier,
 	yieldSize uint16,
+	infoTreeUpdater *l1infotree.Updater,
 ) SequenceBlockCfg {
 
 	return SequenceBlockCfg{
@@ -134,6 +138,7 @@ func StageSequenceBlocksCfg(
 		txPoolDb:         txPoolDb,
 		legacyVerifier:   legacyVerifier,
 		yieldSize:        yieldSize,
+		infoTreeUpdater:  infoTreeUpdater,
 	}
 }
 
@@ -284,12 +289,13 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 	return
 }
 
-func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker) {
+func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker) {
 	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
 	logTicker := time.NewTicker(10 * time.Second)
 	blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
+	infoTreeTicker := time.NewTicker(cfg.zk.InfoTreeUpdateInterval)
 
-	return batchTicker, logTicker, blockTicker
+	return batchTicker, logTicker, blockTicker, infoTreeTicker
 }
 
 // will be called at the start of every new block created within a batch to figure out if there is a new GER

@@ -36,6 +36,10 @@ func SpawnSequencingStage(
 	}
 	defer sdb.tx.Rollback()
 
+	if err = cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
+		return err
+	}
+
 	executionAt, err := s.ExecutionAt(sdb.tx)
 	if err != nil {
 		return err
@@ -149,10 +153,11 @@ func SpawnSequencingStage(
 		}
 	}
 
-	batchTicker, logTicker, blockTicker := prepareTickers(batchContext.cfg)
+	batchTicker, logTicker, blockTicker, infoTreeTicker := prepareTickers(batchContext.cfg)
 	defer batchTicker.Stop()
 	defer logTicker.Stop()
 	defer blockTicker.Stop()
+	defer infoTreeTicker.Stop()
 
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
 
@@ -230,6 +235,17 @@ func SpawnSequencingStage(
 					runLoopBlocks = false
 					break LOOP_TRANSACTIONS
 				}
+			case <-infoTreeTicker.C:
+				newLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
+				if err != nil {
+					return err
+				}
+				var latestIndex uint64
+				latest := cfg.infoTreeUpdater.GetLatestUpdate()
+				if latest != nil {
+					latestIndex = latest.Index
+				}
+				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs), "latestIndex", latestIndex)
 			default:
 				if batchState.isLimboRecovery() {
 					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash)

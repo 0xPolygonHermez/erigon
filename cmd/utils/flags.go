@@ -678,6 +678,16 @@ var (
 		Usage: "A comma separated list of batch numbers that are known bad on the L1. These will automatically be marked as bad during L1 recovery",
 		Value: "",
 	}
+	InfoTreeUpdateInterval = cli.DurationFlag{
+		Name:  "zkevm.info-tree-update-interval",
+		Usage: "The interval at which the sequencer checks the L1 for new GER information",
+		Value: 1 * time.Minute,
+	}
+	ACLPrintHistory = cli.IntFlag{
+		Name:  "acl.print-history",
+		Usage: "Number of entries to print from the ACL history on node start up",
+		Value: 10,
+	}
 	DebugTimers = cli.BoolFlag{
 		Name:  "debug.timers",
 		Usage: "Enable debug timers",

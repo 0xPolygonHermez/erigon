@@ -2,15 +2,9 @@ package stages
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	"math/big"
-
-	"github.com/gateway-fm/cdk-erigon-lib/common"
-	"github.com/gateway-fm/cdk-erigon-lib/kv"
-	"github.com/iden3/go-iden3-crypto/keccak256"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
@@ -19,6 +13,9 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
+	"math/big"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 )
 
 type L1SequencerSyncCfg struct {
@@ -168,45 +165,6 @@ Loop:
 		}
 	}
 
-	return nil
-}
-
-func CreateL1InfoTreeUpdate(l ethTypes.Log, header *ethTypes.Header) (*types.L1InfoTreeUpdate, error) {
-	if len(l.Topics) != 3 {
-		return nil, errors.New("received log for info tree that did not have 3 topics")
-	}
-
-	if l.BlockNumber != header.Number.Uint64() {
-		return nil, errors.New("received log for info tree that did not match the block number")
-	}
-
-	mainnetExitRoot := l.Topics[1]
-	rollupExitRoot := l.Topics[2]
-	combined := append(mainnetExitRoot.Bytes(), rollupExitRoot.Bytes()...)
-	ger := keccak256.Hash(combined)
-	update := &types.L1InfoTreeUpdate{
-		GER:             common.BytesToHash(ger),
-		MainnetExitRoot: mainnetExitRoot,
-		RollupExitRoot:  rollupExitRoot,
-		BlockNumber:     l.BlockNumber,
-		Timestamp:       header.Time,
-		ParentHash:      header.ParentHash,
-	}
-
-	return update, nil
-}
-
-func HandleL1InfoTreeUpdate(
-	hermezDb *hermez_db.HermezDb,
-	update *types.L1InfoTreeUpdate,
-) error {
-	var err error
-	if err = hermezDb.WriteL1InfoTreeUpdate(update); err != nil {
-		return err
-	}
-	if err = hermezDb.WriteL1InfoTreeUpdateToGer(update); err != nil {
-		return err
-	}
 	return nil
 }
 

@@ -82,6 +82,8 @@ type Zk struct {
 
 	TxPoolRejectSmartContractDeployments bool
 
+	ACLPrintHistory        int
+	InfoTreeUpdateInterval time.Duration
 	BadBatches []uint64
 }
 
