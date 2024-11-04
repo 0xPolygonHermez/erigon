@@ -90,7 +90,7 @@ echo "Starting cdk-erigon with modified config"
 kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "nohup cdk-erigon --pprof=true --pprof.addr 0.0.0.0 --config /tmp/cdk-erigon/config.yaml --datadir /home/erigon/data/dynamic-kurtosis-sequencer > /proc/1/fd/1 2>&1 &"
 
 # Wait for cdk-erigon to start
-sleep 30
+sleep 90
 
 echo "Running loadtest using polycli"
 /usr/local/bin/polycli loadtest --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-node-001 rpc)" --private-key "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" --verbosity 600 --requests 2000 --rate-limit 500  --mode uniswapv3 --legacy
