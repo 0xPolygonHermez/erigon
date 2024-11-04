@@ -121,7 +121,7 @@ LOOP:
 	defer ticker.Stop()
 	processed := 0
 
-	tree, err := initialiseL1InfoTree(hermezDb)
+	tree, err := InitialiseL1InfoTree(hermezDb)
 	if err != nil {
 		funcErr = err
 		return funcErr
@@ -234,7 +234,7 @@ func chunkLogs(slice []types.Log, chunkSize int) [][]types.Log {
 	return chunks
 }
 
-func initialiseL1InfoTree(hermezDb *hermez_db.HermezDb) (*l1infotree.L1InfoTree, error) {
+func InitialiseL1InfoTree(hermezDb *hermez_db.HermezDb) (*l1infotree.L1InfoTree, error) {
 	leaves, err := hermezDb.GetAllL1InfoTreeLeaves()
 	if err != nil {
 		return nil, err
