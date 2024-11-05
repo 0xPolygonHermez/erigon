@@ -324,8 +324,8 @@ func SpawnSequencingStage(
 							} else {
 								batchState.newOverflowTransaction()
 								log.Info(fmt.Sprintf("[%s] transaction %s overflow counters", logPrefix, txHash), "count", batchState.overflowTransactions)
-								if batchState.reachedOverflowTransactionLimit() {
-									log.Info(fmt.Sprintf("[%s] closing batch due to counters", logPrefix), "count", batchState.overflowTransactions)
+								if batchState.reachedOverflowTransactionLimit() || cfg.zk.SealBatchImmediatelyOnOverflow {
+									log.Info(fmt.Sprintf("[%s] closing batch due to counters", logPrefix), "count", batchState.overflowTransactions, "immediate", cfg.zk.SealBatchImmediatelyOnOverflow)
 									runLoopBlocks = false
 									break LOOP_TRANSACTIONS
 								}

@@ -192,10 +192,11 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DataStreamWriteTimeout:                 ctx.Duration(utils.DataStreamWriteTimeout.Name),
 		DataStreamInactivityTimeout:            ctx.Duration(utils.DataStreamInactivityTimeout.Name),
 		VirtualCountersSmtReduction:            ctx.Float64(utils.VirtualCountersSmtReduction.Name),
-		
-		ACLPrintHistory:                        ctx.Int(utils.ACLPrintHistory.Name),
-		InfoTreeUpdateInterval:                 ctx.Duration(utils.InfoTreeUpdateInterval.Name),
-		BadBatches:                             badBatches,
+
+		ACLPrintHistory:                ctx.Int(utils.ACLPrintHistory.Name),
+		InfoTreeUpdateInterval:         ctx.Duration(utils.InfoTreeUpdateInterval.Name),
+		BadBatches:                     badBatches,
+		SealBatchImmediatelyOnOverflow: ctx.Bool(utils.SealBatchImmediatelyOnOverflow.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)
