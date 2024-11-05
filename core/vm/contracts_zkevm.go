@@ -310,13 +310,20 @@ func (c *bigModExp_zkevm) RequiredGas(input []byte) uint64 {
 		modBitLen  = mod.BitLen()
 	)
 
-	// special revert case for ZK
-	if baseBitLen == 0 && modBitLen > 8192 {
-		return 0
-	}
+	// zk special cases
+	// - if mod = 0 we consume gas as normal
+	// - if base is 0 and mod < 8192 we consume gas as normal
+	// - if neither of the above are true we check for reverts and return 0 gas fee
 
-	// limit to 8192 bits for base, exp, and mod in ZK - revert if we go over
-	if baseBitLen > 8192 || expBitLen > 8192 || modBitLen > 8192 {
+	if modBitLen == 0 {
+		// consume as normal - will return 0
+	} else if baseBitLen == 0 {
+		if modBitLen > 8192 {
+			return 0
+		} else {
+			// consume as normal - will return 0
+		}
+	} else if baseBitLen > 8192 || expBitLen > 8192 || modBitLen > 8192 {
 		return 0
 	}
 
@@ -407,14 +414,14 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 	)
 
 	if modBitLen == 0 {
-		return common.LeftPadBytes([]byte{}, int(modLen)), nil
+		return []byte{}, nil
 	}
 
 	if baseBitLen == 0 {
 		if modBitLen > 8192 {
 			return nil, ErrExecutionReverted
 		} else {
-			return []byte{}, nil
+			return common.LeftPadBytes([]byte{}, int(modLen)), nil
 		}
 	}
 
