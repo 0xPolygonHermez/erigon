@@ -72,10 +72,10 @@ wait_for_l1_batch() {
 
 
 wait_for_l2_block_number() {
-    local block_number = $1
-    local node_url = $2
-    local latest_block = 0
-    local tries = 0
+    local block_number=$1
+    local node_url=$2
+    local latest_block=0
+    local tries=0
 
     #while latest_block lower than block_number
     #if more than 5 attempts - throw error
