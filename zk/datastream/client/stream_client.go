@@ -128,7 +128,11 @@ func (c *StreamClient) GetL2BlockByNumber(blockNum uint64) (fullBLock *types.Ful
 			if fullBLock, err = c.getL2BlockByNumber(blockNum); err == nil {
 				break
 			}
-			if !errors.Is(err, ErrSocket) {
+
+			if errors.Is(err, types.ErrAlreadyStarted) {
+				// if the client is already started, we can stop the client and try again
+				c.Stop()
+			} else if !errors.Is(err, ErrSocket) {
 				return nil, fmt.Errorf("getL2BlockByNumber: %w", err)
 			}
 
