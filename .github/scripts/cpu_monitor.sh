@@ -19,9 +19,14 @@ get_process_cpu() {
         # Use top in batch mode for each PID to get current CPU usage
         for pid in $pids; do
             # Get process command
-            cmd=$(ps -p $pid -o cmd=)
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                cmd=$(ps -p $pid -o command=)
+                cpu=$(top -l 1 -pid $pid | tail -1 | awk '{print $3}')
+            else
+                cmd=$(ps -p $pid -o cmd=)
+                cpu=$(top -b -n 1 -p $pid | tail -1 | awk '{print $9}')
+            fi
             # Get current CPU usage
-            cpu=$(top -b -n 1 -p $pid | tail -1 | awk '{print $9}')
             echo "$pid $cpu $cmd" >> "$DETAILED_LOG"
         done
     fi
