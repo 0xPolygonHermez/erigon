@@ -274,7 +274,7 @@ func (evm *EVM) call_zkevm(typ OpCode, caller ContractRef, addr libcommon.Addres
 
 		// zk - up to fork 10 we cannot handle a contract code that ends with just a push and nothing to push to the stack
 		// so check for this scenario
-		if !evm.chainConfig.IsForkID10(evm.context.BlockNumber) {
+		if !evm.chainConfig.IsForkID10(evm.Context.BlockNumber) {
 			if code[len(code)-1] == 0x60 {
 				return nil, gas, ErrInvalidCode
 			}
