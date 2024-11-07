@@ -94,7 +94,7 @@ wait_for_l2_block_number() {
         tries=$((tries + 1))
 
         echo "Current block number on $node_url: $latest_block, needed: $block_number. Waiting to try again."
-        sleep 10
+        sleep 60
     done
 }
 
