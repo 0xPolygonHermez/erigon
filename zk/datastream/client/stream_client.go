@@ -227,11 +227,33 @@ func (c *StreamClient) stopStreamingIfStarted() error {
 		c.streaming.Store(false)
 	}
 
-	// empty the socket buffer
-	for {
-		c.conn.SetReadDeadline(time.Now().Add(100))
-		if _, err := c.readBuffer(100); err != nil {
-			break
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			start := time.Now()
+			// No need for SetReadDeadline since we're controlling timeout via channel
+			if _, err := c.readBuffer(100); err != nil {
+				log.Debug("stopStreamingIfStarted buffer read error", "error", err, "duration", time.Since(start))
+				return
+			}
+			log.Debug("stopStreamingIfStarted successful buffer read", "duration", time.Since(start))
+		}
+	}()
+
+	// Wait for either completion or timeout
+	select {
+	case <-done:
+		log.Debug("stopStreamingIfStarted buffer cleared normally")
+	case <-time.After(10 * time.Millisecond):
+		// Force close and reopen the connection to ensure clean state
+		if c.conn != nil {
+			c.conn.Close()
+			c.conn = nil
+			// Reconnect immediately
+			if err := c.Start(); err != nil {
+				log.Warn("Failed to reconnect after buffer clear", "error", err)
+			}
 		}
 	}
 
