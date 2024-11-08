@@ -301,22 +301,46 @@ func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ti
 // will be called at the start of every new block created within a batch to figure out if there is a new GER
 // we can use or not.  In the special case that this is the first block we just return 0 as we need to use the
 // 0 index first before we can use 1+
-func calculateNextL1TreeUpdateToUse(lastInfoIndex uint64, hermezDb *hermez_db.HermezDb, proposedTimestamp uint64) (uint64, *zktypes.L1InfoTreeUpdate, error) {
+func calculateNextL1TreeUpdateToUse(recentlyUsed uint64, hermezDb *hermez_db.HermezDb, proposedTimestamp uint64) (uint64, *zktypes.L1InfoTreeUpdate, error) {
 	// always default to 0 and only update this if the next available index has reached finality
 	var nextL1Index uint64 = 0
 
-	// check if the next index is there and if it has reached finality or not
-	l1Info, err := hermezDb.GetL1InfoTreeUpdate(lastInfoIndex + 1)
+	/*
+		get the progress of the chain so far, then get the latest available data for the next index.
+		If these values are the same info tree update we return 0 as no-change. If the next index is
+		higher we return that one so long as it is valid.
+	*/
+
+	latestIndex, err := hermezDb.GetLatestL1InfoTreeUpdate()
 	if err != nil {
 		return 0, nil, err
 	}
 
-	// ensure that we are above the min timestamp for this index to use it
-	if l1Info != nil && l1Info.Timestamp <= proposedTimestamp {
-		nextL1Index = l1Info.Index
+	if latestIndex == nil || latestIndex.Index == recentlyUsed {
+		// no change
+		return 0, latestIndex, nil
 	}
 
-	return nextL1Index, l1Info, nil
+	// now verify that the latest known index is valid and work backwards until we find one that is
+	// or, we reach the most recently used index or 0
+	for {
+		if latestIndex.Timestamp <= proposedTimestamp {
+			nextL1Index = latestIndex.Index
+			break
+		}
+
+		if latestIndex.Index == 0 {
+			// end of the line
+			return 0, latestIndex, nil
+		}
+
+		latestIndex, err = hermezDb.GetL1InfoTreeUpdate(latestIndex.Index - 1)
+		if err != nil {
+			return 0, nil, err
+		}
+	}
+
+	return nextL1Index, latestIndex, nil
 }
 
 func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, unwinding bool) error {
