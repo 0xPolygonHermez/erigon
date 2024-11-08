@@ -316,9 +316,9 @@ func calculateNextL1TreeUpdateToUse(recentlyUsed uint64, hermezDb *hermez_db.Her
 		return 0, nil, err
 	}
 
-	if latestIndex == nil || latestIndex.Index == recentlyUsed {
+	if latestIndex == nil || latestIndex.Index <= recentlyUsed {
 		// no change
-		return 0, latestIndex, nil
+		return 0, nil, nil
 	}
 
 	// now verify that the latest known index is valid and work backwards until we find one that is
@@ -329,7 +329,7 @@ func calculateNextL1TreeUpdateToUse(recentlyUsed uint64, hermezDb *hermez_db.Her
 			break
 		}
 
-		if latestIndex.Index == 0 {
+		if latestIndex.Index == 0 || latestIndex.Index <= recentlyUsed {
 			// end of the line
 			return 0, latestIndex, nil
 		}
@@ -338,6 +338,11 @@ func calculateNextL1TreeUpdateToUse(recentlyUsed uint64, hermezDb *hermez_db.Her
 		if err != nil {
 			return 0, nil, err
 		}
+
+		if latestIndex == nil {
+			return 0, nil, nil
+		}
+
 	}
 
 	return nextL1Index, latestIndex, nil
