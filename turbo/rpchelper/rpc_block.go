@@ -26,7 +26,7 @@ func GetLatestFinishedBlockNumber(tx kv.Tx) (uint64, error) {
 		}
 	}
 
-	blockNum, err := stages.GetStageProgress(tx, stages.Finish)
+	blockNum, err := stages.GetStageProgress(tx, GetBlockFinishStage())
 	if err != nil {
 		return 0, fmt.Errorf("getting latest block number: %w", err)
 	}

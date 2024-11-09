@@ -217,7 +217,7 @@ func (api *APIImpl) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber
 	defer tx.Rollback()
 
 	// get latest finished block
-	finishedBlock, err := stages.GetStageProgress(tx, stages.Finish)
+	finishedBlock, err := stages.GetStageProgress(tx, rpchelper.GetBlockFinishStage())
 	if err != nil {
 		return nil, err
 	}
