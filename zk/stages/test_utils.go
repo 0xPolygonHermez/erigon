@@ -100,6 +100,7 @@ func (c *TestDatastreamClient) Start() error {
 	return nil
 }
 
-func (c *TestDatastreamClient) Stop() {
+func (c *TestDatastreamClient) Stop() error {
 	c.isStarted = false
+	return nil
 }
