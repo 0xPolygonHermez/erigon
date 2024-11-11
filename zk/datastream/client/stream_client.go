@@ -215,6 +215,9 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 
 			if err != nil && !errors.Is(err, ErrSocket) {
 				return nil, err
+			} else if errors.Is(err, types.ErrAlreadyStarted) {
+				// if the client is already started, we can stop the client and try again
+				c.Stop()
 			}
 		}
 
