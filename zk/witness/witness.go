@@ -330,7 +330,6 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint
 		chainReader := stagedsync.NewChainReaderImpl(g.chainCfg, tx, nil, log.New())
 
 		_, err = core.ExecuteBlockEphemerallyZk(g.chainCfg, &vmConfig, getHashFn, engine, block, tds, trieStateWriter, chainReader, nil, hermezDb, &prevStateRoot)
-
 		if err != nil {
 			return nil, err
 		}
@@ -374,8 +373,8 @@ func (g *Generator) generateMockWitness(batchNum uint64, blocks []*eritypes.Bloc
 
 	if debug {
 		log.Info("Generated mock witness", "batch", batchNum, "witness", mockWitness)
-		for i, block := range blocks {
-			log.Info("Block", "number", i, "number", block.NumberU64(), "hash", block.Hash().Hex())
+		for _, block := range blocks {
+			log.Info("Block", "number", block.NumberU64(), "hash", block.Hash().Hex())
 		}
 	}
 
