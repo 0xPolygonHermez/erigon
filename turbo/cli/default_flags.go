@@ -239,4 +239,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.InfoTreeUpdateInterval,
 	&utils.BadBatches,
 	&utils.SealBatchImmediatelyOnOverflow,
+	&utils.MockWitnessGeneration,
 }

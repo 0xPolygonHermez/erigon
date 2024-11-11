@@ -3,9 +3,8 @@ package cli
 import (
 	"fmt"
 	"math"
-
+	"strconv"
 	"strings"
-
 	"time"
 
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
@@ -14,7 +13,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	utils2 "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/urfave/cli/v2"
-	"strconv"
 )
 
 func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
@@ -197,6 +195,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		InfoTreeUpdateInterval:         ctx.Duration(utils.InfoTreeUpdateInterval.Name),
 		BadBatches:                     badBatches,
 		SealBatchImmediatelyOnOverflow: ctx.Bool(utils.SealBatchImmediatelyOnOverflow.Name),
+		MockWitnessGeneration:          ctx.Bool(utils.MockWitnessGeneration.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

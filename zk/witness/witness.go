@@ -191,6 +191,12 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint
 		log.Info("Generating witness timing", "batch", batchNum, "blockFrom", blocks[0].NumberU64(), "blockTo", blocks[len(blocks)-1].NumberU64(), "taken", diff)
 	}()
 
+	areExecutorUrlsEmpty := len(g.zkConfig.ExecutorUrls) == 0 || g.zkConfig.ExecutorUrls[0] == ""
+	shouldGenerateMockWitness := g.zkConfig.MockWitnessGeneration && areExecutorUrlsEmpty
+	if shouldGenerateMockWitness {
+		return g.generateMockWitness(batchNum, blocks, debug)
+	}
+
 	endBlock := blocks[len(blocks)-1].NumberU64()
 	startBlock := blocks[0].NumberU64()
 
@@ -362,4 +368,17 @@ func getWitnessBytes(witness *trie.Witness, debug bool) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func (g *Generator) generateMockWitness(batchNum uint64, blocks []*eritypes.Block, debug bool) ([]byte, error) {
+	mockWitness := []byte("mockWitness")
+
+	if debug {
+		log.Info("Generated mock witness", "batch", batchNum, "witness", mockWitness)
+		for i, block := range blocks {
+			log.Info("Block", "number", i, "number", block.NumberU64(), "hash", block.Hash().Hex())
+		}
+	}
+
+	return mockWitness, nil
 }
