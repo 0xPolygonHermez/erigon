@@ -66,7 +66,7 @@ type DatastreamClient interface {
 	GetLatestL2Block() (*types.FullL2Block, error)
 	GetProgressAtomic() *atomic.Uint64
 	Start() error
-	Stop()
+	Stop() error
 }
 
 type DatastreamReadRunner interface {
@@ -746,7 +746,9 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 			return nil, nil, fmt.Errorf("dsClient.Start: %w", err)
 		}
 		stopFn = func() {
-			dsClient.Stop()
+			if err := dsClient.Stop(); err != nil {
+				log.Warn("Failed to stop datastream client", "err", err)
+			}
 		}
 	} else {
 		dsClient = cfg.dsClient

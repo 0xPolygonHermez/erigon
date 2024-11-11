@@ -133,7 +133,9 @@ func (c *StreamClient) GetL2BlockByNumber(blockNum uint64) (fullBLock *types.Ful
 
 			if errors.Is(err, types.ErrAlreadyStarted) {
 				// if the client is already started, we can stop the client and try again
-				c.Stop()
+				if errStop := c.Stop(); errStop != nil {
+					log.Warn("failed to send stop command", "error", errStop)
+				}
 			} else if !errors.Is(err, ErrSocket) {
 				return nil, fmt.Errorf("getL2BlockByNumber: %w", err)
 			}
@@ -183,6 +185,10 @@ func (c *StreamClient) getL2BlockByNumber(blockNum uint64) (l2Block *types.FullL
 		return nil, fmt.Errorf("expected block number %d but got %d", blockNum, l2Block.L2BlockNumber)
 	}
 
+	if err := c.Stop(); err != nil {
+		return nil, fmt.Errorf("Stop: %w", err)
+	}
+
 	return l2Block, nil
 }
 
@@ -218,7 +224,9 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 				return nil, err
 			} else if errors.Is(err, types.ErrAlreadyStarted) {
 				// if the client is already started, we can stop the client and try again
-				c.Stop()
+				if errStop := c.Stop(); errStop != nil {
+					log.Warn("failed to send stop command", "error", errStop)
+				}
 			}
 			err = nil
 		}
@@ -281,6 +289,10 @@ func (c *StreamClient) getLatestL2Block() (l2Block *types.FullL2Block, err error
 		return nil, errors.New("no block found")
 	}
 
+	if err := c.Stop(); err != nil {
+		return nil, fmt.Errorf("Stop: %w", err)
+	}
+
 	return l2Block, nil
 }
 
@@ -304,15 +316,15 @@ func (c *StreamClient) Start() error {
 	return nil
 }
 
-func (c *StreamClient) Stop() {
+func (c *StreamClient) Stop() error {
 	if c.conn == nil {
-		return
+		return nil
 	}
 	if err := c.sendStopCmd(); err != nil {
-		log.Warn(fmt.Sprintf("send stop command: %v", err))
+		return fmt.Errorf("sendStopCmd: %w", err)
 	}
-	// c.conn.Close()
-	// c.conn = nil
+
+	return nil
 }
 
 // Command header: Get status
