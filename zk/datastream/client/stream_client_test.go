@@ -50,7 +50,7 @@ func TestStreamClientReadHeaderEntry(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		c := NewClient(context.Background(), "", 0, 2*time.Second, 0)
+		c := NewClient(context.Background(), "", 0, 500*time.Millisecond, 0)
 		server, conn := net.Pipe()
 		defer server.Close()
 		defer c.Stop()
