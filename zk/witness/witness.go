@@ -370,12 +370,17 @@ func getWitnessBytes(witness *trie.Witness, debug bool) ([]byte, error) {
 
 func (g *Generator) generateMockWitness(batchNum uint64, blocks []*eritypes.Block, debug bool) ([]byte, error) {
 	mockWitness := []byte("mockWitness")
+	startBlockNumber := blocks[0].NumberU64()
+	endBlockNumber := blocks[len(blocks)-1].NumberU64()
 
 	if debug {
-		log.Info("Generated mock witness", "batch", batchNum, "witness", mockWitness)
-		for _, block := range blocks {
-			log.Info("Block", "number", block.NumberU64(), "hash", block.Hash().Hex())
-		}
+		log.Info(
+			"Generated mock witness",
+			"witness", mockWitness,
+			"batch", batchNum,
+			"startBlockNumber", startBlockNumber,
+			"endBlockNumber", endBlockNumber,
+		)
 	}
 
 	return mockWitness, nil
