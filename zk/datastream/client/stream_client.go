@@ -142,6 +142,7 @@ func (c *StreamClient) GetL2BlockByNumber(blockNum uint64) (fullBLock *types.Ful
 		time.Sleep(1 * time.Second)
 		connected = c.handleSocketError(err)
 		count++
+		err = nil
 	}
 
 	return fullBLock, nil
@@ -219,6 +220,7 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 				// if the client is already started, we can stop the client and try again
 				c.Stop()
 			}
+			err = nil
 		}
 
 		time.Sleep(1 * time.Second)
