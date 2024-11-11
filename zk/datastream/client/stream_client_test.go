@@ -290,6 +290,7 @@ func TestStreamClientGetLatestL2Block(t *testing.T) {
 	c := NewClient(context.Background(), "", 0, 500*time.Millisecond, 0)
 	c.conn = clientConn
 	c.checkTimeout = 1 * time.Second
+	c.allowStops = false
 	expectedL2Block, _ := createL2BlockAndTransactions(t, 5, 0)
 	l2BlockProto := &types.L2BlockProto{L2Block: expectedL2Block}
 	l2BlockRaw, err := l2BlockProto.Marshal()
@@ -405,6 +406,7 @@ func TestStreamClientGetL2BlockByNumber(t *testing.T) {
 		TotalEntries: 4,
 	}
 	c.conn = clientConn
+	c.allowStops = false
 	c.checkTimeout = 1 * time.Second
 	bookmark := types.NewBookmarkProto(blockNum, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
 	bookmarkRaw, err := bookmark.Marshal()
@@ -487,7 +489,6 @@ func TestStreamClientGetL2BlockByNumber(t *testing.T) {
 				return
 			}
 		}
-
 	}
 
 	go createServerResponses(t, serverConn, bookmarkRaw, l2BlockRaw, l2TxsRaw, l2BlockEndRaw, errCh)

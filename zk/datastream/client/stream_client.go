@@ -58,6 +58,11 @@ type StreamClient struct {
 
 	// keeps track of the latest fork from the stream to assign to l2 blocks
 	currentFork uint64
+
+	// used for testing, during normal execution lots of stop streaming commands are sent
+	// which makes sense for an active server listening for these things but in unit tests
+	// this makes behaviour very unpredictable and hard to test
+	allowStops bool
 }
 
 const (
@@ -317,7 +322,7 @@ func (c *StreamClient) Start() error {
 }
 
 func (c *StreamClient) Stop() error {
-	if c.conn == nil {
+	if c.conn == nil || !c.allowStops {
 		return nil
 	}
 	if err := c.sendStopCmd(); err != nil {
