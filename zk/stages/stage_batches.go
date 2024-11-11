@@ -67,6 +67,7 @@ type DatastreamClient interface {
 	GetProgressAtomic() *atomic.Uint64
 	Start() error
 	Stop() error
+	PrepUnwind()
 }
 
 type DatastreamReadRunner interface {
@@ -630,6 +631,7 @@ func rollback(
 	tx kv.RwTx,
 	u stagedsync.Unwinder,
 ) (uint64, error) {
+	dsQueryClient.PrepUnwind()
 	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestor(eriDb, hermezDb, dsQueryClient, latestDSBlockNum)
 	if err != nil {
 		return 0, err

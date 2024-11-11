@@ -13,6 +13,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/log/v3"
+	"sync"
 )
 
 type StreamType uint64
@@ -49,7 +50,8 @@ type StreamClient struct {
 
 	// atomic
 	lastWrittenTime      atomic.Int64
-	streaming            atomic.Bool
+	mtxStreaming         *sync.Mutex
+	streaming            bool
 	progress             atomic.Uint64
 	stopReadingToChannel atomic.Bool
 
@@ -88,6 +90,7 @@ func NewClient(ctx context.Context, server string, version int, checkTimeout tim
 		streamType:   StSequencer,
 		entryChan:    make(chan interface{}, 100000),
 		currentFork:  uint64(latestDownloadedForkId),
+		mtxStreaming: &sync.Mutex{},
 	}
 
 	return c
@@ -243,13 +246,25 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 	return l2Block, nil
 }
 
+func (c *StreamClient) getStreaming() bool {
+	c.mtxStreaming.Lock()
+	defer c.mtxStreaming.Unlock()
+	return c.streaming
+}
+
+func (c *StreamClient) setStreaming(val bool) {
+	c.mtxStreaming.Lock()
+	defer c.mtxStreaming.Unlock()
+	c.streaming = val
+}
+
 // don't check for errors here, we just need to empty the socket for next reads
 func (c *StreamClient) stopStreamingIfStarted() error {
-	if c.streaming.Load() {
+	if c.getStreaming() {
 		if err := c.sendStopCmd(); err != nil {
 			return fmt.Errorf("sendStopCmd: %w", err)
 		}
-		c.streaming.Store(false)
+		c.setStreaming(false)
 	}
 
 	// empty the socket buffer
@@ -494,7 +509,7 @@ func (c *StreamClient) handleSocketError(socketErr error) bool {
 // reads entries to the end of the stream
 // at end will wait for new entries to arrive
 func (c *StreamClient) readAllEntriesToChannel() (err error) {
-	c.streaming.Store(true)
+	c.setStreaming(true)
 	c.stopReadingToChannel.Store(false)
 
 	var bookmark *types.BookmarkProto
@@ -528,6 +543,8 @@ func (c *StreamClient) initiateDownloadBookmark(bookmark []byte) (*types.ResultE
 	if err := c.sendBookmarkCmd(bookmark, true); err != nil {
 		return nil, fmt.Errorf("sendBookmarkCmd: %w", err)
 	}
+
+	c.setStreaming(true)
 
 	re, err := c.afterStartCommand()
 	if err != nil {
@@ -971,4 +988,12 @@ func (c *StreamClient) resetReadTimeout() error {
 	}
 
 	return nil
+}
+
+// PrepUnwind handles the state of the client prior to searching to the
+// common ancestor block
+func (c *StreamClient) PrepUnwind() {
+	// this is to ensure that the later call to stop streaming if streaming
+	// is activated.
+	c.setStreaming(true)
 }
