@@ -231,8 +231,8 @@ func (c *StreamClient) stopStreamingIfStarted() error {
 
 	// empty the socket buffer
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(100))
-		if _, err := c.readBuffer(100); err != nil {
+		c.conn.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
+		if _, err := readBuffer(c.conn, 1000 /* arbitrary number*/); err != nil {
 			break
 		}
 	}
