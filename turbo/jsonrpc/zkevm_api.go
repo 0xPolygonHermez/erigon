@@ -551,10 +551,13 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, rpcBatchNumber rp
 		batch.Timestamp = types.ArgUint64(block.Time())
 	}
 
-	// if we don't have a datastream available to verify that a batch is actually
-	// closed then we fall back to existing behaviour of checking if the next batch
-	// has any blocks in it
-	if api.datastreamServer != nil {
+	/*
+		if node is a sequencer it won't have the required data stored in the db, so use the datastream
+		server to figure out if the batch is closed, otherwise fall back. This ensures good performance
+		for RPC nodes in daisy chain node which do have a datastream (previous check was testing for
+		presence of datastream server).
+	*/
+	if sequencer.IsSequencer() {
 		highestClosed, err := api.datastreamServer.GetHighestClosedBatchNoCache()
 		if err != nil {
 			return nil, err
@@ -718,7 +721,15 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader,
 	}
 
 	if prevSequence == nil || batchSequence == nil {
-		return nil, fmt.Errorf("failed to get sequence data for batch %d", batchNum)
+		var missing string
+		if prevSequence == nil && batchSequence == nil {
+			missing = "previous and current batch sequences"
+		} else if prevSequence == nil {
+			missing = "previous batch sequence"
+		} else {
+			missing = "current batch sequence"
+		}
+		return nil, fmt.Errorf("failed to get %s for batch %d", missing, batchNum)
 	}
 
 	// get batch range for sequence
@@ -764,6 +775,7 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader,
 	// calculate acc input hash
 	for i := 0; i < int(batchNum-prevSequenceBatch); i++ {
 		accInputHash = accInputHashCalcFn(prevSequenceAccinputHash, i)
+		prevSequenceAccinputHash = *accInputHash
 	}
 
 	return
