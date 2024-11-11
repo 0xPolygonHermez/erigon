@@ -104,3 +104,7 @@ func (c *TestDatastreamClient) Stop() error {
 	c.isStarted = false
 	return nil
 }
+
+func (c *TestDatastreamClient) PrepUnwind() {
+	// do nothing
+}
