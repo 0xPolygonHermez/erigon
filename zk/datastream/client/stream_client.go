@@ -203,15 +203,18 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 			return nil, ErrFailedAttempts
 		}
 		if connected {
-			if err := c.stopStreamingIfStarted(); err != nil {
-				return nil, fmt.Errorf("stopStreamingIfStarted: %w", err)
+			if err = c.stopStreamingIfStarted(); err != nil {
+				err = fmt.Errorf("stopStreamingIfStarted: %w", err)
+			}
+			if err == nil {
+				if l2Block, err = c.getLatestL2Block(); err == nil {
+					break
+				}
+				err = fmt.Errorf("getLatestL2Block: %w", err)
 			}
 
-			if l2Block, err = c.getLatestL2Block(); err == nil {
-				break
-			}
-			if !errors.Is(err, ErrSocket) {
-				return nil, fmt.Errorf("getLatestL2Block: %w", err)
+			if err != nil && !errors.Is(err, ErrSocket) {
+				return nil, err
 			}
 		}
 
@@ -225,7 +228,9 @@ func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error
 // don't check for errors here, we just need to empty the socket for next reads
 func (c *StreamClient) stopStreamingIfStarted() error {
 	if c.streaming.Load() {
-		c.sendStopCmd()
+		if err := c.sendStopCmd(); err != nil {
+			return fmt.Errorf("sendStopCmd: %w", err)
+		}
 		c.streaming.Store(false)
 	}
 
