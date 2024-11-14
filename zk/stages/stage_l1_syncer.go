@@ -24,8 +24,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/types"
 )
 
-//go:generate mockgen -typed=true -destination=./mocks/l1_syncer_mock.go -package=mocks . IL1Syncer
-
 type IL1Syncer interface {
 	// atomic
 	IsSyncStarted() bool
