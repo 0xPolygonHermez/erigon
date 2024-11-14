@@ -316,6 +316,7 @@ func (c *bigModExp_zkevm) RequiredGas(input []byte) uint64 {
 	// - if neither of the above are true we check for reverts and return 0 gas fee
 
 	if modBitLen == 0 {
+		return 0
 		// consume as normal - will return 0
 	} else if baseBitLen == 0 {
 		if modBitLen > 8192 {

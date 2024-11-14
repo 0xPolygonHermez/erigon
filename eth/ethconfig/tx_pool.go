@@ -73,9 +73,13 @@ var DefaultTxPool2Config = func(fullCfg *Config) txpoolcfg.Config {
 	cfg.BlobSlots = fullCfg.TxPool.BlobSlots
 	cfg.TotalBlobPoolLimit = fullCfg.TxPool.TotalBlobPoolLimit
 	cfg.LogEvery = 3 * time.Minute
+	cfg.PurgeEvery = 1 * time.Minute
+	cfg.PurgeDistance = 24 * time.Hour
 	cfg.CommitEvery = 5 * time.Minute
 	cfg.TracedSenders = pool1Cfg.TracedSenders
 	cfg.CommitEvery = pool1Cfg.CommitEvery
+	cfg.PurgeEvery = fullCfg.TxPool.PurgeEvery
+	cfg.PurgeDistance = fullCfg.TxPool.PurgeDistance
 
 	return cfg
 }
