@@ -106,7 +106,15 @@ func ExecuteBlockEphemerallyZk(
 
 		receipt, execResult, err := ApplyTransaction_zkevm(chainConfig, engine, evm, gp, ibs, state.NewNoopWriter(), header, tx, usedGas, effectiveGasPricePercentage, true)
 		if err != nil {
-			return nil, fmt.Errorf("ApplyTransaction: %w", err)
+			if !vmConfig.StatelessExec {
+				return nil, fmt.Errorf("ApplyTransaction_zkevm tx %d from block %d [%v]: %w", txIndex, block.NumberU64(), tx.Hash().Hex(), err)
+			}
+			rejectedTxs = append(rejectedTxs, &RejectedTx{txIndex, err.Error()})
+		} else {
+			includedTxs = append(includedTxs, tx)
+			if !vmConfig.NoReceipts {
+				receipts = append(receipts, receipt)
+			}
 		}
 		if writeTrace {
 			if ftracer, ok := vmConfig.Tracer.(vm.FlushableTracer); ok {
@@ -121,17 +129,6 @@ func ExecuteBlockEphemerallyZk(
 			return nil, fmt.Errorf("ProcessReceiptForBlockExecution: %w", err)
 		}
 
-		if err != nil {
-			if !vmConfig.StatelessExec {
-				return nil, fmt.Errorf("could not apply tx %d from block %d [%v]: %w", txIndex, block.NumberU64(), tx.Hash().Hex(), err)
-			}
-			rejectedTxs = append(rejectedTxs, &RejectedTx{txIndex, err.Error()})
-		} else {
-			includedTxs = append(includedTxs, tx)
-			if !vmConfig.NoReceipts {
-				receipts = append(receipts, receipt)
-			}
-		}
 		if !chainConfig.IsForkID7Etrog(block.NumberU64()) && !chainConfig.IsNormalcy(block.NumberU64()) {
 			if err := ibs.ScalableSetSmtRootHash(roHermezDb); err != nil {
 				return nil, fmt.Errorf("ScalableSetSmtRootHash: %w", err)
