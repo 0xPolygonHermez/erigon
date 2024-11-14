@@ -24,8 +24,9 @@ import (
 	"github.com/ledgerwatch/erigon/zk/types"
 )
 
-type IL1Syncer interface {
+//go:generate mockgen -typed=true -destination=./mocks/l1_syncer_mock.go -package=mocks . IL1Syncer
 
+type IL1Syncer interface {
 	// atomic
 	IsSyncStarted() bool
 	IsDownloading() bool
@@ -46,8 +47,7 @@ type IL1Syncer interface {
 }
 
 var (
-	ErrStateRootMismatch = errors.New("state root mismatch")
-
+	ErrStateRootMismatch      = errors.New("state root mismatch")
 	lastCheckedL1BlockCounter = metrics.GetOrCreateGauge(`last_checked_l1_block`)
 )
 
