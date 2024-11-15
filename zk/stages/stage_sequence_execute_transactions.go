@@ -17,6 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/secp256k1"
 )
 
 func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, bool, error) {
@@ -37,7 +38,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, 0, alreadyYielded); err != nil {
 			return err
 		}
-		yieldedTxs, toRemove, err := extractTransactionsFromSlot(&slots)
+		yieldedTxs, toRemove, err := extractTransactionsFromSlot(&slots, executionAt, cfg)
 		if err != nil {
 			return err
 		}
@@ -53,7 +54,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 	return transactions, allConditionsOk, err
 }
 
-func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Transaction, error) {
+func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *common.Hash, executionAt uint64) ([]types.Transaction, error) {
 	cfg.txPool.LockFlusher()
 	defer cfg.txPool.UnlockFlusher()
 
@@ -68,7 +69,7 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 		if slots != nil {
 			// ignore the toRemove value here, we know the RLP will be sound as we had to read it from the pool
 			// in the first place to get it into limbo
-			transactions, _, err = extractTransactionsFromSlot(slots)
+			transactions, _, err = extractTransactionsFromSlot(slots, executionAt, cfg)
 			if err != nil {
 				return err
 			}
@@ -82,9 +83,11 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 	return transactions, nil
 }
 
-func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, []common.Hash, error) {
+func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg SequenceBlockCfg) ([]types.Transaction, []common.Hash, error) {
 	transactions := make([]types.Transaction, 0, len(slot.Txs))
 	toRemove := make([]common.Hash, 0)
+	signer := types.MakeSigner(cfg.chainConfig, currentHeight, 0)
+	cryptoContext := secp256k1.ContextForThread(1)
 	for idx, txBytes := range slot.Txs {
 		transaction, err := types.DecodeTransaction(txBytes)
 		if err == io.EOF {
@@ -93,12 +96,23 @@ func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, []co
 		if err != nil {
 			// we have a transaction that cannot be decoded or a similar issue.  We don't want to handle
 			// this tx so just WARN about it and remove it from the pool and continue
-			log.Warn("Failed to decode transaction from pool, skipping and removing from pool", "error", err)
+			log.Warn("[extractTransaction] Failed to decode transaction from pool, skipping and removing from pool",
+				"error", err,
+				"id", slot.TxIds[idx])
 			toRemove = append(toRemove, slot.TxIds[idx])
 			continue
 		}
-		var sender common.Address
-		copy(sender[:], slot.Senders.At(idx))
+
+		// now attempt to recover the sender
+		sender, err := signer.SenderWithContext(cryptoContext, transaction)
+		if err != nil {
+			log.Warn("[extractTransaction] Failed to recover sender from transaction, skipping and removing from pool",
+				"error", err,
+				"hash", transaction.Hash())
+			toRemove = append(toRemove, slot.TxIds[idx])
+			continue
+		}
+
 		transaction.SetSender(sender)
 		transactions = append(transactions, transaction)
 	}
