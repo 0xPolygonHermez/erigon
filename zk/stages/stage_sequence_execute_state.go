@@ -13,6 +13,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/l1_data"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
+	"github.com/ledgerwatch/log/v3"
 )
 
 const maximumOverflowTransactionAttempts = 5
