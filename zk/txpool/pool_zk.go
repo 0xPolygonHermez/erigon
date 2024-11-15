@@ -260,6 +260,52 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 	}
 }
 
+func (p *TxPool) RemoveMinedTransactions(ids []common.Hash) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	toDelete := make([]*metaTx, 0)
+
+	p.all.ascendAll(func(mt *metaTx) bool {
+		for _, id := range ids {
+			if bytes.Equal(mt.Tx.IDHash[:], id[:]) {
+				toDelete = append(toDelete, mt)
+				switch mt.currentSubPool {
+				case PendingSubPool:
+					p.pending.Remove(mt)
+				case BaseFeeSubPool:
+					p.baseFee.Remove(mt)
+				case QueuedSubPool:
+					p.queued.Remove(mt)
+				default:
+					//already removed
+				}
+			}
+		}
+		return true
+	})
+
+	for _, mt := range toDelete {
+		p.discardLocked(mt, Mined)
+	}
+}
+
+// discards the transactions that are in overflowZkCoutners from pending
+// executes the discard function on them
+// deletes the tx from the sendersWithChangedState map
+// deletes the discarded txs from the overflowZkCounters
+func (p *TxPool) discardOverflowZkCountersFromPending(pending *PendingPool, discard func(*metaTx, DiscardReason), sendersWithChangedState map[uint64]struct{}) {
+	for _, mt := range p.overflowZkCounters {
+		log.Info("[tx_pool] Removing TX from pending due to counter overflow", "tx", mt.Tx.IDHash)
+		pending.Remove(mt)
+		discard(mt, OverflowZkCounters)
+		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
+		// do not hold on to the discard reason for an OOC issue
+		p.discardReasonsLRU.Remove(string(mt.Tx.IDHash[:]))
+	}
+	p.overflowZkCounters = p.overflowZkCounters[:0]
+}
+
 func (p *TxPool) StartIfNotStarted(ctx context.Context, txPoolDb kv.RoDB, coreTx kv.Tx) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()

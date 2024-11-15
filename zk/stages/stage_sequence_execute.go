@@ -256,13 +256,17 @@ func SpawnSequencingStage(
 
 					var allConditionsOK bool
 					var newTransactions []types.Transaction
+					var newIds []common.Hash
 
-					newTransactions, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
+					newTransactions, newIds, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 					if err != nil {
 						return err
 					}
 
 					batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion, newTransactions...)
+					for idx, tx := range newTransactions {
+						batchState.blockState.transactionHashesToSlots[tx.Hash()] = newIds[idx]
+					}
 
 					if len(batchState.blockState.transactionsForInclusion) == 0 {
 						if allConditionsOK {
@@ -367,6 +371,8 @@ func SpawnSequencingStage(
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
 			return err
 		}
+
+		cfg.txPool.RemoveMinedTransactions(batchState.blockState.builtBlockElements.txSlots)
 
 		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()

@@ -21,10 +21,11 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, bool, error) {
+func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, []common.Hash, bool, error) {
 	cfg.txPool.LockFlusher()
 	defer cfg.txPool.UnlockFlusher()
 
+	var ids []common.Hash
 	var transactions []types.Transaction
 	var allConditionsOk bool
 	var err error
@@ -39,7 +40,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, alreadyYielded); err != nil {
 			return err
 		}
-		yieldedTxs, toRemove, err := extractTransactionsFromSlot(&slots)
+		yieldedTxs, yieldedIds, toRemove, err := extractTransactionsFromSlot(&slots)
 		if err != nil {
 			return err
 		}
@@ -47,12 +48,13 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 			cfg.txPool.MarkForDiscardFromPendingBest(txId)
 		}
 		transactions = append(transactions, yieldedTxs...)
+		ids = append(ids, yieldedIds...)
 		return nil
 	}); err != nil {
-		return nil, allConditionsOk, err
+		return nil, nil, allConditionsOk, err
 	}
 
-	return transactions, allConditionsOk, err
+	return transactions, ids, allConditionsOk, err
 }
 
 func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *common.Hash) ([]types.Transaction, error) {
@@ -70,7 +72,7 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 		if slots != nil {
 			// ignore the toRemove value here, we know the RLP will be sound as we had to read it from the pool
 			// in the first place to get it into limbo
-			transactions, _, err = extractTransactionsFromSlot(slots)
+			transactions, _, _, err = extractTransactionsFromSlot(slots)
 			if err != nil {
 				return err
 			}
@@ -84,7 +86,8 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 	return transactions, nil
 }
 
-func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, []common.Hash, error) {
+func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, []common.Hash, []common.Hash, error) {
+	ids := make([]common.Hash, 0, len(slot.TxIds))
 	transactions := make([]types.Transaction, 0, len(slot.Txs))
 	toRemove := make([]common.Hash, 0)
 	reader := bytes.NewReader([]byte{})
@@ -107,8 +110,9 @@ func extractTransactionsFromSlot(slot *types2.TxsRlp) ([]types.Transaction, []co
 		copy(sender[:], slot.Senders.At(idx))
 		transaction.SetSender(sender)
 		transactions = append(transactions, transaction)
+		ids = append(ids, slot.TxIds[idx])
 	}
-	return transactions, toRemove, nil
+	return transactions, ids, toRemove, nil
 }
 
 func attemptAddTransaction(
