@@ -720,13 +720,6 @@ func (api *ZkEvmAPIImpl) fullTxBlockData(ctx context.Context, tx kv.Tx, hermezDb
 	return batchBlocksJson, batchTransactionsJson, nil
 }
 
-//type SequenceReader interface {
-//	GetRangeSequencesByBatch(batchNo uint64) (*zktypes.L1BatchInfo, *zktypes.L1BatchInfo, error)
-//	GetForkId(batchNo uint64) (uint64, error)
-//
-//	///  TODO: get the db stuff we need
-//}
-
 func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, tx kv.Tx, db *hermez_db.HermezDbReader, batchNum uint64) (accInputHash *common.Hash, err error) {
 	// get batch sequence
 	prevSequence, batchSequence, err := db.GetRangeSequencesByBatch(batchNum)
