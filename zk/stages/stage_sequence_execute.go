@@ -40,7 +40,7 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	highestBatchInDs, err := cfg.datastreamServer.GetHighestBatchNumber()
+	highestBatchInDs, err := cfg.dataStreamServer.GetHighestBatchNumber()
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func sequencingBatchStep(
 			return err
 		}
 
-		if err = cfg.datastreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
+		if err = cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
 			return err
 		}
 		if err = stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
@@ -336,7 +336,7 @@ func sequencingBatchStep(
 				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs), "latestIndex", latestIndex)
 			default:
 				if batchState.isLimboRecovery() {
-					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash)
+					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash, executionAt)
 					if err != nil {
 						return err
 					}
@@ -346,10 +346,19 @@ func sequencingBatchStep(
 						return err
 					}
 				} else if !batchState.isL1Recovery() {
+
 					var allConditionsOK bool
-					batchState.blockState.transactionsForInclusion, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
+					var newTransactions []types.Transaction
+					var newIds []common.Hash
+
+					newTransactions, newIds, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 					if err != nil {
 						return err
+					}
+
+					batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion, newTransactions...)
+					for idx, tx := range newTransactions {
+						batchState.blockState.transactionHashesToSlots[tx.Hash()] = newIds[idx]
 					}
 
 					if len(batchState.blockState.transactionsForInclusion) == 0 {
@@ -369,6 +378,7 @@ func sequencingBatchStep(
 					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 				}
 
+				badTxIndexes := make([]int, 0)
 				for i, transaction := range batchState.blockState.transactionsForInclusion {
 					txHash := transaction.Hash()
 					effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
@@ -403,9 +413,12 @@ func sequencingBatchStep(
 							continue
 						}
 
-						// if running in normal operation mode and error != nil then just allow the code to continue
-						// It is safe because this approach ensures that the problematic transaction (the one that caused err != nil to be returned) is kept in yielded
-						// Each transaction in yielded will be reevaluated at the end of each batch
+						// if we have an error at this point something has gone wrong, either in the pool or otherwise
+						// to stop the pool growing and hampering further processing of good transactions here
+						// we mark it for being discarded
+						log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
+						badTxIndexes = append(badTxIndexes, i)
+						batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
 					}
 
 					switch anyOverflow {
@@ -492,6 +505,12 @@ func sequencingBatchStep(
 					}
 				}
 
+				// remove transactions that have been marked for removal
+				for i := len(badTxIndexes) - 1; i >= 0; i-- {
+					idx := badTxIndexes[i]
+					batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion[:idx], batchState.blockState.transactionsForInclusion[idx+1:]...)
+				}
+
 				if batchState.isL1Recovery() {
 					// just go into the normal loop waiting for new transactions to signal that the recovery
 					// has finished as far as it can go
@@ -512,6 +531,9 @@ func sequencingBatchStep(
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
 			return err
 		}
+
+		cfg.txPool.RemoveMinedTransactions(batchState.blockState.builtBlockElements.txSlots)
+		cfg.txPool.RemoveMinedTransactions(batchState.blockState.transactionsToDiscard)
 
 		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()

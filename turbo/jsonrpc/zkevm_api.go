@@ -16,7 +16,6 @@ import (
 
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
@@ -46,6 +45,8 @@ import (
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
+	"github.com/ledgerwatch/erigon/core/systemcontracts"
+	"math"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -94,7 +95,7 @@ type ZkEvmAPIImpl struct {
 	l1Syncer         *syncer.L1Syncer
 	l2SequencerUrl   string
 	semaphores       map[string]chan struct{}
-	datastreamServer *server.DataStreamServer
+	datastreamServer server.DataStreamServer
 }
 
 func (api *ZkEvmAPIImpl) initializeSemaphores(functionLimits map[string]int) {
@@ -115,13 +116,8 @@ func NewZkEvmAPI(
 	zkConfig *ethconfig.Config,
 	l1Syncer *syncer.L1Syncer,
 	l2SequencerUrl string,
-	datastreamServer *datastreamer.StreamServer,
+	dataStreamServer server.DataStreamServer,
 ) *ZkEvmAPIImpl {
-
-	var streamServer *server.DataStreamServer
-	if datastreamServer != nil {
-		streamServer = server.NewDataStreamServer(datastreamServer, zkConfig.Zk.L2ChainId)
-	}
 
 	a := &ZkEvmAPIImpl{
 		ethApi:           base,
@@ -130,7 +126,7 @@ func NewZkEvmAPI(
 		config:           zkConfig,
 		l1Syncer:         l1Syncer,
 		l2SequencerUrl:   l2SequencerUrl,
-		datastreamServer: streamServer,
+		datastreamServer: dataStreamServer,
 	}
 
 	a.initializeSemaphores(map[string]int{
@@ -735,6 +731,11 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader,
 		return nil, fmt.Errorf("failed to get sequence range data for batch %d: %w", batchNum, err)
 	}
 
+	// if we are asking for genesis return 0x0..0
+	if batchNum == 0 && prevSequence.BatchNo == 0 {
+		return &common.Hash{}, nil
+	}
+
 	if prevSequence == nil || batchSequence == nil {
 		var missing string
 		if prevSequence == nil && batchSequence == nil {
@@ -745,16 +746,6 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader,
 			missing = "current batch sequence"
 		}
 		return nil, fmt.Errorf("failed to get %s for batch %d", missing, batchNum)
-	}
-
-	// if we are asking for the injected batch or genesis return 0x0..0
-	if (batchNum == 0 || batchNum == 1) && prevSequence.BatchNo == 0 {
-		return &common.Hash{}, nil
-	}
-
-	// if prev is 0, set to 1 (injected batch)
-	if prevSequence.BatchNo == 0 {
-		prevSequence.BatchNo = 1
 	}
 
 	// get batch range for sequence
@@ -793,11 +784,8 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader,
 		return nil, fmt.Errorf("batch %d is out of range of sequence calldata", batchNum)
 	}
 
-	accInputHash = &prevSequenceAccinputHash
-	if prevSequenceBatch == 0 {
-		return
-	}
 	// calculate acc input hash
+	accInputHash = &prevSequenceAccinputHash
 	for i := 0; i < int(batchNum-prevSequenceBatch); i++ {
 		accInputHash = accInputHashCalcFn(prevSequenceAccinputHash, i)
 		prevSequenceAccinputHash = *accInputHash
@@ -1023,6 +1011,7 @@ func (api *ZkEvmAPIImpl) buildGenerator(ctx context.Context, tx kv.Tx, witnessMo
 		chainConfig,
 		api.config.Zk,
 		api.ethApi._engine,
+		api.config.WitnessContractInclusion,
 	)
 
 	fullWitness := false
@@ -1709,7 +1698,31 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		ibs.GetState(address, &key, value)
 	}
 
-	rl, err := tds.ResolveSMTRetainList()
+	blockNumber, _, _, err := rpchelper.GetBlockNumber(blockNrOrHash, tx, api.filters)
+	if err != nil {
+		return nil, err
+	}
+
+	chainCfg, err := api.chainConfig(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	plainState := state.NewPlainState(tx, blockNumber, systemcontracts.SystemContractCodeLookup[chainCfg.ChainName])
+	defer plainState.Close()
+
+	inclusion := make(map[libcommon.Address][]libcommon.Hash)
+	for _, contract := range zkapi.config.WitnessContractInclusion {
+		err = plainState.ForEachStorage(contract, libcommon.Hash{}, func(key, secKey libcommon.Hash, value uint256.Int) bool {
+			inclusion[contract] = append(inclusion[contract], key)
+			return false
+		}, math.MaxInt64)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rl, err := tds.ResolveSMTRetainList(inclusion)
 	if err != nil {
 		return nil, err
 	}

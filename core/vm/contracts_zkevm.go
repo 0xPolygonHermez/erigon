@@ -396,18 +396,32 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 		baseLen = new(big.Int).SetBytes(getData(input, 0, 32)).Uint64()
 		expLen  = new(big.Int).SetBytes(getData(input, 32, 32)).Uint64()
 		modLen  = new(big.Int).SetBytes(getData(input, 64, 32)).Uint64()
+		base    = new(big.Int).SetBytes(getData(input, 0, baseLen))
+		exp     = new(big.Int).SetBytes(getData(input, baseLen, expLen))
+		mod     = new(big.Int).SetBytes(getData(input, baseLen+expLen, modLen))
 	)
-	if len(input) > 96 {
-		input = input[96:]
-	} else {
-		input = input[:0]
+
+	// Extract `base`, `exp`, and `mod` with padding as needed
+	baseData := getData(input, 96, uint64(baseLen))
+	if uint64(len(baseData)) < baseLen {
+		baseData = common.RightPadBytes(baseData, int(baseLen))
 	}
+	base.SetBytes(baseData)
+
+	expData := getData(input, 96+uint64(baseLen), uint64(expLen))
+	if uint64(len(expData)) < expLen {
+		expData = common.RightPadBytes(expData, int(expLen))
+	}
+	exp.SetBytes(expData)
+
+	modData := getData(input, 96+uint64(baseLen)+uint64(expLen), uint64(modLen))
+	if uint64(len(modData)) < modLen {
+		modData = common.RightPadBytes(modData, int(modLen))
+	}
+	mod.SetBytes(modData)
 
 	// Retrieve the operands and execute the exponentiation
 	var (
-		base       = new(big.Int).SetBytes(getData(input, 0, baseLen))
-		exp        = new(big.Int).SetBytes(getData(input, baseLen, expLen))
-		mod        = new(big.Int).SetBytes(getData(input, baseLen+expLen, modLen))
 		v          []byte
 		baseBitLen = base.BitLen()
 		expBitLen  = exp.BitLen()
@@ -415,7 +429,7 @@ func (c *bigModExp_zkevm) Run(input []byte) ([]byte, error) {
 	)
 
 	if modBitLen == 0 {
-		return []byte{}, nil
+		return common.LeftPadBytes([]byte{}, int(modLen)), nil
 	}
 
 	if baseBitLen == 0 {
