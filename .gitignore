@@ -115,3 +115,4 @@ vendor
 **/cover.html
 
 datadir/*
+zk/tests/unwinds/datastream/hermez-dynamic-integration8-datastream

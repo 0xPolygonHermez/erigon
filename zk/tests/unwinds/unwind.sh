@@ -11,12 +11,22 @@
 # 8. dump the data
 # 9. compare the dumps at the unwind level and tip level
 
+# pre-requisites:
+# brew install coreutils
+
+
 dataPath="./datadir"
+datastreamPath="zk/tests/unwinds/datastream"
+datastreamZipFileName="./datastream-net8-upto-11318-101.zip"
 firstStop=11204
 stopBlock=11315
 unwindBatch=70
 firstTimeout=300s
 secondTimeout=300s
+
+pushd $datastreamPath
+    tar -xzf $datastreamZipFileName
+popd
 
 rm -rf "$dataPath/rpc-datadir"
 rm -rf "$dataPath/phase1-dump1"

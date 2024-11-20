@@ -19,15 +19,22 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-
+      # remove sudo to run locally
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
-        run: sudo apt update && sudo apt install build-essential
+        run: sudo apt update && sudo apt install -y build-essential
 
+      # Comment this section to run locally
       - name: Build
         run: |
           cd ./cdk-erigon
           make cdk-erigon
+
+      # uncomment this proxy to avoid ceritificate issues locally
+      # - name: Set GOPROXY to direct
+      #   run: |
+      #     export GOPROXY=direct
+      #     export GOSUMDB=off
 
       - name: Prepare configs
         run: |
