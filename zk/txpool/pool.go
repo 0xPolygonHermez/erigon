@@ -1855,12 +1855,23 @@ func (p *TxPool) purge() {
 		if mt.created < cutOff {
 			toDelete = append(toDelete, mt)
 		}
-
-		return false
+		return true
 	})
 
 	for _, mt := range toDelete {
+		switch mt.currentSubPool {
+		case PendingSubPool:
+			p.pending.Remove(mt)
+		case BaseFeeSubPool:
+			p.baseFee.Remove(mt)
+		case QueuedSubPool:
+			p.queued.Remove(mt)
+		default:
+			//already removed
+		}
+
 		p.discardLocked(mt, Expired)
+
 		// do not hold on to the discard reason as we're purging it completely from the pool
 		p.discardReasonsLRU.Remove(string(mt.Tx.IDHash[:]))
 
