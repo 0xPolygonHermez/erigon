@@ -59,7 +59,6 @@ func TestStreamClientReadHeaderEntry(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			go func() {
 				server.Write(testCase.input)
-				server.Close()
 			}()
 
 			header, err := c.readHeaderEntry()
@@ -127,7 +126,6 @@ func TestStreamClientReadResultEntry(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			go func() {
 				server.Write(testCase.input)
-				server.Close()
 			}()
 
 			result, err := c.readResultEntry([]byte{1})

@@ -21,8 +21,8 @@ datastreamZipFileName="./datastream-net8-upto-11318-101.zip"
 firstStop=11204
 stopBlock=11315
 unwindBatch=70
-firstTimeout=450s
-secondTimeout=45s
+firstTimeout=30s
+secondTimeout=30s
 
 pushd $datastreamPath
     tar -xzf $datastreamZipFileName
@@ -49,6 +49,14 @@ go run ./zk/debug_tools/datastream-host --file="$(pwd)/zk/tests/unwinds/datastre
 sleep 10
 
 echo -e '\nStarting erigon \n'
+./build/bin/cdk-erigon \
+    --datadir="$dataPath/rpc-datadir" \
+    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --debug.limit=${firstStop} \
+    --zkevm.sync-limit=${firstStop}
+
+echo -e '\n Erigon - finished syncing, running now with timeout \n'
+
 # run erigon for a while to sync to the unwind point to capture the dump
 timeout $firstTimeout ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
