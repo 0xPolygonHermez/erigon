@@ -281,7 +281,11 @@ func SpawnStageBatches(
 				if err == ErrorTriggeredUnwind {
 					return nil
 				}
-				return fmt.Errorf("ProcessEntry: %w", err)
+				// if it isn't a skipped block error, return the error
+				// if it is a skipped block, set the dsclient progress back and continue
+				if !errors.Is(err, ErrorSkippedBlock) {
+					return fmt.Errorf("ProcessEntry: %w", err)
+				}
 			}
 			dsClientProgress.Store(batchProcessor.LastBlockHeight())
 		case <-ctx.Done():

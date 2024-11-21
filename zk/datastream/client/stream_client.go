@@ -510,7 +510,9 @@ func (c *StreamClient) handleSocketError(socketErr error) bool {
 // at end will wait for new entries to arrive
 func (c *StreamClient) readAllEntriesToChannel() (err error) {
 	defer func() {
-		c.setStreaming(false)
+		if err != nil {
+			c.setStreaming(false)
+		}
 	}()
 
 	c.setStreaming(true)
@@ -542,7 +544,13 @@ func (c *StreamClient) readAllEntriesToChannel() (err error) {
 }
 
 // runs the prerequisites for entries download
-func (c *StreamClient) initiateDownloadBookmark(bookmark []byte) (*types.ResultEntry, error) {
+func (c *StreamClient) initiateDownloadBookmark(bookmark []byte) (re *types.ResultEntry, err error) {
+	defer func() {
+		if err != nil {
+			c.setStreaming(false)
+		}
+	}()
+
 	// send CmdStartBookmark command
 	if err := c.sendBookmarkCmd(bookmark, true); err != nil {
 		return nil, fmt.Errorf("sendBookmarkCmd: %w", err)
@@ -550,7 +558,7 @@ func (c *StreamClient) initiateDownloadBookmark(bookmark []byte) (*types.ResultE
 
 	c.setStreaming(true)
 
-	re, err := c.afterStartCommand()
+	re, err = c.afterStartCommand()
 	if err != nil {
 		return re, fmt.Errorf("afterStartCommand: %w", err)
 	}
