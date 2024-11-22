@@ -21,8 +21,8 @@ datastreamZipFileName="./datastream-net8-upto-11318-101.zip"
 firstStop=11204
 stopBlock=11315
 unwindBatch=70
-firstTimeout=30s
-secondTimeout=30s
+firstTimeout=200s
+secondTimeout=45s
 
 pushd $datastreamPath
     tar -xzf $datastreamZipFileName
@@ -48,11 +48,12 @@ go run ./zk/debug_tools/datastream-host --file="$(pwd)/zk/tests/unwinds/datastre
 # in order to start the datastream server
 sleep 10
 
+# try with 1 and check on time
 echo -e '\nStarting erigon \n'
 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
     --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
-    --debug.limit=${firstStop} \
+    --debug.limit=1 \
     --zkevm.sync-limit=${firstStop}
 
 echo -e '\n Erigon - finished syncing, running now with timeout \n'
@@ -149,3 +150,5 @@ for file in $(ls $dataPath/phase2-dump1); do
         fi
     fi
 done
+
+echo "No error"

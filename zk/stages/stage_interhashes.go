@@ -105,11 +105,15 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	///// DEBUG BISECT /////
 	defer func() {
 		if cfg.zk.DebugLimit > 0 {
+			log.Info(fmt.Sprintf("[%s] Debug limits", logPrefix), "Limit", cfg.zk.DebugLimit, "TO", to, "Err is nil ?", err == nil)
 			if err != nil {
 				log.Error("Hashing Failed", "block", to, "err", err)
 				os.Exit(1)
+				// TODO,
+				// } else if to >= cfg.zk.DebugLimit {  never happens. line 112, zk/stages/stage_interhashes.go
+				// find where it's not allowing the block to go to the next one.
 			} else if to >= cfg.zk.DebugLimit {
-				log.Info(fmt.Sprintf("[%s] Debug limit reached", logPrefix), cfg.zk.DebugLimit)
+				log.Info(fmt.Sprintf("[%s] Debug limit reached", logPrefix))
 				tx.Commit()
 				os.Exit(0)
 			}
