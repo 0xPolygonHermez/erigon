@@ -162,10 +162,6 @@ db-tools:
 
 ## test-unwind:                       run the unwind tests
 test-unwind:
-	@if ! command -v timeout >/dev/null 2>&1; then \
-		echo "Please install coreutils"; \
-		exit 1; \
-	fi
 	make cdk-erigon
 	./zk/tests/unwinds/unwind.sh
 

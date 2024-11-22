@@ -27,6 +27,8 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/log/v3"
+	"os"
+	"syscall"
 )
 
 const (
@@ -151,10 +153,19 @@ func SpawnStageBatches(
 	}
 
 	//// BISECT ////
-	if cfg.zkCfg.DebugLimit > 0 && stageProgressBlockNo > cfg.zkCfg.DebugLimit {
-		log.Info(fmt.Sprintf("[%s] Debug limit reached", logPrefix), "stageProgressBlockNo", stageProgressBlockNo, "debugLimit", cfg.zkCfg.DebugLimit)
-		time.Sleep(2 * time.Second)
-		return nil
+	if cfg.zkCfg.DebugLimit > 0 {
+		finishProg, err := stages.GetStageProgress(tx, stages.Finish)
+		if err != nil {
+		}
+		if finishProg >= cfg.zkCfg.DebugLimit {
+			log.Info(fmt.Sprintf("[%s] Debug limit reached", logPrefix), "finishProg", finishProg, "debugLimit", cfg.zkCfg.DebugLimit)
+			syscall.Kill(os.Getpid(), syscall.SIGINT)
+		}
+
+		if stageProgressBlockNo >= cfg.zkCfg.DebugLimit {
+			log.Info(fmt.Sprintf("[%s] Debug limit reached", logPrefix), "stageProgressBlockNo", stageProgressBlockNo, "debugLimit", cfg.zkCfg.DebugLimit)
+			return nil
+		}
 	}
 
 	// this limit is blocknumber not included, so up to limit-1
@@ -276,6 +287,11 @@ func SpawnStageBatches(
 		// if both download routine stopped and channel empty - stop loop
 		select {
 		case entry := <-*entryChan:
+			// DEBUG LIMIT - don't write more than we need to
+			if cfg.zkCfg.DebugLimit > 0 && batchProcessor.LastBlockHeight() >= cfg.zkCfg.DebugLimit {
+				endLoop = true
+				break
+			}
 			if endLoop, err = batchProcessor.ProcessEntry(entry); err != nil {
 				// if we triggered an unwind somewhere we need to return from the stage
 				if err == ErrorTriggeredUnwind {
