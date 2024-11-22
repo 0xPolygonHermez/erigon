@@ -159,6 +159,17 @@ db-tools:
 	rm -rf vendor
 	@echo "Run \"$(GOBIN)/mdbx_stat -h\" to get info about mdbx db file."
 
+
+## test-unwind:                       run the unwind tests
+test-unwind:
+	@if ! command -v timeout >/dev/null 2>&1; then \
+		echo "Please install coreutils"; \
+		exit 1; \
+	fi
+	make cdk-erigon
+	./zk/tests/unwinds/unwind.sh
+
+
 test-erigon-lib:
 	@cd erigon-lib && $(MAKE) test
 
