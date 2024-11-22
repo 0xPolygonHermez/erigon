@@ -34,11 +34,6 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Install yq
-        run: |
-          sudo curl -L https://github.com/mikefarah/yq/releases/download/v4.44.2/yq_linux_amd64 -o /usr/local/bin/yq
-          sudo chmod +x /usr/local/bin/yq
-          /usr/local/bin/yq --version
       - name: Install polycli
         run: |
           tmp_dir=$(mktemp -d) && curl -L https://github.com/0xPolygon/polygon-cli/releases/download/v0.1.48/polycli_v0.1.48_linux_amd64.tar.gz | tar -xz -C "$tmp_dir" && mv "$tmp_dir"/* /usr/local/bin/polycli && rm -rf "$tmp_dir"
@@ -56,10 +51,13 @@ jobs:
           sed -i '/sentry.drop-useless-peers:/d' templates/cdk-erigon/config.yml
           sed -i '/zkevm.pool-manager-url/d' templates/cdk-erigon/config.yml
           sed -i '/zkevm.l2-datastreamer-timeout:/d' templates/cdk-erigon/config.yml
-      - name: Configure Kurtosis CDK
+
+      - name: Create params.yml overrides
         working-directory: ./kurtosis-cdk
         run: |
-          /usr/local/bin/yq -i '.args.cdk_erigon_node_image = "cdk-erigon:local"' params.yml
+          echo 'args:' > params.yml
+          echo '  cdk_erigon_node_image: cdk-erigon:local' >> params.yml
+
       - name: Deploy Kurtosis CDK package
         working-directory: ./kurtosis-cdk
         run: kurtosis run --enclave cdk-v1 --args-file params.yml --image-download always .
@@ -80,7 +78,7 @@ jobs:
         run: |
           mkdir -p ci_logs
           cd ci_logs
-          kurtosis service logs cdk-v1 cdk-erigon-node-001 --all > cdk-erigon-node-001.log
+          kurtosis service logs cdk-v1 cdk-erigon-rpc-001 --all > cdk-erigon-rpc-001.log
           kurtosis service logs cdk-v1 cdk-erigon-sequencer-001 --all > cdk-erigon-sequencer-001.log
           kurtosis service logs cdk-v1 zkevm-agglayer-001 --all > zkevm-agglayer-001.log
           kurtosis service logs cdk-v1 zkevm-prover-001 --all > zkevm-prover-001.log
