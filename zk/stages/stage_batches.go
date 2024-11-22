@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	STAGE_PROGRESS_SAVE    = 3000000
+	STAGE_PROGRESS_SAVE    = 100_000
 	NEW_BLOCKS_ON_DS_LIMIT = 10000
 )
 
@@ -68,6 +68,7 @@ type DatastreamClient interface {
 	Start() error
 	Stop() error
 	PrepUnwind()
+	HandleStart() error
 }
 
 type DatastreamReadRunner interface {
@@ -184,6 +185,10 @@ func SpawnStageBatches(
 	}
 	defer stopDsClient()
 
+	if err := dsQueryClient.HandleStart(); err != nil {
+		return err
+	}
+
 	var highestDSL2Block *types.FullL2Block
 	newBlockCheckStartTIme := time.Now()
 	for {
@@ -259,8 +264,9 @@ func SpawnStageBatches(
 	}
 
 	// start routine to download blocks and push them in a channel
+	errorChan := make(chan struct{})
 	dsClientRunner := NewDatastreamClientRunner(dsQueryClient, logPrefix)
-	dsClientRunner.StartRead()
+	dsClientRunner.StartRead(errorChan)
 	defer dsClientRunner.StopRead()
 
 	entryChan := dsQueryClient.GetEntryChan()
@@ -275,6 +281,9 @@ func SpawnStageBatches(
 		// if download routine finished, should continue to read from channel until it's empty
 		// if both download routine stopped and channel empty - stop loop
 		select {
+		case <-errorChan:
+			log.Warn("Error in datastream client, stopping consumption")
+			endLoop = true
 		case entry := <-*entryChan:
 			if endLoop, err = batchProcessor.ProcessEntry(entry); err != nil {
 				// if we triggered an unwind somewhere we need to return from the stage
