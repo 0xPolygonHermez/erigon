@@ -27,6 +27,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/zk/datastream/client"
 )
 
 const (
@@ -189,7 +190,7 @@ func SpawnStageBatches(
 		return err
 	}
 
-	var highestDSL2Block *types.FullL2Block
+	var highestDSL2Block uint64
 	newBlockCheckStartTIme := time.Now()
 	for {
 		select {
@@ -197,33 +198,37 @@ func SpawnStageBatches(
 			return nil
 		default:
 		}
-		highestDSL2Block, err = dsQueryClient.GetLatestL2Block()
+
+		highestDSL2Block, err = getHighestDSL2Block(ctx, cfg, uint16(latestForkId))
 		if err != nil {
 			// if we return error, stage will replay and block all other stages
 			log.Warn(fmt.Sprintf("[%s] Failed to get latest l2 block from datastream: %v", logPrefix, err))
+			// because this is likely something network related lets put a pause here for just a couple of
+			// seconds to save the node going into a crazy loop
+			time.Sleep(2 * time.Second)
 			return nil
 		}
 
 		// a lower block should also break the loop because that means the datastream was unwound
 		// thus we should unwind as well and continue from there
-		if highestDSL2Block.L2BlockNumber != stageProgressBlockNo {
-			log.Info(fmt.Sprintf("[%s] Highest block in datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "stageProgressBlockNo", stageProgressBlockNo)
+		if highestDSL2Block != stageProgressBlockNo {
+			log.Info(fmt.Sprintf("[%s] Highest block in datastream", logPrefix), "datastreamBlock", highestDSL2Block, "stageProgressBlockNo", stageProgressBlockNo)
 			break
 		}
 		if time.Since(newBlockCheckStartTIme) > 10*time.Second {
-			log.Info(fmt.Sprintf("[%s] Waiting for at least one new block in datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "last processed block", stageProgressBlockNo)
+			log.Info(fmt.Sprintf("[%s] Waiting for at least one new block in datastream", logPrefix), "datastreamBlock", highestDSL2Block, "last processed block", stageProgressBlockNo)
 			newBlockCheckStartTIme = time.Now()
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	log.Debug(fmt.Sprintf("[%s] Highest block in db and datastream", logPrefix), "datastreamBlock", highestDSL2Block.L2BlockNumber, "dbBlock", stageProgressBlockNo)
+	log.Debug(fmt.Sprintf("[%s] Highest block in db and datastream", logPrefix), "datastreamBlock", highestDSL2Block, "dbBlock", stageProgressBlockNo)
 	unwindFn := func(unwindBlock uint64) (uint64, error) {
-		return rollback(logPrefix, eriDb, hermezDb, dsQueryClient, unwindBlock, tx, u)
+		return rollback(ctx, cfg, logPrefix, eriDb, hermezDb, unwindBlock, uint16(latestForkId), tx, u)
 	}
-	if highestDSL2Block.L2BlockNumber < stageProgressBlockNo {
+	if highestDSL2Block < stageProgressBlockNo {
 		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding", logPrefix))
-		if _, err := unwindFn(highestDSL2Block.L2BlockNumber); err != nil {
+		if _, err := unwindFn(highestDSL2Block); err != nil {
 			return err
 		}
 		return nil
@@ -633,16 +638,26 @@ func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx
 // 2. resolves the unwind block (as the latest block in the previous batch, comparing to the found ancestor block)
 // 3. triggers the unwinding
 func rollback(
+	ctx context.Context,
+	cfg BatchesCfg,
 	logPrefix string,
 	eriDb *erigon_db.ErigonDb,
 	hermezDb *hermez_db.HermezDb,
-	dsQueryClient DatastreamClient,
 	latestDSBlockNum uint64,
+	latestFork uint16,
 	tx kv.RwTx,
 	u stagedsync.Unwinder,
 ) (uint64, error) {
-	dsQueryClient.PrepUnwind()
-	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestor(eriDb, hermezDb, dsQueryClient, latestDSBlockNum)
+	dsClient := buildNewStreamClient(ctx, cfg, latestFork)
+	if err := dsClient.Start(); err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err := dsClient.Stop(); err != nil {
+			log.Error(fmt.Sprintf("[%s] Failed to stop datastream client whilst rolling back", logPrefix), "error", err)
+		}
+	}()
+	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestor(cfg, eriDb, hermezDb, latestDSBlockNum)
 	if err != nil {
 		return 0, err
 	}
@@ -665,10 +680,11 @@ func rollback(
 // findCommonAncestor searches the latest common ancestor block number and hash between the data stream and the local db.
 // The common ancestor block is the one that matches both l2 block hash and batch number.
 func findCommonAncestor(
+	cfg BatchesCfg,
 	db erigon_db.ReadOnlyErigonDb,
 	hermezDb state.ReadOnlyHermezDb,
-	dsClient DatastreamClient,
-	latestBlockNum uint64) (uint64, common.Hash, error) {
+	latestBlockNum uint64,
+) (uint64, common.Hash, error) {
 	var (
 		startBlockNum = uint64(0)
 		endBlockNum   = latestBlockNum
@@ -686,11 +702,14 @@ func findCommonAncestor(
 		}
 
 		midBlockNum := (startBlockNum + endBlockNum) / 2
-		midBlockDataStream, err := dsClient.GetL2BlockByNumber(midBlockNum)
-		if err != nil &&
-			// the required block might not be in the data stream, so ignore that error
-			!errors.Is(err, types.ErrBadFromBookmark) {
-			return 0, emptyHash, fmt.Errorf("GetL2BlockByNumber: failed to get l2 block %d from datastream: %w", midBlockNum, err)
+		headerHash, err := GetZKBlockByNumberHash(cfg.zkCfg.L2RpcUrl, midBlockNum)
+		if err != nil {
+			return 0, emptyHash, fmt.Errorf("ZkBlockHash: failed to get header for block %d: %w", midBlockNum, err)
+		}
+
+		blockBatch, err := GetBatchNumberByBlockNumber(cfg.zkCfg.L2RpcUrl, midBlockNum)
+		if err != nil {
+			return 0, emptyHash, fmt.Errorf("GetBatchNumberByBlockNumber: failed to get batch number for block %d: %w", midBlockNum, err)
 		}
 
 		midBlockDbHash, err := db.ReadCanonicalHash(midBlockNum)
@@ -703,9 +722,9 @@ func findCommonAncestor(
 			return 0, emptyHash, fmt.Errorf("GetBatchNoByL2Block: failed to get batch number for block %d: %w", midBlockNum, err)
 		}
 
-		if midBlockDataStream != nil &&
-			midBlockDataStream.L2Blockhash == midBlockDbHash &&
-			midBlockDataStream.BatchNumber == dbBatchNum {
+		if headerHash != (common.Hash{}) &&
+			headerHash == midBlockDbHash &&
+			blockBatch == dbBatchNum {
 			startBlockNum = midBlockNum + 1
 
 			blockNumber = &midBlockNum
@@ -768,4 +787,41 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 	}
 
 	return dsClient, stopFn, nil
+}
+
+func getHighestDSL2Block(ctx context.Context, batchCfg BatchesCfg, latestFork uint16) (uint64, error) {
+	cfg := batchCfg.zkCfg
+
+	// first try the sequencer rpc endpoint, it might not have been upgraded to the
+	// latest version yet so if we get an error back from this call we can try the older
+	// method of calling the datastream directly
+	highestBlock, err := GetSequencerHighestDataStreamBlock(cfg.L2RpcUrl)
+	if err == nil {
+		return highestBlock, nil
+	}
+
+	// so something went wrong with the rpc call, let's try the older method,
+	// but we're going to open a new connection rather than use the one for syncing blocks.
+	// This is so we can keep the logic simple and just dispose of the connection when we're done
+	// greatly simplifying state juggling of the connection if it errors
+	dsClient := buildNewStreamClient(ctx, batchCfg, latestFork)
+	if err = dsClient.Start(); err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err := dsClient.Stop(); err != nil {
+			log.Error("problem stopping datastream client looking up latest ds l2 block", "err", err)
+		}
+	}()
+	fullBlock, err := dsClient.GetLatestL2Block()
+	if err != nil {
+		return 0, err
+	}
+
+	return fullBlock.L2BlockNumber, nil
+}
+
+func buildNewStreamClient(ctx context.Context, batchesCfg BatchesCfg, latestFork uint16) *client.StreamClient {
+	cfg := batchesCfg.zkCfg
+	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestFork)
 }

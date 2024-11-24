@@ -417,6 +417,11 @@ func (c *StreamClient) RenewEntryChannel() {
 }
 
 func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
+	defer func() {
+		if err != nil {
+			c.lastError = err
+		}
+	}()
 	select {
 	case <-c.ctx.Done():
 		return fmt.Errorf("context done - stopping")
@@ -424,6 +429,11 @@ func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
 	}
 	if err := c.stopStreamingIfStarted(); err != nil {
 		return fmt.Errorf("stopStreamingIfStarted: %w", err)
+	}
+
+	// first load up the header of the stream
+	if _, err := c.GetHeader(); err != nil {
+		return fmt.Errorf("GetHeader: %w", err)
 	}
 
 	if err = c.readAllEntriesToChannel(); err != nil {
@@ -454,6 +464,7 @@ func (c *StreamClient) readAllEntriesToChannel() (err error) {
 	defer func() {
 		if err != nil {
 			c.setStreaming(false)
+			c.lastError = err
 		}
 	}()
 
@@ -591,6 +602,7 @@ LOOP:
 
 func (c *StreamClient) HandleStart() error {
 	if !c.started {
+		log.Info("[Datastream client] Starting datastream client from cold")
 		// never been started - so kick things off
 		if err := c.Start(); err != nil {
 			return err
@@ -599,6 +611,7 @@ func (c *StreamClient) HandleStart() error {
 	}
 
 	if c.lastError != nil {
+		log.Info("[Datastream client] Last error detected, trying to reconnect")
 		// we had an error last time, so try to reconnect
 		if err := c.tryReConnect(); err != nil {
 			return err

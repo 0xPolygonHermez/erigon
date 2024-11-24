@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ledgerwatch/log/v3"
+	"time"
 )
 
 type DatastreamClientRunner struct {
@@ -40,6 +41,7 @@ func (r *DatastreamClientRunner) StartRead(errorChan chan struct{}) error {
 		defer r.isReading.Store(false)
 
 		if err := r.dsClient.ReadAllEntriesToChannel(); err != nil {
+			time.Sleep(1 * time.Second)
 			errorChan <- struct{}{}
 			log.Warn(fmt.Sprintf("[%s] Error downloading blocks from datastream", r.logPrefix), "error", err)
 		}
