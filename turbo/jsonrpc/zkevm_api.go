@@ -81,6 +81,7 @@ type ZkEvmAPI interface {
 	GetForks(ctx context.Context) (res json.RawMessage, err error)
 	GetRollupAddress(ctx context.Context) (res json.RawMessage, err error)
 	GetRollupManagerAddress(ctx context.Context) (res json.RawMessage, err error)
+	GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error)
 }
 
 const getBatchWitness = "getBatchWitness"
@@ -1925,4 +1926,19 @@ func (api *ZkEvmAPIImpl) GetRollupManagerAddress(ctx context.Context) (res json.
 	}
 
 	return rollupManagerAddressJson, err
+}
+
+func (api *ZkEvmAPIImpl) GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error) {
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	latestBlock, err := stages.GetStageProgress(tx, stages.DataStream)
+	if err != nil {
+		return 0, err
+	}
+
+	return hexutil.Uint64(latestBlock), nil
 }
