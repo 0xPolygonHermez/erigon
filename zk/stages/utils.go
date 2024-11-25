@@ -170,7 +170,10 @@ func GetSequencerHighestDataStreamBlock(endpoint string) (uint64, error) {
 	return trimHexAndHandleUint64Result(res)
 }
 
-func GetZKBlockByNumberHash(endpoint string, blockNo uint64) (common.Hash, error) {
+type l2BlockReaderRpc struct {
+}
+
+func (l2BlockReaderRpc) GetZKBlockByNumberHash(endpoint string, blockNo uint64) (common.Hash, error) {
 	asHex := fmt.Sprintf("0x%x", blockNo)
 	res, err := jsonClient.JSONRPCCall(endpoint, ZK_BLOCK_BY_NUMBER, asHex, false)
 	if err != nil {
@@ -189,7 +192,7 @@ func GetZKBlockByNumberHash(endpoint string, blockNo uint64) (common.Hash, error
 	return zkBlock.Hash, nil
 }
 
-func GetBatchNumberByBlockNumber(endpoint string, blockNo uint64) (uint64, error) {
+func (l2BlockReaderRpc) GetBatchNumberByBlockNumber(endpoint string, blockNo uint64) (uint64, error) {
 	asHex := fmt.Sprintf("0x%x", blockNo)
 	res, err := jsonClient.JSONRPCCall(endpoint, BATCH_NUMBER_BY_BLOCK_NUMBER, asHex)
 	if err != nil {

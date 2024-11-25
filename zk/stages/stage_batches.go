@@ -657,7 +657,7 @@ func rollback(
 			log.Error(fmt.Sprintf("[%s] Failed to stop datastream client whilst rolling back", logPrefix), "error", err)
 		}
 	}()
-	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestor(cfg, eriDb, hermezDb, latestDSBlockNum)
+	ancestorBlockNum, ancestorBlockHash, err := findCommonAncestor(cfg, eriDb, hermezDb, l2BlockReaderRpc{}, latestDSBlockNum)
 	if err != nil {
 		return 0, err
 	}
@@ -677,12 +677,18 @@ func rollback(
 	return unwindBlockNum, nil
 }
 
+type L2BlockReaderRpc interface {
+	GetZKBlockByNumberHash(url string, blockNum uint64) (common.Hash, error)
+	GetBatchNumberByBlockNumber(url string, blockNum uint64) (uint64, error)
+}
+
 // findCommonAncestor searches the latest common ancestor block number and hash between the data stream and the local db.
 // The common ancestor block is the one that matches both l2 block hash and batch number.
 func findCommonAncestor(
 	cfg BatchesCfg,
 	db erigon_db.ReadOnlyErigonDb,
 	hermezDb state.ReadOnlyHermezDb,
+	blockReaderRpc L2BlockReaderRpc,
 	latestBlockNum uint64,
 ) (uint64, common.Hash, error) {
 	var (
@@ -702,12 +708,12 @@ func findCommonAncestor(
 		}
 
 		midBlockNum := (startBlockNum + endBlockNum) / 2
-		headerHash, err := GetZKBlockByNumberHash(cfg.zkCfg.L2RpcUrl, midBlockNum)
+		headerHash, err := blockReaderRpc.GetZKBlockByNumberHash(cfg.zkCfg.L2RpcUrl, midBlockNum)
 		if err != nil {
 			return 0, emptyHash, fmt.Errorf("ZkBlockHash: failed to get header for block %d: %w", midBlockNum, err)
 		}
 
-		blockBatch, err := GetBatchNumberByBlockNumber(cfg.zkCfg.L2RpcUrl, midBlockNum)
+		blockBatch, err := blockReaderRpc.GetBatchNumberByBlockNumber(cfg.zkCfg.L2RpcUrl, midBlockNum)
 		if err != nil {
 			return 0, emptyHash, fmt.Errorf("GetBatchNumberByBlockNumber: failed to get batch number for block %d: %w", midBlockNum, err)
 		}
