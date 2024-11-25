@@ -279,7 +279,8 @@ func SpawnSequencingStage(
 					}
 				}
 
-				badTxIndexes := make([]int, 0)
+				badTxHashes := make([]common.Hash, 0)
+				minedTxHashes := make([]common.Hash, 0)
 				for i, transaction := range batchState.blockState.transactionsForInclusion {
 					txHash := transaction.Hash()
 					effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
@@ -306,7 +307,7 @@ func SpawnSequencingStage(
 						// to stop the pool growing and hampering further processing of good transactions here
 						// we mark it for being discarded
 						log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
-						badTxIndexes = append(badTxIndexes, i)
+						badTxHashes = append(badTxHashes, txHash)
 						batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
 					}
 
@@ -352,13 +353,27 @@ func SpawnSequencingStage(
 					if err == nil {
 						blockDataSizeChecker = &backupDataSizeChecker
 						batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
+						minedTxHashes = append(minedTxHashes, txHash)
 					}
 				}
 
-				// remove transactions that have been marked for removal
-				for i := len(badTxIndexes) - 1; i >= 0; i-- {
-					idx := badTxIndexes[i]
-					batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion[:idx], batchState.blockState.transactionsForInclusion[idx+1:]...)
+				// remove bad and mined transactions from the list for inclusion
+				for i := len(batchState.blockState.transactionsForInclusion) - 1; i >= 0; i-- {
+					tx := batchState.blockState.transactionsForInclusion[i]
+					hash := tx.Hash()
+					for _, badHash := range badTxHashes {
+						if badHash == hash {
+							batchState.blockState.transactionsForInclusion = removeInclusionTransaction(batchState.blockState.transactionsForInclusion, i)
+							break
+						}
+					}
+
+					for _, minedHash := range minedTxHashes {
+						if minedHash == hash {
+							batchState.blockState.transactionsForInclusion = removeInclusionTransaction(batchState.blockState.transactionsForInclusion, i)
+							break
+						}
+					}
 				}
 
 				if batchState.isL1Recovery() {
@@ -474,4 +489,11 @@ func SpawnSequencingStage(
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
 
 	return sdb.tx.Commit()
+}
+
+func removeInclusionTransaction(orig []types.Transaction, index int) []types.Transaction {
+	if index < 0 || index >= len(orig) {
+		return orig
+	}
+	return append(orig[:index], orig[index+1:]...)
 }
