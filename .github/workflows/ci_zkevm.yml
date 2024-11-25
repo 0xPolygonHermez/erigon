@@ -83,11 +83,8 @@ jobs:
           ref: v0.2.12
           path: kurtosis-cdk
 
-      - name: Install Kurtosis CDK tools
+      - name: Install Kurtosis CDK tools (Kurtosis, yq, Foundry, disable analytics)
         uses: ./kurtosis-cdk/.github/actions/setup-kurtosis-cdk
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Install yq
         run: |
