@@ -22,6 +22,8 @@ concurrency:
 jobs:
   tests:
     strategy:
+      max-parallel: 2
+      fail-fast: true
       matrix:
         os: [ ubuntu-22.04, macos-14-xlarge ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
