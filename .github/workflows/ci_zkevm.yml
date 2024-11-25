@@ -134,6 +134,8 @@ jobs:
       - name: Monitor verified batches
         working-directory: ./kurtosis-cdk
         shell: bash
+        env:
+          ENCLAVE_NAME: cdk-v1
         run: timeout 900s .github/scripts/monitor-verified-batches.sh --rpc-url $(kurtosis port print cdk-v1 cdk-erigon-node-001 rpc) --target 20 --timeout 900
 
       - name: Set up Docker Buildx
