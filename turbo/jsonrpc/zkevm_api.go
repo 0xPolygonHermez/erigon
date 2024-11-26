@@ -16,12 +16,15 @@ import (
 
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
+	"math"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -45,8 +48,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	"github.com/ledgerwatch/erigon/core/systemcontracts"
-	"math"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -81,6 +82,7 @@ type ZkEvmAPI interface {
 	GetForks(ctx context.Context) (res json.RawMessage, err error)
 	GetRollupAddress(ctx context.Context) (res json.RawMessage, err error)
 	GetRollupManagerAddress(ctx context.Context) (res json.RawMessage, err error)
+	GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error)
 }
 
 const getBatchWitness = "getBatchWitness"
@@ -1917,4 +1919,51 @@ func (api *ZkEvmAPIImpl) GetRollupManagerAddress(ctx context.Context) (res json.
 	}
 
 	return rollupManagerAddressJson, err
+}
+
+func (api *ZkEvmAPIImpl) getInjectedBatchAccInputHashFromSequencer(rpcUrl string) (*libcommon.Hash, error) {
+	res, err := client.JSONRPCCall(rpcUrl, "zkevm_getBatchByNumber", 1)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Error != nil {
+		return nil, fmt.Errorf("RPC error response: %s", res.Error.Message)
+	}
+
+	var resultMap map[string]interface{}
+
+	err = json.Unmarshal(res.Result, &resultMap)
+	if err != nil {
+		return nil, err
+	}
+
+	hashValue, ok := resultMap["accInputHash"]
+	if !ok {
+		return nil, fmt.Errorf("accInputHash not found in response")
+	}
+
+	hash, ok := hashValue.(string)
+	if !ok {
+		return nil, fmt.Errorf("accInputHash is not a string")
+	}
+
+	decoded := libcommon.HexToHash(hash)
+
+	return &decoded, nil
+}
+
+func (api *ZkEvmAPIImpl) GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error) {
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	latestBlock, err := stages.GetStageProgress(tx, stages.DataStream)
+	if err != nil {
+		return 0, err
+	}
+
+	return hexutil.Uint64(latestBlock), nil
 }
