@@ -410,6 +410,11 @@ var (
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
 		Value: "3s",
 	}
+	L2ShortCircuitToVerifiedBatchFlag = cli.BoolFlag{
+		Name:  "zkevm.l2-short-circuit-to-verified-batch",
+		Usage: "Short circuit block execution up to the batch after the latest verified batch (default: true). When disabled, the sequencer will execute all downloaded batches",
+		Value: true,
+	}
 	L1SyncStartBlock = cli.Uint64Flag{
 		Name:  "zkevm.l1-sync-start-block",
 		Usage: "Designed for recovery of the network from the L1 batch data, slower mode of operation than the datastream.  If set the datastream will not be used",
@@ -752,6 +757,16 @@ var (
 		Name:  "zkevm.seal-batch-immediately-on-overflow",
 		Usage: "Seal the batch immediately when detecting a counter overflow",
 		Value: false,
+	}
+	MockWitnessGeneration = cli.BoolFlag{
+		Name:  "zkevm.mock-witness-generation",
+		Usage: "Mock the witness generation",
+		Value: false,
+	}
+	WitnessContractInclusion = cli.StringFlag{
+		Name:  "zkevm.witness-contract-inclusion",
+		Usage: "Contracts that will have all of their storage added to the witness every time",
+		Value: "",
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",

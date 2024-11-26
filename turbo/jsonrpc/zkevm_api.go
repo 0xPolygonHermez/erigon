@@ -16,13 +16,15 @@ import (
 
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
+	"math"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -78,6 +80,9 @@ type ZkEvmAPI interface {
 	GetForkById(ctx context.Context, forkId hexutil.Uint64) (res json.RawMessage, err error)
 	GetForkIdByBatchNumber(ctx context.Context, batchNumber rpc.BlockNumber) (hexutil.Uint64, error)
 	GetForks(ctx context.Context) (res json.RawMessage, err error)
+	GetRollupAddress(ctx context.Context) (res json.RawMessage, err error)
+	GetRollupManagerAddress(ctx context.Context) (res json.RawMessage, err error)
+	GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error)
 }
 
 const getBatchWitness = "getBatchWitness"
@@ -92,7 +97,7 @@ type ZkEvmAPIImpl struct {
 	l1Syncer         *syncer.L1Syncer
 	l2SequencerUrl   string
 	semaphores       map[string]chan struct{}
-	datastreamServer *server.DataStreamServer
+	datastreamServer server.DataStreamServer
 }
 
 func (api *ZkEvmAPIImpl) initializeSemaphores(functionLimits map[string]int) {
@@ -113,13 +118,8 @@ func NewZkEvmAPI(
 	zkConfig *ethconfig.Config,
 	l1Syncer *syncer.L1Syncer,
 	l2SequencerUrl string,
-	datastreamServer *datastreamer.StreamServer,
+	dataStreamServer server.DataStreamServer,
 ) *ZkEvmAPIImpl {
-
-	var streamServer *server.DataStreamServer
-	if datastreamServer != nil {
-		streamServer = server.NewDataStreamServer(datastreamServer, zkConfig.Zk.L2ChainId)
-	}
 
 	a := &ZkEvmAPIImpl{
 		ethApi:           base,
@@ -128,7 +128,7 @@ func NewZkEvmAPI(
 		config:           zkConfig,
 		l1Syncer:         l1Syncer,
 		l2SequencerUrl:   l2SequencerUrl,
-		datastreamServer: streamServer,
+		datastreamServer: dataStreamServer,
 	}
 
 	a.initializeSemaphores(map[string]int{
@@ -258,6 +258,16 @@ func (api *ZkEvmAPIImpl) VirtualBatchNumber(ctx context.Context) (hexutil.Uint64
 	}
 
 	if latestSequencedBatch == nil {
+		forkId, err := hermezDb.GetForkId(0)
+		if err != nil {
+			return hexutil.Uint64(0), err
+		}
+
+		// injected batch post etrog must be both virtual and verified
+		if forkId >= uint64(chain.ForkID7Etrog) {
+			return hexutil.Uint64(1), nil
+		}
+
 		return hexutil.Uint64(0), nil
 	}
 
@@ -541,10 +551,13 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, rpcBatchNumber rp
 		batch.Timestamp = types.ArgUint64(block.Time())
 	}
 
-	// if we don't have a datastream available to verify that a batch is actually
-	// closed then we fall back to existing behaviour of checking if the next batch
-	// has any blocks in it
-	if api.datastreamServer != nil {
+	/*
+		if node is a sequencer it won't have the required data stored in the db, so use the datastream
+		server to figure out if the batch is closed, otherwise fall back. This ensures good performance
+		for RPC nodes in daisy chain node which do have a datastream (previous check was testing for
+		presence of datastream server).
+	*/
+	if sequencer.IsSequencer() {
 		highestClosed, err := api.datastreamServer.GetHighestClosedBatchNoCache()
 		if err != nil {
 			return nil, err
@@ -563,7 +576,20 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, rpcBatchNumber rp
 			return nil, err
 		}
 
-		batch.Closed = batchNo <= latestClosedbatchNum
+		if batchNo <= latestClosedbatchNum {
+			// simple check if we have a closed batch entry higher than or equal to the one requested
+			batch.Closed = true
+		} else {
+			// we might be missing a batch end along the way so lets double check if we have a block
+			// from the next batch or not
+			_, foundHigher, err := hermezDb.GetLowestBlockInBatch(batchNo + 1)
+			if err != nil {
+				return nil, err
+			}
+			if foundHigher {
+				batch.Closed = true
+			}
+		}
 	}
 
 	// verification - if we can't find one, maybe this batch was verified along with a higher batch number
@@ -707,8 +733,21 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader,
 		return nil, fmt.Errorf("failed to get sequence range data for batch %d: %w", batchNum, err)
 	}
 
+	// if we are asking for genesis return 0x0..0
+	if batchNum == 0 && prevSequence.BatchNo == 0 {
+		return &common.Hash{}, nil
+	}
+
 	if prevSequence == nil || batchSequence == nil {
-		return nil, fmt.Errorf("failed to get sequence data for batch %d", batchNum)
+		var missing string
+		if prevSequence == nil && batchSequence == nil {
+			missing = "previous and current batch sequences"
+		} else if prevSequence == nil {
+			missing = "previous batch sequence"
+		} else {
+			missing = "current batch sequence"
+		}
+		return nil, fmt.Errorf("failed to get %s for batch %d", missing, batchNum)
 	}
 
 	// get batch range for sequence
@@ -747,13 +786,11 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader,
 		return nil, fmt.Errorf("batch %d is out of range of sequence calldata", batchNum)
 	}
 
-	accInputHash = &prevSequenceAccinputHash
-	if prevSequenceBatch == 0 {
-		return
-	}
 	// calculate acc input hash
+	accInputHash = &prevSequenceAccinputHash
 	for i := 0; i < int(batchNum-prevSequenceBatch); i++ {
 		accInputHash = accInputHashCalcFn(prevSequenceAccinputHash, i)
+		prevSequenceAccinputHash = *accInputHash
 	}
 
 	return
@@ -976,6 +1013,7 @@ func (api *ZkEvmAPIImpl) buildGenerator(ctx context.Context, tx kv.Tx, witnessMo
 		chainConfig,
 		api.config.Zk,
 		api.ethApi._engine,
+		api.config.WitnessContractInclusion,
 	)
 
 	fullWitness := false
@@ -999,12 +1037,12 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 		return nil, fmt.Errorf("not supported by Erigon3")
 	}
 
-	blockNr, _, _, err := rpchelper.GetCanonicalBlockNumber(startBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
+	blockNr, _, _, err := rpchelper.GetCanonicalBlockNumber_zkevm(startBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
 	if err != nil {
 		return nil, err
 	}
 
-	endBlockNr, _, _, err := rpchelper.GetCanonicalBlockNumber(endBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
+	endBlockNr, _, _, err := rpchelper.GetCanonicalBlockNumber_zkevm(endBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
 
 	if err != nil {
 		return nil, err
@@ -1598,7 +1636,7 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		return nil, fmt.Errorf("not supported by Erigon3")
 	}
 
-	blockNr, _, _, err := rpchelper.GetBlockNumber(blockNrOrHash, tx, api.filters)
+	blockNr, _, _, err := rpchelper.GetBlockNumber_zkevm(blockNrOrHash, tx, api.filters)
 	if err != nil {
 		return nil, err
 	}
@@ -1662,7 +1700,31 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		ibs.GetState(address, &key, value)
 	}
 
-	rl, err := tds.ResolveSMTRetainList()
+	blockNumber, _, _, err := rpchelper.GetBlockNumber(blockNrOrHash, tx, api.filters)
+	if err != nil {
+		return nil, err
+	}
+
+	chainCfg, err := api.chainConfig(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	plainState := state.NewPlainState(tx, blockNumber, systemcontracts.SystemContractCodeLookup[chainCfg.ChainName])
+	defer plainState.Close()
+
+	inclusion := make(map[libcommon.Address][]libcommon.Hash)
+	for _, contract := range zkapi.config.WitnessContractInclusion {
+		err = plainState.ForEachStorage(contract, libcommon.Hash{}, func(key, secKey libcommon.Hash, value uint256.Int) bool {
+			inclusion[contract] = append(inclusion[contract], key)
+			return false
+		}, math.MaxInt64)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rl, err := tds.ResolveSMTRetainList(inclusion)
 	if err != nil {
 		return nil, err
 	}
@@ -1835,4 +1897,73 @@ func (api *ZkEvmAPIImpl) GetForks(ctx context.Context) (res json.RawMessage, err
 	}
 
 	return forksJson, err
+}
+
+func (api *ZkEvmAPIImpl) GetRollupAddress(ctx context.Context) (res json.RawMessage, err error) {
+	rollupAddress := api.config.AddressZkevm
+
+	rollupAddressJson, err := json.Marshal(rollupAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	return rollupAddressJson, err
+}
+
+func (api *ZkEvmAPIImpl) GetRollupManagerAddress(ctx context.Context) (res json.RawMessage, err error) {
+	rollupManagerAddress := api.config.AddressRollup
+
+	rollupManagerAddressJson, err := json.Marshal(rollupManagerAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	return rollupManagerAddressJson, err
+}
+
+func (api *ZkEvmAPIImpl) getInjectedBatchAccInputHashFromSequencer(rpcUrl string) (*libcommon.Hash, error) {
+	res, err := client.JSONRPCCall(rpcUrl, "zkevm_getBatchByNumber", 1)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Error != nil {
+		return nil, fmt.Errorf("RPC error response: %s", res.Error.Message)
+	}
+
+	var resultMap map[string]interface{}
+
+	err = json.Unmarshal(res.Result, &resultMap)
+	if err != nil {
+		return nil, err
+	}
+
+	hashValue, ok := resultMap["accInputHash"]
+	if !ok {
+		return nil, fmt.Errorf("accInputHash not found in response")
+	}
+
+	hash, ok := hashValue.(string)
+	if !ok {
+		return nil, fmt.Errorf("accInputHash is not a string")
+	}
+
+	decoded := libcommon.HexToHash(hash)
+
+	return &decoded, nil
+}
+
+func (api *ZkEvmAPIImpl) GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error) {
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	latestBlock, err := stages.GetStageProgress(tx, stages.DataStream)
+	if err != nil {
+		return 0, err
+	}
+
+	return hexutil.Uint64(latestBlock), nil
 }

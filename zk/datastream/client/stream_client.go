@@ -13,6 +13,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/log/v3"
+	"sync"
 )
 
 type StreamType uint64
@@ -33,6 +34,8 @@ const (
 var (
 	// ErrFileEntryNotFound denotes error that is returned when the certain file entry is not found in the datastream
 	ErrFileEntryNotFound = errors.New("file entry not found")
+
+	minimumCheckTimeout = 500 * time.Millisecond
 )
 
 type StreamClient struct {
@@ -47,7 +50,8 @@ type StreamClient struct {
 
 	// atomic
 	lastWrittenTime      atomic.Int64
-	streaming            atomic.Bool
+	mtxStreaming         *sync.Mutex
+	streaming            bool
 	progress             atomic.Uint64
 	stopReadingToChannel atomic.Bool
 
@@ -56,6 +60,14 @@ type StreamClient struct {
 
 	// keeps track of the latest fork from the stream to assign to l2 blocks
 	currentFork uint64
+
+	// used for testing, during normal execution lots of stop streaming commands are sent
+	// which makes sense for an active server listening for these things but in unit tests
+	// this makes behaviour very unpredictable and hard to test
+	allowStops bool
+
+	lastError error
+	started   bool
 }
 
 const (
@@ -81,6 +93,7 @@ func NewClient(ctx context.Context, server string, version int, checkTimeout tim
 		streamType:   StSequencer,
 		entryChan:    make(chan interface{}, 100000),
 		currentFork:  uint64(latestDownloadedForkId),
+		mtxStreaming: &sync.Mutex{},
 	}
 
 	return c
@@ -106,43 +119,23 @@ var (
 // and streams the changes for that block (including the transactions).
 // Note that this function is intended for on demand querying and it disposes the connection after it ends.
 func (c *StreamClient) GetL2BlockByNumber(blockNum uint64) (fullBLock *types.FullL2Block, err error) {
-	var (
-		connected bool = c.conn != nil
-	)
-	count := 0
-	for {
-		select {
-		case <-c.ctx.Done():
-			return nil, fmt.Errorf("context done - stopping")
+	select {
+	case <-c.ctx.Done():
+		return nil, fmt.Errorf("context done - stopping")
 
-		default:
-		}
-		if count > 5 {
-			return nil, ErrFailedAttempts
-		}
-		if connected {
-			if err := c.stopStreamingIfStarted(); err != nil {
-				return nil, fmt.Errorf("stopStreamingIfStarted: %w", err)
-			}
-
-			if fullBLock, err = c.getL2BlockByNumber(blockNum); err == nil {
-				break
-			}
-
-			if errors.Is(err, types.ErrAlreadyStarted) {
-				// if the client is already started, we can stop the client and try again
-				c.Stop()
-			} else if !errors.Is(err, ErrSocket) {
-				return nil, fmt.Errorf("getL2BlockByNumber: %w", err)
-			}
-
-		}
-		time.Sleep(1 * time.Second)
-		connected = c.handleSocketError(err)
-		count++
+	default:
+	}
+	if err := c.stopStreamingIfStarted(); err != nil {
+		return nil, fmt.Errorf("stopStreamingIfStarted: %w", err)
 	}
 
-	return fullBLock, nil
+	fullBlock, err := c.getL2BlockByNumber(blockNum)
+	if err != nil {
+		c.lastError = err
+		return nil, err
+	}
+
+	return fullBlock, nil
 }
 
 func (c *StreamClient) getL2BlockByNumber(blockNum uint64) (l2Block *types.FullL2Block, err error) {
@@ -180,6 +173,10 @@ func (c *StreamClient) getL2BlockByNumber(blockNum uint64) (l2Block *types.FullL
 		return nil, fmt.Errorf("expected block number %d but got %d", blockNum, l2Block.L2BlockNumber)
 	}
 
+	if err := c.Stop(); err != nil {
+		return nil, fmt.Errorf("Stop: %w", err)
+	}
+
 	return l2Block, nil
 }
 
@@ -187,50 +184,49 @@ func (c *StreamClient) getL2BlockByNumber(blockNum uint64) (l2Block *types.FullL
 // it retrieves the latest File entry that is of EntryTypeL2Block type.
 // Note that this function is intended for on demand querying and it disposes the connection after it ends.
 func (c *StreamClient) GetLatestL2Block() (l2Block *types.FullL2Block, err error) {
-	var (
-		connected bool = c.conn != nil
-	)
-	count := 0
-	for {
-		select {
-		case <-c.ctx.Done():
-			return nil, errors.New("context done - stopping")
-		default:
-		}
-		if count > 5 {
-			return nil, ErrFailedAttempts
-		}
-		if connected {
-			if err := c.stopStreamingIfStarted(); err != nil {
-				return nil, fmt.Errorf("stopStreamingIfStarted: %w", err)
-			}
-
-			if l2Block, err = c.getLatestL2Block(); err == nil {
-				break
-			}
-			if !errors.Is(err, ErrSocket) {
-				return nil, fmt.Errorf("getLatestL2Block: %w", err)
-			}
-		}
-
-		time.Sleep(1 * time.Second)
-		connected = c.handleSocketError(err)
-		count++
+	select {
+	case <-c.ctx.Done():
+		return nil, errors.New("context done - stopping")
+	default:
 	}
-	return l2Block, nil
+	if err = c.stopStreamingIfStarted(); err != nil {
+		err = fmt.Errorf("stopStreamingIfStarted: %w", err)
+	}
+
+	fullBlock, err := c.getLatestL2Block()
+	if err != nil {
+		c.lastError = err
+		return nil, err
+	}
+
+	return fullBlock, nil
+}
+
+func (c *StreamClient) getStreaming() bool {
+	c.mtxStreaming.Lock()
+	defer c.mtxStreaming.Unlock()
+	return c.streaming
+}
+
+func (c *StreamClient) setStreaming(val bool) {
+	c.mtxStreaming.Lock()
+	defer c.mtxStreaming.Unlock()
+	c.streaming = val
 }
 
 // don't check for errors here, we just need to empty the socket for next reads
 func (c *StreamClient) stopStreamingIfStarted() error {
-	if c.streaming.Load() {
-		c.sendStopCmd()
-		c.streaming.Store(false)
+	if c.getStreaming() {
+		if err := c.sendStopCmd(); err != nil {
+			return fmt.Errorf("sendStopCmd: %w", err)
+		}
+		c.setStreaming(false)
 	}
 
 	// empty the socket buffer
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(100))
-		if _, err := c.readBuffer(100); err != nil {
+		c.conn.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
+		if _, err := readBuffer(c.conn, 1000 /* arbitrary number*/); err != nil {
 			break
 		}
 	}
@@ -269,6 +265,10 @@ func (c *StreamClient) getLatestL2Block() (l2Block *types.FullL2Block, err error
 		return nil, errors.New("no block found")
 	}
 
+	if err := c.Stop(); err != nil {
+		return nil, fmt.Errorf("Stop: %w", err)
+	}
+
 	return l2Block, nil
 }
 
@@ -292,15 +292,15 @@ func (c *StreamClient) Start() error {
 	return nil
 }
 
-func (c *StreamClient) Stop() {
-	if c.conn == nil {
-		return
+func (c *StreamClient) Stop() error {
+	if c.conn == nil || !c.allowStops {
+		return nil
 	}
 	if err := c.sendStopCmd(); err != nil {
-		log.Warn(fmt.Sprintf("send stop command: %v", err))
+		return fmt.Errorf("sendStopCmd: %w", err)
 	}
-	// c.conn.Close()
-	// c.conn = nil
+
+	return nil
 }
 
 // Command header: Get status
@@ -417,32 +417,28 @@ func (c *StreamClient) RenewEntryChannel() {
 }
 
 func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
-	var (
-		connected bool = c.conn != nil
-	)
-	count := 0
-	for {
-		select {
-		case <-c.ctx.Done():
-			return fmt.Errorf("context done - stopping")
-		default:
+	defer func() {
+		if err != nil {
+			c.lastError = err
 		}
-		if connected {
-			if err := c.stopStreamingIfStarted(); err != nil {
-				return fmt.Errorf("stopStreamingIfStarted: %w", err)
-			}
+	}()
+	select {
+	case <-c.ctx.Done():
+		return fmt.Errorf("context done - stopping")
+	default:
+	}
+	if err := c.stopStreamingIfStarted(); err != nil {
+		return fmt.Errorf("stopStreamingIfStarted: %w", err)
+	}
 
-			if err = c.readAllEntriesToChannel(); err == nil {
-				break
-			}
-			if !errors.Is(err, ErrSocket) {
-				return fmt.Errorf("readAllEntriesToChannel: %w", err)
-			}
-		}
+	// first load up the header of the stream
+	if _, err := c.GetHeader(); err != nil {
+		return fmt.Errorf("GetHeader: %w", err)
+	}
 
-		time.Sleep(1 * time.Second)
-		connected = c.handleSocketError(err)
-		count++
+	if err = c.readAllEntriesToChannel(); err != nil {
+		c.lastError = err
+		return err
 	}
 
 	return nil
@@ -465,7 +461,14 @@ func (c *StreamClient) handleSocketError(socketErr error) bool {
 // reads entries to the end of the stream
 // at end will wait for new entries to arrive
 func (c *StreamClient) readAllEntriesToChannel() (err error) {
-	c.streaming.Store(true)
+	defer func() {
+		if err != nil {
+			c.setStreaming(false)
+			c.lastError = err
+		}
+	}()
+
+	c.setStreaming(true)
 	c.stopReadingToChannel.Store(false)
 
 	var bookmark *types.BookmarkProto
@@ -500,6 +503,8 @@ func (c *StreamClient) initiateDownloadBookmark(bookmark []byte) (*types.ResultE
 		return nil, fmt.Errorf("sendBookmarkCmd: %w", err)
 	}
 
+	c.setStreaming(true)
+
 	re, err := c.afterStartCommand()
 	if err != nil {
 		return re, fmt.Errorf("afterStartCommand: %w", err)
@@ -530,8 +535,15 @@ LOOP:
 			break LOOP
 		}
 
-		if c.checkTimeout > 0 {
-			c.conn.SetReadDeadline(time.Now().Add(c.checkTimeout))
+		var timeout time.Time
+		if c.checkTimeout < minimumCheckTimeout {
+			timeout = time.Now().Add(minimumCheckTimeout)
+		} else {
+			timeout = time.Now().Add(c.checkTimeout)
+		}
+
+		if err = c.conn.SetReadDeadline(timeout); err != nil {
+			return err
 		}
 
 		if readNewProto {
@@ -583,6 +595,28 @@ LOOP:
 			}
 			break LOOP
 		}
+	}
+
+	return nil
+}
+
+func (c *StreamClient) HandleStart() error {
+	if !c.started {
+		log.Info("[Datastream client] Starting datastream client from cold")
+		// never been started - so kick things off
+		if err := c.Start(); err != nil {
+			return err
+		}
+		c.started = true
+	}
+
+	if c.lastError != nil {
+		log.Info("[Datastream client] Last error detected, trying to reconnect")
+		// we had an error last time, so try to reconnect
+		if err := c.tryReConnect(); err != nil {
+			return err
+		}
+		c.lastError = nil
 	}
 
 	return nil
@@ -908,11 +942,14 @@ func (c *StreamClient) writeToConn(data interface{}) error {
 }
 
 func (c *StreamClient) resetWriteTimeout() error {
-	if c.checkTimeout == 0 {
-		return nil
+	var timeout time.Time
+	if c.checkTimeout < minimumCheckTimeout {
+		timeout = time.Now().Add(minimumCheckTimeout)
+	} else {
+		timeout = time.Now().Add(c.checkTimeout)
 	}
 
-	if err := c.conn.SetWriteDeadline(time.Now().Add(c.checkTimeout)); err != nil {
+	if err := c.conn.SetWriteDeadline(timeout); err != nil {
 		return fmt.Errorf("%w: conn.SetWriteDeadline: %v", ErrSocket, err)
 	}
 
@@ -920,13 +957,24 @@ func (c *StreamClient) resetWriteTimeout() error {
 }
 
 func (c *StreamClient) resetReadTimeout() error {
-	if c.checkTimeout == 0 {
-		return nil
+	var timeout time.Time
+	if c.checkTimeout < minimumCheckTimeout {
+		timeout = time.Now().Add(minimumCheckTimeout)
+	} else {
+		timeout = time.Now().Add(c.checkTimeout)
 	}
 
-	if err := c.conn.SetReadDeadline(time.Now().Add(c.checkTimeout)); err != nil {
+	if err := c.conn.SetReadDeadline(timeout); err != nil {
 		return fmt.Errorf("%w: conn.SetReadDeadline: %v", ErrSocket, err)
 	}
 
 	return nil
+}
+
+// PrepUnwind handles the state of the client prior to searching to the
+// common ancestor block
+func (c *StreamClient) PrepUnwind() {
+	// this is to ensure that the later call to stop streaming if streaming
+	// is activated.
+	c.setStreaming(true)
 }

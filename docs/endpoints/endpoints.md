@@ -198,8 +198,11 @@ If the endpoint is not in the list below, it means this specific endpoint is not
 - zkevm_getFullBlockByHash
 - zkevm_getFullBlockByNumber
 - zkevm_getL2BlockInfoTree
+- zkevm_getLatestDataStreamBlock
 - zkevm_getLatestGlobalExitRoot
 - zkevm_getProverInput
+- zkevm_getRollupAddress
+- zkevm_getRollupManagerAddress
 - zkevm_getVersionHistory
 - zkevm_getWitness
 - zkevm_isBlockConsolidated
