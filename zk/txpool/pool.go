@@ -1852,6 +1852,10 @@ func (p *TxPool) purge() {
 	toDelete := make([]*metaTx, 0)
 
 	p.all.ascendAll(func(mt *metaTx) bool {
+		// don't purge from pending
+		if mt.currentSubPool == PendingSubPool {
+			return true
+		}
 		if mt.created < cutOff {
 			toDelete = append(toDelete, mt)
 		}
@@ -1872,7 +1876,8 @@ func (p *TxPool) purge() {
 
 		p.discardLocked(mt, Expired)
 
-		// do not hold on to the discard reason as we're purging it completely from the pool
+		// do not hold on to the discard reason as we're purging it completely from the pool and an end user
+		// may wish to resubmit it and we should allow this
 		p.discardReasonsLRU.Remove(string(mt.Tx.IDHash[:]))
 
 		// get the address of the sender
