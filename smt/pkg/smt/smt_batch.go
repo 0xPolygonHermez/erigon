@@ -301,7 +301,11 @@ func (s *SMT) saveBatchedNodeValues(
 	return nil
 }
 
-func validateDataLengths(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeValue8, nodeValuesHashes *[]*[4]uint64) error {
+func validateDataLengths(
+	nodeKeys []*utils.NodeKey,
+	nodeValues []*utils.NodeValue8,
+	nodeValuesHashes *[]*[4]uint64,
+) error {
 	var size int = len(nodeKeys)
 
 	if len(nodeValues) != size {
@@ -318,7 +322,11 @@ func validateDataLengths(nodeKeys []*utils.NodeKey, nodeValues []*utils.NodeValu
 	return nil
 }
 
-func removeDuplicateEntriesByKeys(nodeKeys *[]*utils.NodeKey, nodeValues *[]*utils.NodeValue8, nodeValuesHashes *[]*[4]uint64) error {
+func removeDuplicateEntriesByKeys(
+	nodeKeys *[]*utils.NodeKey,
+	nodeValues *[]*utils.NodeValue8,
+	nodeValuesHashes *[]*[4]uint64,
+) error {
 	size := len(*nodeKeys)
 	storage := make(map[uint64]map[uint64]map[uint64]map[uint64]int)
 
@@ -350,7 +358,10 @@ func removeDuplicateEntriesByKeys(nodeKeys *[]*utils.NodeKey, nodeValues *[]*uti
 	return nil
 }
 
-func calculateNodeValueHashesIfMissing(nodeValues []*utils.NodeValue8, nodeValuesHashes *[]*[4]uint64) error {
+func calculateNodeValueHashesIfMissing(
+	nodeValues []*utils.NodeValue8,
+	nodeValuesHashes *[]*[4]uint64,
+) error {
 	var globalError error
 	size := len(nodeValues)
 	cpuNum := parallel.DefaultNumGoroutines()
@@ -384,7 +395,12 @@ func calculateNodeValueHashesIfMissing(nodeValues []*utils.NodeValue8, nodeValue
 	return globalError
 }
 
-func calculateNodeValueHashesIfMissingInInterval(nodeValues []*utils.NodeValue8, nodeValuesHashes *[]*[4]uint64, startIndex, endIndex int) error {
+func calculateNodeValueHashesIfMissingInInterval(
+	nodeValues []*utils.NodeValue8,
+	nodeValuesHashes *[]*[4]uint64,
+	startIndex,
+	endIndex int,
+) error {
 	for i := startIndex; i < endIndex; i++ {
 		if (*nodeValuesHashes)[i] != nil {
 			continue
@@ -488,7 +504,10 @@ func (s *SMT) findInsertingPoint(
 	return insertingNodePathLevel, insertingPointerToSmtBatchNode, visitedNodeHashes, nil
 }
 
-func updateNodeHashesForDelete(nodeHashesForDelete map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey, visitedNodeHashes []*utils.NodeKey) {
+func updateNodeHashesForDelete(
+	nodeHashesForDelete map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey,
+	visitedNodeHashes []*utils.NodeKey,
+) {
 	for _, visitedNodeHash := range visitedNodeHashes {
 		if visitedNodeHash == nil {
 			continue
@@ -499,7 +518,12 @@ func updateNodeHashesForDelete(nodeHashesForDelete map[uint64]map[uint64]map[uin
 }
 
 // no point to parallelize this function because db consumer is slower than this producer
-func calculateAndSaveHashesDfs(sdh *smtDfsHelper, smtBatchNode *smtBatchNode, path []int, level int) {
+func calculateAndSaveHashesDfs(
+	sdh *smtDfsHelper,
+	smtBatchNode *smtBatchNode,
+	path []int,
+	level int,
+) {
 	if smtBatchNode.isLeaf() {
 		hashObj, hashValue := utils.HashKeyAndValueByPointers(utils.ConcatArrays4ByPointers(smtBatchNode.nodeLeftHashOrRemainingKey.AsUint64Pointer(), smtBatchNode.nodeRightHashOrValueHash.AsUint64Pointer()), &utils.LeafCapacity)
 		smtBatchNode.hash = hashObj
@@ -548,7 +572,11 @@ type smtBatchNode struct {
 	hash                       *[4]uint64
 }
 
-func newSmtBatchNodeLeaf(nodeLeftHashOrRemainingKey, nodeRightHashOrValueHash *utils.NodeKey, parentNode *smtBatchNode) *smtBatchNode {
+func newSmtBatchNodeLeaf(
+	nodeLeftHashOrRemainingKey,
+	nodeRightHashOrValueHash *utils.NodeKey,
+	parentNode *smtBatchNode,
+) *smtBatchNode {
 	return &smtBatchNode{
 		nodeLeftHashOrRemainingKey: nodeLeftHashOrRemainingKey,
 		nodeRightHashOrValueHash:   nodeRightHashOrValueHash,
@@ -619,7 +647,11 @@ func (sbn *smtBatchNode) updateHashesAfterDelete() {
 	}
 }
 
-func (sbn *smtBatchNode) createALeafInEmptyDirection(insertingNodePath []int, insertingNodePathLevel int, insertingNodeKey *utils.NodeKey) (**smtBatchNode, error) {
+func (sbn *smtBatchNode) createALeafInEmptyDirection(
+	insertingNodePath []int,
+	insertingNodePathLevel int,
+	insertingNodeKey *utils.NodeKey,
+) (**smtBatchNode, error) {
 	direction := insertingNodePath[insertingNodePathLevel]
 	childPointer := sbn.getChildInDirection(direction)
 	if (*childPointer) != nil {
@@ -630,7 +662,10 @@ func (sbn *smtBatchNode) createALeafInEmptyDirection(insertingNodePath []int, in
 	return childPointer, nil
 }
 
-func (sbn *smtBatchNode) expandLeafByAddingALeafInDirection(insertingNodeKey []int, insertingNodeKeyLevel int) **smtBatchNode {
+func (sbn *smtBatchNode) expandLeafByAddingALeafInDirection(
+	insertingNodeKey []int,
+	insertingNodeKeyLevel int,
+) **smtBatchNode {
 	direction := insertingNodeKey[insertingNodeKeyLevel]
 	insertingNodeKeyUpToLevel := insertingNodeKey[:insertingNodeKeyLevel]
 
@@ -647,7 +682,12 @@ func (sbn *smtBatchNode) expandLeafByAddingALeafInDirection(insertingNodeKey []i
 	return childPointer
 }
 
-func (sbn *smtBatchNode) collapseLeafByRemovingTheSingleLeaf(insertingNodeKey []int, insertingNodeKeyLevel int, theSingleLeaf *smtBatchNode, theSingleNodeLeafDirection int) **smtBatchNode {
+func (sbn *smtBatchNode) collapseLeafByRemovingTheSingleLeaf(
+	insertingNodeKey []int,
+	insertingNodeKeyLevel int,
+	theSingleLeaf *smtBatchNode,
+	theSingleNodeLeafDirection int,
+) **smtBatchNode {
 	insertingNodeKeyUpToLevel := insertingNodeKey[:insertingNodeKeyLevel+1]
 	insertingNodeKeyUpToLevel[insertingNodeKeyLevel] = theSingleNodeLeafDirection
 	nodeKey := utils.JoinKey(insertingNodeKeyUpToLevel, *theSingleLeaf.nodeLeftHashOrRemainingKey)
@@ -721,7 +761,11 @@ func (sdh *smtDfsHelper) startConsumersLoop(s *SMT) error {
 	}
 }
 
-func setNodeKeyMapValue[T int | *utils.NodeKey](nodeKeyMap map[uint64]map[uint64]map[uint64]map[uint64]T, nodeKey *utils.NodeKey, value T) {
+func setNodeKeyMapValue[T int | *utils.NodeKey](
+	nodeKeyMap map[uint64]map[uint64]map[uint64]map[uint64]T,
+	nodeKey *utils.NodeKey,
+	value T,
+) {
 	mapLevel0, found := nodeKeyMap[nodeKey[0]]
 	if !found {
 		mapLevel0 = make(map[uint64]map[uint64]map[uint64]T)
@@ -743,7 +787,10 @@ func setNodeKeyMapValue[T int | *utils.NodeKey](nodeKeyMap map[uint64]map[uint64
 	mapLevel2[nodeKey[3]] = value
 }
 
-func getNodeKeyMapValue[T int | *utils.NodeKey](nodeKeyMap map[uint64]map[uint64]map[uint64]map[uint64]T, nodeKey *utils.NodeKey) (T, bool) {
+func getNodeKeyMapValue[T int | *utils.NodeKey](
+	nodeKeyMap map[uint64]map[uint64]map[uint64]map[uint64]T,
+	nodeKey *utils.NodeKey,
+) (T, bool) {
 	var notExistingValue T
 
 	mapLevel0, found := nodeKeyMap[nodeKey[0]]
