@@ -29,7 +29,7 @@ func getProgressPrinterPre(logPrefix string, progressType string, size uint64, s
 	if shouldPrintProgress {
 		newChan, stopProgressPrinterPre = zk.ProgressPrinter(fmt.Sprintf("[%s] SMT incremental progress (%s)", logPrefix, progressType), size, false)
 	} else {
-		newChan = make(chan uint64, 100)
+		newChan = make(chan uint64, size)
 		var once sync.Once
 
 		stopProgressPrinterPre = func() {
