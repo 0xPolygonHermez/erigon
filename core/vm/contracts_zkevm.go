@@ -300,7 +300,6 @@ func (c *bigModExp_zkevm) RequiredGas(input []byte) uint64 {
 		input = input[:0]
 	}
 
-	// Retrieve the operands and execute the exponentiation
 	// Retrieve the head 32 bytes of exp for the adjusted exponent length
 	var expHead *big.Int
 	if big.NewInt(int64(len(input))).Cmp(baseLen) <= 0 {
