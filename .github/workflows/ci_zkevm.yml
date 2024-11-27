@@ -8,6 +8,7 @@ on:
     branches:
       - zkevm
       - zkevm-2.60
+      - stable*
     types:
       - opened
       - reopened
@@ -18,6 +19,10 @@ on:
 concurrency:
   group: ${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
 jobs:
   tests:
@@ -39,7 +44,7 @@ jobs:
         run: sudo apt update && sudo apt install build-essential
 
       - name: Build
-        run: make BUILD_TAGS=nosqlite,noboltdb,nosilkworm all
+        run: make BUILD_TAGS=nosqlite,noboltdb,nosilkworm cdk-erigon
 
       - name: Reproducible build test
         run: |
@@ -85,6 +90,12 @@ jobs:
           ref: v0.2.12
           path: kurtosis-cdk
 
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
       - name: Install Kurtosis CDK tools (Kurtosis, yq, Foundry, disable analytics)
         uses: ./kurtosis-cdk/.github/actions/setup-kurtosis-cdk
 
@@ -96,7 +107,7 @@ jobs:
 
       - name: Build docker image
         working-directory: ./cdk-erigon
-        run: docker build -t cdk-erigon:local --file Dockerfile .
+        run: docker build -t cdk-erigon:local --file Dockerfile.lite .
 
       - name: Remove unused flags
         working-directory: ./kurtosis-cdk
@@ -220,8 +231,11 @@ jobs:
       - name: Install Kurtosis CDK tools
         uses: ./kurtosis-cdk/.github/actions/setup-kurtosis-cdk
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Install yq
         run: |
@@ -237,7 +251,7 @@ jobs:
 
       - name: Build docker image
         working-directory: ./cdk-erigon
-        run: docker build -t cdk-erigon:local --file Dockerfile .
+        run: docker build -t cdk-erigon:local --file Dockerfile.lite .
 
       - name: Modify cdk-erigon flags
         working-directory: ./kurtosis-cdk
