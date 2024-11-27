@@ -278,7 +278,11 @@ func (s *SMT) deleteBatchedNodeValues(
 	return nil
 }
 
-func (s *SMT) saveBatchedNodeValues(logPrefix string, nodeValues []*utils.NodeValue8, nodeValuesHashes []*[4]uint64) error {
+func (s *SMT) saveBatchedNodeValues(
+	logPrefix string,
+	nodeValues []*utils.NodeValue8,
+	nodeValuesHashes []*[4]uint64,
+) error {
 	progressChanFin, stopProgressPrinterFin := getProgressPrinterPre(logPrefix, "finalize", uint64(len(nodeValues)), false)
 	defer stopProgressPrinterFin()
 
