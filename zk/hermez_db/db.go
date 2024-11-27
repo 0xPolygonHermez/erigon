@@ -53,6 +53,7 @@ const PLAIN_STATE_VERSION = "plain_state_version"                       // batch
 const ERIGON_VERSIONS = "erigon_versions"                               // erigon version -> timestamp of startup
 const BATCH_ENDS = "batch_ends"                                         // batch number -> true
 const WITNESS_CACHE = "witness_cache"                                   // block number -> witness for 1 block
+const BATCH_ACCINPUTHASHES = "batch_accinputhashes"                     // batch number -> acc input hash
 
 var HermezDbTables = []string{
 	L1VERIFICATIONS,
@@ -90,6 +91,7 @@ var HermezDbTables = []string{
 	ERIGON_VERSIONS,
 	BATCH_ENDS,
 	WITNESS_CACHE,
+	BATCH_ACCINPUTHASHES,
 }
 
 type HermezDb struct {
@@ -300,6 +302,67 @@ func (db *HermezDbReader) GetSequenceByL1Block(l1BlockNo uint64) (*types.L1Batch
 
 func (db *HermezDbReader) GetSequenceByBatchNo(batchNo uint64) (*types.L1BatchInfo, error) {
 	return db.getByBatchNo(L1SEQUENCES, batchNo)
+}
+
+func (db *HermezDbReader) GetAllSequences() ([]*types.L1BatchInfo, error) {
+	c, err := db.tx.Cursor(L1SEQUENCES)
+	if err != nil {
+		return nil, err
+	}
+
+	defer c.Close()
+
+	var sequences []*types.L1BatchInfo
+	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			return nil, err
+		}
+
+		l1Block, batch, err := SplitKey(k)
+		if err != nil {
+			return nil, err
+		}
+
+		seq, err := parseL1BatchInfo(l1Block, batch, v)
+		if err != nil {
+			return nil, err
+		}
+
+		sequences = append(sequences, seq)
+	}
+
+	return sequences, nil
+}
+
+func (db *HermezDbReader) GetAllSequencesAboveBatchNo(batchNo uint64) ([]*types.L1BatchInfo, error) {
+	c, err := db.tx.Cursor(L1SEQUENCES)
+	if err != nil {
+		return nil, err
+	}
+
+	defer c.Close()
+
+	var sequences []*types.L1BatchInfo
+	for k, v, err := c.Seek(Uint64ToBytes(batchNo)); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			return nil, err
+		}
+
+		l1Block, batch, err := SplitKey(k)
+		if err != nil {
+			return nil, err
+		}
+
+		seq, err := parseL1BatchInfo(l1Block, batch, v)
+		if err != nil {
+			return nil, err
+		}
+
+		sequences = append(sequences, seq)
+
+	}
+
+	return sequences, nil
 }
 
 func (db *HermezDbReader) GetRangeSequencesByBatch(batchNo uint64) (*types.L1BatchInfo, *types.L1BatchInfo, error) {
@@ -1905,4 +1968,61 @@ func (db *HermezDbReader) GetWitnessCache(blockNo uint64) ([]byte, error) {
 
 func (db *HermezDb) DeleteWitnessCaches(from, to uint64) error {
 	return db.deleteFromBucketWithUintKeysRange(WITNESS_CACHE, from, to)
+}
+
+func (db *HermezDb) WriteBatchAccInputHash(batchNo uint64, hash common.Hash) error {
+	return db.tx.Put(BATCH_ACCINPUTHASHES, Uint64ToBytes(batchNo), hash.Bytes())
+}
+
+func (db *HermezDbReader) GetHighestStoredBatchAccInputHash() (uint64, common.Hash, error) {
+	c, err := db.tx.Cursor(BATCH_ACCINPUTHASHES)
+	if err != nil {
+		return 0, common.Hash{}, err
+	}
+	defer c.Close()
+
+	k, v, err := c.Last()
+	if err != nil {
+		return 0, common.Hash{}, err
+	}
+	if k == nil {
+		return 0, common.Hash{}, nil
+	}
+	return BytesToUint64(k), common.BytesToHash(v), nil
+}
+
+func (db *HermezDbReader) GetAccInputHashForBatchOrPrevious(batchNo uint64) (common.Hash, uint64, error) {
+	v, err := db.tx.GetOne(BATCH_ACCINPUTHASHES, Uint64ToBytes(batchNo))
+	if err != nil {
+		return common.Hash{}, 0, err
+	}
+
+	currentBatchNo := batchNo
+
+	// if nil, go backwards
+	if len(v) == 0 {
+		c, err := db.tx.Cursor(BATCH_ACCINPUTHASHES)
+		if err != nil {
+			return common.Hash{}, 0, err
+		}
+		defer c.Close()
+
+		var k, v []byte
+		for k, v, err = c.Last(); k != nil; k, v, err = c.Prev() {
+			if err != nil {
+				break
+			}
+			currentBatchNo = BytesToUint64(k)
+			if currentBatchNo <= batchNo {
+				break
+			}
+		}
+		if k == nil {
+			return common.Hash{}, 0, nil
+		}
+
+		return common.BytesToHash(v), currentBatchNo, nil
+	}
+
+	return common.BytesToHash(v), currentBatchNo, nil
 }

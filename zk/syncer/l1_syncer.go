@@ -229,7 +229,7 @@ func (s *L1Syncer) GetPreElderberryAccInputHash(ctx context.Context, addr *commo
 // returns accInputHash only if the batch matches the last batch in sequence
 // on Etrrof the rollup contract was changed so data is taken differently
 func (s *L1Syncer) GetElderberryAccInputHash(ctx context.Context, addr *common.Address, rollupId, batchNum uint64) (common.Hash, error) {
-	h, _, err := s.callGetRollupSequencedBatches(ctx, addr, rollupId, batchNum)
+	h, _, err := s.CallGetRollupSequencedBatches(ctx, addr, rollupId, batchNum)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -493,7 +493,7 @@ func (s *L1Syncer) callSequencedBatchesMap(ctx context.Context, addr *common.Add
 
 // calls the rollup contract to get the accInputHash for a certain batch
 // returns the accInputHash and lastBatchNumber
-func (s *L1Syncer) callGetRollupSequencedBatches(ctx context.Context, addr *common.Address, rollupId, batchNum uint64) (common.Hash, uint64, error) {
+func (s *L1Syncer) CallGetRollupSequencedBatches(ctx context.Context, addr *common.Address, rollupId, batchNum uint64) (common.Hash, uint64, error) {
 	rollupID := fmt.Sprintf("%064x", rollupId)
 	batchNumber := fmt.Sprintf("%064x", batchNum)
 

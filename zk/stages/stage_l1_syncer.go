@@ -22,6 +22,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/types"
+	"sync"
 )
 
 type IL1Syncer interface {
@@ -42,6 +43,8 @@ type IL1Syncer interface {
 	ConsumeQueryBlocks()
 	WaitQueryBlocksToFinish()
 	CheckL1BlockFinalized(blockNo uint64) (bool, uint64, error)
+
+	CallGetRollupSequencedBatches(ctx context.Context, addr *common.Address, rollupId, batchNum uint64) (common.Hash, uint64, error)
 }
 
 var (
@@ -146,6 +149,14 @@ Loop:
 					if batchLogType == logSequence && cfg.zkCfg.L1RollupId > 1 {
 						continue
 					}
+					// TODO: make the l1 call to get the accinputhash - if we have one for the batch, we get it.
+					// check the table for the batch - if it's there don't call l1
+					// cal l1 for it
+					// if its not 0, write it
+					// warn on failure - but it's not critical
+					// move on
+					// unwind scenario
+					// flag to turn this off
 					if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot, info.L1InfoRoot); err != nil {
 						return fmt.Errorf("WriteSequence: %w", err)
 					}
@@ -191,6 +202,12 @@ Loop:
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
+	}
+
+	// do this separately to allow upgrading nodes to back-fill the table
+	err = getAccInputHashes(ctx, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, highestVerification.BatchNo)
+	if err != nil {
+		return fmt.Errorf("getAccInputHashes: %w", err)
 	}
 
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
@@ -412,4 +429,116 @@ func blockComparison(tx kv.RwTx, hermezDb *hermez_db.HermezDb, blockNo uint64, l
 	}
 
 	return nil
+}
+
+// call the l1 to get accInputHashes working backwards from the highest known batch, to the highest stored batch
+// could be all the way to 0 for a new or upgrading node
+func getAccInputHashes(ctx context.Context, hermezDb *hermez_db.HermezDb, syncer IL1Syncer, rollupAddr *common.Address, rollupId uint64, highestSeenBatchNo uint64) error {
+	if highestSeenBatchNo == 0 {
+		log.Info("No (new) batches seen on L1, skipping acc input hash retrieval")
+		return nil
+	}
+
+	startTime := time.Now()
+
+	highestStored, _, err := hermezDb.GetHighestStoredBatchAccInputHash()
+	if err != nil {
+		return fmt.Errorf("GetHighestStoredBatchAccInputHash: %w", err)
+	}
+
+	sequences, err := hermezDb.GetAllSequencesAboveBatchNo(highestStored)
+	if err != nil {
+		return fmt.Errorf("GetAllSequences: %w", err)
+	}
+
+	// only fetch for sequences above highest stored
+	filteredSequences := make([]*types.L1BatchInfo, 0, len(sequences))
+	for _, seq := range sequences {
+		if seq.BatchNo > highestStored {
+			filteredSequences = append(filteredSequences, seq)
+		}
+	}
+	sequences = filteredSequences
+
+	type Result struct {
+		BatchNo      uint64
+		AccInputHash common.Hash
+		Error        error
+	}
+
+	resultsCh := make(chan Result)
+	semaphore := make(chan struct{}, 5)
+
+	totalSequences := len(sequences)
+	processedSequences := 0
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	// l1 queries
+	go func() {
+		var wg sync.WaitGroup
+		defer close(resultsCh)
+
+		for _, seq := range sequences {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				semaphore <- struct{}{}
+				wg.Add(1)
+
+				go func(seq *types.L1BatchInfo) {
+					defer wg.Done()
+					defer func() { <-semaphore }()
+
+					batchNo := seq.BatchNo
+
+					accInputHash, _, err := syncer.CallGetRollupSequencedBatches(ctx, rollupAddr, rollupId, batchNo)
+					if err != nil {
+						log.Error("CallGetRollupSequencedBatches failed", "batch", batchNo, "err", err)
+						select {
+						case resultsCh <- Result{BatchNo: batchNo, Error: err}:
+						case <-ctx.Done():
+						}
+						return
+					}
+
+					log.Debug("Got accinputhash from L1", "batch", batchNo, "hash", accInputHash)
+
+					select {
+					case resultsCh <- Result{BatchNo: batchNo, AccInputHash: accInputHash}:
+					case <-ctx.Done():
+					}
+				}(seq)
+			}
+		}
+
+		wg.Wait()
+	}()
+
+	// process results
+	for {
+		select {
+		case res, ok := <-resultsCh:
+			if !ok {
+				duration := time.Since(startTime)
+				log.Info("Completed fetching accinputhashes", "total_batches", totalSequences, "processed_batches", processedSequences, "duration", duration)
+				return nil
+			}
+			if res.Error != nil {
+				log.Warn("Error fetching accinputhash", "batch", res.BatchNo, "err", res.Error)
+			}
+			// Write to Db
+			if err := hermezDb.WriteBatchAccInputHash(res.BatchNo, res.AccInputHash); err != nil {
+				log.Error("WriteBatchAccInputHash failed", "batch", res.BatchNo, "err", err)
+				return err
+			}
+			processedSequences++
+		case <-ticker.C:
+			log.Info("Progress update", "total_batches", totalSequences, "processed_batches", processedSequences)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }

@@ -622,3 +622,126 @@ func TestDeleteForkId(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteAndRetrieveBatchAccInputHash(t *testing.T) {
+	tx, cleanup := GetDbTx()
+	defer cleanup()
+
+	db := NewHermezDb(tx)
+
+	batches := []struct {
+		batchNo uint64
+		hash    common.Hash
+	}{
+		{batchNo: 1, hash: common.HexToHash("0xabc")},
+		{batchNo: 2, hash: common.HexToHash("0xdef")},
+		{batchNo: 3, hash: common.HexToHash("0x123")},
+		{batchNo: 5, hash: common.HexToHash("0x456")}, // non sequential number
+	}
+
+	// write
+	for _, batch := range batches {
+		err := db.WriteBatchAccInputHash(batch.batchNo, batch.hash)
+		require.NoError(t, err, "Failed to write batch AccInputHash")
+	}
+
+	// get highest stored
+	highestBatchNo, highestHash, err := db.GetHighestStoredBatchAccInputHash()
+	require.NoError(t, err, "Failed to get highest stored batch AccInputHash")
+
+	// expected
+	expectedBatchNo := uint64(5)
+	expectedHash := common.HexToHash("0x456")
+
+	// check
+	assert.Equal(t, expectedBatchNo, highestBatchNo, "Highest batch number does not match expected")
+	assert.Equal(t, expectedHash, highestHash, "Highest batch hash does not match expected")
+}
+
+func TestGetAccInputHashForBatchOrPrevious(t *testing.T) {
+
+	testCases := []struct {
+		name            string
+		requestBatchNo  uint64
+		expectedBatchNo uint64
+		expectedHash    common.Hash
+		expectedError   error
+	}{
+		{
+			name:            "Exact Match Existing Batch",
+			requestBatchNo:  3,
+			expectedBatchNo: 3,
+			expectedHash:    common.HexToHash("0xdef"),
+			expectedError:   nil,
+		},
+		{
+			name:            "Previous Batch Found",
+			requestBatchNo:  4,
+			expectedBatchNo: 3,
+			expectedHash:    common.HexToHash("0xdef"),
+			expectedError:   nil,
+		},
+		{
+			name:            "No Previous Batch Available",
+			requestBatchNo:  0,
+			expectedBatchNo: 0,
+			expectedHash:    common.Hash{},
+			expectedError:   nil,
+		},
+		{
+			name:            "Request Batch Higher Than Any Stored",
+			requestBatchNo:  6,
+			expectedBatchNo: 5,
+			expectedHash:    common.HexToHash("0x123"),
+			expectedError:   nil,
+		},
+		{
+			name:            "Exact Match First Batch",
+			requestBatchNo:  1,
+			expectedBatchNo: 1,
+			expectedHash:    common.HexToHash("0xabc"),
+			expectedError:   nil,
+		},
+		{
+			name:            "Previous Batch Found Between Batches",
+			requestBatchNo:  2,
+			expectedBatchNo: 1,
+			expectedHash:    common.HexToHash("0xabc"),
+			expectedError:   nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, cleanup := GetDbTx()
+			defer cleanup()
+
+			dbReader := NewHermezDbReader(tx)
+			dbWriter := NewHermezDb(tx)
+
+			batches := []struct {
+				batchNo uint64
+				hash    common.Hash
+			}{
+				{batchNo: 1, hash: common.HexToHash("0xabc")},
+				{batchNo: 3, hash: common.HexToHash("0xdef")},
+				{batchNo: 5, hash: common.HexToHash("0x123")},
+			}
+
+			for _, batch := range batches {
+				err := dbWriter.WriteBatchAccInputHash(batch.batchNo, batch.hash)
+				require.NoError(t, err, "Failed to write batch AccInputHash")
+			}
+			hash, batchNo, err := dbReader.GetAccInputHashForBatchOrPrevious(tc.requestBatchNo)
+
+			if tc.expectedError != nil {
+				assert.Error(t, err)
+				assert.Equal(t, tc.expectedError, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expectedBatchNo, batchNo, "Batch number mismatch")
+				assert.Equal(t, tc.expectedHash, hash, "Hash mismatch")
+			}
+		})
+	}
+}
