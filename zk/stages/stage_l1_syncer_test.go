@@ -102,6 +102,7 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 	latestBlock := types.NewBlockWithHeader(latestBlockHeader)
 
 	EthermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
+	EthermanMock.EXPECT().CallContract(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	filterQuery := ethereum.FilterQuery{
 		FromBlock: l1FirstBlock,

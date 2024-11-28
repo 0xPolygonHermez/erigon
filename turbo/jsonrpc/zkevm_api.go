@@ -33,6 +33,7 @@ import (
 	smtUtils "github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/ledgerwatch/erigon/zk/acc_input_hash"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
@@ -45,7 +46,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	"github.com/ledgerwatch/erigon/zk/acc_input_hash"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -388,7 +388,18 @@ func (api *ZkEvmAPIImpl) getOrCalcBatchData(ctx context.Context, tx kv.Tx, dbRea
 		return nil, err
 	}
 
-	return utils.GenerateBatchDataFromDb(tx, dbReader, batchBlocks, forkId)
+	lastBlockNoInPreviousBatch := uint64(0)
+	firstBlockInBatch := batchBlocks[0]
+	if firstBlockInBatch.NumberU64() != 0 {
+		lastBlockNoInPreviousBatch = firstBlockInBatch.NumberU64() - 1
+	}
+
+	lastBlockInPreviousBatch, err := rawdb.ReadBlockByNumber(tx, lastBlockNoInPreviousBatch)
+	if err != nil {
+		return nil, err
+	}
+
+	return utils.GenerateBatchDataFromDb(tx, dbReader, batchBlocks, lastBlockInPreviousBatch, forkId)
 }
 
 type blockGetter interface {
@@ -625,7 +636,11 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, rpcBatchNumber rp
 	batch.BatchL2Data = batchL2Data
 
 	if api.l1Syncer != nil {
-		accInputHash, err := acc_input_hash.CalculateAccInputHash(ctx, forkId, batchNo, hermezDb)
+		calc, err := acc_input_hash.NewCalculator(ctx, tx, hermezDb, forkId)
+		if err != nil {
+			return nil, err
+		}
+		accInputHash, err := calc.Calculate(batchNo)
 		if err != nil {
 			log.Error(fmt.Sprintf("failed to get acc input hash for batch %d: %v", batchNo, err))
 		}
@@ -715,81 +730,6 @@ func (api *ZkEvmAPIImpl) fullTxBlockData(ctx context.Context, tx kv.Tx, hermezDb
 
 	return batchBlocksJson, batchTransactionsJson, nil
 }
-
-//type SequenceReader interface {
-//	GetRangeSequencesByBatch(batchNo uint64) (*zktypes.L1BatchInfo, *zktypes.L1BatchInfo, error)
-//	GetForkId(batchNo uint64) (uint64, error)
-//}
-
-//func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, db SequenceReader, batchNum uint64) (accInputHash *common.Hash, err error) {
-//	// get batch sequence
-//	prevSequence, batchSequence, err := db.GetRangeSequencesByBatch(batchNum)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get sequence range data for batch %d: %w", batchNum, err)
-//	}
-//
-//	// if we are asking for genesis return 0x0..0
-//	if batchNum == 0 && prevSequence.BatchNo == 0 {
-//		return &common.Hash{}, nil
-//	}
-//
-//	if prevSequence == nil || batchSequence == nil {
-//		var missing string
-//		if prevSequence == nil && batchSequence == nil {
-//			missing = "previous and current batch sequences"
-//		} else if prevSequence == nil {
-//			missing = "previous batch sequence"
-//		} else {
-//			missing = "current batch sequence"
-//		}
-//		return nil, fmt.Errorf("failed to get %s for batch %d", missing, batchNum)
-//	}
-//
-//	// get batch range for sequence
-//	prevSequenceBatch, currentSequenceBatch := prevSequence.BatchNo, batchSequence.BatchNo
-//	// get call data for tx
-//	l1Transaction, _, err := api.l1Syncer.GetTransaction(batchSequence.L1TxHash)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get transaction data for tx %s: %w", batchSequence.L1TxHash, err)
-//	}
-//	sequenceBatchesCalldata := l1Transaction.GetData()
-//	if len(sequenceBatchesCalldata) < 10 {
-//		return nil, fmt.Errorf("calldata for tx %s is too short", batchSequence.L1TxHash)
-//	}
-//
-//	currentBatchForkId, err := db.GetForkId(currentSequenceBatch)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get fork id for batch %d: %w", currentSequenceBatch, err)
-//	}
-//
-//	prevSequenceAccinputHash, err := api.GetccInputHash(ctx, currentBatchForkId, prevSequenceBatch)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get old acc input hash for batch %d: %w", prevSequenceBatch, err)
-//	}
-//
-//	decodedSequenceInterface, err := syncer.DecodeSequenceBatchesCalldata(sequenceBatchesCalldata)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to decode calldata for tx %s: %w", batchSequence.L1TxHash, err)
-//	}
-//
-//	accInputHashCalcFn, totalSequenceBatches, err := syncer.GetAccInputDataCalcFunction(batchSequence.L1InfoRoot, decodedSequenceInterface)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get accInputHash calculation func: %w", err)
-//	}
-//
-//	if totalSequenceBatches == 0 || batchNum-prevSequenceBatch > uint64(totalSequenceBatches) {
-//		return nil, fmt.Errorf("batch %d is out of range of sequence calldata", batchNum)
-//	}
-//
-//	// calculate acc input hash
-//	accInputHash = &prevSequenceAccinputHash
-//	for i := 0; i < int(batchNum-prevSequenceBatch); i++ {
-//		accInputHash = accInputHashCalcFn(prevSequenceAccinputHash, i)
-//		prevSequenceAccinputHash = *accInputHash
-//	}
-//
-//	return
-//}
 
 // GetFullBlockByNumber returns a full block from the current canonical chain. If number is nil, the
 // latest known block is returned.
@@ -1210,7 +1150,11 @@ func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64,
 		if err != nil {
 			return nil, err
 		}
-		oaih, err := acc_input_hash.CalculateAccInputHash(ctx, forkId, batchNumber-1, hDb)
+		calc, err := acc_input_hash.NewCalculator(ctx, tx, hDb, forkId)
+		if err != nil {
+			return nil, err
+		}
+		oaih, err := calc.Calculate(batchNumber - 1)
 		if err != nil {
 			return nil, err
 		}

@@ -8,7 +8,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
@@ -162,23 +161,18 @@ func GetBatchLocalExitRootFromSCStorageByBlock(blockNumber uint64, db DbReader, 
 	return libcommon.Hash{}, nil
 }
 
+type BatchDataReader interface {
+	GetBlockL1InfoTreeIndex(blockNo uint64) (uint64, error)
+	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
+}
+
 func GenerateBatchDataFromDb(
 	dbTx kv.Tx,
-	hermezDb state.ReadOnlyHermezDb,
+	hermezDb BatchDataReader,
 	batchBlocks []*eritypes.Block,
+	lastBlockInPreviousBatch *eritypes.Block,
 	forkId uint64,
 ) ([]byte, error) {
-	lastBlockNoInPreviousBatch := uint64(0)
-	firstBlockInBatch := batchBlocks[0]
-	if firstBlockInBatch.NumberU64() != 0 {
-		lastBlockNoInPreviousBatch = firstBlockInBatch.NumberU64() - 1
-	}
-
-	lastBlockInPreviousBatch, err := rawdb.ReadBlockByNumber(dbTx, lastBlockNoInPreviousBatch)
-	if err != nil {
-		return nil, err
-	}
-
 	batchBlockData := make([]BatchBlockData, 0, len(batchBlocks))
 	for i := 0; i < len(batchBlocks); i++ {
 		var dTs uint32
