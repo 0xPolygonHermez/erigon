@@ -14,6 +14,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -328,7 +329,11 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 				oldKey := utils.RemoveKeyBits(*foundKey, level2+1)
 				oldLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(oldKey, foundOldValHash), utils.LeafCapacity)
-				s.Db.InsertHashKey(oldLeafHash, *foundKey)
+				if err != nil {
+					return nil, err
+				}
+
+				err = s.Db.InsertHashKey(oldLeafHash, *foundKey)
 				if err != nil {
 					return nil, err
 				}
@@ -350,7 +355,10 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 					return nil, err
 				}
 
-				s.Db.InsertHashKey(newLeafHash, k)
+				err = s.Db.InsertHashKey(newLeafHash, k)
+				if err != nil {
+					return nil, err
+				}
 
 				var node [8]uint64
 				for i := 0; i < 8; i++ {
@@ -416,7 +424,10 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 				return nil, err
 			}
 
-			s.Db.InsertHashKey(newLeafHash, k)
+			err = s.Db.InsertHashKey(newLeafHash, k)
+			if err != nil {
+				return nil, err
+			}
 
 			proofHashCounter += 2
 
@@ -471,10 +482,15 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 					oldKey := utils.RemoveKeyBits(*insKey, level+1)
 					oldLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(oldKey, *valH), utils.LeafCapacity)
-					s.Db.InsertHashKey(oldLeafHash, *insKey)
 					if err != nil {
 						return nil, err
 					}
+
+					err = s.Db.InsertHashKey(oldLeafHash, *insKey)
+					if err != nil {
+						return nil, err
+					}
+
 					proofHashCounter += 1
 
 					if level >= 0 {
@@ -790,11 +806,9 @@ func (s *SMT) insertHashNode(path []int, hash [4]uint64, root utils.NodeKey) (ut
 	}
 
 	childIndex := path[0]
-
 	childOldRoot := rootVal[childIndex*4 : childIndex*4+4]
 
 	childNewRoot, err := s.insertHashNode(path[1:], hash, utils.NodeKeyFromBigIntArray(childOldRoot))
-
 	if err != nil {
 		return utils.NodeKey{}, err
 	}
@@ -802,24 +816,29 @@ func (s *SMT) insertHashNode(path []int, hash [4]uint64, root utils.NodeKey) (ut
 	var newIn [8]uint64
 
 	emptyRootVal := utils.NodeValue12{}
+	sibling := utils.BranchCapacity
 
-	if childIndex == 0 {
-		var sibling [4]uint64
-		if rootVal == emptyRootVal {
-			sibling = [4]uint64{0, 0, 0, 0}
-		} else {
+	if childIndex == int(utils.Left) {
+		if rootVal != emptyRootVal {
 			sibling = *rootVal.Get4to8()
 		}
 		newIn = utils.ConcatArrays4(childNewRoot, sibling)
 	} else {
-		var sibling [4]uint64
-		if rootVal == emptyRootVal {
-			sibling = [4]uint64{0, 0, 0, 0}
-		} else {
+		if rootVal != emptyRootVal {
 			sibling = *rootVal.Get0to4()
 		}
 		newIn = utils.ConcatArrays4(sibling, childNewRoot)
 	}
 
 	return s.hashcalcAndSave(newIn, utils.BranchCapacity)
+}
+
+// Copy copies the SMT, by converting it into the witness first and then back to the SMT from witness.
+func (s *SMT) Copy(ctx context.Context, rd trie.RetainDecider) (*SMT, error) {
+	witness, err := BuildWitness(s, rd, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return BuildSMTFromWitness(witness)
 }

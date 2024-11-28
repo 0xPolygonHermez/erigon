@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/stretchr/testify/require"
 )
 
 func generateOperands() []WitnessOperator {
@@ -49,6 +51,11 @@ func generateOperands() []WitnessOperator {
 			false,
 			13,
 		},
+		&OperatorSMTLeafValue{
+			NodeType: utils.KEY_BALANCE,
+			Address:  libcommon.HexToAddress("0x135792468").Bytes(),
+			Value:    big.NewInt(13).Bytes(),
+		},
 	}
 }
 
@@ -74,23 +81,16 @@ func witnessesEqual(w1, w2 *Witness) bool {
 
 func TestWitnessSerialization(t *testing.T) {
 	expectedHeader := defaultWitnessHeader()
-
 	expectedOperands := generateOperands()
-
-	expectedWitness := Witness{expectedHeader, expectedOperands}
+	expectedWitness := &Witness{expectedHeader, expectedOperands}
 
 	var buffer bytes.Buffer
-
-	if _, err := expectedWitness.WriteInto(&buffer, true); err != nil {
-		t.Error(err)
-	}
+	_, err := expectedWitness.WriteInto(&buffer, true)
+	require.NoError(t, err)
 
 	decodedWitness, err := NewWitnessFromReader(&buffer, false /* trace */)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
-	if !witnessesEqual(&expectedWitness, decodedWitness) {
-		t.Errorf("witnesses not equal: expected %+v; got %+v", expectedWitness, decodedWitness)
-	}
+	require.True(t, witnessesEqual(expectedWitness, decodedWitness),
+		"witnesses not equal: expected %+v; got %+v", expectedWitness, decodedWitness)
 }

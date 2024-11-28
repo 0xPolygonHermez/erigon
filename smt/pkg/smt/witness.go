@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"reflect"
+	"strings"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
@@ -117,8 +119,8 @@ func BuildWitness(s *SMT, rd trie.RetainDecider, ctx context.Context) (*trie.Wit
 	return trie.NewWitness(operands), err
 }
 
-// BuildSMTfromWitness builds SMT from witness
-func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
+// BuildSMTFromWitness builds SMT from witness
+func BuildSMTFromWitness(w *trie.Witness) (*SMT, error) {
 	// using memdb
 	s := NewSMT(nil, false)
 
@@ -130,8 +132,8 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 	path := make([]int, 0)
 
 	firstNode := true
-	NodeChildCountMap := make(map[string]uint32)
-	NodesBranchValueMap := make(map[string]uint32)
+	nodeChildCountMap := make(map[string]uint32)
+	nodesBranchValueMap := make(map[string]uint32)
 
 	type nodeHash struct {
 		path []int
@@ -143,68 +145,73 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 	for i, operator := range w.Operators {
 		switch op := operator.(type) {
 		case *trie.OperatorSMTLeafValue:
-			valScaler := big.NewInt(0).SetBytes(op.Value)
-			addr := libcommon.BytesToAddress(op.Address)
+			valScaler := new(big.Int).SetBytes(op.Value)
+			hexAddr := libcommon.BytesToAddress(op.Address).String()
 
 			switch op.NodeType {
 			case utils.KEY_BALANCE:
-				balanceMap[addr.String()] = valScaler
+				balanceMap[hexAddr] = valScaler
 
 			case utils.KEY_NONCE:
-				nonceMap[addr.String()] = valScaler
+				nonceMap[hexAddr] = valScaler
 
 			case utils.SC_STORAGE:
-				if _, ok := storageMap[addr.String()]; !ok {
-					storageMap[addr.String()] = make(map[string]string)
+				if _, ok := storageMap[hexAddr]; !ok {
+					storageMap[hexAddr] = make(map[string]string)
 				}
 
 				stKey := hexutils.BytesToHex(op.StorageKey)
-				if len(stKey) > 0 {
-					stKey = fmt.Sprintf("0x%s", stKey)
-				}
+				stKey = fmt.Sprintf("0x%s", stKey)
 
-				storageMap[addr.String()][stKey] = valScaler.String()
+				storageMap[hexAddr][stKey] = valScaler.String()
 			}
 
 			path = path[:len(path)-1]
-			NodeChildCountMap[intArrayToString(path)] += 1
+			nodePathAsString := intArrayToString(path)
+			nodeChildCountMap[nodePathAsString] += 1
 
-			for len(path) != 0 && NodeChildCountMap[intArrayToString(path)] == NodesBranchValueMap[intArrayToString(path)] {
+			for len(path) != 0 && nodeChildCountMap[nodePathAsString] == nodesBranchValueMap[nodePathAsString] {
 				path = path[:len(path)-1]
+				nodePathAsString = intArrayToString(path)
 			}
-			if NodeChildCountMap[intArrayToString(path)] < NodesBranchValueMap[intArrayToString(path)] {
+
+			if nodeChildCountMap[nodePathAsString] < nodesBranchValueMap[nodePathAsString] {
 				path = append(path, 1)
 			}
 
 		case *trie.OperatorCode:
-			addr := libcommon.BytesToAddress(w.Operators[i+1].(*trie.OperatorSMTLeafValue).Address)
+			smtLeafValueOp, ok := w.Operators[i+1].(*trie.OperatorSMTLeafValue)
+			if !ok {
+				return nil, fmt.Errorf("expected %T, but found %T witness operator", (*trie.OperatorSMTLeafValue)(nil), reflect.TypeOf(smtLeafValueOp))
+			}
 
+			hexAddr := libcommon.BytesToAddress(smtLeafValueOp.Address).String()
 			code := hexutils.BytesToHex(op.Code)
 			if len(code) > 0 {
-				if err := s.Db.AddCode(hexutils.HexToBytes(code)); err != nil {
+				if err := s.Db.AddCode(op.Code); err != nil {
 					return nil, err
 				}
 				code = fmt.Sprintf("0x%s", code)
 			}
 
-			contractMap[addr.String()] = code
+			contractMap[hexAddr] = code
 
 		case *trie.OperatorBranch:
 			if firstNode {
 				firstNode = false
 			} else {
-				NodeChildCountMap[intArrayToString(path[:len(path)-1])] += 1
+				nodeChildCountMap[intArrayToString(path[:len(path)-1])] += 1
 			}
 
 			switch op.Mask {
 			case 1:
-				NodesBranchValueMap[intArrayToString(path)] = 1
+				nodesBranchValueMap[intArrayToString(path)] = 1
 				path = append(path, 0)
 			case 2:
-				NodesBranchValueMap[intArrayToString(path)] = 1
+				nodesBranchValueMap[intArrayToString(path)] = 1
 				path = append(path, 1)
 			case 3:
-				NodesBranchValueMap[intArrayToString(path)] = 2
+				nodesBranchValueMap[intArrayToString(path)] = 2
 				path = append(path, 0)
 			}
 
@@ -214,12 +221,12 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 			nodeHashes = append(nodeHashes, nodeHash{path: pathCopy, hash: op.Hash})
 
 			path = path[:len(path)-1]
-			NodeChildCountMap[intArrayToString(path)] += 1
+			nodeChildCountMap[intArrayToString(path)] += 1
 
-			for len(path) != 0 && NodeChildCountMap[intArrayToString(path)] == NodesBranchValueMap[intArrayToString(path)] {
+			for len(path) != 0 && nodeChildCountMap[intArrayToString(path)] == nodesBranchValueMap[intArrayToString(path)] {
 				path = path[:len(path)-1]
 			}
-			if NodeChildCountMap[intArrayToString(path)] < NodesBranchValueMap[intArrayToString(path)] {
+			if nodeChildCountMap[intArrayToString(path)] < nodesBranchValueMap[intArrayToString(path)] {
 				path = append(path, 1)
 			}
 
@@ -265,7 +272,7 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 	for addr, storage := range storageMap {
 		_, err := s.SetContractStorage(addr, storage, nil)
 		if err != nil {
-			fmt.Println("error : unable to set contract storage", err)
+			return nil, err
 		}
 	}
 
@@ -273,9 +280,9 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 }
 
 func intArrayToString(a []int) string {
-	s := ""
+	var s strings.Builder
 	for _, v := range a {
-		s += fmt.Sprintf("%d", v)
+		s.WriteString(fmt.Sprintf("%d", v))
 	}
-	return s
+	return s.String()
 }

@@ -36,6 +36,7 @@ const (
 	// OpEmptyRoot places nil onto the node stack, and empty root hash onto the hash stack.
 	OpEmptyRoot
 
+	// OpSMTLeaf creates a SMT leaf node
 	OpSMTLeaf
 
 	// OpNewTrie stops the processing, because another trie is encoded into the witness.

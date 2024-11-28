@@ -163,7 +163,7 @@ func TestWitnessToSMT(t *testing.T) {
 	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
-	newSMT, err := smt.BuildSMTfromWitness(witness)
+	newSMT, err := smt.BuildSMTFromWitness(witness)
 	require.NoError(t, err, "error building SMT from witness")
 
 	root, err := newSMT.Db.GetLastRoot()
@@ -193,7 +193,7 @@ func TestWitnessToSMTStateReader(t *testing.T) {
 	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
-	newSMT, err := smt.BuildSMTfromWitness(witness)
+	newSMT, err := smt.BuildSMTFromWitness(witness)
 	require.NoError(t, err, "error building SMT from witness")
 
 	root, err := newSMT.Db.GetLastRoot()

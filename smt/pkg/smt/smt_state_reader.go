@@ -43,9 +43,9 @@ func (s *SMT) ReadAccountData(address libcommon.Address) (*accounts.Account, err
 	return account, nil
 }
 
-// ReadAccountStorage reads account storage from the SMT (not implemented for SMT)
+// ReadAccountStorage reads account storage from the SMT
 func (s *SMT) ReadAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
-	value, err := s.getValue(0, address, key)
+	value, err := s.getValue(utils.SC_STORAGE, address, key)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -70,7 +70,7 @@ func (s *SMT) ReadAccountCodeSize(address libcommon.Address, _ uint64, _ libcomm
 		return 0, err
 	}
 
-	sizeBig := big.NewInt(0).SetBytes(valueInBytes)
+	sizeBig := new(big.Int).SetBytes(valueInBytes)
 
 	if !sizeBig.IsInt64() {
 		err = errors.New("code size value is too large to fit into an int")

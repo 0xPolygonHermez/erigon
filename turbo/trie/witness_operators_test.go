@@ -5,6 +5,9 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ugorji/go/codec"
 )
 
@@ -259,5 +262,57 @@ func TestKeySerialization(t *testing.T) {
 			t.Errorf("wrong deserialization, expected %x got %x", key, key2)
 		}
 
+	}
+}
+
+func TestOperatorSMTLeafValue_EncodeDecode(t *testing.T) {
+	tests := []struct {
+		name string
+		leaf OperatorSMTLeafValue
+	}{
+		{
+			name: "storage leaf",
+			leaf: OperatorSMTLeafValue{
+				NodeType:   utils.SC_STORAGE,
+				Address:    []byte("testAddress"),
+				StorageKey: []byte("testStorageKey"),
+				Value:      []byte("testValue"),
+			},
+		},
+		{
+			name: "non-storage leaf",
+			leaf: OperatorSMTLeafValue{
+				NodeType:   utils.KEY_BALANCE,
+				Address:    []byte("testAddress"),
+				StorageKey: nil,
+				Value:      []byte("testValue"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create marshaller and unmarshaller
+			var buf bytes.Buffer
+			marshaller := NewOperatorMarshaller(&buf)
+
+			// Encode
+			err := tt.leaf.WriteTo(marshaller)
+			require.NoError(t, err)
+
+			// Decode
+			unmarshaller := NewOperatorUnmarshaller(&buf)
+			// Read OpCode first as it would be in real scenario
+			opCode, err := unmarshaller.ReadUInt8()
+			require.NoError(t, err)
+			require.Equal(t, uint8(OpSMTLeaf), opCode)
+
+			var decoded OperatorSMTLeafValue
+			err = decoded.LoadFrom(unmarshaller)
+			require.NoError(t, err)
+
+			// Compare original and decoded
+			require.Equal(t, tt.leaf, decoded)
+		})
 	}
 }

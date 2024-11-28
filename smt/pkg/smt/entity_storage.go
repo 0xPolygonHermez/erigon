@@ -252,7 +252,6 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			if err = s.DeleteKeySource(&keyBalance); err != nil {
 				return nil, nil, err
 			}
-
 		}
 
 		keysBatchStorage = append(keysBatchStorage, &keyNonce)
