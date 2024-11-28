@@ -112,6 +112,7 @@ different_files=(
     "HashedCodeHash.txt"
     "hermez_l1Sequences.txt"
     "hermez_l1Verifications.txt"
+    "batch_accinputhashes.txt"
     "HermezSmt.txt"
     "PlainCodeHash.txt"
     "SyncStage.txt"
