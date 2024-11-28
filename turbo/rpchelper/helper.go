@@ -13,6 +13,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/rpc"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 )
 
 // unable to decode supplied params, or an invalid number of parameters
@@ -33,11 +34,18 @@ func GetCanonicalBlockNumber(blockNrOrHash rpc.BlockNumberOrHash, tx kv.Tx, filt
 }
 
 func _GetBlockNumber(requireCanonical bool, blockNrOrHash rpc.BlockNumberOrHash, tx kv.Tx, filters *Filters) (blockNumber uint64, hash libcommon.Hash, latest bool, err error) {
-	// Due to changed semantics of `lastest` block in RPC request, it is now distinct
-	// from the block block number corresponding to the plain state
-	var plainStateBlockNumber uint64
-	if plainStateBlockNumber, err = stages.GetStageProgress(tx, stages.Execution); err != nil {
-		return 0, libcommon.Hash{}, false, fmt.Errorf("getting plain state block number: %w", err)
+	var finishedBlockNumber uint64
+
+	if !sequencer.IsSequencer() {
+		finishedBlockNumber, err = stages.GetStageProgress(tx, stages.Finish)
+		if err != nil {
+			return 0, libcommon.Hash{}, false, fmt.Errorf("getting finished block number: %w", err)
+		}
+	} else {
+		finishedBlockNumber, err = stages.GetStageProgress(tx, stages.Execution)
+		if err != nil {
+			return 0, libcommon.Hash{}, false, fmt.Errorf("getting execution block number: %w", err)
+		}
 	}
 	var ok bool
 	hash, ok = blockNrOrHash.Hash()
@@ -45,7 +53,7 @@ func _GetBlockNumber(requireCanonical bool, blockNrOrHash rpc.BlockNumberOrHash,
 		number := *blockNrOrHash.BlockNumber
 		switch number {
 		case rpc.LatestBlockNumber:
-			blockNumber = plainStateBlockNumber
+			blockNumber = finishedBlockNumber
 		case rpc.EarliestBlockNumber:
 			blockNumber = 0
 		case rpc.FinalizedBlockNumber:
@@ -57,21 +65,26 @@ func _GetBlockNumber(requireCanonical bool, blockNrOrHash rpc.BlockNumberOrHash,
 			// [zkevm] safe not available, returns finilized instead
 			// blockNumber, err = GetSafeBlockNumber(tx)
 			blockNumber, err = GetFinalizedBlockNumber(tx)
-
 			if err != nil {
 				return 0, libcommon.Hash{}, false, err
 			}
 		case rpc.PendingBlockNumber:
 			pendingBlock := filters.LastPendingBlock()
 			if pendingBlock == nil {
-				blockNumber = plainStateBlockNumber
+				blockNumber = finishedBlockNumber
 			} else {
 				return pendingBlock.NumberU64(), pendingBlock.Hash(), false, nil
 			}
 		case rpc.LatestExecutedBlockNumber:
-			blockNumber = plainStateBlockNumber
+			blockNumber, err = stages.GetStageProgress(tx, stages.Execution)
+			if err != nil {
+				return 0, libcommon.Hash{}, false, fmt.Errorf("getting latest executed block number: %w", err)
+			}
 		default:
 			blockNumber = uint64(number.Int64())
+			if blockNumber > finishedBlockNumber {
+				return 0, libcommon.Hash{}, false, fmt.Errorf("block with number %d not found", blockNumber)
+			}
 		}
 		hash, err = rawdb.ReadCanonicalHash(tx, blockNumber)
 		if err != nil {
@@ -92,7 +105,7 @@ func _GetBlockNumber(requireCanonical bool, blockNrOrHash rpc.BlockNumberOrHash,
 			return 0, libcommon.Hash{}, false, nonCanonocalHashError{hash}
 		}
 	}
-	return blockNumber, hash, blockNumber == plainStateBlockNumber, nil
+	return blockNumber, hash, blockNumber == finishedBlockNumber, nil
 }
 
 func CreateStateReader(ctx context.Context, tx kv.Tx, blockNrOrHash rpc.BlockNumberOrHash, txnIndex int, filters *Filters, stateCache kvcache.Cache, historyV3 bool, chainName string) (state.StateReader, error) {
