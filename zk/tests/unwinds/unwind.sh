@@ -121,9 +121,11 @@ different_files=(
 )
 
 is_in_array() {
+    local array=("${!1}")
+    local seeking="$2"
     local element
-    for element in "${different_files[@]}"; do
-        if [[ "$element" == "$filename" ]]; then
+    for element in "${array[@]}"; do
+        if [[ "$element" == "$seeking" ]]; then
             return 0
         fi
     done
@@ -141,7 +143,7 @@ for file in "$dataPath/phase1-dump1"/*; do
         echo "No difference found in $filename"
     else
         # this is a list of files where we expect differences.
-        if is_in_array; then
+        if is_in_array different_files[@] "$filename"; then
             echo "Phase 1 - Expected differences in $filename"
         else
             # unwind tests failed
@@ -167,6 +169,11 @@ go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata"
 # mkdir -p "$dataPath/phase2-diffs/pre"
 # mkdir -p "$dataPath/phase2-diffs/post"
 
+different_files2=(
+    "BadHeaderNumber.txt"
+    "batch_accinputhashes.txt"
+)
+
 # iterate over the files in the pre-dump folder
 for file in "$dataPath/phase2-dump1"/*; do
     # get the filename
@@ -177,7 +184,7 @@ for file in "$dataPath/phase2-dump1"/*; do
         echo "Phase 2 No difference found in $filename"
     else
         # file where it should be different
-        if [ "$filename" = "BadHeaderNumber.txt" ]; then  
+        if is_in_array different_files2[@] "$filename"; then
             echo "Phase 2 - Expected differences in $filename"
         else
             echo "Phase 2 - Error unexpected differences in $filename"

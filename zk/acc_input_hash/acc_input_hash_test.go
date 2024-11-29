@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
+
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/types"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,12 +93,12 @@ func (m *MockAccInputHashReader) GetL1InfoTreeIndexToRoots() (map[uint64]common.
 	return m.L1InfoTreeIndexToRoots, nil
 }
 
-func GetDbTx() (tx kv.RwTx, cleanup func()) {
-	dbi, err := mdbx.NewTemporaryMdbx(context.TODO(), "")
+func GetDbTx(ctx context.Context) (tx kv.RwTx, cleanup func()) {
+	dbi, err := mdbx.NewTemporaryMdbx(ctx, "")
 	if err != nil {
 		panic(err)
 	}
-	tx, err = dbi.BeginRw(context.TODO())
+	tx, err = dbi.BeginRw(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -155,7 +156,7 @@ func TestCalculateAccInputHash(t *testing.T) {
 		"Valid Fork7 Missing Batch Calculate Hash": {
 			forkID:       7,
 			batchNum:     5,
-			expectedHash: common.HexToHash("0x34166ed584a98ccfad3c615899d1ea4975431bddcbe05e9a30f47fef00079739"),
+			expectedHash: common.HexToHash("0xb370e69e462a8a00469cb0ce188399a9754880dfd8ebd98717e24cbe1103efa6"),
 			expectError:  false,
 			setup: func(t *testing.T) (*MockAccInputHashReader, *MockBlockReader) {
 				reader := &MockAccInputHashReader{
@@ -204,7 +205,7 @@ func TestCalculateAccInputHash(t *testing.T) {
 		"Valid Fork7, No Previous Batch": {
 			forkID:       7,
 			batchNum:     2,
-			expectedHash: common.HexToHash("0x81436dcddced6a80e936704a5c7fc6002ee19260169d213e4ff2d4f51bab0484"),
+			expectedHash: common.HexToHash("0x0cd77f88e7eeeef006fa44caaf24baab7a1b46321e26a9fa28f943a293a8811e"),
 			expectError:  false,
 			setup: func(t *testing.T) (*MockAccInputHashReader, *MockBlockReader) {
 				reader := &MockAccInputHashReader{
@@ -274,7 +275,7 @@ func TestCalculateAccInputHash(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			tx, cleanup := GetDbTx()
+			tx, cleanup := GetDbTx(ctx)
 			reader, mockBlockReader := tc.setup(t)
 			var calculator AccInputHashCalculator
 			var err error

@@ -40,7 +40,7 @@ const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch
 const BATCH_COUNTERS = "hermez_batch_counters"                          // block number -> counters
 const L1_BATCH_DATA = "l1_batch_data"                                   // batch number -> l1 batch data from transaction call data
 const REUSED_L1_INFO_TREE_INDEX = "reused_l1_info_tree_index"           // block number => const 1
-const LATEST_USED_GER = "latest_used_ger"                               // batch number -> GER latest used GER
+const LATEST_USED_GER = "latest_used_ger"                               // block number -> GER latest used GER
 const BATCH_BLOCKS = "batch_blocks"                                     // batch number -> block numbers (concatenated together)
 const SMT_DEPTHS = "smt_depths"                                         // block number -> smt depth
 const L1_INFO_LEAVES = "l1_info_leaves"                                 // l1 info tree index -> l1 info tree leaf
@@ -1576,6 +1576,26 @@ func (db *HermezDbReader) GetLatestUsedGer() (uint64, common.Hash, error) {
 	ger := common.BytesToHash(v)
 
 	return batchNo, ger, nil
+}
+
+func (db *HermezDbReader) GetLatestUsedGerByBlockNo(blockNo uint64) (common.Hash, error) {
+	c, err := db.tx.Cursor(LATEST_USED_GER)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	defer c.Close()
+
+	for k, v, err := c.Seek(Uint64ToBytes(blockNo)); k != nil; k, v, err = c.Prev() {
+		if err != nil {
+			return common.Hash{}, err
+		}
+
+		if len(v) > 0 {
+			return common.BytesToHash(v), nil
+		}
+	}
+
+	return common.Hash{}, nil
 }
 
 func (db *HermezDb) DeleteLatestUsedGers(fromBlockNum, toBlockNum uint64) error {

@@ -149,14 +149,6 @@ Loop:
 					if batchLogType == logSequence && cfg.zkCfg.L1RollupId > 1 {
 						continue
 					}
-					// TODO: make the l1 call to get the accinputhash - if we have one for the batch, we get it.
-					// check the table for the batch - if it's there don't call l1
-					// cal l1 for it
-					// if its not 0, write it
-					// warn on failure - but it's not critical
-					// move on
-					// unwind scenario
-					// flag to turn this off
 					if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot, info.L1InfoRoot); err != nil {
 						return fmt.Errorf("WriteSequence: %w", err)
 					}
@@ -205,7 +197,7 @@ Loop:
 	}
 
 	// do this separately to allow upgrading nodes to back-fill the table
-	err = getAccInputHashes(ctx, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, highestVerification.BatchNo)
+	err = getAccInputHashes(ctx, logPrefix, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, highestVerification.BatchNo)
 	if err != nil {
 		return fmt.Errorf("getAccInputHashes: %w", err)
 	}
@@ -433,9 +425,9 @@ func blockComparison(tx kv.RwTx, hermezDb *hermez_db.HermezDb, blockNo uint64, l
 
 // call the l1 to get accInputHashes working backwards from the highest known batch, to the highest stored batch
 // could be all the way to 0 for a new or upgrading node
-func getAccInputHashes(ctx context.Context, hermezDb *hermez_db.HermezDb, syncer IL1Syncer, rollupAddr *common.Address, rollupId uint64, highestSeenBatchNo uint64) error {
+func getAccInputHashes(ctx context.Context, logPrefix string, hermezDb *hermez_db.HermezDb, syncer IL1Syncer, rollupAddr *common.Address, rollupId uint64, highestSeenBatchNo uint64) error {
 	if highestSeenBatchNo == 0 {
-		log.Info("No (new) batches seen on L1, skipping acc input hash retrieval")
+		log.Info(fmt.Sprintf("[%s] No (new) batches seen on L1, skipping accinputhash retreival", logPrefix))
 		return nil
 	}
 
@@ -496,7 +488,7 @@ func getAccInputHashes(ctx context.Context, hermezDb *hermez_db.HermezDb, syncer
 
 					accInputHash, _, err := syncer.CallGetRollupSequencedBatches(ctx, rollupAddr, rollupId, batchNo)
 					if err != nil {
-						log.Error("CallGetRollupSequencedBatches failed", "batch", batchNo, "err", err)
+						log.Error(fmt.Sprintf("[%s] CallGetRollupSequencedBatches failed", logPrefix), "batch", batchNo, "err", err)
 						select {
 						case resultsCh <- Result{BatchNo: batchNo, Error: err}:
 						case <-ctx.Done():
@@ -504,7 +496,7 @@ func getAccInputHashes(ctx context.Context, hermezDb *hermez_db.HermezDb, syncer
 						return
 					}
 
-					log.Debug("Got accinputhash from L1", "batch", batchNo, "hash", accInputHash)
+					log.Debug(fmt.Sprintf("[%s] Got accinputhash from L1", logPrefix), "batch", batchNo, "hash", accInputHash)
 
 					select {
 					case resultsCh <- Result{BatchNo: batchNo, AccInputHash: accInputHash}:
@@ -523,20 +515,20 @@ func getAccInputHashes(ctx context.Context, hermezDb *hermez_db.HermezDb, syncer
 		case res, ok := <-resultsCh:
 			if !ok {
 				duration := time.Since(startTime)
-				log.Info("Completed fetching accinputhashes", "total_batches", totalSequences, "processed_batches", processedSequences, "duration", duration)
+				log.Info(fmt.Sprintf("[%s] Completed fetching accinputhashes", logPrefix), "total_batches", totalSequences, "processed_batches", processedSequences, "duration", duration)
 				return nil
 			}
 			if res.Error != nil {
-				log.Warn("Error fetching accinputhash", "batch", res.BatchNo, "err", res.Error)
+				log.Warn(fmt.Sprintf("[%s] Error fetching accinputhash", logPrefix), "batch", res.BatchNo, "err", res.Error)
 			}
 			// Write to Db
 			if err := hermezDb.WriteBatchAccInputHash(res.BatchNo, res.AccInputHash); err != nil {
-				log.Error("WriteBatchAccInputHash failed", "batch", res.BatchNo, "err", err)
+				log.Error(fmt.Sprintf("[%s] WriteBatchAccInputHash failed", logPrefix), "batch", res.BatchNo, "err", err)
 				return err
 			}
 			processedSequences++
 		case <-ticker.C:
-			log.Info("Progress update", "total_batches", totalSequences, "processed_batches", processedSequences)
+			log.Info(fmt.Sprintf("[%s] Progress update", logPrefix), "total_batches", totalSequences, "processed_batches", processedSequences)
 		case <-ctx.Done():
 			return ctx.Err()
 		}

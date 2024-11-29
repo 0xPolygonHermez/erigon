@@ -3,10 +3,11 @@ package utils
 import (
 	"math/big"
 
+	"errors"
+
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/crypto"
-	"errors"
 )
 
 func CalculateBananaAccInputHash(
@@ -198,13 +199,13 @@ func CalculateBatchHashData(transactions []byte) []byte {
 }
 
 type AccHashInputs struct {
-	OldAccInputHash *common.Hash
+	OldAccInputHash common.Hash
 	Sequencer       common.Address
 	BatchData       []byte
 
-	L1InfoRoot      *common.Hash
+	L1InfoRoot      common.Hash
 	LimitTimestamp  uint64
-	ForcedBlockHash *common.Hash
+	ForcedBlockHash common.Hash
 }
 
 func CalculateAccInputHashByForkId(input AccHashInputs) (common.Hash, error) {
@@ -217,35 +218,23 @@ func CalculateAccInputHashByForkId(input AccHashInputs) (common.Hash, error) {
 		if input.BatchData == nil || len(input.BatchData) == 0 {
 			return common.Hash{}, errors.New("batchData is required for etrog rollup")
 		}
-		if input.L1InfoRoot == nil {
-			return common.Hash{}, errors.New("l1InfoRoot is required for etrog rollup")
-		}
-		if input.ForcedBlockHash == nil {
-			return common.Hash{}, errors.New("forcedBlockHash is required for etrog rollup")
-		}
 		newAccInputHash = CalculateEtrogAccInputHash(
-			*input.OldAccInputHash,
+			input.OldAccInputHash,
 			input.BatchData,
-			*input.L1InfoRoot,
+			input.L1InfoRoot,
 			input.LimitTimestamp,
 			input.Sequencer,
-			*input.ForcedBlockHash,
+			input.ForcedBlockHash,
 		)
 	} else {
 		// validium
-		if input.L1InfoRoot == nil {
-			return common.Hash{}, errors.New("l1InfoRoot is required for etrog validium")
-		}
-		if input.ForcedBlockHash == nil {
-			return common.Hash{}, errors.New("forcedBlockHash is required for etrog validium")
-		}
 		newAccInputHash = CalculateEtrogValidiumAccInputHash(
-			*input.OldAccInputHash,
+			input.OldAccInputHash,
 			common.BytesToHash(input.BatchData),
-			*input.L1InfoRoot,
+			input.L1InfoRoot,
 			input.LimitTimestamp,
 			input.Sequencer,
-			*input.ForcedBlockHash,
+			input.ForcedBlockHash,
 		)
 	}
 
