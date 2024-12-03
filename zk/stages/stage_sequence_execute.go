@@ -40,7 +40,7 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	highestBatchInDs, err := cfg.datastreamServer.GetHighestBatchNumber()
+	highestBatchInDs, err := cfg.dataStreamServer.GetHighestBatchNumber()
 	if err != nil {
 		return err
 	}
@@ -80,6 +80,10 @@ func sequencingBatchStep(
 		return err
 	}
 	defer sdb.tx.Rollback()
+
+	if err = cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
+		return err
+	}
 
 	executionAt, err := s.ExecutionAt(sdb.tx)
 	if err != nil {
@@ -121,7 +125,7 @@ func sequencingBatchStep(
 			return err
 		}
 
-		if err = cfg.datastreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
+		if err = cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
 			return err
 		}
 		if err = stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
@@ -191,15 +195,32 @@ func sequencingBatchStep(
 			return nil
 		}
 
-		if handled, err := doCheckForBadBatch(batchContext, batchState, executionAt); err != nil || handled {
-			return err
+		bad := false
+		for _, batch := range cfg.zk.BadBatches {
+			if batch == batchState.batchNumber {
+				bad = true
+				break
+			}
+		}
+
+		// if we aren't forcing a bad batch then check it
+		if !bad {
+			bad, err = doCheckForBadBatch(batchContext, batchState, executionAt)
+			if err != nil {
+				return err
+			}
+		}
+
+		if bad {
+			return writeBadBatchDetails(batchContext, batchState, executionAt)
 		}
 	}
 
-	batchTicker, logTicker, blockTicker := prepareTickers(batchContext.cfg)
+	batchTicker, logTicker, blockTicker, infoTreeTicker := prepareTickers(batchContext.cfg)
 	defer batchTicker.Stop()
 	defer logTicker.Stop()
 	defer blockTicker.Stop()
+	defer infoTreeTicker.Stop()
 
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
 
@@ -286,8 +307,14 @@ func sequencingBatchStep(
 			log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 		}
 
-	LOOP_TRANSACTIONS:
+		innerBreak := false
+		emptyBlockOverflow := false
+
+	OuterLoopTransactions:
 		for {
+			if innerBreak {
+				break
+			}
 			select {
 			case <-logTicker.C:
 				if !batchState.isAnyRecovery() {
@@ -295,16 +322,27 @@ func sequencingBatchStep(
 				}
 			case <-blockTicker.C:
 				if !batchState.isAnyRecovery() {
-					break LOOP_TRANSACTIONS
+					break OuterLoopTransactions
 				}
 			case <-batchTicker.C:
 				if !batchState.isAnyRecovery() {
 					log.Debug(fmt.Sprintf("[%s] Batch timeout reached", logPrefix))
 					batchTimedOut = true
 				}
+			case <-infoTreeTicker.C:
+				newLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
+				if err != nil {
+					return err
+				}
+				var latestIndex uint64
+				latest := cfg.infoTreeUpdater.GetLatestUpdate()
+				if latest != nil {
+					latestIndex = latest.Index
+				}
+				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs), "latestIndex", latestIndex)
 			default:
 				if batchState.isLimboRecovery() {
-					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash)
+					batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash, executionAt)
 					if err != nil {
 						return err
 					}
@@ -314,10 +352,19 @@ func sequencingBatchStep(
 						return err
 					}
 				} else if !batchState.isL1Recovery() {
+
 					var allConditionsOK bool
-					batchState.blockState.transactionsForInclusion, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
+					var newTransactions []types.Transaction
+					var newIds []common.Hash
+
+					newTransactions, newIds, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 					if err != nil {
 						return err
+					}
+
+					batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion, newTransactions...)
+					for idx, tx := range newTransactions {
+						batchState.blockState.transactionHashesToSlots[tx.Hash()] = newIds[idx]
 					}
 
 					if len(batchState.blockState.transactionsForInclusion) == 0 {
@@ -337,7 +384,21 @@ func sequencingBatchStep(
 					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 				}
 
+				badTxHashes := make([]common.Hash, 0)
+				minedTxHashes := make([]common.Hash, 0)
+
+			InnerLoopTransactions:
 				for i, transaction := range batchState.blockState.transactionsForInclusion {
+					// quick check if we should stop handling transactions
+					select {
+					case <-blockTicker.C:
+						if !batchState.isAnyRecovery() {
+							innerBreak = true
+							break InnerLoopTransactions
+						}
+					default:
+					}
+
 					txHash := transaction.Hash()
 					effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
 
@@ -371,9 +432,12 @@ func sequencingBatchStep(
 							continue
 						}
 
-						// if running in normal operation mode and error != nil then just allow the code to continue
-						// It is safe because this approach ensures that the problematic transaction (the one that caused err != nil to be returned) is kept in yielded
-						// Each transaction in yielded will be reevaluated at the end of each batch
+						// if we have an error at this point something has gone wrong, either in the pool or otherwise
+						// to stop the pool growing and hampering further processing of good transactions here
+						// we mark it for being discarded
+						log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
+						badTxHashes = append(badTxHashes, txHash)
+						batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
 					}
 
 					switch anyOverflow {
@@ -397,7 +461,7 @@ func sequencingBatchStep(
 									In this case we make note that we have had a transaction that overflowed and continue attempting to process transactions
 									Once we reach the cap for these attempts we will stop producing blocks and consider the batch done
 							*/
-							if !batchState.hasAnyTransactionsInThisBatch {
+							if !batchState.hasAnyTransactionsInThisBatch && len(batchState.builtBlocks) == 0 {
 								// mark the transaction to be removed from the pool
 								cfg.txPool.MarkForDiscardFromPendingBest(txHash)
 								log.Info(fmt.Sprintf("[%s] single transaction %s cannot fit into batch", logPrefix, txHash))
@@ -408,10 +472,13 @@ func sequencingBatchStep(
 								ocs, _ := batchCounters.CounterStats(l1TreeUpdateIndex != 0)
 								// was not included in this batch because it overflowed: counter x, counter y
 								log.Info(transactionNotAddedText, "Counters context:", ocs, "overflow transactions", batchState.overflowTransactions)
-								if batchState.reachedOverflowTransactionLimit() {
-									log.Info(fmt.Sprintf("[%s] closing batch due to counters", logPrefix), "counters: ", batchState.overflowTransactions)
+								if batchState.reachedOverflowTransactionLimit() || cfg.zk.SealBatchImmediatelyOnOverflow {
+									log.Info(fmt.Sprintf("[%s] closing batch due to counters", logPrefix), "counters: ", batchState.overflowTransactions, "immediate", cfg.zk.SealBatchImmediatelyOnOverflow)
 									runLoopBlocks = false
-									break LOOP_TRANSACTIONS
+									if len(batchState.blockState.builtBlockElements.transactions) == 0 {
+										emptyBlockOverflow = true
+									}
+									break OuterLoopTransactions
 								}
 							}
 
@@ -428,13 +495,14 @@ func sequencingBatchStep(
 						}
 						log.Info(fmt.Sprintf("[%s] gas overflowed adding transaction to block", logPrefix), "block", blockNumber, "tx-hash", txHash)
 						runLoopBlocks = false
-						break LOOP_TRANSACTIONS
+						break OuterLoopTransactions
 					case overflowNone:
 					}
 
 					if err == nil {
 						blockDataSizeChecker = &backupDataSizeChecker
 						batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
+						minedTxHashes = append(minedTxHashes, txHash)
 					}
 
 					// We will only update the processed index in resequence job if there isn't overflow
@@ -447,15 +515,34 @@ func sequencingBatchStep(
 					if len(batchState.blockState.transactionsForInclusion) == 0 {
 						// We need to jump to the next block here if there are no transactions in current block
 						batchState.resequenceBatchJob.UpdateLastProcessedTx(batchState.resequenceBatchJob.CurrentBlock().L2Blockhash)
-						break LOOP_TRANSACTIONS
+						break OuterLoopTransactions
 					}
 
 					if batchState.resequenceBatchJob.AtNewBlockBoundary() {
 						// We need to jump to the next block here if we are at the end of the current block
-						break LOOP_TRANSACTIONS
+						break OuterLoopTransactions
 					} else {
 						if cfg.zk.SequencerResequenceStrict {
 							return fmt.Errorf("strict mode enabled, but resequenced batch %d has transactions that overflowed counters or failed transactions", batchState.batchNumber)
+						}
+					}
+				}
+
+				// remove bad and mined transactions from the list for inclusion
+				for i := len(batchState.blockState.transactionsForInclusion) - 1; i >= 0; i-- {
+					tx := batchState.blockState.transactionsForInclusion[i]
+					hash := tx.Hash()
+					for _, badHash := range badTxHashes {
+						if badHash == hash {
+							batchState.blockState.transactionsForInclusion = removeInclusionTransaction(batchState.blockState.transactionsForInclusion, i)
+							break
+						}
+					}
+
+					for _, minedHash := range minedTxHashes {
+						if minedHash == hash {
+							batchState.blockState.transactionsForInclusion = removeInclusionTransaction(batchState.blockState.transactionsForInclusion, i)
+							break
 						}
 					}
 				}
@@ -467,19 +554,29 @@ func sequencingBatchStep(
 						log.Info(fmt.Sprintf("[%s] L1 recovery no more transactions to recover", logPrefix))
 					}
 
-					break LOOP_TRANSACTIONS
+					break OuterLoopTransactions
 				}
 
 				if batchState.isLimboRecovery() {
 					runLoopBlocks = false
-					break LOOP_TRANSACTIONS
+					break OuterLoopTransactions
 				}
 			}
+		}
+
+		// we do not want to commit this block if it has no transactions and we detected an overflow - essentially the batch is too
+		// full to get any more transactions in it and we don't want to commit an empty block
+		if emptyBlockOverflow {
+			log.Info(fmt.Sprintf("[%s] Block %d overflow detected with no transactions added, skipping block for next batch", logPrefix, blockNumber))
+			break
 		}
 
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
 			return err
 		}
+
+		cfg.txPool.RemoveMinedTransactions(batchState.blockState.builtBlockElements.txSlots)
+		cfg.txPool.RemoveMinedTransactions(batchState.blockState.transactionsToDiscard)
 
 		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()
@@ -555,4 +652,11 @@ func sequencingBatchStep(
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
 
 	return sdb.tx.Commit()
+}
+
+func removeInclusionTransaction(orig []types.Transaction, index int) []types.Transaction {
+	if index < 0 || index >= len(orig) {
+		return orig
+	}
+	return append(orig[:index], orig[index+1:]...)
 }

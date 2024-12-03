@@ -237,6 +237,16 @@ var (
 		Usage: "How often transactions should be committed to the storage",
 		Value: txpoolcfg.DefaultConfig.CommitEvery,
 	}
+	TxpoolPurgeEveryFlag = cli.DurationFlag{
+		Name:  "txpool.purge.every",
+		Usage: "How often transactions should be purged from the storage",
+		Value: txpoolcfg.DefaultConfig.PurgeEvery,
+	}
+	TxpoolPurgeDistanceFlag = cli.DurationFlag{
+		Name:  "txpool.purge.distance",
+		Usage: "Transactions older than this distance will be purged",
+		Value: txpoolcfg.DefaultConfig.PurgeDistance,
+	}
 	// Miner settings
 	MiningEnabledFlag = cli.BoolFlag{
 		Name:  "mine",
@@ -408,7 +418,12 @@ var (
 	L2DataStreamerTimeout = cli.StringFlag{
 		Name:  "zkevm.l2-datastreamer-timeout",
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
-		Value: "0s",
+		Value: "3s",
+	}
+	L2ShortCircuitToVerifiedBatchFlag = cli.BoolFlag{
+		Name:  "zkevm.l2-short-circuit-to-verified-batch",
+		Usage: "Short circuit block execution up to the batch after the latest verified batch (default: true). When disabled, the sequencer will execute all downloaded batches",
+		Value: true,
 	}
 	L1SyncStartBlock = cli.Uint64Flag{
 		Name:  "zkevm.l1-sync-start-block",
@@ -696,7 +711,7 @@ var (
 	WitnessFullFlag = cli.BoolFlag{
 		Name:  "zkevm.witness-full",
 		Usage: "Enable/Diable witness full",
-		Value: true,
+		Value: false,
 	}
 	SyncLimit = cli.UintFlag{
 		Name:  "zkevm.sync-limit",
@@ -733,14 +748,49 @@ var (
 		Usage: "The multiplier to reduce the SMT depth by when calculating virtual counters",
 		Value: 0.6,
 	}
+	BadBatches = cli.StringFlag{
+		Name:  "zkevm.bad-batches",
+		Usage: "A comma separated list of batch numbers that are known bad on the L1. These will automatically be marked as bad during L1 recovery",
+		Value: "",
+	}
 	InitialBatchCfgFile = cli.StringFlag{
 		Name:  "zkevm.initial-batch.config",
 		Usage: "The file that contains the initial (injected) batch data.",
 		Value: "",
 	}
+	InfoTreeUpdateInterval = cli.DurationFlag{
+		Name:  "zkevm.info-tree-update-interval",
+		Usage: "The interval at which the sequencer checks the L1 for new GER information",
+		Value: 1 * time.Minute,
+	}
+	SealBatchImmediatelyOnOverflow = cli.BoolFlag{
+		Name:  "zkevm.seal-batch-immediately-on-overflow",
+		Usage: "Seal the batch immediately when detecting a counter overflow",
+		Value: false,
+	}
+	MockWitnessGeneration = cli.BoolFlag{
+		Name:  "zkevm.mock-witness-generation",
+		Usage: "Mock the witness generation",
+		Value: false,
+	}
+	WitnessCacheEnable = cli.BoolFlag{
+		Name:  "zkevm.witness-cache-enable",
+		Usage: "Enable witness cache",
+		Value: false,
+	}
+	WitnessCacheLimit = cli.UintFlag{
+		Name:  "zkevm.witness-cache-limit",
+		Usage: "Amount of blocks behind the last executed one to keep witnesses for. Needs a lot of HDD space. Default value 10 000.",
+		Value: 10000,
+	}
+	WitnessContractInclusion = cli.StringFlag{
+		Name:  "zkevm.witness-contract-inclusion",
+		Usage: "Contracts that will have all of their storage added to the witness every time",
+		Value: "",
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
-		Usage: "Number of entries to print from the ACL history on node startup",
+		Usage: "Number of entries to print from the ACL history on node start up",
 		Value: 10,
 	}
 	DebugTimers = cli.BoolFlag{
@@ -1433,6 +1483,7 @@ func setNodeUserIdent(ctx *cli.Context, cfg *nodecfg.Config) {
 		cfg.UserIdent = identity
 	}
 }
+
 func setNodeUserIdentCobra(f *pflag.FlagSet, cfg *nodecfg.Config) {
 	if identity := f.String(IdentityFlag.Name, IdentityFlag.Value, IdentityFlag.Usage); identity != nil && len(*identity) > 0 {
 		cfg.UserIdent = *identity
@@ -1741,7 +1792,7 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config, nodeName, datadir string, l
 
 	if ctx.String(ChainFlag.Name) == networkname.DevChainName {
 		// --dev mode can't use p2p networking.
-		//cfg.MaxPeers = 0 // It can have peers otherwise local sync is not possible
+		// cfg.MaxPeers = 0 // It can have peers otherwise local sync is not possible
 		if !ctx.IsSet(ListenPortFlag.Name) {
 			cfg.ListenAddr = ":0"
 		}
@@ -1762,7 +1813,7 @@ func SetNodeConfig(ctx *cli.Context, cfg *nodecfg.Config, logger log.Logger) {
 
 func SetNodeConfigCobra(cmd *cobra.Command, cfg *nodecfg.Config) {
 	flags := cmd.Flags()
-	//SetP2PConfig(ctx, &cfg.P2P)
+	// SetP2PConfig(ctx, &cfg.P2P)
 	setNodeUserIdentCobra(flags, cfg)
 	setDataDirCobra(flags, cfg)
 }
@@ -1888,6 +1939,12 @@ func setTxPool(ctx *cli.Context, fullCfg *ethconfig.Config) {
 		fullCfg.TxPool.BlobPriceBump = ctx.Uint64(TxPoolBlobPriceBumpFlag.Name)
 	}
 	cfg.CommitEvery = common2.RandomizeDuration(ctx.Duration(TxPoolCommitEveryFlag.Name))
+
+	purgeEvery := ctx.Duration(TxpoolPurgeEveryFlag.Name)
+	purgeDistance := ctx.Duration(TxpoolPurgeDistanceFlag.Name)
+
+	fullCfg.TxPool.PurgeEvery = common2.RandomizeDuration(purgeEvery)
+	fullCfg.TxPool.PurgeDistance = purgeDistance
 }
 
 func setEthash(ctx *cli.Context, datadir string, cfg *ethconfig.Config) {
@@ -2138,7 +2195,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	}
 
 	cfg.Sync.UseSnapshots = ethconfig.UseSnapshotsByChainName(chain)
-	if ctx.IsSet(SnapshotFlag.Name) { //force override default by cli
+	if ctx.IsSet(SnapshotFlag.Name) { // force override default by cli
 		cfg.Sync.UseSnapshots = ctx.Bool(SnapshotFlag.Name)
 	}
 
@@ -2169,7 +2226,6 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 			webseedsList = append(webseedsList, known...)
 		}
 		cfg.Downloader, err = downloadercfg2.New(cfg.Dirs, version, lvl, downloadRate, uploadRate, ctx.Int(TorrentPortFlag.Name), ctx.Int(TorrentConnsPerFileFlag.Name), ctx.Int(TorrentDownloadSlotsFlag.Name), libcommon.CliString2Array(ctx.String(TorrentStaticPeersFlag.Name)), webseedsList, chain, true)
-
 		if err != nil {
 			panic(err)
 		}

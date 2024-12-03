@@ -306,6 +306,7 @@ func addSenders(
 	senders := make([]common.Address, 0, len(finalTransactions))
 	var from common.Address
 	for _, transaction := range finalTransactions {
+
 		if val, ok := txHash2SenderCache[transaction.Hash()]; ok {
 			from = val
 		} else {

@@ -198,7 +198,7 @@ For a full explanation of the config options, see below:
 Sequencer specific config:
 - `zkevm.executor-urls`: A csv list of the executor URLs.  These will be used in a round robbin fashion by the sequencer
 - `zkevm.executor-strict`: Defaulted to true, but can be set to false when running the sequencer without verifications (use with extreme caution)
-- `zkevm.witness-full`: Defaulted to true.  Controls whether the full or partial witness is used with the executor.
+- `zkevm.witness-full`: Defaulted to false.  Controls whether the full or partial witness is used with the executor.
 - `zkevm.reject-smart-contract-deployments`: Defaulted to false.  Controls whether smart contract deployments are rejected by the TxPool.
 
 Resource Utilisation config:
@@ -207,6 +207,15 @@ Resource Utilisation config:
 Useful config entries:
 - `zkevm.sync-limit`: This will ensure the network only syncs to a given block height.
 - `debug.timers`: This will enable debug timers in the logs to help with performance tuning. Recording timings of witness generation, etc. at INFO level.
+
+Metrics and pprof configuration flags:
+
+- `metrics:` Enables or disables the metrics collection. Set to true to enable.
+- `metrics.addr`: The address on which the metrics server will listen. Default is "0.0.0.0".
+- `metrics.port`: The port on which the metrics server will listen. Default is 6060.
+- `pprof`: Enables or disables the pprof profiling. Set to true to enable.
+- `pprof.addr`: The address on which the pprof server will listen. Default is "0.0.0.0".
+- `pprof.port`: The port on which the pprof server will listen. Default is 6061.
 
 ***
 
