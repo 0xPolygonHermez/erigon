@@ -196,6 +196,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BadBatches:                     badBatches,
 		SealBatchImmediatelyOnOverflow: ctx.Bool(utils.SealBatchImmediatelyOnOverflow.Name),
 		MockWitnessGeneration:          ctx.Bool(utils.MockWitnessGeneration.Name),
+		RejectLowGasPriceTransactions:  ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

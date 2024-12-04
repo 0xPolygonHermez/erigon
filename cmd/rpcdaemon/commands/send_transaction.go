@@ -10,6 +10,7 @@ import (
 	"github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 	txPoolProto "github.com/gateway-fm/cdk-erigon-lib/gointerfaces/txpool"
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/params"
@@ -47,6 +48,20 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 	txn, err := types.DecodeTransaction(rlp.NewStream(bytes.NewReader(encodedTx), uint64(len(encodedTx))))
 	if err != nil {
 		return common.Hash{}, err
+	}
+
+	// check if the transaction price is lower than the current network price and
+	// reject the tx if it is
+	if api.RejectLowGasPriceTransactions && !api.BaseAPI.gasless {
+		txnPrice := txn.GetPrice()
+		networkPrice, err := api.GasPrice_nonRedirected(ctx)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		networkPrice256, _ := uint256.FromBig(networkPrice.ToInt())
+		if txnPrice.Cmp(networkPrice256) < 0 {
+			return common.Hash{}, fmt.Errorf("transaction price is lower than the current network price")
+		}
 	}
 
 	if txn.Type() != types.LegacyTxType {

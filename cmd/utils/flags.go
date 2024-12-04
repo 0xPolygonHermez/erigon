@@ -693,6 +693,11 @@ var (
 		Usage: "Mock the witness generation",
 		Value: false,
 	}
+	RejectLowGasPriceTransactions = cli.BoolFlag{
+		Name:  "zkevm.reject-low-gas-price-transactions",
+		Usage: "Reject transactions with a gas price lower than the current network price",
+		Value: false,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",
