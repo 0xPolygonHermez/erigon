@@ -46,6 +46,7 @@ If the endpoint is not in the list below, it means this specific endpoint is not
 - debug_traceCall
 - debug_traceTransaction
 - debug_traceTransactionCounters
+- debug_traceBatchByNumber
 
 ## engine
 
