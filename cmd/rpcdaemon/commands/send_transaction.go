@@ -59,6 +59,14 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 			return common.Hash{}, err
 		}
 		networkPrice256, _ := uint256.FromBig(networkPrice.ToInt())
+
+		// drop the network price by the tolerance factor to account for fluctuations
+		if api.RejectLowGasPriceTolerance > 0 {
+			modifier := new(uint256.Int).SetUint64(uint64(100 - api.RejectLowGasPriceTolerance*100))
+			networkPrice256.Mul(networkPrice256, modifier)
+			networkPrice256.Div(networkPrice256, uint256.NewInt(100))
+		}
+
 		if txnPrice.Cmp(networkPrice256) < 0 {
 			return common.Hash{}, fmt.Errorf("transaction price is lower than the current network price")
 		}

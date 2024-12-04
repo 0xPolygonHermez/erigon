@@ -241,4 +241,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.SealBatchImmediatelyOnOverflow,
 	&utils.MockWitnessGeneration,
 	&utils.RejectLowGasPriceTransactions,
+	&utils.RejectLowGasPriceTolerance,
 }

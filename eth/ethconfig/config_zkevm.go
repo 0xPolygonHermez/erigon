@@ -88,6 +88,7 @@ type Zk struct {
 	SealBatchImmediatelyOnOverflow bool
 	MockWitnessGeneration          bool
 	RejectLowGasPriceTransactions  bool
+	RejectLowGasPriceTolerance     float64
 }
 
 var DefaultZkConfig = &Zk{}

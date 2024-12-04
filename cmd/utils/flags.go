@@ -698,6 +698,11 @@ var (
 		Usage: "Reject transactions with a gas price lower than the current network price",
 		Value: false,
 	}
+	RejectLowGasPriceTolerance = cli.Float64Flag{
+		Name:  "zkevm.reject-low-gas-price-tolerance",
+		Usage: "Percentage to drop the network price by when rejecting low gas price transactions, 0 means no tolerance, value should be between 0 and 1",
+		Value: 0,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",
