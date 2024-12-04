@@ -9,6 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon/zk/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,7 +139,7 @@ func TestGetAndSetLatest(t *testing.T) {
 			db := NewHermezDb(tx)
 			var err error
 			if tc.table == L1SEQUENCES {
-				err = tc.writeSequenceMethod(db, tc.l1BlockNo, tc.batchNo, tc.l1TxHashBytes, tc.stateRoot, common.HexToHash("0x0"))
+				err = tc.writeSequenceMethod(db, tc.l1BlockNo, tc.batchNo, tc.l1TxHashBytes, tc.stateRoot, tc.l1InfoRoot)
 			} else {
 				err = tc.writeVerificationMethod(db, tc.l1BlockNo, tc.batchNo, tc.l1TxHashBytes, tc.stateRoot)
 			}
@@ -146,10 +147,22 @@ func TestGetAndSetLatest(t *testing.T) {
 
 			info, err := db.getLatest(tc.table)
 			require.NoError(t, err)
-			assert.Equal(t, tc.batchNo, info.BatchNo)
-			assert.Equal(t, tc.l1BlockNo, info.L1BlockNo)
-			assert.Equal(t, tc.l1TxHashBytes, info.L1TxHash)
-			assert.Equal(t, tc.stateRoot, info.StateRoot)
+
+			if tc.table == L1SEQUENCES {
+				seqInfo := info.(*types.BatchSequenceInfo)
+				assert.Equal(t, tc.batchNo, seqInfo.BatchNo)
+				assert.Equal(t, tc.l1BlockNo, seqInfo.L1BlockNo)
+				assert.Equal(t, tc.l1TxHashBytes, seqInfo.L1TxHash)
+				assert.Equal(t, tc.stateRoot, seqInfo.StateRoot)
+				assert.Equal(t, tc.l1InfoRoot, seqInfo.L1InfoRoot)
+			} else {
+				verInfo := info.(*types.BatchVerificationInfo)
+				assert.Equal(t, tc.batchNo, verInfo.BatchNo)
+				assert.Equal(t, tc.l1BlockNo, verInfo.L1BlockNo)
+				assert.Equal(t, tc.l1TxHashBytes, verInfo.L1TxHash)
+				assert.Equal(t, tc.stateRoot, verInfo.StateRoot)
+			}
+
 			cleanup()
 		})
 	}
@@ -186,7 +199,7 @@ func TestGetAndSetLatestUnordered(t *testing.T) {
 
 	info, err := db.getLatest(L1VERIFICATIONS)
 	require.NoError(t, err)
-	assert.Equal(t, highestBatchNo, info.BatchNo)
+	assert.Equal(t, highestBatchNo, info.(*types.BatchVerificationInfo).BatchNo)
 
 	cleanup()
 }
@@ -744,4 +757,183 @@ func TestGetAccInputHashForBatchOrPrevious(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetBatchLimitsBetweenForkIds(t *testing.T) {
+	testCases := []struct {
+		name          string
+		forkId1       uint64
+		forkId2       uint64
+		expectedFirst uint64
+		expectedLast  uint64
+		expectedError error
+	}{
+		{
+			name:          "Valid Range",
+			forkId1:       1,
+			forkId2:       3,
+			expectedFirst: 100,
+			expectedLast:  299,
+			expectedError: nil,
+		},
+		{
+			name:          "Invalid Range - Fork IDs Reversed",
+			forkId1:       3,
+			forkId2:       1,
+			expectedFirst: 0,
+			expectedLast:  0,
+			expectedError: fmt.Errorf("forkId1 must be less than forkId2"),
+		},
+		{
+			name:          "Valid Single Fork ID Pair",
+			forkId1:       2,
+			forkId2:       3,
+			expectedFirst: 200,
+			expectedLast:  299,
+			expectedError: nil,
+		},
+		{
+			name:          "Missing Fork IDs",
+			forkId1:       4,
+			forkId2:       5,
+			expectedFirst: 0,
+			expectedLast:  0,
+			expectedError: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, cleanup := GetDbTx()
+			defer cleanup()
+
+			dbReader := NewHermezDbReader(tx)
+			dbWriter := NewHermezDb(tx)
+
+			forkHistory := []struct {
+				forkId  uint64
+				batchNo uint64
+			}{
+				{forkId: 1, batchNo: 100},
+				{forkId: 2, batchNo: 200},
+				{forkId: 3, batchNo: 300},
+			}
+
+			for _, record := range forkHistory {
+				err := dbWriter.WriteNewForkHistory(record.forkId, record.batchNo)
+				require.NoError(t, err, "Failed to write fork history")
+			}
+
+			firstBatch, lastBatch, err := dbReader.GetBatchLimitsBetweenForkIds(tc.forkId1, tc.forkId2)
+
+			if tc.expectedError != nil {
+				assert.Error(t, err)
+				assert.Equal(t, tc.expectedError.Error(), err.Error())
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expectedFirst, firstBatch, "First batch number mismatch")
+				assert.Equal(t, tc.expectedLast, lastBatch, "Last batch number mismatch")
+			}
+		})
+	}
+}
+
+func TestL1BlockTimestampFunctions(t *testing.T) {
+	t.Run("WriteL1BlockTimestamp and GetL1BlockTimestamp", func(t *testing.T) {
+		testCases := []struct {
+			name         string
+			batchNo      uint64
+			timestamp    uint64
+			expectedErr  error
+			expectedFind bool
+		}{
+			{
+				name:         "Write and Get Valid Timestamp",
+				batchNo:      1,
+				timestamp:    1620000000,
+				expectedErr:  nil,
+				expectedFind: true,
+			},
+			{
+				name:         "Get Timestamp for Non-Existent Batch",
+				batchNo:      99,
+				timestamp:    0,
+				expectedErr:  nil,
+				expectedFind: false,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				tx, cleanup := GetDbTx()
+				defer cleanup()
+
+				dbWriter := NewHermezDb(tx)
+				dbReader := NewHermezDbReader(tx)
+
+				if tc.expectedFind {
+					err := dbWriter.WriteL1BlockTimestamp(tc.batchNo, tc.timestamp)
+					require.NoError(t, err, "Failed to write L1 block timestamp")
+				}
+
+				timestamp, found, err := dbReader.GetL1BlockTimestamp(tc.batchNo)
+
+				if tc.expectedErr != nil {
+					assert.Error(t, err)
+					assert.Equal(t, tc.expectedErr, err)
+				} else {
+					require.NoError(t, err)
+					assert.Equal(t, tc.expectedFind, found, "Mismatch in found state")
+					if found {
+						assert.Equal(t, tc.timestamp, timestamp, "Timestamp mismatch")
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("GetHighestL1BlockTimestamp", func(t *testing.T) {
+		t.Run("Retrieve Highest Timestamp", func(t *testing.T) {
+			tx, cleanup := GetDbTx()
+			defer cleanup()
+
+			dbWriter := NewHermezDb(tx)
+			dbReader := NewHermezDbReader(tx)
+
+			batchTimestamps := []struct {
+				batchNo   uint64
+				timestamp uint64
+			}{
+				{batchNo: 1, timestamp: 1620000000},
+				{batchNo: 2, timestamp: 1620001000},
+				{batchNo: 3, timestamp: 1620002000},
+			}
+
+			for _, record := range batchTimestamps {
+				err := dbWriter.WriteL1BlockTimestamp(record.batchNo, record.timestamp)
+				require.NoError(t, err, "Failed to write L1 block timestamp")
+			}
+
+			batchNo, timestamp, found, err := dbReader.GetHighestL1BlockTimestamp()
+
+			require.NoError(t, err)
+			assert.True(t, found, "Expected to find highest timestamp")
+			assert.Equal(t, uint64(3), batchNo, "Batch number mismatch")
+			assert.Equal(t, uint64(1620002000), timestamp, "Timestamp mismatch")
+		})
+
+		t.Run("No Timestamps Present", func(t *testing.T) {
+			tx, cleanup := GetDbTx()
+			defer cleanup()
+
+			dbReader := NewHermezDbReader(tx)
+
+			batchNo, timestamp, found, err := dbReader.GetHighestL1BlockTimestamp()
+
+			require.NoError(t, err)
+			assert.False(t, found, "Expected no timestamp to be found")
+			assert.Equal(t, uint64(0), batchNo, "Batch number mismatch for empty state")
+			assert.Equal(t, uint64(0), timestamp, "Timestamp mismatch for empty state")
+		})
+	})
 }

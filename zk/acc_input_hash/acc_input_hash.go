@@ -11,7 +11,19 @@ import (
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
+
+/*
+NOTES:
+
+We read the inforoot from the s/c in state.
+
+Etrog (forkid 7):
+	- limitTs the timestamp of the l1 block when the batch was sequenced.
+Elderberry (forkid 8):
+	- limitTs is the timestamp of the last block in the sequenced batch.
+*/
 
 const SpecialZeroHash = "0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757"
 
@@ -31,6 +43,7 @@ type BatchDataReader interface {
 type L1DataReader interface {
 	GetL1InfoTreeIndexToRoots() (map[uint64]common.Hash, error)
 	GetBlockL1InfoTreeIndex(blockNo uint64) (uint64, error)
+	GetHighestL1BlockTimestamp() (batchNo uint64, timestamp uint64, found bool, err error)
 }
 
 // AccInputHashReader combines the necessary reader interfaces
@@ -46,6 +59,7 @@ type AccInputHashCalculator interface {
 }
 
 type BaseCalc struct {
+	LogPrefix   string
 	Ctx         context.Context
 	Reader      AccInputHashReader
 	Tx          kv.Tx
@@ -55,12 +69,12 @@ type BaseCalc struct {
 var Calculators = map[uint64]func(*BaseCalc) AccInputHashCalculator{
 	// pre 7 not supported
 	7:  NewFork7Calculator, // etrog
-	8:  NewFork7Calculator,
-	9:  NewFork7Calculator,
-	10: NewFork7Calculator,
-	11: NewFork7Calculator,
-	12: NewFork7Calculator,
-	13: NewFork7Calculator,
+	8:  NewFork8Calculator,
+	9:  NewFork8Calculator,
+	10: NewFork8Calculator,
+	11: NewFork8Calculator,
+	12: NewFork8Calculator,
+	13: NewFork8Calculator,
 }
 
 func NewCalculator(ctx context.Context, tx kv.Tx, reader AccInputHashReader, forkID uint64) (AccInputHashCalculator, error) {
@@ -70,6 +84,7 @@ func NewCalculator(ctx context.Context, tx kv.Tx, reader AccInputHashReader, for
 	}
 
 	baseCalc := &BaseCalc{
+		LogPrefix:   fmt.Sprintf("acc_input_hash fork: %d)", forkID),
 		Ctx:         ctx,
 		Reader:      reader,
 		Tx:          tx,
@@ -147,7 +162,7 @@ func (f Fork7Calculator) Calculate(batchNum uint64) (common.Hash, error) {
 	}
 
 	// otherwise calculate it
-	accInputHash, err = LocalAccInputHashCalc(f.Ctx, f.Reader, f.BlockReader, f.Tx, batchNum, returnedBatchNo, accInputHash)
+	accInputHash, err = f.localAccInputHashCalc(batchNum, returnedBatchNo, accInputHash)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -155,10 +170,10 @@ func (f Fork7Calculator) Calculate(batchNum uint64) (common.Hash, error) {
 	return accInputHash, nil
 }
 
-func LocalAccInputHashCalc(ctx context.Context, reader AccInputHashReader, blockReader BlockReader, tx kv.Tx, batchNum, startBatchNo uint64, prevAccInputHash common.Hash) (common.Hash, error) {
+func (f Fork7Calculator) localAccInputHashCalc(batchNum, startBatchNo uint64, prevAccInputHash common.Hash) (common.Hash, error) {
 	var accInputHash common.Hash
 
-	infoTreeIndexes, err := reader.GetL1InfoTreeIndexToRoots()
+	infoTreeIndexes, err := f.Reader.GetL1InfoTreeIndexToRoots()
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to get l1 info tree indexes: %w", err)
 	}
@@ -174,19 +189,19 @@ func LocalAccInputHashCalc(ctx context.Context, reader AccInputHashReader, block
 	// TODO: handle batch 1 case where we should get check the aggregator code: https://github.com/0xPolygon/cdk/blob/develop/aggregator/aggregator.go#L1167
 
 	for i := startBatchNo; i <= batchNum; i++ {
-		currentForkId, err := reader.GetForkId(i)
+		currentForkId, err := f.Reader.GetForkId(i)
 		if err != nil {
 			return common.Hash{}, fmt.Errorf("failed to get fork id for batch %d: %w", i, err)
 		}
 
-		batchBlockNos, err := reader.GetL2BlockNosByBatch(i)
+		batchBlockNos, err := f.Reader.GetL2BlockNosByBatch(i)
 		if err != nil {
 			return common.Hash{}, fmt.Errorf("failed to get batch blocks for batch %d: %w", i, err)
 		}
 		batchBlocks := []*eritypes.Block{}
 		var coinbase common.Address
 		for in, blockNo := range batchBlockNos {
-			block, err := blockReader.ReadBlockByNumber(blockNo)
+			block, err := f.BlockReader.ReadBlockByNumber(blockNo)
 			if err != nil {
 				return common.Hash{}, fmt.Errorf("failed to get block %d: %w", blockNo, err)
 			}
@@ -202,19 +217,19 @@ func LocalAccInputHashCalc(ctx context.Context, reader AccInputHashReader, block
 			lastBlockNoInPreviousBatch = firstBlockInBatch.NumberU64() - 1
 		}
 
-		lastBlockInPreviousBatch, err := blockReader.ReadBlockByNumber(lastBlockNoInPreviousBatch)
+		lastBlockInPreviousBatch, err := f.BlockReader.ReadBlockByNumber(lastBlockNoInPreviousBatch)
 		if err != nil {
 			return common.Hash{}, err
 		}
 
-		batchL2Data, err := utils.GenerateBatchDataFromDb(tx, reader, batchBlocks, lastBlockInPreviousBatch, currentForkId)
+		batchL2Data, err := utils.GenerateBatchDataFromDb(f.Tx, f.Reader, batchBlocks, lastBlockInPreviousBatch, currentForkId)
 		if err != nil {
 			return common.Hash{}, fmt.Errorf("failed to generate batch data for batch %d: %w", i, err)
 		}
 
 		highestBlock := batchBlocks[len(batchBlocks)-1]
 
-		sr := state.NewPlainState(tx, highestBlock.NumberU64(), systemcontracts.SystemContractCodeLookup["hermez"])
+		sr := state.NewPlainState(f.Tx, highestBlock.NumberU64(), systemcontracts.SystemContractCodeLookup["hermez"])
 		if err != nil {
 			return common.Hash{}, fmt.Errorf("failed to get psr: %w", err)
 		}
@@ -225,7 +240,19 @@ func LocalAccInputHashCalc(ctx context.Context, reader AccInputHashReader, block
 		sr.Close()
 		l1InfoRoot := common.BytesToHash(l1InfoRootBytes)
 
-		limitTs := highestBlock.Time()
+		batchNo, limitTs, found, err := f.Reader.GetHighestL1BlockTimestamp()
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to get l1 block timestamp for batch %d: %w", i, err)
+		}
+		if !found {
+			// TODO: downrate this?
+			log.Warn(fmt.Sprintf("[%s] No l1 block timestamp found for batch %d", f.LogPrefix, i))
+
+		}
+
+		if batchNo != i {
+			log.Warn(fmt.Sprintf("[%s] L1 block timestamp batch no mismatch for batch %d", f.LogPrefix, i), "batchNo", batchNo, "i", i)
+		}
 
 		fmt.Println("[l1InfoRoot]", l1InfoRoot.Hex())
 		fmt.Println("[limitTs]", limitTs)
@@ -245,4 +272,20 @@ func LocalAccInputHashCalc(ctx context.Context, reader AccInputHashReader, block
 		prevAccInputHash = accInputHash
 	}
 	return accInputHash, nil
+}
+
+type Fork8Calculator struct {
+	*BaseCalc
+}
+
+func NewFork8Calculator(bc *BaseCalc) AccInputHashCalculator {
+	return Fork8Calculator{BaseCalc: bc}
+}
+
+func (f Fork8Calculator) Calculate(batchNum uint64) (common.Hash, error) {
+	return common.Hash{}, nil
+}
+
+func (f Fork8Calculator) localAccInputHashCalc(batchNum, startBatchNo uint64, prevAccInputHash common.Hash) (common.Hash, error) {
+	return common.Hash{}, nil
 }

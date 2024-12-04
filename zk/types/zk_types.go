@@ -22,13 +22,53 @@ const EFFECTIVE_GAS_PRICE_PERCENTAGE_MAXIMUM = 255
 
 var EFFECTIVE_GAS_PRICE_MAX_VAL = new(uint256.Int).SetUint64(256)
 
-type L1BatchInfo struct {
-	BatchNo    uint64
-	L1BlockNo  uint64
-	L1TxHash   common.Hash
-	StateRoot  common.Hash
-	L1InfoRoot common.Hash
+type BaseBatchInfo struct {
+	BatchNo   uint64
+	L1BlockNo uint64
+	L1TxHash  common.Hash
 }
+
+type BatchSequenceInfo struct {
+	BaseBatchInfo
+	L1InfoRoot         common.Hash
+	LastGlobalExitRoot common.Hash
+	Sequencer          common.Address
+	Transaction        []byte
+	StateRoot          common.Hash
+}
+
+type BatchVerificationInfo struct {
+	BaseBatchInfo
+	StateRoot common.Hash
+}
+
+type RollupUpdateInfo struct {
+	RollupType     uint64
+	NewRollup      uint64
+	LatestVerified uint64
+	ForkId         uint64
+}
+
+type UnknownBatchInfo struct {
+	BaseBatchInfo
+}
+
+type BatchLogType byte
+
+var (
+	LogUnknown          BatchLogType = 0
+	LogSequence         BatchLogType = 1
+	LogSequenceEtrog    BatchLogType = 2
+	LogVerify           BatchLogType = 3
+	LogVerifyEtrog      BatchLogType = 4
+	LogL1InfoTreeUpdate BatchLogType = 5
+	LogRollbackBatches  BatchLogType = 6
+	LogInjectedBatch    BatchLogType = 7
+	LogAddRollupType    BatchLogType = 8
+	LogRollupCreate     BatchLogType = 9
+
+	LogIncompatible BatchLogType = 100
+)
 
 // Batch struct
 type Batch struct {

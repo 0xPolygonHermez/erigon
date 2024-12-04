@@ -118,7 +118,6 @@ func NewSequencerZkStages(ctx context.Context,
 
 	return zkStages.SequencerZkStages(ctx,
 		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
-		zkStages.StageL1SequencerSyncCfg(db, cfg.Zk, sequencerStageSyncer),
 		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, infoTreeUpdater),
 		zkStages.StageSequencerL1BlockSyncCfg(db, cfg.Zk, l1BlockSyncer),
 		zkStages.StageDataStreamCatchupCfg(dataStreamServer, db, cfg.Genesis.Config.ChainID.Uint64(), cfg.DatastreamVersion, cfg.HasExecutors()),

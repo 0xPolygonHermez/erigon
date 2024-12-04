@@ -34,7 +34,7 @@ const BLOCK_L1_INFO_TREE_INDEX = "block_l1_info_tree_index"             // block
 const BLOCK_L1_INFO_TREE_INDEX_PROGRESS = "block_l1_info_tree_progress" // block number -> l1 info tree progress
 const L1_INJECTED_BATCHES = "l1_injected_batches"                       // index increasing by 1 -> injected batch for the start of the chain
 const BLOCK_INFO_ROOTS = "block_info_roots"                             // block number -> block info root hash
-const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                   // block number -> l1 block hash
+const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                   // L2 block number -> l1 block hash
 const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots"  // l2blockno -> stateRoot
 const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch number -> witness
 const BATCH_COUNTERS = "hermez_batch_counters"                          // block number -> counters
@@ -54,6 +54,7 @@ const ERIGON_VERSIONS = "erigon_versions"                               // erigo
 const BATCH_ENDS = "batch_ends"                                         // batch number -> true
 const WITNESS_CACHE = "witness_cache"                                   // block number -> witness for 1 block
 const BATCH_ACCINPUTHASHES = "batch_accinputhashes"                     // batch number -> acc input hash
+const L1_BLOCK_TIMESTAMPS = "l1_block_timestamps"                       // l1 block number -> timestamp (the timestamp of the l1 block used for etrog accinputhash)
 
 var HermezDbTables = []string{
 	L1VERIFICATIONS,
@@ -92,6 +93,7 @@ var HermezDbTables = []string{
 	BATCH_ENDS,
 	WITNESS_CACHE,
 	BATCH_ACCINPUTHASHES,
+	L1_BLOCK_TIMESTAMPS,
 }
 
 type HermezDb struct {
@@ -286,7 +288,7 @@ func (db *HermezDbReader) GetHighestVerifiedBlockNo() (uint64, error) {
 	return blockNo, nil
 }
 
-func (db *HermezDbReader) GetVerificationByL2BlockNo(blockNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetVerificationByL2BlockNo(blockNo uint64) (*types.BatchVerificationInfo, error) {
 	batchNo, err := db.GetBatchNoByL2Block(blockNo)
 	if err != nil {
 		return nil, err
@@ -296,15 +298,33 @@ func (db *HermezDbReader) GetVerificationByL2BlockNo(blockNo uint64) (*types.L1B
 	return db.GetVerificationByBatchNo(batchNo)
 }
 
-func (db *HermezDbReader) GetSequenceByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
-	return db.getByL1Block(L1SEQUENCES, l1BlockNo)
+func (db *HermezDbReader) GetSequenceByL1Block(l1BlockNo uint64) (*types.BatchSequenceInfo, error) {
+	sequence, err := db.getByL1Block(L1SEQUENCES, l1BlockNo)
+	if err != nil {
+		return nil, err
+	}
+
+	if sequence == nil {
+		return nil, nil
+	}
+
+	return sequence.(*types.BatchSequenceInfo), nil
 }
 
-func (db *HermezDbReader) GetSequenceByBatchNo(batchNo uint64) (*types.L1BatchInfo, error) {
-	return db.getByBatchNo(L1SEQUENCES, batchNo)
+func (db *HermezDbReader) GetSequenceByBatchNo(batchNo uint64) (*types.BatchSequenceInfo, error) {
+	sequence, err := db.getByBatchNo(L1SEQUENCES, batchNo)
+	if err != nil {
+		return nil, err
+	}
+
+	if sequence == nil {
+		return nil, nil
+	}
+
+	return sequence.(*types.BatchSequenceInfo), nil
 }
 
-func (db *HermezDbReader) GetAllSequences() ([]*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetAllSequences() ([]*types.BatchSequenceInfo, error) {
 	c, err := db.tx.Cursor(L1SEQUENCES)
 	if err != nil {
 		return nil, err
@@ -312,7 +332,7 @@ func (db *HermezDbReader) GetAllSequences() ([]*types.L1BatchInfo, error) {
 
 	defer c.Close()
 
-	var sequences []*types.L1BatchInfo
+	var sequences []*types.BatchSequenceInfo
 	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 		if err != nil {
 			return nil, err
@@ -323,7 +343,7 @@ func (db *HermezDbReader) GetAllSequences() ([]*types.L1BatchInfo, error) {
 			return nil, err
 		}
 
-		seq, err := parseL1BatchInfo(l1Block, batch, v)
+		seq, err := parseL1BatchSequenceInfo(l1Block, batch, v)
 		if err != nil {
 			return nil, err
 		}
@@ -334,7 +354,7 @@ func (db *HermezDbReader) GetAllSequences() ([]*types.L1BatchInfo, error) {
 	return sequences, nil
 }
 
-func (db *HermezDbReader) GetAllSequencesAboveBatchNo(batchNo uint64) ([]*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetAllSequencesAboveBatchNo(batchNo uint64) ([]*types.BatchSequenceInfo, error) {
 	c, err := db.tx.Cursor(L1SEQUENCES)
 	if err != nil {
 		return nil, err
@@ -342,7 +362,7 @@ func (db *HermezDbReader) GetAllSequencesAboveBatchNo(batchNo uint64) ([]*types.
 
 	defer c.Close()
 
-	var sequences []*types.L1BatchInfo
+	var sequences []*types.BatchSequenceInfo
 	for k, v, err := c.Seek(Uint64ToBytes(batchNo)); k != nil; k, v, err = c.Next() {
 		if err != nil {
 			return nil, err
@@ -353,7 +373,7 @@ func (db *HermezDbReader) GetAllSequencesAboveBatchNo(batchNo uint64) ([]*types.
 			return nil, err
 		}
 
-		seq, err := parseL1BatchInfo(l1Block, batch, v)
+		seq, err := parseL1BatchSequenceInfo(l1Block, batch, v)
 		if err != nil {
 			return nil, err
 		}
@@ -365,11 +385,11 @@ func (db *HermezDbReader) GetAllSequencesAboveBatchNo(batchNo uint64) ([]*types.
 	return sequences, nil
 }
 
-func (db *HermezDbReader) GetRangeSequencesByBatch(batchNo uint64) (*types.L1BatchInfo, *types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetRangeSequencesByBatch(batchNo uint64) (*types.BatchSequenceInfo, *types.BatchSequenceInfo, error) {
 	return db.getPrevAndCurrentForBatch(L1SEQUENCES, batchNo)
 }
 
-func (db *HermezDbReader) GetSequenceByBatchNoOrHighest(batchNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetSequenceByBatchNoOrHighest(batchNo uint64) (*types.BatchSequenceInfo, error) {
 	seq, err := db.GetSequenceByBatchNo(batchNo)
 	if err != nil {
 		return nil, err
@@ -398,13 +418,13 @@ func (db *HermezDbReader) GetSequenceByBatchNoOrHighest(batchNo uint64) (*types.
 		}
 
 		if batch > batchNo {
-			return parseL1BatchInfo(l1Block, batch, v)
+			return parseL1BatchSequenceInfo(l1Block, batch, v)
 		}
 	}
 
 	return nil, nil
 }
-func parseL1BatchInfo(l1BlockN, batchN uint64, v []byte) (*types.L1BatchInfo, error) {
+func parseL1BatchSequenceInfo(l1BlockN, batchN uint64, v []byte) (*types.BatchSequenceInfo, error) {
 	if len(v) != 96 && len(v) != 64 {
 		return nil, fmt.Errorf("invalid hash length")
 	}
@@ -413,23 +433,62 @@ func parseL1BatchInfo(l1BlockN, batchN uint64, v []byte) (*types.L1BatchInfo, er
 	stateRoot := common.BytesToHash(v[32:64])
 	l1InfoRoot := common.BytesToHash(v[64:])
 
-	return &types.L1BatchInfo{
-		BatchNo:    batchN,
-		L1BlockNo:  l1BlockN,
-		StateRoot:  stateRoot,
-		L1TxHash:   l1TxHash,
+	return &types.BatchSequenceInfo{
+		BaseBatchInfo: types.BaseBatchInfo{
+			BatchNo:   batchN,
+			L1BlockNo: l1BlockN,
+			L1TxHash:  l1TxHash,
+		},
 		L1InfoRoot: l1InfoRoot,
+		StateRoot:  stateRoot, // nil after etrog
 	}, nil
 }
-func (db *HermezDbReader) GetVerificationByL1Block(l1BlockNo uint64) (*types.L1BatchInfo, error) {
-	return db.getByL1Block(L1VERIFICATIONS, l1BlockNo)
+
+func parseL1BatchVerificationInfo(l1BlockN, batchN uint64, v []byte) (*types.BatchVerificationInfo, error) {
+	if len(v) != 96 && len(v) != 64 {
+		return nil, fmt.Errorf("invalid hash length")
+	}
+
+	l1TxHash := common.BytesToHash(v[:32])
+	stateRoot := common.BytesToHash(v[32:64])
+
+	return &types.BatchVerificationInfo{
+		BaseBatchInfo: types.BaseBatchInfo{
+			BatchNo:   batchN,
+			L1BlockNo: l1BlockN,
+			L1TxHash:  l1TxHash,
+		},
+		StateRoot: stateRoot,
+	}, nil
 }
 
-func (db *HermezDbReader) GetVerificationByBatchNo(batchNo uint64) (*types.L1BatchInfo, error) {
-	return db.getByBatchNo(L1VERIFICATIONS, batchNo)
+func (db *HermezDbReader) GetVerificationByL1Block(l1BlockNo uint64) (*types.BatchVerificationInfo, error) {
+	verification, err := db.getByL1Block(L1VERIFICATIONS, l1BlockNo)
+	if err != nil {
+		return nil, err
+	}
+
+	if verification == nil {
+		return nil, nil
+	}
+
+	return verification.(*types.BatchVerificationInfo), nil
 }
 
-func (db *HermezDbReader) GetVerificationByBatchNoOrHighest(batchNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) GetVerificationByBatchNo(batchNo uint64) (*types.BatchVerificationInfo, error) {
+	verification, err := db.getByBatchNo(L1VERIFICATIONS, batchNo)
+	if err != nil {
+		return nil, err
+	}
+
+	if verification == nil {
+		return nil, nil
+	}
+
+	return verification.(*types.BatchVerificationInfo), nil
+}
+
+func (db *HermezDbReader) GetVerificationByBatchNoOrHighest(batchNo uint64) (*types.BatchVerificationInfo, error) {
 	batchInfo, err := db.GetVerificationByBatchNo(batchNo)
 	if err != nil {
 		return nil, err
@@ -464,17 +523,14 @@ func (db *HermezDbReader) GetVerificationByBatchNoOrHighest(batchNo uint64) (*ty
 
 			l1TxHash := common.BytesToHash(v[:32])
 			stateRoot := common.BytesToHash(v[32:64])
-			var l1InfoRoot common.Hash
-			if len(v) > 64 {
-				l1InfoRoot = common.BytesToHash(v[64:])
-			}
 
-			return &types.L1BatchInfo{
-				BatchNo:    batch,
-				L1BlockNo:  l1Block,
-				StateRoot:  stateRoot,
-				L1TxHash:   l1TxHash,
-				L1InfoRoot: l1InfoRoot,
+			return &types.BatchVerificationInfo{
+				BaseBatchInfo: types.BaseBatchInfo{
+					BatchNo:   batch,
+					L1BlockNo: l1Block,
+					L1TxHash:  l1TxHash,
+				},
+				StateRoot: stateRoot,
 			}, nil
 		}
 	}
@@ -482,7 +538,7 @@ func (db *HermezDbReader) GetVerificationByBatchNoOrHighest(batchNo uint64) (*ty
 	return nil, nil
 }
 
-func (db *HermezDbReader) getByL1Block(table string, l1BlockNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) getByL1Block(table string, l1BlockNo uint64) (interface{}, error) {
 	c, err := db.tx.Cursor(table)
 	if err != nil {
 		return nil, err
@@ -501,14 +557,17 @@ func (db *HermezDbReader) getByL1Block(table string, l1BlockNo uint64) (*types.L
 		}
 
 		if l1Block == l1BlockNo {
-			return parseL1BatchInfo(l1Block, batchNo, v)
+			if table == L1SEQUENCES {
+				return parseL1BatchSequenceInfo(l1Block, batchNo, v)
+			}
+			return parseL1BatchVerificationInfo(l1Block, batchNo, v)
 		}
 	}
 
 	return nil, nil
 }
 
-func (db *HermezDbReader) getPrevAndCurrentForBatch(table string, batchNo uint64) (prev *types.L1BatchInfo, current *types.L1BatchInfo, err error) {
+func (db *HermezDbReader) getPrevAndCurrentForBatch(table string, batchNo uint64) (prev *types.BatchSequenceInfo, current *types.BatchSequenceInfo, err error) {
 	c, err := db.tx.Cursor(table)
 	if err != nil {
 		return
@@ -529,7 +588,7 @@ func (db *HermezDbReader) getPrevAndCurrentForBatch(table string, batchNo uint64
 
 		// found the current one
 		if batch >= batchNo {
-			current, err = parseL1BatchInfo(l1Block, batch, v)
+			current, err = parseL1BatchSequenceInfo(l1Block, batch, v)
 			if err != nil {
 				return
 			}
@@ -542,7 +601,7 @@ func (db *HermezDbReader) getPrevAndCurrentForBatch(table string, batchNo uint64
 		return
 	}
 	if len(v) == 0 {
-		prev = &types.L1BatchInfo{}
+		prev = &types.BatchSequenceInfo{}
 		return
 	}
 
@@ -551,7 +610,7 @@ func (db *HermezDbReader) getPrevAndCurrentForBatch(table string, batchNo uint64
 		return
 	}
 
-	prev, err = parseL1BatchInfo(l1Block, prevBatch, v)
+	prev, err = parseL1BatchSequenceInfo(l1Block, prevBatch, v)
 	if err != nil {
 		return
 	}
@@ -559,7 +618,7 @@ func (db *HermezDbReader) getPrevAndCurrentForBatch(table string, batchNo uint64
 	return
 }
 
-func (db *HermezDbReader) getByBatchNo(table string, batchNo uint64) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) getByBatchNo(table string, batchNo uint64) (interface{}, error) {
 	c, err := db.tx.Cursor(table)
 	if err != nil {
 		return nil, err
@@ -578,22 +637,43 @@ func (db *HermezDbReader) getByBatchNo(table string, batchNo uint64) (*types.L1B
 		}
 
 		if batch == batchNo {
-			return parseL1BatchInfo(l1Block, batch, v)
+			if table == L1SEQUENCES {
+				return parseL1BatchSequenceInfo(l1Block, batch, v)
+			}
+			return parseL1BatchVerificationInfo(l1Block, batch, v)
 		}
 	}
 
 	return nil, nil
 }
 
-func (db *HermezDbReader) GetLatestSequence() (*types.L1BatchInfo, error) {
-	return db.getLatest(L1SEQUENCES)
+func (db *HermezDbReader) GetLatestSequence() (*types.BatchSequenceInfo, error) {
+	sequence, err := db.getLatest(L1SEQUENCES)
+	if err != nil {
+		return nil, err
+	}
+
+	if sequence == nil {
+		return nil, nil
+	}
+
+	return sequence.(*types.BatchSequenceInfo), nil
 }
 
-func (db *HermezDbReader) GetLatestVerification() (*types.L1BatchInfo, error) {
-	return db.getLatest(L1VERIFICATIONS)
+func (db *HermezDbReader) GetLatestVerification() (*types.BatchVerificationInfo, error) {
+	verification, err := db.getLatest(L1VERIFICATIONS)
+	if err != nil {
+		return nil, err
+	}
+
+	if verification == nil {
+		return nil, nil
+	}
+
+	return verification.(*types.BatchVerificationInfo), nil
 }
 
-func (db *HermezDbReader) getLatest(table string) (*types.L1BatchInfo, error) {
+func (db *HermezDbReader) getLatest(table string) (interface{}, error) {
 	c, err := db.tx.Cursor(table)
 	if err != nil {
 		return nil, err
@@ -622,13 +702,18 @@ func (db *HermezDbReader) getLatest(table string) (*types.L1BatchInfo, error) {
 	if len(value) == 0 {
 		return nil, nil
 	}
-	return parseL1BatchInfo(l1BlockNo, batchNo, value)
+
+	if table == L1SEQUENCES {
+		return parseL1BatchSequenceInfo(l1BlockNo, batchNo, value)
+	}
+
+	return parseL1BatchVerificationInfo(l1BlockNo, batchNo, value)
 }
 
 func (db *HermezDb) WriteSequence(l1BlockNo, batchNo uint64, l1TxHash, stateRoot, l1InfoRoot common.Hash) error {
 	val := make([]byte, 0, 96)
 	val = append(val, l1TxHash.Bytes()...)
-	val = append(val, stateRoot.Bytes()...)
+	val = append(val, stateRoot.Bytes()...) // nil post etrog
 	val = append(val, l1InfoRoot.Bytes()...)
 	return db.tx.Put(L1SEQUENCES, ConcatKey(l1BlockNo, batchNo), val)
 }
@@ -1820,6 +1905,38 @@ func (db *HermezDbReader) GetAllForkHistory() ([]uint64, []uint64, error) {
 	return forks, batches, nil
 }
 
+func (db *HermezDbReader) GetBatchLimitsBetweenForkIds(forkId1, forkId2 uint64) (firstBatchNo, lastBatchNo uint64, err error) {
+	if forkId1 >= forkId2 {
+		return 0, 0, fmt.Errorf("forkId1 must be less than forkId2")
+	}
+
+	cursor, err := db.tx.Cursor(FORK_HISTORY)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer cursor.Close()
+
+	for k, v, err := cursor.First(); k != nil; k, v, err = cursor.Next() {
+		if err != nil {
+			return 0, 0, err
+		}
+
+		forkId := BytesToUint64(v[:8])
+		batchNo := BytesToUint64(v[8:])
+
+		if forkId == forkId1 {
+			firstBatchNo = batchNo
+		}
+
+		if forkId == forkId2 {
+			lastBatchNo = batchNo - 1
+			break
+		}
+	}
+
+	return firstBatchNo, lastBatchNo, nil
+}
+
 func (db *HermezDbReader) GetVersionHistory() (map[string]time.Time, error) {
 	c, err := db.tx.Cursor(ERIGON_VERSIONS)
 	if err != nil {
@@ -2045,4 +2162,37 @@ func (db *HermezDbReader) GetAccInputHashForBatchOrPrevious(batchNo uint64) (com
 	}
 
 	return common.BytesToHash(v), currentBatchNo, nil
+}
+
+func (db *HermezDb) WriteL1BlockTimestamp(batchNo uint64, timestamp uint64) error {
+	return db.tx.Put(L1_BLOCK_TIMESTAMPS, Uint64ToBytes(batchNo), Uint64ToBytes(timestamp))
+}
+
+func (db *HermezDbReader) GetL1BlockTimestamp(batchNo uint64) (timestamp uint64, found bool, err error) {
+	v, err := db.tx.GetOne(L1_BLOCK_TIMESTAMPS, Uint64ToBytes(batchNo))
+	if err != nil {
+		return 0, false, err
+	}
+	if len(v) == 0 {
+		return 0, false, nil
+	}
+	return BytesToUint64(v), true, nil
+}
+
+func (db *HermezDbReader) GetHighestL1BlockTimestamp() (batchNo uint64, timestamp uint64, found bool, err error) {
+	c, err := db.tx.Cursor(L1_BLOCK_TIMESTAMPS)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	defer c.Close()
+
+	k, v, err := c.Last()
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if k == nil {
+		return 0, 0, false, nil
+	}
+
+	return BytesToUint64(k), BytesToUint64(v), true, nil
 }

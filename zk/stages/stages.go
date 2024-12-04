@@ -20,7 +20,6 @@ var (
 func SequencerZkStages(
 	ctx context.Context,
 	l1SyncerCfg L1SyncerCfg,
-	l1SequencerSyncCfg L1SequencerSyncCfg,
 	l1InfoTreeCfg L1InfoTreeCfg,
 	sequencerL1BlockSyncCfg SequencerL1BlockSyncCfg,
 	dataStreamCatchupCfg DataStreamCatchupCfg,
@@ -37,7 +36,7 @@ func SequencerZkStages(
 	return []*stages.Stage{
 		{
 			ID:          stages2.L1Syncer,
-			Description: "Download L1 Verifications",
+			Description: "Download L1 Logs",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
 				if badBlockUnwind {
 					return nil
@@ -49,19 +48,6 @@ func SequencerZkStages(
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
 				return PruneL1SyncerStage(p, tx, l1SyncerCfg, ctx)
-			},
-		},
-		{
-			ID:          stages2.L1SequencerSyncer,
-			Description: "L1 Sequencer Sync Updates",
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				return SpawnL1SequencerSyncStage(s, u, txc.Tx, l1SequencerSyncCfg, ctx, logger)
-			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				return UnwindL1SequencerSyncStage(u, txc.Tx, l1SequencerSyncCfg, ctx)
-			},
-			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
-				return PruneL1SequencerSyncStage(p, tx, l1SequencerSyncCfg, ctx)
 			},
 		},
 		{
@@ -244,7 +230,7 @@ func DefaultZkStages(
 	return []*stages.Stage{
 		{
 			ID:          stages2.L1Syncer,
-			Description: "Download L1 Verifications",
+			Description: "Download L1 Logs",
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
 				if badBlockUnwind {
 					return nil
