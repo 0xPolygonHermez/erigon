@@ -324,12 +324,12 @@ func sequencingBatchStep(
 					log.Info(fmt.Sprintf("[%s] Waiting some more for txs from the pool...", logPrefix))
 				}
 			case <-blockTicker.C:
-				if len(batchState.blockState.transactionHashesToSlots) > 0 && !batchState.isAnyRecovery() {
+				if len(batchState.blockState.builtBlockElements.transactions) > 0 && !batchState.isAnyRecovery() {
 					break OuterLoopTransactions
 				}
 
 			case <-emptyBlockTicker.C:
-				if len(batchState.blockState.transactionHashesToSlots) == 0 && !batchState.isAnyRecovery() {
+				if len(batchState.blockState.builtBlockElements.transactions) == 0 && !batchState.isAnyRecovery() {
 					break OuterLoopTransactions
 				}
 			case <-batchTicker.C:
