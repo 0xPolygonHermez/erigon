@@ -112,8 +112,10 @@ type EthAPI interface {
 }
 
 type BaseAPI struct {
-	stateCache   kvcache.Cache                         // thread-safe
-	blocksLRU    *lru.Cache[common.Hash, *types.Block] // thread-safe
+	stateCache    kvcache.Cache                         // thread-safe
+	blocksLRU     *lru.Cache[common.Hash, *types.Block] // thread-safe
+	receiptsCache *lru.Cache[common.Hash, []*types.Receipt]
+
 	filters      *rpchelper.Filters
 	_chainConfig atomic.Pointer[chain.Config]
 	_genesis     atomic.Pointer[types.Block]
@@ -132,7 +134,10 @@ type BaseAPI struct {
 }
 
 func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.AggregatorV3, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs) *BaseAPI {
-	blocksLRUSize := 128 // ~32Mb
+	var (
+		blocksLRUSize      = 128 // ~32Mb
+		receiptsCacheLimit = 32
+	)
 	if !singleNodeMode {
 		blocksLRUSize = 512
 	}
@@ -140,8 +145,12 @@ func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader serv
 	if err != nil {
 		panic(err)
 	}
+	receiptsCache, err := lru.New[common.Hash, []*types.Receipt](receiptsCacheLimit)
+	if err != nil {
+		panic(err)
+	}
 
-	return &BaseAPI{filters: f, stateCache: stateCache, blocksLRU: blocksLRU, _blockReader: blockReader, _txnReader: blockReader, _agg: agg, evmCallTimeout: evmCallTimeout, _engine: engine, dirs: dirs}
+	return &BaseAPI{filters: f, stateCache: stateCache, blocksLRU: blocksLRU, _blockReader: blockReader, _txnReader: blockReader, _agg: agg, evmCallTimeout: evmCallTimeout, _engine: engine, dirs: dirs, receiptsCache: receiptsCache}
 }
 
 func (api *BaseAPI) SetGasless(gasless bool) {

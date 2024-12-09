@@ -39,10 +39,20 @@ import (
 )
 
 func (api *BaseAPI) getReceipts(ctx context.Context, tx kv.Tx, chainConfig *chain.Config, block *types.Block, senders []common.Address) (types.Receipts, error) {
-	if cached := rawdb.ReadReceipts_zkEvm(tx, block, senders); cached != nil {
-		return cached, nil
+	if receipts, ok := api.receiptsCache.Get(block.Hash()); ok {
+		return receipts, nil
 	}
+
+	if receipts := rawdb.ReadReceipts(tx, block, senders); receipts != nil {
+		api.receiptsCache.Add(block.Hash(), receipts)
+		return receipts, nil
+	}
+
 	engine := api.engine()
+	chainConfig, err := api.chainConfig(tx)
+	if err != nil {
+		return nil, err
+	}
 
 	txEnv, err := transactions.ComputeTxEnv_ZkEvm(ctx, engine, block, chainConfig, api._blockReader, tx, 0, api.historyV3(tx))
 	if err != nil {
