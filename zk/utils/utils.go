@@ -237,5 +237,8 @@ type LogLevel string
 
 // function to check if log level is trace
 func (ll *LogLevel) IsTraceLogLevelSet() bool {
+	if ll == nil {
+		return false
+	}
 	return strings.ToLower(string(*ll)) == "trace"
 }

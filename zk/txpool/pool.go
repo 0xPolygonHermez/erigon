@@ -368,6 +368,11 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		tracedSenders[common.BytesToAddress([]byte(sender))] = struct{}{}
 	}
 
+	logLevel := utils.LogLevel("")
+	if ethCfg.Zk != nil {
+		logLevel = ethCfg.Zk.LogLevel
+	}
+
 	return &TxPool{
 		lock:                    &sync.Mutex{},
 		byHash:                  map[string]*metaTx{},
@@ -392,7 +397,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		flushMtx:                &sync.Mutex{},
 		aclDB:                   aclDB,
 		limbo:                   newLimbo(),
-		logLevel:                ethCfg.Zk.LogLevel,
+		logLevel:                logLevel,
 	}, nil
 }
 
