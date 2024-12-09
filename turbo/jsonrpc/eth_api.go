@@ -131,6 +131,7 @@ type BaseAPI struct {
 	dirs           datadir.Dirs
 	l2RpcUrl       string
 	gasless        bool
+	logLevel       utils.LogLevel
 }
 
 func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.Aggregator, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs) *BaseAPI {
@@ -171,7 +172,7 @@ func (api *BaseAPI) chainConfig(ctx context.Context, tx kv.Tx) (*chain.Config, e
 
 	//[zkevm] get dynamic fork config
 	hermezDb := hermez_db.NewHermezDbReader(tx)
-	if err := utils.UpdateZkEVMBlockCfg(cfg, hermezDb, ""); err != nil {
+	if err := utils.UpdateZkEVMBlockCfg(cfg, hermezDb, "", api.logLevel.IsTraceLogLevelSet()); err != nil {
 		return cfg, err
 	}
 
@@ -378,6 +379,8 @@ type APIImpl struct {
 	gasTracker                    RpcL1GasPriceTracker
 	RejectLowGasPriceTransactions bool
 	RejectLowGasPriceTolerance    float64
+ 
+	logLevel                    utils.LogLevel
 }
 
 // NewEthAPI returns APIImpl instance
@@ -385,6 +388,8 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
+
+	base.logLevel = ethCfg.LogLevel
 
 	return &APIImpl{
 		BaseAPI:                       base,

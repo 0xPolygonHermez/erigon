@@ -5,6 +5,7 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 type Zk struct {
@@ -37,6 +38,7 @@ type Zk struct {
 	RpcGetBatchWitnessConcurrencyLimit     int
 	DatastreamVersion                      int
 	SequencerBlockSealTime                 time.Duration
+	SequencerEmptyBlockSealTime            time.Duration
 	SequencerBatchSealTime                 time.Duration
 	SequencerBatchVerificationTimeout      time.Duration
 	SequencerBatchVerificationRetries      int
@@ -101,6 +103,7 @@ type Zk struct {
 	WitnessContractInclusion       []common.Address
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
+	LogLevel                       utils.LogLevel
 }
 
 var DefaultZkConfig = &Zk{}

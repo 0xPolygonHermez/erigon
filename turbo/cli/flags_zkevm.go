@@ -3,12 +3,10 @@ package cli
 import (
 	"fmt"
 	"math"
-
-	"strings"
-
-	"time"
-
+	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
@@ -79,6 +77,17 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		panic(fmt.Sprintf("could not parse sequencer block seal time timeout value %s", sequencerBlockSealTimeVal))
 	}
 
+	var sequencerEmptyBlockSealTime time.Duration
+	sequencerEmptyBlockSealTimeVal := ctx.String(utils.SequencerEmptyBlockSealTime.Name)
+	if sequencerEmptyBlockSealTimeVal == "" {
+		sequencerEmptyBlockSealTime = sequencerBlockSealTime
+	} else {
+		sequencerEmptyBlockSealTime, err = time.ParseDuration(sequencerEmptyBlockSealTimeVal)
+		if err != nil {
+			panic(fmt.Sprintf("could not parse sequencer empty block seal time timeout value %s", sequencerEmptyBlockSealTimeVal))
+		}
+	}
+
 	sequencerBatchSealTimeVal := ctx.String(utils.SequencerBatchSealTime.Name)
 	sequencerBatchSealTime, err := time.ParseDuration(sequencerBatchSealTimeVal)
 	if err != nil {
@@ -147,6 +156,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		witnessInclusion = append(witnessInclusion, libcommon.HexToAddress(s))
 	}
 
+	logLevel := os.Getenv("LOG_LEVEL")
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),
@@ -179,6 +190,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		IncrementTreeAlways:                    ctx.Bool(utils.IncrementTreeAlways.Name),
 		SmtRegenerateInMemory:                  ctx.Bool(utils.SmtRegenerateInMemory.Name),
 		SequencerBlockSealTime:                 sequencerBlockSealTime,
+		SequencerEmptyBlockSealTime:            sequencerEmptyBlockSealTime,
 		SequencerBatchSealTime:                 sequencerBatchSealTime,
 		SequencerBatchVerificationTimeout:      sequencerBatchVerificationTimeout,
 		SequencerBatchVerificationRetries:      ctx.Int(utils.SequencerBatchVerificationRetries.Name),
@@ -232,6 +244,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		GasPriceHistoryCount:                   ctx.Uint64(utils.GasPriceHistoryCount.Name),
 		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
 		RejectLowGasPriceTolerance:             ctx.Float64(utils.RejectLowGasPriceTolerance.Name),
+		LogLevel:                               utils2.LogLevel(logLevel),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)
