@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -49,6 +50,8 @@ type StreamClient struct {
 
 	// keeps track of the latest fork from the stream to assign to l2 blocks
 	currentFork uint64
+	tlsConfig   *tls.Config
+	useTLS      bool
 }
 
 const (
@@ -64,7 +67,7 @@ const (
 
 // Creates a new client fo datastream
 // server must be in format "url:port"
-func NewClient(ctx context.Context, server string, version int, checkTimeout time.Duration, latestDownloadedForkId uint16) *StreamClient {
+func NewClient(ctx context.Context, server string, useTLS bool, version int, checkTimeout time.Duration, latestDownloadedForkId uint16) *StreamClient {
 	c := &StreamClient{
 		ctx:          ctx,
 		checkTimeout: checkTimeout,
@@ -74,7 +77,16 @@ func NewClient(ctx context.Context, server string, version int, checkTimeout tim
 		id:           "",
 		entryChan:    make(chan interface{}, 100000),
 		currentFork:  uint64(latestDownloadedForkId),
+		tlsConfig:    &tls.Config{},
+		useTLS:       useTLS,
 	}
+
+	// Extract hostname from server address (removing port if present)
+	host, _, err := net.SplitHostPort(c.server)
+	if err != nil {
+		host = c.server // If no port was specified, use the full server string
+	}
+	c.tlsConfig.ServerName = host
 
 	return c
 }
@@ -98,9 +110,12 @@ func (c *StreamClient) GetProgressAtomic() *atomic.Uint64 {
 
 // Opens a TCP connection to the server
 func (c *StreamClient) Start() error {
-	// Connect to server
 	var err error
-	c.conn, err = net.Dial("tcp", c.server)
+	if c.useTLS {
+		c.conn, err = tls.Dial("tcp", c.server, c.tlsConfig)
+	} else {
+		c.conn, err = net.Dial("tcp", c.server)
+	}
 	if err != nil {
 		return fmt.Errorf("error connecting to server %s: %v", c.server, err)
 	}
