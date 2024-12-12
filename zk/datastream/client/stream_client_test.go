@@ -215,7 +215,7 @@ func TestStreamClientReadFileEntry(t *testing.T) {
 }
 
 func TestStreamClientReadParsedProto(t *testing.T) {
-	c := NewClient(context.Background(), "", 0, 500*time.Millisecond, 0)
+	c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
 	serverConn, clientConn := net.Pipe()
 	c.conn = clientConn
 	c.checkTimeout = 1 * time.Second
@@ -287,7 +287,7 @@ func TestStreamClientGetLatestL2Block(t *testing.T) {
 		clientConn.Close()
 	}()
 
-	c := NewClient(context.Background(), "", 0, 500*time.Millisecond, 0)
+	c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
 	c.conn = clientConn
 	c.checkTimeout = 1 * time.Second
 	c.allowStops = false
@@ -401,7 +401,7 @@ func TestStreamClientGetL2BlockByNumber(t *testing.T) {
 		clientConn.Close()
 	}()
 
-	c := NewClient(context.Background(), "", 0, 500*time.Millisecond, 0)
+	c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
 	c.header = &types.HeaderEntry{
 		TotalEntries: 4,
 	}
