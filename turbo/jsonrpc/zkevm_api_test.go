@@ -498,7 +498,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	assert.Equal(gers[len(gers)-1], batch.GlobalExitRoot)
 	assert.Equal(mainnetExitRoots[len(mainnetExitRoots)-1], batch.MainnetExitRoot)
 	assert.Equal(rollupExitRoots[len(rollupExitRoots)-1], batch.RollupExitRoot)
-	assert.Equal(common.HexToHash("0xebf7acfdbfb4ea6ef8775e7d2246d7d4f3d8c280fbe7649e1b90eb7490ea19e6"), batch.AccInputHash)
+	assert.Equal(common.HexToHash("0x4ada34202c254799e2abc9f832764692c2fc6f654fa98a1f9c19391deff623bd"), batch.AccInputHash)
 	assert.Equal(common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), *batch.SendSequencesTxHash)
 	assert.Equal(rpctypes.ArgUint64(1714427009), batch.Timestamp)
 	assert.Equal(true, batch.Closed)

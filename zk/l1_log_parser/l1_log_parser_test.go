@@ -250,7 +250,6 @@ func TestParseAndHandleLog(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			// Setup mocks
 			hermezDbMock := &MockHermezDb{}
 			l1SyncerMock := &MockIL1Syncer{}
 
@@ -271,14 +270,12 @@ func TestParseAndHandleLog(t *testing.T) {
 
 			resultSyncMeta, err := parser.ParseAndHandleLog(tc.log, syncMeta)
 
-			// Check error
 			if tc.expectedError != nil {
 				require.ErrorIs(t, err, tc.expectedError)
 			} else {
 				require.NoError(t, err)
 			}
 
-			// Check syncMeta
 			require.Equal(t, tc.expectedSyncMeta, resultSyncMeta)
 		})
 	}

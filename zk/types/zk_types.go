@@ -66,6 +66,7 @@ var (
 	LogInjectedBatch    BatchLogType = 7
 	LogAddRollupType    BatchLogType = 8
 	LogRollupCreate     BatchLogType = 9
+	LogUpdateRollup     BatchLogType = 10
 
 	LogIncompatible BatchLogType = 100
 )

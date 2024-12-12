@@ -16,6 +16,7 @@ type IL1Syncer interface {
 }
 
 type IHermezDb interface {
+	GetForkFromRollupType(rollupType uint64) (uint64, error)
 	WriteSequence(l1BlockNo uint64, batchNo uint64, l1TxHash common.Hash, stateRoot common.Hash, l1InfoRoot common.Hash) error
 	WriteVerification(l1BlockNo uint64, batchNo uint64, l1TxHash common.Hash, stateRoot common.Hash) error
 	WriteRollupType(rollupType uint64, forkId uint64) error
@@ -117,12 +118,17 @@ func (p *L1LogParser) parseLogType(l *ethTypes.Log) (parsedLog interface{}, logT
 
 	case contracts.CreateNewRollupTopic:
 		rollupId := new(big.Int).SetBytes(l.Topics[1].Bytes()).Uint64()
+		if rollupId != p.L1RollupId {
+			return nil, types.LogUnknown, nil
+		}
 		return types.RollupUpdateInfo{
 			NewRollup:  rollupId,
 			RollupType: new(big.Int).SetBytes(l.Data[0:32]).Uint64(),
 		}, types.LogRollupCreate, nil
 
 	case contracts.AddNewRollupTypeTopic:
+		fallthrough
+
 	case contracts.AddNewRollupTypeTopicBanana:
 		return types.RollupUpdateInfo{
 			RollupType: new(big.Int).SetBytes(l.Topics[1].Bytes()).Uint64(),
@@ -130,10 +136,25 @@ func (p *L1LogParser) parseLogType(l *ethTypes.Log) (parsedLog interface{}, logT
 		}, types.LogAddRollupType, nil
 
 	case contracts.UpdateRollupTopic:
+		rollupId := new(big.Int).SetBytes(l.Topics[1].Bytes()).Uint64()
+		if rollupId != p.L1RollupId {
+			return nil, types.LogUnknown, nil
+		}
+
+		newRollupBytes := l.Data[0:32]
+		newRollup := new(big.Int).SetBytes(newRollupBytes).Uint64()
+
+		latestVerifiedBytes := l.Data[32:64]
+		latestVerified := new(big.Int).SetBytes(latestVerifiedBytes).Uint64()
+
 		return types.RollupUpdateInfo{
-			NewRollup:      new(big.Int).SetBytes(l.Data[0:32]).Uint64(),
-			LatestVerified: new(big.Int).SetBytes(l.Data[32:64]).Uint64(),
-		}, types.LogL1InfoTreeUpdate, nil
+			NewRollup:      newRollup,
+			LatestVerified: latestVerified,
+		}, types.LogUpdateRollup, nil
+
+	case contracts.UpdateL1InfoTreeTopic:
+		// This case is handled by the l1infotree updater code
+		return nil, types.LogUnknown, nil
 
 	case contracts.RollbackBatchesTopic:
 		return types.BatchVerificationInfo{
@@ -145,8 +166,6 @@ func (p *L1LogParser) parseLogType(l *ethTypes.Log) (parsedLog interface{}, logT
 			BaseBatchInfo: baseInfo,
 		}, types.LogUnknown, nil
 	}
-
-	return nil, types.LogUnknown, nil
 }
 
 func (p *L1LogParser) handleLog(
@@ -208,8 +227,24 @@ func (p *L1LogParser) handleLog(
 		return syncMeta, p.HermezDb.RollbackSequences(info.BatchNo)
 
 	case types.LogInjectedBatch:
-		info := l.(*types.L1InjectedBatch)
-		return syncMeta, p.HermezDb.WriteL1InjectedBatch(info)
+		info := l.(types.L1InjectedBatch)
+		return syncMeta, p.HermezDb.WriteL1InjectedBatch(&info)
+
+	case types.LogUpdateRollup:
+		info := l.(types.RollupUpdateInfo)
+		fork, err := p.HermezDb.GetForkFromRollupType(info.NewRollup)
+		if err != nil {
+			return syncMeta, err
+		}
+		if fork == 0 {
+			log.Warn("received UpdateRollupTopic for unknown rollup type", "rollup", info.NewRollup)
+			return syncMeta, nil
+		}
+
+		return syncMeta, p.HermezDb.WriteNewForkHistory(fork, info.LatestVerified)
+
+	case types.LogUnknown:
+		return syncMeta, nil
 
 	default:
 		log.Warn("Unknown log type", "logType", logType)

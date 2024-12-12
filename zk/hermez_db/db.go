@@ -1924,7 +1924,7 @@ func (db *HermezDbReader) GetBatchLimitsBetweenForkIds(forkId1, forkId2 uint64) 
 		forkId := BytesToUint64(v[:8])
 		batchNo := BytesToUint64(v[8:])
 
-		if forkId == forkId1 {
+		if forkId > 0 && forkId == forkId1 {
 			firstBatchNo = batchNo
 		}
 

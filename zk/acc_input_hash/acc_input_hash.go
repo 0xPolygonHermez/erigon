@@ -22,7 +22,7 @@ We read the inforoot from the s/c in state.
 Etrog (forkid 7):
 	- limitTs the timestamp of the l1 block when the batch was sequenced.
 Elderberry (forkid 8):
-	- limitTs is the timestamp of the last block in the sequenced batch.
+	- limitTs is the timestamp of the last block in the sequence.
 */
 
 const SpecialZeroHash = "0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757"
@@ -110,6 +110,8 @@ func NewCalculatorWithBlockReader(ctx context.Context, tx kv.Tx, reader AccInput
 	return calcConstructor(baseCalc), nil
 }
 
+// PRE-ETROG (forkid < 7) Calculator: UNSUPPORTED
+
 type PreFork7Calculator struct {
 	*BaseCalc
 }
@@ -122,6 +124,8 @@ func (p PreFork7Calculator) Calculate(batchNum uint64) (common.Hash, error) {
 	// this isn't supported
 	return common.Hash{}, nil
 }
+
+// ETROG (forkid 7) Calculator
 
 type Fork7Calculator struct {
 	*BaseCalc
@@ -274,6 +278,8 @@ func (f Fork7Calculator) localAccInputHashCalc(batchNum, startBatchNo uint64, pr
 	return accInputHash, nil
 }
 
+// ELDERBERRY (forkid 8) Calculator
+
 type Fork8Calculator struct {
 	*BaseCalc
 }
@@ -283,9 +289,143 @@ func NewFork8Calculator(bc *BaseCalc) AccInputHashCalculator {
 }
 
 func (f Fork8Calculator) Calculate(batchNum uint64) (common.Hash, error) {
-	return common.Hash{}, nil
+	accInputHash, returnedBatchNo, err := f.Reader.GetAccInputHashForBatchOrPrevious(batchNum)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	// check the forkid of the returnedBatchNo
+	forkId, err := f.Reader.GetForkId(returnedBatchNo)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	if forkId < uint64(chain.ForkID7Etrog) {
+		return common.Hash{}, fmt.Errorf("unsupported fork ID: %d", forkId)
+	}
+
+	// TODO: remove test spoooofing! (1001 and 997 are l1 held batch accinputhashes - sequence ends)
+	if batchNum >= 7000 {
+		// let's just spoof it backwards:
+		accInputHash, returnedBatchNo, err = f.Reader.GetAccInputHashForBatchOrPrevious(7000)
+		if err != nil {
+			return common.Hash{}, err
+		}
+	}
+
+	// if we have it, return it
+	if returnedBatchNo == batchNum {
+		return accInputHash, nil
+	}
+
+	// otherwise calculate it
+	accInputHash, err = f.localAccInputHashCalc(batchNum, returnedBatchNo, accInputHash)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return accInputHash, nil
 }
 
 func (f Fork8Calculator) localAccInputHashCalc(batchNum, startBatchNo uint64, prevAccInputHash common.Hash) (common.Hash, error) {
-	return common.Hash{}, nil
+	var accInputHash common.Hash
+
+	infoTreeIndexes, err := f.Reader.GetL1InfoTreeIndexToRoots()
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get l1 info tree indexes: %w", err)
+	}
+	if len(infoTreeIndexes) == 0 {
+		return common.Hash{}, fmt.Errorf("no l1 info tree indexes found")
+	}
+
+	// go from injected batch with known batch 0 accinputhash of 0x0...0
+	if startBatchNo == 0 {
+		startBatchNo = 1
+	}
+
+	// Elderberry limitTS is the highest L2 block TS
+	// get the highest l2 block in the sequence (highest batch)
+	blockNos, err := f.Reader.GetL2BlockNosByBatch(batchNum)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get l2 block nos by batch for batch %d: %w", batchNum, err)
+	}
+	seqHighestBlockNo := blockNos[len(blockNos)-1]
+	seqHighestBlock, err := f.BlockReader.ReadBlockByNumber(seqHighestBlockNo)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get highest block for batch %d: %w", batchNum, err)
+	}
+	limitTs := seqHighestBlock.Time()
+
+	// TODO: handle batch 1 case where we should get check the aggregator code: https://github.com/0xPolygon/cdk/blob/develop/aggregator/aggregator.go#L1167
+
+	for i := startBatchNo; i <= batchNum; i++ {
+		currentForkId, err := f.Reader.GetForkId(i)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to get fork id for batch %d: %w", i, err)
+		}
+
+		batchBlockNos, err := f.Reader.GetL2BlockNosByBatch(i)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to get batch blocks for batch %d: %w", i, err)
+		}
+		batchBlocks := []*eritypes.Block{}
+		var coinbase common.Address
+		for in, blockNo := range batchBlockNos {
+			block, err := f.BlockReader.ReadBlockByNumber(blockNo)
+			if err != nil {
+				return common.Hash{}, fmt.Errorf("failed to get block %d: %w", blockNo, err)
+			}
+			if in == 0 {
+				coinbase = block.Coinbase()
+			}
+			batchBlocks = append(batchBlocks, block)
+		}
+
+		lastBlockNoInPreviousBatch := uint64(0)
+		firstBlockInBatch := batchBlocks[0]
+		if firstBlockInBatch.NumberU64() != 0 {
+			lastBlockNoInPreviousBatch = firstBlockInBatch.NumberU64() - 1
+		}
+
+		lastBlockInPreviousBatch, err := f.BlockReader.ReadBlockByNumber(lastBlockNoInPreviousBatch)
+		if err != nil {
+			return common.Hash{}, err
+		}
+
+		batchL2Data, err := utils.GenerateBatchDataFromDb(f.Tx, f.Reader, batchBlocks, lastBlockInPreviousBatch, currentForkId)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to generate batch data for batch %d: %w", i, err)
+		}
+
+		highestBlock := batchBlocks[len(batchBlocks)-1]
+
+		sr := state.NewPlainState(f.Tx, highestBlock.NumberU64(), systemcontracts.SystemContractCodeLookup["hermez"])
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to get psr: %w", err)
+		}
+		l1InfoRootBytes, err := sr.ReadAccountStorage(state.ADDRESS_SCALABLE_L2, 1, &state.BLOCK_INFO_ROOT_STORAGE_POS)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to read l1 info root: %w", err)
+		}
+		sr.Close()
+		l1InfoRoot := common.BytesToHash(l1InfoRootBytes)
+
+		fmt.Println("[l1InfoRoot]", l1InfoRoot.Hex())
+		fmt.Println("[limitTs]", limitTs)
+
+		inputs := utils.AccHashInputs{
+			OldAccInputHash: prevAccInputHash,
+			Sequencer:       coinbase,
+			BatchData:       batchL2Data,
+			L1InfoRoot:      l1InfoRoot,
+			LimitTimestamp:  limitTs,
+			ForcedBlockHash: common.Hash{},
+		}
+		accInputHash, err = utils.CalculateAccInputHashByForkId(inputs)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to calculate accInputHash for batch %d: %w", i, err)
+		}
+		prevAccInputHash = accInputHash
+	}
+	return accInputHash, nil
 }

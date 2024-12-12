@@ -1047,31 +1047,27 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			log.Info("Starting sequencer in L1 recovery mode", "startBlock", cfg.L1SyncStartBlock)
 		}
 
-		seqAndVerifTopics := [][]libcommon.Hash{{
-			contracts.SequenceBatchesTopicPreEtrog,
-			contracts.SequenceBatchesTopicEtrog,
-			contracts.RollbackBatchesTopic,
-			contracts.VerificationTopicPreEtrog,
-			contracts.VerificationTopicEtrog,
-			contracts.VerificationValidiumTopicEtrog,
-		}}
-
-		seqAndVerifL1Contracts := []libcommon.Address{cfg.AddressRollup, cfg.AddressAdmin, cfg.AddressZkevm}
-
-		var l1Topics [][]libcommon.Hash
-		var l1Contracts []libcommon.Address
-		if isSequencer {
-			l1Topics = [][]libcommon.Hash{{
+		combinedL1Topics := [][]libcommon.Hash{
+			{
+				contracts.SequencedBatchTopicPreEtrog,
+				contracts.SequencedBatchTopicEtrog,
+				contracts.RollbackBatchesTopic,
+				contracts.VerificationTopicPreEtrog,
+				contracts.VerificationTopicEtrog,
+				contracts.VerificationValidiumTopicEtrog,
 				contracts.InitialSequenceBatchesTopic,
 				contracts.AddNewRollupTypeTopic,
 				contracts.AddNewRollupTypeTopicBanana,
 				contracts.CreateNewRollupTopic,
 				contracts.UpdateRollupTopic,
-			}}
-			l1Contracts = []libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup}
-		} else {
-			l1Topics = seqAndVerifTopics
-			l1Contracts = seqAndVerifL1Contracts
+				contracts.SequenceBatchesTopic,
+			},
+		}
+
+		combinedL1Contracts := []libcommon.Address{
+			cfg.AddressRollup,
+			cfg.AddressAdmin,
+			cfg.AddressZkevm,
 		}
 
 		ethermanClients := make([]syncer.IEtherman, len(backend.etherManClients))
@@ -1079,21 +1075,11 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			ethermanClients[i] = c.EthClient
 		}
 
-		seqVerSyncer := syncer.NewL1Syncer(
-			ctx,
-			ethermanClients,
-			seqAndVerifL1Contracts,
-			seqAndVerifTopics,
-			cfg.L1BlockRange,
-			cfg.L1QueryDelay,
-			cfg.L1HighestBlockType,
-		)
-
 		backend.l1Syncer = syncer.NewL1Syncer(
 			ctx,
 			ethermanClients,
-			l1Contracts,
-			l1Topics,
+			combinedL1Contracts,
+			combinedL1Topics,
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
 			cfg.L1HighestBlockType,
@@ -1165,18 +1151,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			// we switch context from being an RPC node to a sequencer
 			backend.txPool2.ForceUpdateLatestBlock(executionProgress)
 
-			l1BlockSyncer := syncer.NewL1Syncer(
-				ctx,
-				ethermanClients,
-				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
-				[][]libcommon.Hash{{
-					contracts.SequenceBatchesTopicEtrog,
-				}},
-				cfg.L1BlockRange,
-				cfg.L1QueryDelay,
-				cfg.L1HighestBlockType,
-			)
-
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
 				backend.chainDB,
@@ -1190,8 +1164,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.engine,
 				dataStreamServer,
 				backend.l1Syncer,
-				seqVerSyncer,
-				l1BlockSyncer,
 				backend.txPool2,
 				backend.txPool2DB,
 				verifier,
@@ -1229,6 +1201,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.forkValidator,
 				backend.engine,
 				backend.l1Syncer,
+				l1InfoTreeUpdater,
 				streamClient,
 				dataStreamServer,
 				l1InfoTreeUpdater,

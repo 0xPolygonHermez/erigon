@@ -21,6 +21,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/l1_log_parser"
+	"github.com/ledgerwatch/erigon/zk/l1infotree"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/types"
 )
@@ -53,20 +54,27 @@ var (
 )
 
 type L1SyncerCfg struct {
-	db     kv.RwDB
-	syncer IL1Syncer
+	db      kv.RwDB
+	syncer  IL1Syncer
+	updater *l1infotree.Updater
 
 	zkCfg *ethconfig.Zk
 }
 
-func StageL1SyncerCfg(db kv.RwDB, syncer IL1Syncer, zkCfg *ethconfig.Zk) L1SyncerCfg {
+func StageL1SyncerCfg(db kv.RwDB, syncer IL1Syncer, updater *l1infotree.Updater, zkCfg *ethconfig.Zk) L1SyncerCfg {
 	return L1SyncerCfg{
-		db:     db,
-		syncer: syncer,
-		zkCfg:  zkCfg,
+		db:      db,
+		syncer:  syncer,
+		updater: updater,
+		zkCfg:   zkCfg,
 	}
 }
 
+/*
+1. get the l1 info tree updates (commit tx in first cycle)
+2. start the syncer for all other contracts/topics
+3. parse logs and handle them
+*/
 func SpawnStageL1Syncer(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -83,10 +91,6 @@ func SpawnStageL1Syncer(
 
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting L1 sync stage", logPrefix))
-	// if sequencer.IsSequencer() {
-	// 	log.Info(fmt.Sprintf("[%s] skipping -- sequencer", logPrefix))
-	// 	return nil
-	// }
 	defer log.Info(fmt.Sprintf("[%s] Finished L1 sync stage ", logPrefix))
 
 	var internalTxOpened bool
@@ -101,7 +105,37 @@ func SpawnStageL1Syncer(
 		defer tx.Rollback()
 	}
 
-	// pass tx to the hermezdb
+	// l1 info tree first
+	if err := cfg.updater.WarmUp(tx); err != nil {
+		return fmt.Errorf("cfg.updater.WarmUp: %w", err)
+	}
+
+	allLogs, err := cfg.updater.CheckForInfoTreeUpdates(logPrefix, tx)
+	if err != nil {
+		return fmt.Errorf("CheckForInfoTreeUpdates: %w", err)
+	}
+
+	var latestIndex uint64
+	latestUpdate := cfg.updater.GetLatestUpdate()
+	if latestUpdate != nil {
+		latestIndex = latestUpdate.Index
+	}
+	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(allLogs), "latestIndex", latestIndex)
+
+	// commit tx if it was opened
+	if internalTxOpened {
+		log.Debug("l1 sync: first cycle, committing tx")
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("tx.Commit: %w", err)
+		}
+		tx, err = cfg.db.BeginRw(ctx)
+		if err != nil {
+			return fmt.Errorf("cfg.db.BeginRw: %w", err)
+		}
+		defer tx.Rollback()
+	}
+
+	// 	pass tx to the hermezdb
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	// get l1 block progress from this stage's progress
@@ -109,6 +143,14 @@ func SpawnStageL1Syncer(
 	if err != nil {
 		return fmt.Errorf("GetStageProgress, %w", err)
 	}
+
+	l1BlockProgressSeqOldStage, err := stages.GetStageProgress(tx, stages.L1SequencerSync)
+	if err != nil {
+		return fmt.Errorf("GetStageProgress, %w", err)
+	}
+
+	// [seq] - use sequencer stage progress - take the lowest progress to use as the starting point
+	l1BlockProgress = min(l1BlockProgress, l1BlockProgressSeqOldStage)
 
 	// start syncer if not started
 	if !cfg.syncer.IsSyncStarted() {
@@ -166,16 +208,16 @@ Loop:
 	}
 
 	// // do this separately to allow upgrading nodes to back-fill the table
-	// err = getAccInputHashes(ctx, logPrefix, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, highestVerification.BatchNo)
-	// if err != nil {
-	// 	return fmt.Errorf("getAccInputHashes: %w", err)
-	// }
+	err = getAccInputHashes(ctx, logPrefix, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, syncMeta.HighestVerification.BatchNo)
+	if err != nil {
+		return fmt.Errorf("getAccInputHashes: %w", err)
+	}
 
-	// // get l1 block timestamps
-	// err = getL1BlockTimestamps(ctx, logPrefix, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, highestVerification.BatchNo)
-	// if err != nil {
-	// 	return fmt.Errorf("getL1BlockTimestamps: %w", err)
-	// }
+	// get l1 block timestamps
+	err = getL1BlockTimestamps(ctx, logPrefix, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, syncMeta.HighestVerification.BatchNo)
+	if err != nil {
+		return fmt.Errorf("getL1BlockTimestamps: %w", err)
+	}
 
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
 
@@ -185,6 +227,10 @@ Loop:
 		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", syncMeta.NewVerificationsCount, "newSequencesCount", syncMeta.NewSequencesCount, "highestWrittenL1BlockNo", syncMeta.HighestWrittenL1BlockNo)
 
 		if err := stages.SaveStageProgress(tx, stages.L1Syncer, syncMeta.HighestWrittenL1BlockNo); err != nil {
+			return fmt.Errorf("SaveStageProgress: %w", err)
+		}
+		// [seq] - use sequencer stage progress
+		if err := stages.SaveStageProgress(tx, stages.L1SequencerSync, syncMeta.HighestWrittenL1BlockNo); err != nil {
 			return fmt.Errorf("SaveStageProgress: %w", err)
 		}
 		if syncMeta.HighestVerification.BatchNo > 0 {
@@ -452,7 +498,9 @@ func getL1BlockTimestamps(ctx context.Context, logPrefix string, hermezDb *herme
 		return fmt.Errorf("GetEtrog7FirstAndLastBatchNubmers: %w", err)
 	}
 
-	if firstBatchNo == 0 || lastBatchNo == 0 {
+	// we can't detect the start of etrog, but we can detect the end
+
+	if lastBatchNo == 0 {
 		log.Info(fmt.Sprintf("[%s] No etrog or elderberry batches found, skipping L1 block timestamp retrieval", logPrefix))
 		return nil
 	}
