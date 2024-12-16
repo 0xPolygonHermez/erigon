@@ -591,13 +591,14 @@ func sequencingBatchStep(
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
 			return err
 		}
+		fmt.Println("block", block.Number().Uint64())
+		fmt.Println("removing mined txpool lock")
 
-		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, batchState.blockState.builtBlockElements.txSlots); err != nil {
+		txsToRemove := append(batchState.blockState.builtBlockElements.txSlots, batchState.blockState.transactionsToDiscard...)
+		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, txsToRemove); err != nil {
 			return err
 		}
-		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, batchState.blockState.transactionsToDiscard); err != nil {
-			return err
-		}
+		fmt.Println("removing mined txpool unlock")
 
 		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()

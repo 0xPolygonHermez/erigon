@@ -18,6 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/ledgerwatch/secp256k1"
+	"fmt"
 )
 
 func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, []common.Hash, bool, error) {
@@ -36,12 +37,20 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 
 	if err := cfg.txPoolDb.View(ctx, func(poolTx kv.Tx) error {
 		slots := types2.TxsRlp{}
+		fmt.Println("YieldBest before")
 		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, 0, alreadyYielded); err != nil {
 			return err
 		}
 		yieldedTxs, yieldedIds, toRemove, err := extractTransactionsFromSlot(&slots, executionAt, cfg)
 		if err != nil {
 			return err
+		}
+		fmt.Println("YieldBest after", "count", len(yieldedTxs))
+		for _, tx := range yieldedTxs {
+			sender, ok := tx.GetSender()
+			if ok {
+				cfg.zk.NonceCache.TrySetHighestNonceForSender(sender, tx.GetNonce())
+			}
 		}
 		for _, txId := range toRemove {
 			cfg.txPool.MarkForDiscardFromPendingBest(txId)

@@ -39,6 +39,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/nonce_cache"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -379,8 +380,9 @@ type APIImpl struct {
 	gasTracker                    RpcL1GasPriceTracker
 	RejectLowGasPriceTransactions bool
 	RejectLowGasPriceTolerance    float64
- 
-	logLevel                    utils.LogLevel
+	NonceCache                    *nonce_cache.NonceCache
+
+	logLevel utils.LogLevel
 }
 
 // NewEthAPI returns APIImpl instance
@@ -418,6 +420,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		gasTracker:                    gasTracker,
 		RejectLowGasPriceTransactions: ethCfg.RejectLowGasPriceTransactions,
 		RejectLowGasPriceTolerance:    ethCfg.RejectLowGasPriceTolerance,
+		NonceCache:                    ethCfg.NonceCache,
 	}
 }
 

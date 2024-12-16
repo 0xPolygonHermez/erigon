@@ -39,6 +39,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/diagnostics"
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
+	"github.com/ledgerwatch/erigon/zk/nonce_cache"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 
@@ -1011,6 +1012,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		// entering ZK territory!
 		cfg := backend.config
+
+		cfg.NonceCache = nonce_cache.NewNonceCache()
 
 		backend.chainConfig.AllowFreeTransactions = cfg.AllowFreeTransactions
 		backend.chainConfig.ZkDefaultGasPrice = cfg.DefaultGasPrice
