@@ -170,10 +170,10 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 
 func validateIfDatastreamIsAheadOfExecution(
 	s *stagedsync.StageState,
-	// u stagedsync.Unwinder,
+// u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
-	// historyCfg stagedsync.HistoryCfg,
+// historyCfg stagedsync.HistoryCfg,
 ) error {
 	roTx, err := cfg.db.BeginRo(ctx)
 	if err != nil {
@@ -475,12 +475,15 @@ func checkForBadBatch(
 ) (bool, error) {
 	timestamp := latestTimestamp
 
+	fmt.Println("[checkForBadBatch] batchNo", batchNo, "decodedBlocks", len(decodedBlocks))
+
 	for _, decodedBlock := range decodedBlocks {
 		timestamp += uint64(decodedBlock.DeltaTimestamp)
 
 		// now check the limit timestamp we can't have used l1 info tree index from the future
 		if timestamp > limitTimestamp {
 			log.Error("batch went above the limit timestamp", "batch", batchNo, "timestamp", timestamp, "limit_timestamp", limitTimestamp)
+			fmt.Printf("[checkForBadBatch] batch went above the limit timestamp, batch: %d, timestamp: %d, limit_timestamp: %d\n", batchNo, timestamp, limitTimestamp)
 			return true, nil
 		}
 
@@ -493,18 +496,21 @@ func checkForBadBatch(
 			if l1Info == nil {
 				// can't use an index that doesn't exist, so we have a bad batch
 				log.Error("batch used info tree index that doesn't exist", "batch", batchNo, "index", decodedBlock.L1InfoTreeIndex)
+				fmt.Printf("[checkForBadBatch] batch used info tree index that doesn't exist, batch: %d, index: %d\n", batchNo, decodedBlock.L1InfoTreeIndex)
 				return true, nil
 			}
 
 			// we have an invalid batch if the block timestamp is lower than the l1 info min timestamp value
 			if timestamp < l1Info.Timestamp {
 				log.Error("batch used info tree index with timestamp lower than allowed", "batch", batchNo, "index", decodedBlock.L1InfoTreeIndex, "timestamp", timestamp, "min_timestamp", l1Info.Timestamp)
+				fmt.Printf("[checkForBadBatch] batch used info tree index with timestamp lower than allowed, batch: %d, index: %d, timestamp: %d, min_timestamp: %d\n", batchNo, decodedBlock.L1InfoTreeIndex, timestamp, l1Info.Timestamp)
 				return true, nil
 			}
 
 			// now finally check that the index used is lower or equal to the highest allowed index
 			if uint64(decodedBlock.L1InfoTreeIndex) > highestAllowedInfoTreeIndex {
 				log.Error("batch used info tree index higher than the current info tree root allows", "batch", batchNo, "index", decodedBlock.L1InfoTreeIndex, "highest_allowed", highestAllowedInfoTreeIndex)
+				fmt.Printf("[checkForBadBatch] batch used info tree index higher than the current info tree root allows, batch: %d, index: %d, highest_allowed: %d\n", batchNo, decodedBlock.L1InfoTreeIndex, highestAllowedInfoTreeIndex)
 				return true, nil
 			}
 		}

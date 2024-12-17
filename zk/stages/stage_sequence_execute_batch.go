@@ -48,18 +48,29 @@ func prepareBatchCounters(batchContext *BatchContext, batchState *BatchState) (*
 func doCheckForBadBatch(batchContext *BatchContext, batchState *BatchState, thisBlock uint64) (bool, error) {
 	infoTreeIndex, err := batchState.batchL1RecoveryData.getInfoTreeIndex(batchContext.sdb)
 	if err != nil {
+		fmt.Println("[doCheckForBadBatch] Error in doCheckForBadBatch - getInfoTreeIndex", err.Error())
 		return false, err
 	}
+
+	fmt.Println("[doCheckForBadBatch] infoTreeIndex", infoTreeIndex)
 
 	// now let's detect a bad batch and skip it if we have to
 	currentBlock, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, thisBlock)
 	if err != nil {
+		fmt.Println("[doCheckForBadBatch] Error in doCheckForBadBatch - ReadBlockByNumber", err.Error())
 		return false, err
 	}
 
 	badBatch, err := checkForBadBatch(batchState.batchNumber, batchContext.sdb.hermezDb, currentBlock.Time(), infoTreeIndex, batchState.batchL1RecoveryData.recoveredBatchData.LimitTimestamp, batchState.batchL1RecoveryData.recoveredBatchData.DecodedData)
 	if err != nil {
+		fmt.Println("[doCheckForBadBatch] Error in doCheckForBadBatch - checkForBadBatch", err.Error())
 		return false, err
+	}
+
+	fmt.Println("[doCheckForBadBatch] badBatch", badBatch, "batchNumber", batchState.batchNumber)
+
+	if badBatch {
+		log.Info("Bad batch detected (doCheckForBadBatch)", "batchNumber", batchState.batchNumber)
 	}
 
 	return badBatch, nil

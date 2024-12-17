@@ -198,6 +198,7 @@ func sequencingBatchStep(
 		bad := false
 		for _, batch := range cfg.zk.BadBatches {
 			if batch == batchState.batchNumber {
+				log.Info("Forcing bad batch (L1 recovery)", "batch", batchState.batchNumber)
 				bad = true
 				break
 			}
@@ -205,6 +206,7 @@ func sequencingBatchStep(
 
 		// if we aren't forcing a bad batch then check it
 		if !bad {
+			log.Info("Batch not bad (config), checking doCheckForBatch", "batch", batchState.batchNumber)
 			bad, err = doCheckForBadBatch(batchContext, batchState, executionAt)
 			if err != nil {
 				return err
