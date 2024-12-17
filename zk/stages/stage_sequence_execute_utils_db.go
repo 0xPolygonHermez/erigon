@@ -2,7 +2,6 @@ package stages
 
 import (
 	"context"
-
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/state"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"

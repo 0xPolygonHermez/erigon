@@ -1299,9 +1299,28 @@ func (p *TxPool) NonceFromAddress(addr [20]byte) (nonce uint64, inPool bool) {
 	defer p.lock.Unlock()
 	senderID, found := p.senders.getID(addr)
 	if !found {
-		return 0, false
+		// WE FLUSHED THE TX POOL
+		return p.GetNonceFromCache(addr), false
 	}
-	return p.all.nonce(senderID)
+
+	n, ip := p.all.nonce(senderID)
+
+	if n == 0 {
+		return p.GetNonceFromCache(addr), false
+	}
+
+	return n, ip
+}
+
+func (p *TxPool) GetNonceFromCache(addr [20]byte) (nonce uint64) {
+	cachedNonce, f := p.ethCfg.Zk.NonceCache.GetHighestNonceForSender(addr)
+	if f {
+		if cachedNonce > nonce {
+			nonce = cachedNonce + 1
+			return nonce
+		}
+	}
+	return 0
 }
 
 func (p *TxPool) LockFlusher() {
@@ -2111,6 +2130,7 @@ func (sc *sendersBatch) getOrCreateID(addr common.Address) (uint64, bool) {
 			log.Info(fmt.Sprintf("TX TRACING: allocated senderID %d to sender %x", id, addr))
 		}
 	}
+	fmt.Println("[txpool - senders] created id", id, traced)
 	return id, traced
 }
 func (sc *sendersBatch) info(cacheView kvcache.CacheView, id uint64) (nonce uint64, balance uint256.Int, err error) {
