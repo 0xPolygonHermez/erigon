@@ -5,6 +5,7 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/zk/nonce_cache"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -105,6 +106,8 @@ type Zk struct {
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
 	LogLevel                       utils.LogLevel
+
+	NonceCache *nonce_cache.NonceCache
 }
 
 var DefaultZkConfig = &Zk{}

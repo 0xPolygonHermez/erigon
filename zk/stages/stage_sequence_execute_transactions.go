@@ -8,6 +8,7 @@ import (
 
 	"io"
 
+	"fmt"
 	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/core"
@@ -36,6 +37,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 
 	if err := cfg.txPoolDb.View(ctx, func(poolTx kv.Tx) error {
 		slots := types2.TxsRlp{}
+		fmt.Println("YieldBest before")
 		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, 0, alreadyYielded); err != nil {
 			return err
 		}
@@ -43,6 +45,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 		if err != nil {
 			return err
 		}
+		fmt.Println("YieldBest after", "count", len(yieldedTxs))
 		for _, txId := range toRemove {
 			cfg.txPool.MarkForDiscardFromPendingBest(txId)
 		}

@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"runtime"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -38,11 +40,19 @@ func (p *TxPool) Trace(msg string, ctx ...interface{}) {
 }
 
 // onSenderStateChange is the function that recalculates ephemeral fields of transactions and determines
-// which sub pool they will need to go to. Sice this depends on other transactions from the same sender by with lower
+// which sub pool they will need to go to. Since this depends on other transactions from the same sender by with lower
 // nonces, and also affect other transactions from the same sender with higher nonce, it loops through all transactions
 // for a given senderID
 func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, senderBalance uint256.Int, byNonce *BySenderAndNonce,
 	protocolBaseFee, blockGasLimit uint64, pending *PendingPool, baseFee, queued *SubPool, discard func(*metaTx, DiscardReason)) {
+
+	// use call stack to print caller
+	_, file, line, _ := runtime.Caller(1)
+	fmt.Println("onSenderStateChange, called from:", file, line)
+	locked := p.lock.TryLock()
+	fmt.Println("[txpool] onSenderStateChange", "already locked", !locked)
+
+	fmt.Println("[txpool] onSenderStateChange", "senderID", senderID, "senderNonce", senderNonce, "senderBalance", senderBalance)
 	noGapsNonce := senderNonce
 	cumulativeRequiredBalance := uint256.NewInt(0)
 	minFeeCap := uint256.NewInt(0).SetAllOne()
@@ -52,6 +62,12 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		if mt.Tx.Traced {
 			log.Info(fmt.Sprintf("TX TRACING: onSenderStateChange loop iteration idHash=%x senderID=%d, senderNonce=%d, txn.nonce=%d, currentSubPool=%s", mt.Tx.IDHash, senderID, senderNonce, mt.Tx.Nonce, mt.currentSubPool))
 		}
+		fmt.Println("STARTING TX SENDER STATE CHANGE", common.BytesToHash(mt.Tx.IDHash[:]))
+		fmt.Println("[txpool] mt.subPool startoffunc", mt.subPool)
+		fmt.Println("[txpool] mt.currentSubPool", mt.currentSubPool)
+
+		fmt.Printf("SubPool Bits: %b\n", mt.subPool)
+
 		if senderNonce > mt.Tx.Nonce {
 			if mt.Tx.Traced {
 				log.Info(fmt.Sprintf("TX TRACING: removing due to low nonce for idHash=%x senderID=%d, senderNonce=%d, txn.nonce=%d, currentSubPool=%s", mt.Tx.IDHash, senderID, senderNonce, mt.Tx.Nonce, mt.currentSubPool))
@@ -60,10 +76,13 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 			switch mt.currentSubPool {
 			case PendingSubPool:
 				pending.Remove(mt)
+				fmt.Println("[txpool] onSenderStateChange - pending1", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 			case BaseFeeSubPool:
 				baseFee.Remove(mt)
+				fmt.Println("[txpool] onSenderStateChange - baseFee1", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 			case QueuedSubPool:
 				queued.Remove(mt)
+				fmt.Println("[txpool] onSenderStateChange - queued1", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 			default:
 				//already removed
 			}
@@ -92,21 +111,35 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		// parameter of minimal base fee. Set to 0 if feeCap is less than minimum base fee, which means
 		// this transaction will never be included into this particular chain.
 		mt.subPool &^= EnoughFeeCapProtocol
+		fmt.Printf("[txpool] mt.subPool enoughfeecap: %b\n", mt.subPool)
 		if mt.minFeeCap.Cmp(uint256.NewInt(protocolBaseFee)) >= 0 {
 			mt.subPool |= EnoughFeeCapProtocol
+			fmt.Printf("[txpool] mt.subPool duringenoughfeecap: %b\n", mt.subPool)
 		} else {
 			mt.subPool = 0 // TODO: we immediately drop all transactions if they have no first bit - then maybe we don't need this bit at all? And don't add such transactions to queue?
+			fmt.Printf("[txpool] mt.subPool duringenoughfeecap : %b\n", mt.subPool)
 			return true
 		}
+		fmt.Printf("[txpool] mt.subPool afterenoughfeecap: %b\n", mt.subPool)
 
 		// 2. Absence of nonce gaps. Set to 1 for transactions whose nonce is N, state nonce for
 		// the sender is M, and there are transactions for all nonces between M and N from the same
 		// sender. Set to 0 is the transaction's nonce is divided from the state nonce by one or more nonce gaps.
 		mt.subPool &^= NoNonceGaps
+		fmt.Println("[txpool] mt.subPool noncegaps", mt.subPool)
+		fmt.Println("[txpool] mt.subPool currently requires noGapsNonce==mt.Tx.Nonce")
+		fmt.Printf("[txpool] noGapsNonce=%d, mt.Tx.Nonce=%d, senderNonce=%d\n", noGapsNonce, mt.Tx.Nonce, senderNonce)
+
 		if noGapsNonce == mt.Tx.Nonce {
+			fmt.Printf("[txpool] onSenderStateChange passing no noncegap check - setting NoNonceGaps bit. noGapsNonce=%d\n", noGapsNonce)
 			mt.subPool |= NoNonceGaps
 			noGapsNonce++
+		} else {
+			fmt.Printf("[txpool] onSenderStateChange failing no noncegap check. noGapsNonce=%d, txnNonce=%d\n", noGapsNonce, mt.Tx.Nonce)
 		}
+
+		// After determining NoNonceGaps status
+		fmt.Println("[txpool] mt.subPool after noncegaps", mt.subPool)
 
 		// 3. Sufficient balance for gas. Set to 1 if the balance of sender's account in the
 		// state is B, nonce of the sender in the state is M, nonce of the transaction is N, and the
@@ -115,41 +148,56 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		// set if there is currently a guarantee that the transaction and all its required prior
 		// transactions will be able to pay for gas.
 		mt.subPool &^= EnoughBalance
+		fmt.Println("[txpool] mt.subPool enoughbalance", mt.subPool)
 		mt.cumulativeBalanceDistance = math.MaxUint64
 		if mt.Tx.Nonce >= senderNonce {
 			cumulativeRequiredBalance = cumulativeRequiredBalance.Add(cumulativeRequiredBalance, needBalance) // already deleted all transactions with nonce <= sender.nonce
 			if senderBalance.Gt(cumulativeRequiredBalance) || senderBalance.Eq(cumulativeRequiredBalance) {
 				mt.subPool |= EnoughBalance
+				fmt.Println("[txpool] mt.subPool duringenoughbalance", mt.subPool)
 			} else {
 				if cumulativeRequiredBalance.IsUint64() && senderBalance.IsUint64() {
 					mt.cumulativeBalanceDistance = cumulativeRequiredBalance.Uint64() - senderBalance.Uint64()
 				}
 			}
 		}
+		fmt.Println("[txpool] mt.subPool afterenoughbalance", mt.subPool)
 
 		mt.subPool &^= NotTooMuchGas
+		fmt.Println("[txpool] mt.subPool nottoomuchgas", mt.subPool)
 		// zk: here we don't care about block limits any more and care about only the transaction gas limit in ZK
 		if mt.Tx.Gas <= transactionGasLimit {
 			mt.subPool |= NotTooMuchGas
+			fmt.Println("[txpool] mt.subPool duringnottoomuchgas", mt.subPool)
 		}
+		fmt.Println("[txpool] mt.subPool afternottoomuchgas", mt.subPool)
 
 		if mt.Tx.Traced {
 			log.Info(fmt.Sprintf("TX TRACING: onSenderStateChange loop iteration idHash=%x senderId=%d subPool=%b", mt.Tx.IDHash, mt.Tx.SenderID, mt.subPool))
 		}
 
+		fmt.Println("[txpool] mt.currentSubPool ln155", mt.currentSubPool)
+
 		// Some fields of mt might have changed, need to fix the invariants in the subpool best and worst queues
 		switch mt.currentSubPool {
 		case PendingSubPool:
 			pending.Updated(mt)
+			fmt.Println("[txpool] onSenderStateChange - pending2", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 		case BaseFeeSubPool:
 			baseFee.Updated(mt)
+			fmt.Println("[txpool] onSenderStateChange - baseFee2", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 		case QueuedSubPool:
 			queued.Updated(mt)
+			fmt.Println("[txpool] onSenderStateChange - queued2", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 		}
+
+		fmt.Println("FINISHING TX SENDER STATE CHANGE", common.BytesToHash(mt.Tx.IDHash[:]))
+		fmt.Printf("[txpool] mt.subPool endoffunc: %b\n", mt.subPool)
 		return true
 	})
 	for _, mt := range toDel {
 		discard(mt, NonceTooLow)
+		fmt.Println("[txpool] onSenderStateChange - discard", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 	}
 }
 
@@ -243,6 +291,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		}
 
 		p.Trace("Including transaction", "txID", mt.Tx.IDHash)
+		p.nonceCache.TrySetHighestNonceForSender(p.senders.senderID2Addr[mt.Tx.SenderID], mt.Tx.Nonce)
 		txs.Txs[count] = rlpTx
 		txs.TxIds[count] = mt.Tx.IDHash
 		copy(txs.Senders.At(count), sender.Bytes())
@@ -286,10 +335,21 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 }
 
 func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGasLimit uint64, ids []common.Hash) error {
+	fmt.Println("[txpool] RemoveMinedTransactions", "ids", len(ids))
+	if len(ids) == 0 {
+		return nil
+	}
 	cache := p.cache()
 
+	fmt.Println("[txpool] RemoveMinedTransactions", "ids", ids)
+
+	fmt.Println("removeMinedTransactions acquiring lock")
 	p.lock.Lock()
-	defer p.lock.Unlock()
+
+	defer func() {
+		fmt.Println("removeMinedTransactions releasing lock")
+		p.lock.Unlock()
+	}()
 
 	toDelete := make([]*metaTx, 0)
 
@@ -300,10 +360,13 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 				switch mt.currentSubPool {
 				case PendingSubPool:
 					p.pending.Remove(mt)
+					fmt.Println("[txpool] RemoveMinedTransactions - pending", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 				case BaseFeeSubPool:
 					p.baseFee.Remove(mt)
+					fmt.Println("[txpool] RemoveMinedTransactions - baseFee", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 				case QueuedSubPool:
 					p.queued.Remove(mt)
+					fmt.Println("[txpool] RemoveMinedTransactions - queued", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 				default:
 					//already removed
 				}
@@ -331,7 +394,6 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 		}
 		p.onSenderStateChange(senderID, nonce, balance, p.all,
 			baseFee, blockGasLimit, p.pending, p.baseFee, p.queued, p.discardLocked)
-
 	}
 	return nil
 }

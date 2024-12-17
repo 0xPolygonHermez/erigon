@@ -59,6 +59,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/kvcache"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon-lib/types"
+	"github.com/ledgerwatch/erigon/zk/nonce_cache"
 )
 
 var (
@@ -238,6 +239,8 @@ type metaTx struct {
 
 func newMetaTx(slot *types.TxSlot, isLocal bool, timestmap uint64) *metaTx {
 	mt := &metaTx{Tx: slot, worstIndex: -1, bestIndex: -1, timestamp: timestmap, created: uint64(time.Now().Unix())}
+	fmt.Printf("newMetaTx subPool: %b\n", mt.subPool)
+	fmt.Printf("isLocal? %t\n", isLocal)
 	if isLocal {
 		mt.subPool = IsLocal
 	}
@@ -338,6 +341,8 @@ type TxPool struct {
 	limbo *Limbo
 
 	logLevel utils.LogLevel
+
+	nonceCache *nonce_cache.NonceCache
 }
 
 func CreateTxPoolBuckets(tx kv.RwTx) error {
@@ -358,10 +363,13 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		return nil, err
 	}
 
+	nc := nonce_cache.NewNonceCache(nonce_cache.MaxNonceCacheSize)
+
 	byNonce := &BySenderAndNonce{
 		tree:             btree.NewG[*metaTx](32, SortByNonceLess),
 		search:           &metaTx{Tx: &types.TxSlot{}},
 		senderIDTxnCount: map[uint64]int{},
+		nonceCache:       nc,
 	}
 	tracedSenders := make(map[common.Address]struct{})
 	for _, sender := range cfg.TracedSenders {
@@ -398,11 +406,15 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		aclDB:                   aclDB,
 		limbo:                   newLimbo(),
 		logLevel:                logLevel,
+		nonceCache:              nc,
 	}, nil
 }
 
 func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChangeBatch, unwindTxs, minedTxs types.TxSlots, tx kv.Tx) error {
 	defer newBlockTimer.UpdateDuration(time.Now())
+
+	fmt.Println("[txpool] OnNewBlock - unwindTxs", len(unwindTxs.Txs))
+	fmt.Println("[txpool] OnNewBlock - minedTxs", len(minedTxs.Txs))
 
 	isAfterLimbo := len(unwindTxs.Txs) > 0 && p.isDeniedYieldingTransactions()
 
@@ -1055,7 +1067,9 @@ func (p *TxPool) addTxs(blockNum uint64, cacheView kvcache.CacheView, senders *s
 			continue
 		}
 		mt := newMetaTx(txn, newTxs.IsLocal[i], blockNum)
+		fmt.Println("[txpool]", common.BytesToHash(mt.Tx.IDHash[:]))
 		if reason := add(mt, &announcements); reason != NotSet {
+			fmt.Println("[txpool]", discardReasons[i])
 			discardReasons[i] = reason
 			continue
 		}
@@ -1073,9 +1087,18 @@ func (p *TxPool) addTxs(blockNum uint64, cacheView kvcache.CacheView, senders *s
 		if err != nil {
 			return announcements, discardReasons, err
 		}
+
+		if p.ethCfg.Zk.NonceCache == nil {
+			p.ethCfg.Zk.NonceCache = nonce_cache.NewNonceCache(nonce_cache.MaxNonceCacheSize)
+		}
+
 		p.onSenderStateChange(senderID, nonce, balance, byNonce,
 			protocolBaseFee, blockGasLimit, pending, baseFee, queued, discard)
 	}
+
+	fmt.Println("protocolBaseFee", protocolBaseFee)
+	fmt.Println("pending", pending)
+	fmt.Println("queued", queued)
 
 	promote(pending, baseFee, queued, pendingBaseFee, discard, &announcements)
 
@@ -1167,6 +1190,10 @@ func (p *TxPool) addTxsOnNewBlock(
 			protocolBaseFee, blockGasLimit, pending, baseFee, queued, discard)
 	}
 
+	fmt.Println("protocolBaseFee", protocolBaseFee)
+	fmt.Println("pending", pending)
+	fmt.Println("queued", queued)
+
 	promote(pending, baseFee, queued, pendingBaseFee, discard, &announcements)
 
 	return announcements, nil
@@ -1191,6 +1218,7 @@ func (p *TxPool) setBaseFee(baseFee uint64, allowFreeTransactions bool) (uint64,
 func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) DiscardReason {
 	// Insert to pending pool, if pool doesn't have txn with same Nonce and bigger Tip
 	found := p.all.get(mt.Tx.SenderID, mt.Tx.Nonce)
+	fmt.Println("[txpool] addLocked", common.BytesToHash(mt.Tx.IDHash[:]), found)
 	if found != nil {
 		tipThreshold := uint256.NewInt(0)
 		tipThreshold = tipThreshold.Mul(&found.Tx.Tip, uint256.NewInt(100+p.cfg.PriceBump))
@@ -1233,6 +1261,9 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 		p.discardLocked(found, ReplacedByHigherTip)
 	} else if p.pending.IsFull() {
 		// new transaction will be denied if pending pool is full unless it will replace an old transaction
+
+		fmt.Println("pending overflowed")
+
 		return PendingPoolOverflow
 	}
 
@@ -1249,6 +1280,7 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 	}
 	// All transactions are first added to the queued pool and then immediately promoted from there if required
 	p.queued.Add(mt)
+	fmt.Println("added to queued for promotion (initially):", common.BytesToHash(mt.Tx.IDHash[:]))
 	return NotSet
 }
 
@@ -1266,9 +1298,15 @@ func (p *TxPool) NonceFromAddress(addr [20]byte) (nonce uint64, inPool bool) {
 	defer p.lock.Unlock()
 	senderID, found := p.senders.getID(addr)
 	if !found {
-		return 0, false
+		return p.nonceCache.GetHighestNonceForSender(addr)
 	}
-	return p.all.nonce(senderID)
+
+	n, ip := p.all.nonce(senderID)
+	if !ip {
+		return p.nonceCache.GetHighestNonceForSender(addr)
+	}
+
+	return n, ip
 }
 
 func (p *TxPool) LockFlusher() {
@@ -1295,6 +1333,8 @@ func removeMined(byNonce *BySenderAndNonce, minedTxs []*types.TxSlot, pending *P
 		}
 	}
 
+	fmt.Println("[txpool] removeMined - noncesToRemove", noncesToRemove)
+
 	var toDel []*metaTx // can't delete items while iterate them
 	for senderID, nonce := range noncesToRemove {
 		//if sender.all.Len() > 0 {
@@ -1313,10 +1353,13 @@ func removeMined(byNonce *BySenderAndNonce, minedTxs []*types.TxSlot, pending *P
 			// del from sub-pool
 			switch mt.currentSubPool {
 			case PendingSubPool:
+				fmt.Println("[txpool] removeMined - pending", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 				pending.Remove(mt)
 			case BaseFeeSubPool:
+				fmt.Println("[txpool] removeMined - baseFee", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 				baseFee.Remove(mt)
 			case QueuedSubPool:
+				fmt.Println("[txpool] removeMined - queued", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 				queued.Remove(mt)
 			default:
 				//already removed
@@ -1336,14 +1379,25 @@ func removeMined(byNonce *BySenderAndNonce, minedTxs []*types.TxSlot, pending *P
 // being promoted to the pending or basefee pool, for re-broadcasting
 func promote(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint64, discard func(*metaTx, DiscardReason), announcements *types.Announcements) {
 	// Demote worst transactions that do not qualify for pending sub pool anymore, to other sub pools, or discard
+
+	fmt.Println("[txpool] promote - pending", "pending", pending.Len(), "baseFee", baseFee.Len(), "queued", queued.Len())
+
 	for worst := pending.Worst(); pending.Len() > 0 && (worst.subPool < BaseFeePoolBits || worst.minFeeCap.Cmp(uint256.NewInt(pendingBaseFee)) < 0); worst = pending.Worst() {
+
+		fmt.Printf("SubPool Bits: %b\n", worst.subPool)
+
+		fmt.Println("[txpool] promote - pending", "worst", common.BytesToHash(worst.Tx.IDHash[:]), "subPool", worst.subPool, "minFeeCap", worst.minFeeCap, "pendingBaseFee", pendingBaseFee)
+
 		if worst.subPool >= BaseFeePoolBits {
 			tx := pending.PopWorst()
 			announcements.Append(tx.Tx.Type, tx.Tx.Size, tx.Tx.IDHash[:])
+			fmt.Println("[txpool] promote - baseFee", "tx", common.BytesToHash(tx.Tx.IDHash[:]))
 			baseFee.Add(tx)
 		} else if worst.subPool >= QueuedPoolBits {
+			fmt.Println("[txpool] demote - queued", "tx", common.BytesToHash(worst.Tx.IDHash[:]))
 			queued.Add(pending.PopWorst())
 		} else {
+			fmt.Println("[txpool] promote - discard", "tx", common.BytesToHash(worst.Tx.IDHash[:]))
 			discard(pending.PopWorst(), FeeTooLow)
 		}
 	}
@@ -1351,6 +1405,7 @@ func promote(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint
 	// Promote best transactions from base fee pool to pending pool while they qualify
 	for best := baseFee.Best(); baseFee.Len() > 0 && best.subPool >= BaseFeePoolBits && best.minFeeCap.Cmp(uint256.NewInt(pendingBaseFee)) >= 0; best = baseFee.Best() {
 		tx := baseFee.PopBest()
+		fmt.Println("[txpool] promote - pending", "tx", common.BytesToHash(tx.Tx.IDHash[:]))
 		announcements.Append(tx.Tx.Type, tx.Tx.Size, tx.Tx.IDHash[:])
 		pending.Add(tx)
 	}
@@ -1358,8 +1413,10 @@ func promote(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint
 	// Demote worst transactions that do not qualify for base fee pool anymore, to queued sub pool, or discard
 	for worst := baseFee.Worst(); baseFee.Len() > 0 && worst.subPool < BaseFeePoolBits; worst = baseFee.Worst() {
 		if worst.subPool >= QueuedPoolBits {
+			fmt.Println("[txpool] demote - queued", "tx", common.BytesToHash(worst.Tx.IDHash[:]))
 			queued.Add(baseFee.PopWorst())
 		} else {
+			fmt.Println("[txpool] promote - discard", "tx", common.BytesToHash(worst.Tx.IDHash[:]))
 			discard(baseFee.PopWorst(), FeeTooLow)
 		}
 	}
@@ -1382,16 +1439,19 @@ func promote(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint
 
 	// Discard worst transactions from pending pool until it is within capacity limit
 	for pending.Len() > pending.limit {
+		fmt.Println("[txpool] promote - discard pending", "tx", common.BytesToHash(pending.Worst().Tx.IDHash[:]))
 		discard(pending.PopWorst(), PendingPoolOverflow)
 	}
 
 	// Discard worst transactions from pending sub pool until it is within capacity limits
 	for baseFee.Len() > baseFee.limit {
+		fmt.Println("[txpool] promote - discard baseFee", "tx", common.BytesToHash(baseFee.Worst().Tx.IDHash[:]))
 		discard(baseFee.PopWorst(), BaseFeePoolOverflow)
 	}
 
 	// Discard worst transactions from the queued sub pool until it is within its capacity limits
 	for _ = queued.Worst(); queued.Len() > queued.limit; _ = queued.Worst() {
+		fmt.Println("[txpool] promote - discard queued", "tx", common.BytesToHash(queued.Worst().Tx.IDHash[:]))
 		discard(queued.PopWorst(), QueuedPoolOverflow)
 	}
 }
@@ -2112,6 +2172,7 @@ type BySenderAndNonce struct {
 	tree             *btree.BTreeG[*metaTx]
 	search           *metaTx
 	senderIDTxnCount map[uint64]int // count of sender's txns in the pool - may differ from nonce
+	nonceCache       *nonce_cache.NonceCache
 }
 
 func (b *BySenderAndNonce) nonce(senderID uint64) (nonce uint64, ok bool) {
@@ -2299,6 +2360,7 @@ func (p *PendingPool) Add(i *metaTx) {
 		log.Info(fmt.Sprintf("TX TRACING: moved to subpool %s, IdHash=%x, sender=%d", p.t, i.Tx.IDHash, i.Tx.SenderID))
 	}
 	i.currentSubPool = p.t
+	fmt.Println("[txpool] add to txpool pending (worst)", p.t)
 	heap.Push(p.worst, i)
 	p.best.UnsafeAdd(i)
 	p.sorted = false
@@ -2354,6 +2416,7 @@ func (p *SubPool) Add(i *metaTx) {
 	if i.Tx.Traced {
 		log.Info(fmt.Sprintf("TX TRACING: moved to subpool %s, IdHash=%x, sender=%d", p.t, i.Tx.IDHash, i.Tx.SenderID))
 	}
+	fmt.Println("[txpool] add to txpool subpool", p.t)
 	i.currentSubPool = p.t
 	heap.Push(p.best, i)
 	heap.Push(p.worst, i)
