@@ -70,6 +70,8 @@ func doCheckForBadBatch(batchContext *BatchContext, batchState *BatchState, this
 	fmt.Println("[doCheckForBadBatch] badBatch", badBatch, "batchNumber", batchState.batchNumber)
 
 	if badBatch {
+		badBatch = false
+		fmt.Println("IGNORING BAD BATCH")
 		log.Info("Bad batch detected (doCheckForBadBatch)", "batchNumber", batchState.batchNumber)
 	}
 
