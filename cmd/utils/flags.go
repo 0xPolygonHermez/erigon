@@ -415,6 +415,11 @@ var (
 		Usage: "L2 datastreamer endpoint",
 		Value: "",
 	}
+	L2DataStreamerUseTLSFlag = cli.BoolFlag{
+		Name:  "zkevm.l2-datastreamer-use-tls",
+		Usage: "Use TLS connection to L2 datastreamer endpoint",
+		Value: false,
+	}
 	L2DataStreamerTimeout = cli.StringFlag{
 		Name:  "zkevm.l2-datastreamer-timeout",
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
@@ -546,6 +551,11 @@ var (
 		Usage: "Block seal time. Defaults to 6s",
 		Value: "6s",
 	}
+	SequencerEmptyBlockSealTime = cli.StringFlag{
+		Name:  "zkevm.sequencer-empty-block-seal-time",
+		Usage: "Empty block seal time. Defaults to zkevm.sequencer-block-seal-time",
+		Value: "",
+	}
 	SequencerBatchSealTime = cli.StringFlag{
 		Name:  "zkevm.sequencer-batch-seal-time",
 		Usage: "Batch seal time. Defaults to 12s",
@@ -667,6 +677,16 @@ var (
 		Usage: "Allow the sequencer to proceed transactions with 0 gas price",
 		Value: false,
 	}
+	RejectLowGasPriceTransactions = cli.BoolFlag{
+		Name:  "zkevm.reject-low-gas-price-transactions",
+		Usage: "Reject the sequencer to proceed transactions with low gas price",
+		Value: false,
+	}
+	RejectLowGasPriceTolerance = cli.Float64Flag{
+		Name:  "zkevm.reject-low-gas-price-tolerance",
+		Usage: "Value between 0 and 1 that defines the tolerance for low gas price transactions, this percentage will be removed from the lowest price to determine rejection",
+		Value: 0,
+	}
 	AllowPreEIP155Transactions = cli.BoolFlag{
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
@@ -706,6 +726,16 @@ var (
 	GasPriceFactor = cli.Float64Flag{
 		Name:  "zkevm.gas-price-factor",
 		Usage: "Apply factor to L1 gas price to calculate l2 gasPrice",
+		Value: 1,
+	}
+	GasPriceCheckFrequency = cli.DurationFlag{
+		Name:  "zkevm.gas-price-check-frequency",
+		Usage: "The frequency at which to check the L1 for the latest gas price",
+		Value: 0,
+	}
+	GasPriceHistoryCount = cli.Uint64Flag{
+		Name:  "zkevm.gas-price-history-count",
+		Usage: "The number of historical gas prices to keep",
 		Value: 1,
 	}
 	WitnessFullFlag = cli.BoolFlag{
