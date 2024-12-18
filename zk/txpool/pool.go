@@ -1266,6 +1266,7 @@ func (p *TxPool) NonceFromAddress(addr [20]byte) (nonce uint64, inPool bool) {
 	defer p.lock.Unlock()
 	senderID, found := p.senders.getID(addr)
 	if !found {
+		log.Warn("NonceFromAddress: sender not found", "addr", addr)
 		return 0, false
 	}
 	return p.all.nonce(senderID)
