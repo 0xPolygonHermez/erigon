@@ -71,6 +71,7 @@ func SpawnExecuteBlocksStageZk(
 	defer func() {
 		batch.Close()
 	}()
+	hermezDb := hermez_db.NewHermezDb(tx)
 
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, hermezDb, s.LogPrefix(), cfg.zk.LogLevel == log.LvlTrace); err != nil {
 		return fmt.Errorf("UpdateZkEVMBlockCfg: %w", err)
