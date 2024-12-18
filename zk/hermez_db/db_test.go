@@ -669,6 +669,33 @@ func TestWriteAndRetrieveBatchAccInputHash(t *testing.T) {
 	// check
 	assert.Equal(t, expectedBatchNo, highestBatchNo, "Highest batch number does not match expected")
 	assert.Equal(t, expectedHash, highestHash, "Highest batch hash does not match expected")
+
+	// second write with real examples
+	batches = []struct {
+		batchNo uint64
+		hash    common.Hash
+	}{
+		{batchNo: 170, hash: common.Hash{}},
+		{batchNo: 180, hash: common.HexToHash("0xff9e8ef2b9b59b9f7eb79abd9c8d6970b5f1e1ca38a9dc38a0d5a551c89f2f29")},
+	}
+
+	// write
+	for _, batch := range batches {
+		err := db.WriteBatchAccInputHash(batch.batchNo, batch.hash)
+		require.NoError(t, err, "Failed to write batch AccInputHash")
+	}
+
+	// get highest stored
+	highestBatchNo, highestHash, err = db.GetHighestStoredBatchAccInputHash()
+	require.NoError(t, err, "Failed to get highest stored batch AccInputHash")
+
+	// expected
+	expectedBatchNo = uint64(180)
+	expectedHash = common.HexToHash("0xff9e8ef2b9b59b9f7eb79abd9c8d6970b5f1e1ca38a9dc38a0d5a551c89f2f29")
+
+	assert.Equal(t, expectedBatchNo, highestBatchNo, "Highest batch number does not match expected")
+	assert.Equal(t, expectedHash, highestHash, "Highest batch hash does not match expected")
+
 }
 
 func TestGetAccInputHashForBatchOrPrevious(t *testing.T) {
