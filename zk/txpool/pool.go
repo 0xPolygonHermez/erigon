@@ -335,6 +335,8 @@ type TxPool struct {
 
 	// limbo specific fields where bad batch transactions identified by the executor go
 	limbo *Limbo
+
+	logLevel log.Lvl
 }
 
 func CreateTxPoolBuckets(tx kv.RwTx) error {
@@ -365,6 +367,11 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		tracedSenders[common.BytesToAddress([]byte(sender))] = struct{}{}
 	}
 
+	logLevel := log.LvlInfo
+	if ethCfg.Zk != nil {
+		logLevel = ethCfg.Zk.LogLevel
+	}
+
 	return &TxPool{
 		lock:                    &sync.Mutex{},
 		byHash:                  map[string]*metaTx{},
@@ -389,6 +396,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		flushMtx:                &sync.Mutex{},
 		aclDB:                   aclDB,
 		limbo:                   newLimbo(),
+		logLevel:                logLevel,
 	}, nil
 }
 

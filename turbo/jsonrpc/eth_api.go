@@ -131,6 +131,7 @@ type BaseAPI struct {
 	dirs           datadir.Dirs
 	l2RpcUrl       string
 	gasless        bool
+	logLevel       log.Lvl
 }
 
 func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.Aggregator, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs) *BaseAPI {
@@ -171,7 +172,7 @@ func (api *BaseAPI) chainConfig(ctx context.Context, tx kv.Tx) (*chain.Config, e
 
 	//[zkevm] get dynamic fork config
 	hermezDb := hermez_db.NewHermezDbReader(tx)
-	if err := utils.UpdateZkEVMBlockCfg(cfg, hermezDb, ""); err != nil {
+	if err := utils.UpdateZkEVMBlockCfg(cfg, hermezDb, "", api.logLevel == log.LvlTrace); err != nil {
 		return cfg, err
 	}
 
@@ -353,60 +354,70 @@ func (api *BaseAPI) pruneMode(tx kv.Tx) (*prune.Mode, error) {
 // APIImpl is implementation of the EthAPI interface based on remote Db access
 type APIImpl struct {
 	*BaseAPI
-	ethBackend                  rpchelper.ApiBackend
-	txPool                      txpool.TxpoolClient
-	mining                      txpool.MiningClient
-	gasCache                    *GasPriceCache
-	db                          kv.RoDB
-	GasCap                      uint64
-	FeeCap                      float64
-	ReturnDataLimit             int
-	ZkRpcUrl                    string
-	PoolManagerUrl              string
-	AllowFreeTransactions       bool
-	AllowPreEIP155Transactions  bool
-	AllowUnprotectedTxs         bool
-	MaxGetProofRewindBlockCount int
-	L1RpcUrl                    string
-	DefaultGasPrice             uint64
-	MaxGasPrice                 uint64
-	GasPriceFactor              float64
-	L1GasPrice                  L1GasPrice
-	SubscribeLogsChannelSize    int
-	logger                      log.Logger
-	VirtualCountersSmtReduction float64
+	ethBackend                    rpchelper.ApiBackend
+	txPool                        txpool.TxpoolClient
+	mining                        txpool.MiningClient
+	gasCache                      *GasPriceCache
+	db                            kv.RoDB
+	GasCap                        uint64
+	FeeCap                        float64
+	ReturnDataLimit               int
+	ZkRpcUrl                      string
+	PoolManagerUrl                string
+	AllowFreeTransactions         bool
+	AllowPreEIP155Transactions    bool
+	AllowUnprotectedTxs           bool
+	MaxGetProofRewindBlockCount   int
+	L1RpcUrl                      string
+	DefaultGasPrice               uint64
+	MaxGasPrice                   uint64
+	GasPriceFactor                float64
+	L1GasPrice                    L1GasPrice
+	SubscribeLogsChannelSize      int
+	logger                        log.Logger
+	VirtualCountersSmtReduction   float64
+	gasTracker                    RpcL1GasPriceTracker
+	RejectLowGasPriceTransactions bool
+	RejectLowGasPriceTolerance    float64
+
+	logLevel utils.LogLevel
 }
 
 // NewEthAPI returns APIImpl instance
-func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger) *APIImpl {
+func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger, gasTracker RpcL1GasPriceTracker) *APIImpl {
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
 
+	base.logLevel = ethCfg.LogLevel
+
 	return &APIImpl{
-		BaseAPI:                     base,
-		db:                          db,
-		ethBackend:                  eth,
-		txPool:                      txPool,
-		mining:                      mining,
-		gasCache:                    NewGasPriceCache(),
-		GasCap:                      gascap,
-		FeeCap:                      feecap,
-		AllowUnprotectedTxs:         allowUnprotectedTxs,
-		ReturnDataLimit:             returnDataLimit,
-		ZkRpcUrl:                    ethCfg.L2RpcUrl,
-		PoolManagerUrl:              ethCfg.PoolManagerUrl,
-		AllowFreeTransactions:       ethCfg.AllowFreeTransactions,
-		AllowPreEIP155Transactions:  ethCfg.AllowPreEIP155Transactions,
-		MaxGetProofRewindBlockCount: maxGetProofRewindBlockCount,
-		L1RpcUrl:                    ethCfg.L1RpcUrl,
-		DefaultGasPrice:             ethCfg.DefaultGasPrice,
-		MaxGasPrice:                 ethCfg.MaxGasPrice,
-		GasPriceFactor:              ethCfg.GasPriceFactor,
-		L1GasPrice:                  L1GasPrice{},
-		SubscribeLogsChannelSize:    subscribeLogsChannelSize,
-		logger:                      logger,
-		VirtualCountersSmtReduction: ethCfg.VirtualCountersSmtReduction,
+		BaseAPI:                       base,
+		db:                            db,
+		ethBackend:                    eth,
+		txPool:                        txPool,
+		mining:                        mining,
+		gasCache:                      NewGasPriceCache(),
+		GasCap:                        gascap,
+		FeeCap:                        feecap,
+		AllowUnprotectedTxs:           allowUnprotectedTxs,
+		ReturnDataLimit:               returnDataLimit,
+		ZkRpcUrl:                      ethCfg.L2RpcUrl,
+		PoolManagerUrl:                ethCfg.PoolManagerUrl,
+		AllowFreeTransactions:         ethCfg.AllowFreeTransactions,
+		AllowPreEIP155Transactions:    ethCfg.AllowPreEIP155Transactions,
+		MaxGetProofRewindBlockCount:   maxGetProofRewindBlockCount,
+		L1RpcUrl:                      ethCfg.L1RpcUrl,
+		DefaultGasPrice:               ethCfg.DefaultGasPrice,
+		MaxGasPrice:                   ethCfg.MaxGasPrice,
+		GasPriceFactor:                ethCfg.GasPriceFactor,
+		L1GasPrice:                    L1GasPrice{},
+		SubscribeLogsChannelSize:      subscribeLogsChannelSize,
+		logger:                        logger,
+		VirtualCountersSmtReduction:   ethCfg.VirtualCountersSmtReduction,
+		gasTracker:                    gasTracker,
+		RejectLowGasPriceTransactions: ethCfg.RejectLowGasPriceTransactions,
+		RejectLowGasPriceTolerance:    ethCfg.RejectLowGasPriceTolerance,
 	}
 }
 
