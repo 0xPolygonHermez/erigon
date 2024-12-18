@@ -48,7 +48,7 @@ func SpawnSequencingStage(
 		return err
 	}
 
-	if lastBatch < lastSequence.BatchNo && !cfg.zk.IsL1Recovery() {
+	if lastSequence != nil && lastBatch < lastSequence.BatchNo && !cfg.zk.IsL1Recovery() {
 		panic(fmt.Sprintf("lastBatch %d < lastSequence.BatchNo %d", lastBatch, lastSequence.BatchNo))
 	}
 
