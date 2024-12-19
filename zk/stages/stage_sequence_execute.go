@@ -161,6 +161,9 @@ func SpawnSequencingStage(
 
 	log.Info(fmt.Sprintf("[%s] Starting batch %d...", logPrefix, batchState.batchNumber))
 
+	minedTxsToRemove := make([]common.Hash, 0)
+	var header *types.Header
+
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
 		logTicker.Reset(10 * time.Second)
@@ -178,7 +181,8 @@ func SpawnSequencingStage(
 			}
 		}
 
-		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg))
+		var parentBlock *types.Block
+		header, parentBlock, err = prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg))
 		if err != nil {
 			return err
 		}
@@ -426,8 +430,8 @@ func SpawnSequencingStage(
 			return err
 		}
 
-		cfg.txPool.RemoveMinedTransactions(batchState.blockState.builtBlockElements.txSlots)
-		cfg.txPool.RemoveMinedTransactions(batchState.blockState.transactionsToDiscard)
+		minedTxsToRemove = append(minedTxsToRemove, batchState.blockState.transactionsToDiscard...)
+		minedTxsToRemove = append(minedTxsToRemove, batchState.blockState.builtBlockElements.txSlots...)
 
 		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()
@@ -517,7 +521,11 @@ func SpawnSequencingStage(
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
 
-	return sdb.tx.Commit()
+	if err := sdb.tx.Commit(); err != nil {
+		return err
+	}
+	cfg.txPool.RemoveMinedTransactions(minedTxsToRemove)
+	return nil
 }
 
 func removeInclusionTransaction(orig []types.Transaction, index int) []types.Transaction {
