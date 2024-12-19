@@ -417,7 +417,7 @@ func TestGetBatchByNumber(t *testing.T) {
 		assert.NoError(err)
 		err = hDB.WriteBlockGlobalExitRoot(uint64(i+1), gers[i])
 		assert.NoError(err)
-		l1InforTree := &zktypes.L1InfoTreeUpdate{
+		l1InfoTree := &zktypes.L1InfoTreeUpdate{
 			Index:           uint64(i),
 			GER:             gers[i],
 			MainnetExitRoot: mainnetExitRoots[i],
@@ -426,7 +426,11 @@ func TestGetBatchByNumber(t *testing.T) {
 			Timestamp:       times[i],
 			BlockNumber:     uint64(i + 1),
 		}
-		err = hDB.WriteL1InfoTreeUpdateToGer(l1InforTree)
+		err = hDB.WriteL1InfoTreeUpdateToGer(l1InfoTree)
+		assert.NoError(err)
+		err = hDB.WriteL1InfoTreeUpdate(l1InfoTree)
+		assert.NoError(err)
+		err = hDB.WriteL1InfoTreeRoot(hashes[i], uint64(i))
 		assert.NoError(err)
 	}
 
@@ -448,6 +452,8 @@ func TestGetBatchByNumber(t *testing.T) {
 		assert.NoError(err)
 	}
 
+	accInputHash := common.HexToHash("0xd24388f39169a9187e66711e42c8da0dfd9f9089ec46c9a95d29a1f25a58234a")
+
 	for i := 0; i < 4; i++ {
 		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], params.TestChainConfig)
 		assert.NoError(err)
@@ -456,7 +462,6 @@ func TestGetBatchByNumber(t *testing.T) {
 	}
 	tx.Commit()
 	var response []byte
-	accInputHash := common.HexToHash("0xd24388f39169a9187e66711e42c8da0dfd9f9089ec46c9a95d29a1f25a58234a")
 	response = append(response, accInputHash.Bytes()...)
 	response = append(response, common.Hash{}.Bytes()...)
 	response = append(response, common.FromHex(fmt.Sprintf("0x%064x", 1))...)
@@ -493,7 +498,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	assert.Equal(gers[len(gers)-1], batch.GlobalExitRoot)
 	assert.Equal(mainnetExitRoots[len(mainnetExitRoots)-1], batch.MainnetExitRoot)
 	assert.Equal(rollupExitRoots[len(rollupExitRoots)-1], batch.RollupExitRoot)
-	assert.Equal(common.HexToHash("0x97d1524156ccb46723e5c3c87951da9a390499ba288161d879df1dbc03d49afc"), batch.AccInputHash)
+	assert.Equal(common.HexToHash("0x4ada34202c254799e2abc9f832764692c2fc6f654fa98a1f9c19391deff623bd"), batch.AccInputHash)
 	assert.Equal(common.HexToHash("0x22ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba97"), *batch.SendSequencesTxHash)
 	assert.Equal(rpctypes.ArgUint64(1714427009), batch.Timestamp)
 	assert.Equal(true, batch.Closed)

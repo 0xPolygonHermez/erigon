@@ -9,8 +9,9 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
-	"math/big"
+	"sync"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/metrics"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -18,8 +19,9 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/zk/contracts"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/l1_log_parser"
+	"github.com/ledgerwatch/erigon/zk/l1infotree"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/types"
 )
@@ -42,6 +44,8 @@ type IL1Syncer interface {
 	ConsumeQueryBlocks()
 	WaitQueryBlocksToFinish()
 	CheckL1BlockFinalized(blockNo uint64) (bool, uint64, error)
+
+	CallGetRollupSequencedBatches(ctx context.Context, addr *common.Address, rollupId, batchNum uint64) (common.Hash, uint64, error)
 }
 
 var (
@@ -50,20 +54,27 @@ var (
 )
 
 type L1SyncerCfg struct {
-	db     kv.RwDB
-	syncer IL1Syncer
+	db      kv.RwDB
+	syncer  IL1Syncer
+	updater *l1infotree.Updater
 
 	zkCfg *ethconfig.Zk
 }
 
-func StageL1SyncerCfg(db kv.RwDB, syncer IL1Syncer, zkCfg *ethconfig.Zk) L1SyncerCfg {
+func StageL1SyncerCfg(db kv.RwDB, syncer IL1Syncer, updater *l1infotree.Updater, zkCfg *ethconfig.Zk) L1SyncerCfg {
 	return L1SyncerCfg{
-		db:     db,
-		syncer: syncer,
-		zkCfg:  zkCfg,
+		db:      db,
+		syncer:  syncer,
+		updater: updater,
+		zkCfg:   zkCfg,
 	}
 }
 
+/*
+1. get the l1 info tree updates (commit tx in first cycle)
+2. start the syncer for all other contracts/topics
+3. parse logs and handle them
+*/
 func SpawnStageL1Syncer(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -80,10 +91,6 @@ func SpawnStageL1Syncer(
 
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting L1 sync stage", logPrefix))
-	// if sequencer.IsSequencer() {
-	// 	log.Info(fmt.Sprintf("[%s] skipping -- sequencer", logPrefix))
-	// 	return nil
-	// }
 	defer log.Info(fmt.Sprintf("[%s] Finished L1 sync stage ", logPrefix))
 
 	var internalTxOpened bool
@@ -98,7 +105,37 @@ func SpawnStageL1Syncer(
 		defer tx.Rollback()
 	}
 
-	// pass tx to the hermezdb
+	// l1 info tree first
+	if err := cfg.updater.WarmUp(tx); err != nil {
+		return fmt.Errorf("cfg.updater.WarmUp: %w", err)
+	}
+
+	allLogs, err := cfg.updater.CheckForInfoTreeUpdates(logPrefix, tx)
+	if err != nil {
+		return fmt.Errorf("CheckForInfoTreeUpdates: %w", err)
+	}
+
+	var latestIndex uint64
+	latestUpdate := cfg.updater.GetLatestUpdate()
+	if latestUpdate != nil {
+		latestIndex = latestUpdate.Index
+	}
+	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(allLogs), "latestIndex", latestIndex)
+
+	// commit tx if it was opened
+	if internalTxOpened {
+		log.Debug("l1 sync: first cycle, committing tx")
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("tx.Commit: %w", err)
+		}
+		tx, err = cfg.db.BeginRw(ctx)
+		if err != nil {
+			return fmt.Errorf("cfg.db.BeginRw: %w", err)
+		}
+		defer tx.Rollback()
+	}
+
+	// 	pass tx to the hermezdb
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	// get l1 block progress from this stage's progress
@@ -106,6 +143,14 @@ func SpawnStageL1Syncer(
 	if err != nil {
 		return fmt.Errorf("GetStageProgress, %w", err)
 	}
+
+	l1BlockProgressSeqOldStage, err := stages.GetStageProgress(tx, stages.L1SequencerSync)
+	if err != nil {
+		return fmt.Errorf("GetStageProgress, %w", err)
+	}
+
+	// [seq] - use sequencer stage progress - take the lowest progress to use as the starting point
+	l1BlockProgress = min(l1BlockProgress, l1BlockProgressSeqOldStage)
 
 	// start syncer if not started
 	if !cfg.syncer.IsSyncStarted() {
@@ -126,61 +171,30 @@ func SpawnStageL1Syncer(
 
 	logsChan := cfg.syncer.GetLogsChan()
 	progressMessageChan := cfg.syncer.GetProgressMessageChan()
-	highestVerification := types.L1BatchInfo{}
 
-	newVerificationsCount := 0
-	newSequencesCount := 0
-	highestWrittenL1BlockNo := uint64(0)
+	l1LogParser := l1_log_parser.NewL1LogParser(cfg.syncer, hermezDb, cfg.zkCfg.L1RollupId)
+
+	syncMeta := &l1_log_parser.L1SyncMeta{
+		HighestVerification: types.BatchVerificationInfo{
+			BaseBatchInfo: types.BaseBatchInfo{
+				BatchNo:   0,
+				L1BlockNo: 0,
+				L1TxHash:  common.Hash{},
+			},
+		},
+		HighestWrittenL1BlockNo: 0,
+		NewVerificationsCount:   0,
+		NewSequencesCount:       0,
+	}
 Loop:
 	for {
 		select {
 		case logs := <-logsChan:
 			for _, l := range logs {
-				l := l
-				info, batchLogType := parseLogType(cfg.zkCfg.L1RollupId, &l)
-				switch batchLogType {
-				case logSequence:
-					fallthrough
-				case logSequenceEtrog:
-					// prevent storing pre-etrog sequences for etrog rollups
-					if batchLogType == logSequence && cfg.zkCfg.L1RollupId > 1 {
-						continue
-					}
-					if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot, info.L1InfoRoot); err != nil {
-						return fmt.Errorf("WriteSequence: %w", err)
-					}
-					if info.L1BlockNo > highestWrittenL1BlockNo {
-						highestWrittenL1BlockNo = info.L1BlockNo
-					}
-					newSequencesCount++
-				case logRollbackBatches:
-					if err := hermezDb.RollbackSequences(info.BatchNo); err != nil {
-						return fmt.Errorf("RollbackSequences: %w", err)
-					}
-					if info.L1BlockNo > highestWrittenL1BlockNo {
-						highestWrittenL1BlockNo = info.L1BlockNo
-					}
-				case logVerify:
-					fallthrough
-				case logVerifyEtrog:
-					// prevent storing pre-etrog verifications for etrog rollups
-					if batchLogType == logVerify && cfg.zkCfg.L1RollupId > 1 {
-						continue
-					}
-					if info.BatchNo > highestVerification.BatchNo {
-						highestVerification = info
-					}
-					if err := hermezDb.WriteVerification(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
-						return fmt.Errorf("WriteVerification for block %d: %w", info.L1BlockNo, funcErr)
-					}
-					if info.L1BlockNo > highestWrittenL1BlockNo {
-						highestWrittenL1BlockNo = info.L1BlockNo
-					}
-					newVerificationsCount++
-				case logIncompatible:
-					continue
-				default:
-					log.Warn("L1 Syncer unknown topic", "topic", l.Topics[0])
+				lg := l
+				syncMeta, err = l1LogParser.ParseAndHandleLog(&lg, syncMeta)
+				if err != nil {
+					return fmt.Errorf("ParseAndHandleLog: %w", err)
 				}
 			}
 		case progressMessage := <-progressMessageChan:
@@ -193,19 +207,35 @@ Loop:
 		}
 	}
 
+	// // do this separately to allow upgrading nodes to back-fill the table
+	err = getAccInputHashes(ctx, logPrefix, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, syncMeta.HighestVerification.BatchNo)
+	if err != nil {
+		return fmt.Errorf("getAccInputHashes: %w", err)
+	}
+
+	// get l1 block timestamps
+	err = getL1BlockTimestamps(ctx, logPrefix, hermezDb, cfg.syncer, &cfg.zkCfg.AddressRollup, cfg.zkCfg.L1RollupId, syncMeta.HighestVerification.BatchNo)
+	if err != nil {
+		return fmt.Errorf("getL1BlockTimestamps: %w", err)
+	}
+
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
 
 	lastCheckedL1BlockCounter.Set(float64(latestCheckedBlock))
 
-	if highestWrittenL1BlockNo > l1BlockProgress {
-		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", newVerificationsCount, "newSequencesCount", newSequencesCount, "highestWrittenL1BlockNo", highestWrittenL1BlockNo)
+	if syncMeta.HighestWrittenL1BlockNo > l1BlockProgress {
+		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", syncMeta.NewVerificationsCount, "newSequencesCount", syncMeta.NewSequencesCount, "highestWrittenL1BlockNo", syncMeta.HighestWrittenL1BlockNo)
 
-		if err := stages.SaveStageProgress(tx, stages.L1Syncer, highestWrittenL1BlockNo); err != nil {
+		if err := stages.SaveStageProgress(tx, stages.L1Syncer, syncMeta.HighestWrittenL1BlockNo); err != nil {
 			return fmt.Errorf("SaveStageProgress: %w", err)
 		}
-		if highestVerification.BatchNo > 0 {
-			log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", highestVerification.BatchNo)
-			if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, highestVerification.BatchNo); err != nil {
+		// [seq] - use sequencer stage progress
+		if err := stages.SaveStageProgress(tx, stages.L1SequencerSync, syncMeta.HighestWrittenL1BlockNo); err != nil {
+			return fmt.Errorf("SaveStageProgress: %w", err)
+		}
+		if syncMeta.HighestVerification.BatchNo > 0 {
+			log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", syncMeta.HighestVerification.BatchNo)
+			if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, syncMeta.HighestVerification.BatchNo); err != nil {
 				return fmt.Errorf("SaveStageProgress: %w", err)
 			}
 		}
@@ -229,71 +259,6 @@ Loop:
 	}
 
 	return nil
-}
-
-type BatchLogType byte
-
-var (
-	logUnknown          BatchLogType = 0
-	logSequence         BatchLogType = 1
-	logSequenceEtrog    BatchLogType = 2
-	logVerify           BatchLogType = 3
-	logVerifyEtrog      BatchLogType = 4
-	logL1InfoTreeUpdate BatchLogType = 5
-	logRollbackBatches  BatchLogType = 6
-
-	logIncompatible BatchLogType = 100
-)
-
-func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1BatchInfo, batchLogType BatchLogType) {
-	var (
-		batchNum              uint64
-		stateRoot, l1InfoRoot common.Hash
-	)
-
-	switch log.Topics[0] {
-	case contracts.SequenceBatchesTopicPreEtrog:
-		batchLogType = logSequence
-		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
-	case contracts.SequenceBatchesTopicEtrog:
-		batchLogType = logSequenceEtrog
-		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
-		l1InfoRoot = common.BytesToHash(log.Data[:32])
-	case contracts.VerificationTopicPreEtrog:
-		batchLogType = logVerify
-		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
-		stateRoot = common.BytesToHash(log.Data[:32])
-	case contracts.VerificationValidiumTopicEtrog:
-		batchLogType = logVerifyEtrog
-		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
-		stateRoot = common.BytesToHash(log.Data[:32])
-	case contracts.VerificationTopicEtrog:
-		bigRollupId := new(big.Int).SetUint64(l1RollupId)
-		isRollupIdMatching := log.Topics[1] == common.BigToHash(bigRollupId)
-		if isRollupIdMatching {
-			batchLogType = logVerifyEtrog
-			batchNum = common.BytesToHash(log.Data[:32]).Big().Uint64()
-			stateRoot = common.BytesToHash(log.Data[32:64])
-		} else {
-			batchLogType = logIncompatible
-		}
-	case contracts.UpdateL1InfoTreeTopic:
-		batchLogType = logL1InfoTreeUpdate
-	case contracts.RollbackBatchesTopic:
-		batchLogType = logRollbackBatches
-		batchNum = new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64()
-	default:
-		batchLogType = logUnknown
-		batchNum = 0
-	}
-
-	return types.L1BatchInfo{
-		BatchNo:    batchNum,
-		L1BlockNo:  log.BlockNumber,
-		L1TxHash:   common.BytesToHash(log.TxHash.Bytes()),
-		StateRoot:  stateRoot,
-		L1InfoRoot: l1InfoRoot,
-	}, batchLogType
 }
 
 func UnwindL1SyncerStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg L1SyncerCfg, ctx context.Context) (err error) {
@@ -410,6 +375,175 @@ func blockComparison(tx kv.RwTx, hermezDb *hermez_db.HermezDb, blockNo uint64, l
 		log.Error(fmt.Sprintf("[%s] State root mismatch in block %d. Local=0x%x, L1 verification=0x%x", logPrefix, blockNo, block.Root(), v.StateRoot))
 		return ErrStateRootMismatch
 	}
+
+	return nil
+}
+
+// call the l1 to get accInputHashes working backwards from the highest known batch, to the highest stored batch
+// could be all the way to 0 for a new or upgrading node
+func getAccInputHashes(ctx context.Context, logPrefix string, hermezDb *hermez_db.HermezDb, syncer IL1Syncer, rollupAddr *common.Address, rollupId uint64, highestSeenBatchNo uint64) error {
+	if highestSeenBatchNo == 0 {
+		log.Info(fmt.Sprintf("[%s] No (new) batches seen on L1, skipping accinputhash retreival", logPrefix))
+		return nil
+	}
+
+	startTime := time.Now()
+
+	highestStored, _, err := hermezDb.GetHighestStoredBatchAccInputHash()
+	if err != nil {
+		return fmt.Errorf("GetHighestStoredBatchAccInputHash: %w", err)
+	}
+
+	sequences, err := hermezDb.GetAllSequencesAboveBatchNo(highestStored)
+	if err != nil {
+		return fmt.Errorf("GetAllSequences: %w", err)
+	}
+
+	// only fetch for sequences above highest stored
+	filteredSequences := make([]*types.BatchSequenceInfo, 0, len(sequences))
+	for _, seq := range sequences {
+		if seq.BatchNo > highestStored {
+			filteredSequences = append(filteredSequences, seq)
+		}
+	}
+	sequences = filteredSequences
+
+	type Result struct {
+		BatchNo      uint64
+		AccInputHash common.Hash
+		Error        error
+	}
+
+	resultsCh := make(chan Result)
+	semaphore := make(chan struct{}, 5)
+
+	totalSequences := len(sequences)
+	processedSequences := 0
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	// l1 queries
+	go func() {
+		var wg sync.WaitGroup
+		defer close(resultsCh)
+
+		for _, seq := range sequences {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				semaphore <- struct{}{}
+				wg.Add(1)
+
+				go func(seq *types.BatchSequenceInfo) {
+					defer wg.Done()
+					defer func() { <-semaphore }()
+
+					batchNo := seq.BatchNo
+
+					accInputHash, _, err := syncer.CallGetRollupSequencedBatches(ctx, rollupAddr, rollupId, batchNo)
+					if err != nil {
+						log.Error(fmt.Sprintf("[%s] CallGetRollupSequencedBatches failed", logPrefix), "batch", batchNo, "err", err)
+						select {
+						case resultsCh <- Result{BatchNo: batchNo, Error: err}:
+						case <-ctx.Done():
+						}
+						return
+					}
+
+					log.Debug(fmt.Sprintf("[%s] Got accinputhash from L1", logPrefix), "batch", batchNo, "hash", accInputHash)
+
+					select {
+					case resultsCh <- Result{BatchNo: batchNo, AccInputHash: accInputHash}:
+					case <-ctx.Done():
+					}
+				}(seq)
+			}
+		}
+
+		wg.Wait()
+	}()
+
+	// process results
+	for {
+		select {
+		case res, ok := <-resultsCh:
+			if !ok {
+				duration := time.Since(startTime)
+				log.Info(fmt.Sprintf("[%s] Completed fetching accinputhashes", logPrefix), "total_batches", totalSequences, "processed_batches", processedSequences, "duration", duration)
+				return nil
+			}
+			if res.Error != nil {
+				log.Warn(fmt.Sprintf("[%s] Error fetching accinputhash", logPrefix), "batch", res.BatchNo, "err", res.Error)
+			}
+			// Write to Db
+			if err := hermezDb.WriteBatchAccInputHash(res.BatchNo, res.AccInputHash); err != nil {
+				log.Error(fmt.Sprintf("[%s] WriteBatchAccInputHash failed", logPrefix), "batch", res.BatchNo, "err", err)
+				return err
+			}
+			processedSequences++
+		case <-ticker.C:
+			log.Info(fmt.Sprintf("[%s] Progress update", logPrefix), "total_batches", totalSequences, "processed_batches", processedSequences)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// get l1 block timestamps - for all etrog sequences
+func getL1BlockTimestamps(ctx context.Context, logPrefix string, hermezDb *hermez_db.HermezDb, syncer IL1Syncer, rollupAddr *common.Address, rollupId uint64, highestSeenBatchNo uint64) error {
+	firstBatchNo, lastBatchNo, err := hermezDb.GetBatchLimitsBetweenForkIds(uint64(chain.ForkID7Etrog), uint64(chain.ForkID8Elderberry))
+	if err != nil {
+		return fmt.Errorf("GetEtrog7FirstAndLastBatchNubmers: %w", err)
+	}
+
+	// we can't detect the start of etrog, but we can detect the end
+
+	if lastBatchNo == 0 {
+		log.Info(fmt.Sprintf("[%s] No etrog or elderberry batches found, skipping L1 block timestamp retrieval", logPrefix))
+		return nil
+	}
+
+	// find progress
+	highestStoredTsBatchNo, _, _, err := hermezDb.GetHighestL1BlockTimestamp()
+	if err != nil {
+		return fmt.Errorf("GetHighestL1BlockTimestamp: %w", err)
+	}
+
+	// either go from progress, or firstBatchNo to lastBatch No (whichever is higher)
+	startBatchNo := firstBatchNo
+	if highestStoredTsBatchNo > firstBatchNo {
+		startBatchNo = highestStoredTsBatchNo
+	}
+	endBatchNo := lastBatchNo
+
+	startTime := time.Now()
+
+	// get the sequences from the db, starting from etrog to elderberry (don't go any higher than elderberry)
+	sequences, err := hermezDb.GetAllSequencesAboveBatchNo(startBatchNo)
+	if err != nil {
+		return fmt.Errorf("GetAllSequencesAboveBatchNo: %w", err)
+	}
+
+	// fetch missing from L1 RPC
+	for _, seq := range sequences {
+		if seq.BatchNo > endBatchNo {
+			break
+		}
+		block, err := syncer.GetBlock(seq.L1BlockNo)
+		if err != nil {
+			return fmt.Errorf("GetBlock: %w", err)
+		}
+
+		err = hermezDb.WriteL1BlockTimestamp(seq.BatchNo, block.Time())
+		if err != nil {
+			log.Error(fmt.Sprintf("[%s] WriteL1BlockTimestamp failed", logPrefix), "batch", seq.BatchNo, "err", err)
+			continue
+		}
+	}
+
+	log.Info(fmt.Sprintf("[%s] Completed fetching L1 block timestamps", logPrefix), "total_batches", len(sequences), "duration", time.Since(startTime))
 
 	return nil
 }

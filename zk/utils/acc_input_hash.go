@@ -3,6 +3,8 @@ package utils
 import (
 	"math/big"
 
+	"errors"
+
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/crypto"
@@ -194,4 +196,47 @@ func calculatePreEtrogAccInputHash(
 // transactionBytes are as taken from the sequenceBatches calldata
 func CalculateBatchHashData(transactions []byte) []byte {
 	return crypto.Keccak256(transactions)
+}
+
+type AccHashInputs struct {
+	OldAccInputHash common.Hash
+	Sequencer       common.Address
+	BatchData       []byte
+
+	L1InfoRoot      common.Hash
+	LimitTimestamp  uint64
+	ForcedBlockHash common.Hash
+}
+
+func CalculateAccInputHashByForkId(input AccHashInputs) (common.Hash, error) {
+	var newAccInputHash *common.Hash
+
+	isValidium := len(input.BatchData) == len(common.Hash{})
+
+	if !isValidium {
+		// rollup
+		if input.BatchData == nil || len(input.BatchData) == 0 {
+			return common.Hash{}, errors.New("batchData is required for etrog rollup")
+		}
+		newAccInputHash = CalculateEtrogAccInputHash(
+			input.OldAccInputHash,
+			input.BatchData,
+			input.L1InfoRoot,
+			input.LimitTimestamp,
+			input.Sequencer,
+			input.ForcedBlockHash,
+		)
+	} else {
+		// validium
+		newAccInputHash = CalculateEtrogValidiumAccInputHash(
+			input.OldAccInputHash,
+			common.BytesToHash(input.BatchData),
+			input.L1InfoRoot,
+			input.LimitTimestamp,
+			input.Sequencer,
+			input.ForcedBlockHash,
+		)
+	}
+
+	return *newAccInputHash, nil
 }

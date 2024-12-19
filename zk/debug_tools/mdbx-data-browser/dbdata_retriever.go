@@ -129,7 +129,18 @@ func (d *DbDataRetriever) GetBatchByNumber(batchNum uint64, verboseOutput bool) 
 		return nil, err
 	}
 
-	batchL2Data, err := utils.GenerateBatchDataFromDb(d.tx, d.dbReader, batchBlocks, forkId)
+	lastBlockNoInPreviousBatch := uint64(0)
+	firstBlockInBatch := batchBlocks[0]
+	if firstBlockInBatch.NumberU64() != 0 {
+		lastBlockNoInPreviousBatch = firstBlockInBatch.NumberU64() - 1
+	}
+
+	lastBlockInPreviousBatch, err := rawdb.ReadBlockByNumber(d.tx, lastBlockNoInPreviousBatch)
+	if err != nil {
+		return nil, err
+	}
+
+	batchL2Data, err := utils.GenerateBatchDataFromDb(d.tx, d.dbReader, batchBlocks, lastBlockInPreviousBatch, forkId)
 	if err != nil {
 		return nil, err
 	}
