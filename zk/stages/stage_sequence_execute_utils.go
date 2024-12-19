@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -9,10 +10,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	libstate "github.com/ledgerwatch/erigon-lib/state"
-
-	"math/big"
-
-	"fmt"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/common/math"
@@ -48,7 +45,6 @@ const (
 
 var (
 	noop                 = state.NewNoopWriter()
-	blockDifficulty      = new(big.Int).SetUint64(0)
 	SpecialZeroIndexHash = common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757")
 )
 
@@ -198,7 +194,8 @@ func validateIfDatastreamIsAheadOfExecution(
 	return nil
 }
 
-type forkDb interface {
+//go:generate mockgen -typed=true -destination=./fork_db_mock.go -package=stages . ForkDb
+type ForkDb interface {
 	GetAllForkHistory() ([]uint64, []uint64, error)
 	GetLatestForkHistory() (uint64, uint64, error)
 	GetForkId(batch uint64) (uint64, error)
@@ -206,10 +203,7 @@ type forkDb interface {
 	WriteForkId(batch, forkId uint64) error
 }
 
-func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, error) {
-	var err error
-	var latest uint64
-
+func prepareForkId(lastBatch, executionAt uint64, hermezDb ForkDb) (latest uint64, err error) {
 	// get all history and find the fork appropriate for the batch we're processing now
 	allForks, allBatches, err := hermezDb.GetAllForkHistory()
 	if err != nil {
@@ -226,6 +220,11 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, erro
 	}
 
 	if latest == 0 {
+		// this means the first forkid we have is ahead of us
+		// this will happen if the first block on the network is pre forkid 8
+		if len(allBatches) > 0 {
+			panic("Last batch is behind the first recorded with fork id. This probably means the network started at fork id lower than 8.")
+		}
 		// not an error, need to wait for the block to finalize on the L1
 		return 0, nil
 	}
@@ -338,13 +337,14 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 	return
 }
 
-func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker) {
+func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker) {
 	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
 	logTicker := time.NewTicker(10 * time.Second)
 	blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
+	emptyBlockTicker := time.NewTicker(cfg.zk.SequencerEmptyBlockSealTime)
 	infoTreeTicker := time.NewTicker(cfg.zk.InfoTreeUpdateInterval)
 
-	return batchTicker, logTicker, blockTicker, infoTreeTicker
+	return batchTicker, logTicker, blockTicker, emptyBlockTicker, infoTreeTicker
 }
 
 // will be called at the start of every new block created within a batch to figure out if there is a new GER
