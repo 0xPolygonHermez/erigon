@@ -79,7 +79,6 @@ func TestUpdater_initialiseL1InfoTree(t *testing.T) {
 	assert.NotNil(t, l1infotree)
 
 }
-
 func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
 	tx, cleanup := GetDbTx()
 	defer cleanup()
@@ -102,8 +101,13 @@ func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
 	l1infotreeupdate, err := createL1InfoTreeUpdate(log, header)
 	assert.NoError(t, err)
 	assert.NotNil(t, l1infotreeupdate)
+	assert.Equal(t, log.Topics[1], l1infotreeupdate.MainnetExitRoot)
+	assert.Equal(t, log.Topics[2], l1infotreeupdate.RollupExitRoot)
+	assert.Equal(t, log.BlockNumber, l1infotreeupdate.BlockNumber)
+	assert.Equal(t, header.Time, l1infotreeupdate.Timestamp)
+	assert.Equal(t, header.ParentHash, l1infotreeupdate.ParentHash)
 
-	// Prepare a valid log with 3 topics
+	// Prepare a valid log with less than 3 topics
 	lessThen3Topics := types.Log{
 		BlockNumber: 1,
 		Topics:      []common.Hash{},
@@ -120,7 +124,6 @@ func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
 	l1infotreeupdate3, err3 := createL1InfoTreeUpdate(lessThen3Topics, unmatchingHeader)
 	assert.Error(t, err3)
 	assert.Nil(t, l1infotreeupdate3)
-
 }
 
 func TestUpdater_handleL1InfoTreeUpdate(t *testing.T) {
