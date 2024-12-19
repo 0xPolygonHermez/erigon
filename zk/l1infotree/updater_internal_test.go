@@ -79,6 +79,7 @@ func TestUpdater_initialiseL1InfoTree(t *testing.T) {
 	assert.NotNil(t, l1infotree)
 
 }
+
 func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
 	tx, cleanup := GetDbTx()
 	defer cleanup()
@@ -147,5 +148,16 @@ func TestUpdater_handleL1InfoTreeUpdate(t *testing.T) {
 	err = handleL1InfoTreeUpdate(db, l1infotreeupdate)
 	assert.Nil(t, err)
 	assert.NoError(t, err)
+
+	// Fetch and assert data from the DB
+	// Verify WriteL1InfoTreeUpdate
+	retrievedUpdate, err := db.GetL1InfoTreeUpdate(l1infotreeupdate.Index)
+	assert.NoError(t, err)
+	assert.NotNil(t, retrievedUpdate)
+
+	// Verify WriteL1InfoTreeUpdateToGer
+	retrievedUpdateGer, err := db.GetL1InfoTreeUpdateByGer(l1infotreeupdate.GER)
+	assert.NoError(t, err)
+	assert.NotNil(t, retrievedUpdateGer)
 
 }
