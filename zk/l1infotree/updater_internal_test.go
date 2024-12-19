@@ -103,6 +103,24 @@ func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, l1infotreeupdate)
 
+	// Prepare a valid log with 3 topics
+	lessThen3Topics := types.Log{
+		BlockNumber: 1,
+		Topics:      []common.Hash{},
+	}
+
+	// func createL1InfoTreeUpdate(l types.Log, header *types.Header) (*zkTypes.L1InfoTreeUpdate, error) {
+	l1infotreeupdate2, err2 := createL1InfoTreeUpdate(lessThen3Topics, header)
+	assert.Error(t, err2)
+	assert.Nil(t, l1infotreeupdate2)
+
+	unmatchingHeader := &types.Header{Number: big.NewInt(2), Time: uint64(time.Now().Unix()), ParentHash: common.HexToHash("0x0")}
+
+	// func createL1InfoTreeUpdate(l types.Log, header *types.Header) (*zkTypes.L1InfoTreeUpdate, error) {
+	l1infotreeupdate3, err3 := createL1InfoTreeUpdate(lessThen3Topics, unmatchingHeader)
+	assert.Error(t, err3)
+	assert.Nil(t, l1infotreeupdate3)
+
 }
 
 func TestUpdater_handleL1InfoTreeUpdate(t *testing.T) {
