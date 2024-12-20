@@ -75,15 +75,25 @@ func TestUpdater_WarmUp(t *testing.T) {
 	defer mockCtrl.Finish()
 	EthermanMock := mocks.NewMockIEtherman(mockCtrl)
 
-	header := &types.Header{Number: big.NewInt(1), Difficulty: big.NewInt(100)}
-	expectedBlock := types.NewBlockWithHeader(header)
+	cfg := &ethconfig.Zk{
+		L1FirstBlock: 1,
+	}
 
+	finalizedHeader := &types.Header{Number: big.NewInt(10), Difficulty: big.NewInt(100)}
+	finalizedBlock := types.NewBlockWithHeader(finalizedHeader)
+
+	// this will be last block answer
 	EthermanMock.EXPECT().
 		BlockByNumber(gomock.Any(), (*big.Int)(nil)).
-		Return(expectedBlock, nil).
-		AnyTimes()
+		Return(finalizedBlock, nil).AnyTimes()
 
-	cfg := &ethconfig.Zk{}
+	// // filterLogs
+	EthermanMock.EXPECT().
+		FilterLogs(gomock.Any(), gomock.Any()).Return(
+		[]types.Log{
+			{},
+			{},
+		}, nil).AnyTimes()
 
 	l1InfoTreeSyncer := syncer.NewL1Syncer(
 		ctx,
@@ -101,6 +111,8 @@ func TestUpdater_WarmUp(t *testing.T) {
 	defer cleanup()
 
 	err := updater.WarmUp(tx)
+
+	assert.Equal(t, uint64(0), updater.GetProgress())
 	// log error
 	log.Println(err)
 	assert.NoError(t, err)
