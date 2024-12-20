@@ -1,0 +1,146 @@
+name: Run tests
+
+on:
+    workflow_dispatch:
+        inputs:
+            erigon_image:
+                type: string
+                description: "Erigon image to use"
+                required: true
+                default: "hermeznetwork/cdk-erigon:v2.61.0"
+            forkid:
+                type: choice
+                description: "Fork ID to use"
+                required: true
+                options:
+                    - 11
+                    - 12
+                    - 13
+            consensus_contract_type:
+                type: choice
+                description: "Consensus contract type to use"
+                required: true
+                options:
+                    - "rollup"
+                    - "cdk-validium"
+
+env:
+  DEVTOOLING_IMAGE: xavierromero/devtooling:20241219
+  ERIGON_IMAGE: ${{ github.event.inputs.erigon_image }}
+  FORKID: ${{ github.event.inputs.forkid }}
+  CONSENSUS: ${{ github.event.inputs.consensus_contract_type }}
+  KURTOSIS_ENCLAVE: cdk
+
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Setup kurtosis
+          uses: ./.github/actions/devtools_kurtosis
+          with:
+            erigon_image: ${{ env.ERIGON_IMAGE }}
+            enclave_name: ${{ env.KURTOSIS_ENCLAVE }}
+            forkid: ${{ env.FORKID }}
+            consensus_contract_type: ${{ env.CONSENSUS }}
+
+        - name: Set up env vars
+          run: |
+            echo "L2_PRV_KEY=0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" >> $GITHUB_ENV
+            echo "L2_RPC_URL=$(kurtosis port print ${{ env.KURTOSIS_ENCLAVE }} cdk-erigon-rpc-001 rpc --cli-log-level error)" >> $GITHUB_ENV
+            echo "L2_ROLLUP_ID=1" >> $GITHUB_ENV
+            echo "L1_RPC_URL=http://$(kurtosis port print ${{ env.KURTOSIS_ENCLAVE }} el-1-geth-lighthouse rpc --cli-log-level error)" >> $GITHUB_ENV
+            echo "L1_PRV_KEY=0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" >> $GITHUB_ENV
+            echo "BRIDGE_URL=$(kurtosis port print ${{ env.KURTOSIS_ENCLAVE }} zkevm-bridge-service-001 rpc --cli-log-level error)" >> $GITHUB_ENV
+            echo "BRIDGE_ADDR=$(kurtosis service exec ${{ env.KURTOSIS_ENCLAVE }} contracts-001 "cat /opt/zkevm/combined.json | jq -r .polygonZkEVMBridgeAddress" --cli-log-level error | tail -n +2 | head -1)" >> $GITHUB_ENV
+            echo "CLAIMTX=$(kurtosis service exec ${{ env.KURTOSIS_ENCLAVE }} contracts-001 "cat /opt/zkevm/claimtxmanager.keystore | jq -r .address" --cli-log-level error | tail -n +2 | head -1)" >> $GITHUB_ENV
+
+        - name: Run devtooling
+          run: docker run --name devtooling --network host --detach --rm
+            -e L2_RPC_URL=$L2_RPC_URL -e L2_PRV_KEY=$L2_PRV_KEY
+            -e L2_ROLLUP_ID=$L2_ROLLUP_ID -e L1_RPC_URL=$L1_RPC_URL
+            -e L1_PRV_KEY=$L1_PRV_KEY -e BRIDGE_URL=$BRIDGE_URL
+            -e BRIDGE_ADDR=$BRIDGE_ADDR ${{ env.DEVTOOLING_IMAGE }}
+
+        # I get no output by running commands on the container immediately, so I introduce a delay
+        - name: Sleep 10 seconds
+          run: sleep 10
+  
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Just 1 EOA tx
+          run: docker exec devtooling x txtest
+
+        - name: Fund Claim tx manager
+          run: docker exec devtooling x cast send --legacy --value 1ether $CLAIMTX
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Run retests
+          run: docker exec devtooling x run-retests
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Check Boundaries
+          run: docker exec devtooling x scripted -f /files/scripted/boundaries.json
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Check past issues
+          run: docker exec devtooling x scripted -f /files/scripted/scripted.json
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Check tx calls
+          run: docker exec devtooling x scripted -f /files/scripted/scripted-calling.json
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Check identity precompileds
+          run: docker exec devtooling x scripted -f /files/scripted/scripted-identity_precompiled.json
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: zkEVM Test Vectors
+          run: docker exec devtooling x run-zktv
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: John fuzzed tests
+          run: docker exec devtooling x run-fuzzed
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Bridge to L2
+          run: docker exec devtooling x bench --bridge2l2
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Bridge to L1
+          run: docker exec devtooling x bench --bridge2l1
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Just 1 EOA tx
+          run: docker exec devtooling x txtest
+
+        - name: Network info
+          run: docker exec devtooling x netinfo
+
+        - name: Wait to verify everything
+          run: docker exec devtooling x wait-verified

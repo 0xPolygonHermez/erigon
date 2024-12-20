@@ -1,0 +1,50 @@
+
+name: "Setup Kurtosis"
+description: "Setup Kurtosis CDK for tests"
+inputs:
+  erigon_image:
+    description: "The Erigon image to use"
+    required: true
+    default: "hermeznetwork/cdk-erigon:v2.61.0"
+  enclave_name:
+    description: "The enclave name to use"
+    required: true
+    default: "cdk"
+  forkid:
+    description: ForkID to use"
+    required: true
+    default: "13"
+  consensus_contract_type:
+    type: choice
+    description: "Consensus contract type to use"
+    required: true
+    options:
+      - "rollup"
+      - "cdk-validium"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: Get right params.yaml
+      shell: bash
+      run: |
+        cp ./.github/kurtosis/fork${{ inputs.forkid }}-${{ inputs.consensus_contract_type }}.yml params.yml
+        echo "  cdk_erigon_node_image: ${{ inputs.erigon_image }}" >> params.yml
+
+    - name: Checkout kurtosis-cdk
+      uses: actions/checkout@v4
+      with:
+        repository: 0xPolygon/kurtosis-cdk
+        ref: v0.2.24
+        path: kurtosis-cdk
+
+    - name: Install Kurtosis CDK tools
+      uses: ./kurtosis-cdk/.github/actions/setup-kurtosis-cdk
+
+    - name: Deploy Kurtosis CDK package
+      working-directory: ./kurtosis-cdk
+      shell: bash
+      run: |
+        kurtosis run --enclave ${{ inputs.enclave_name }} --args-file ../params.yml  . 
