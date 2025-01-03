@@ -245,6 +245,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.DebugStep,
 	&utils.DebugStepAfter,
 	&utils.OtsSearchMaxCapFlag,
+	&utils.PanicOnReorg,
 
 	&utils.SilkwormExecutionFlag,
 	&utils.SilkwormRpcDaemonFlag,
@@ -287,6 +288,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.DAUrl,
 	&utils.VirtualCountersSmtReduction,
 	&utils.BadBatches,
+	&utils.IgnoreBadBatchesCheck,
 	&utils.InitialBatchCfgFile,
 
 	&utils.ACLPrintHistory,

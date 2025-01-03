@@ -72,6 +72,7 @@ type Zk struct {
 	DataStreamWriteTimeout                 time.Duration
 	DataStreamInactivityTimeout            time.Duration
 	DataStreamInactivityCheckInterval      time.Duration
+	PanicOnReorg                           bool
 
 	RebuildTreeAfter      uint64
 	IncrementTreeAlways   bool
@@ -97,6 +98,7 @@ type Zk struct {
 	ACLPrintHistory                int
 	InfoTreeUpdateInterval         time.Duration
 	BadBatches                     []uint64
+	IgnoreBadBatchesCheck          bool
 	SealBatchImmediatelyOnOverflow bool
 	MockWitnessGeneration          bool
 	WitnessCacheEnabled            bool
@@ -120,4 +122,8 @@ func (c *Zk) HasExecutors() bool {
 // ShouldImportInitialBatch returns true in case initial batch config file name is non-empty string.
 func (c *Zk) ShouldImportInitialBatch() bool {
 	return c.InitialBatchCfgFile != ""
+}
+
+func (c *Zk) IsL1Recovery() bool {
+	return c.L1SyncStartBlock > 0
 }
