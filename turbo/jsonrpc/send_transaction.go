@@ -63,6 +63,10 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 		}
 	}
 
+	if api.RejectLowGasPriceTransactions && txn.GetPrice().Uint64() < api.DefaultGasPrice {
+		return common.Hash{}, errors.New("transaction price is too low")
+	}
+
 	// If the transaction fee cap is already specified, ensure the
 	// fee of the given transaction is _reasonable_.
 	if err := checkTxFee(txn.GetPrice().ToBig(), txn.GetGas(), api.FeeCap); err != nil {
