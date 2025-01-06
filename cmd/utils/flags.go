@@ -667,6 +667,11 @@ var (
 		Usage: "Allow the sequencer to proceed transactions with 0 gas price",
 		Value: false,
 	}
+	RejectLowGasPriceTransactions = cli.BoolFlag{
+		Name:  "zkevm.reject-low-gas-price-transactions",
+		Usage: "Reject the sequencer to proceed transactions with low gas price",
+		Value: false,
+	}
 	AllowPreEIP155Transactions = cli.BoolFlag{
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
