@@ -2,52 +2,22 @@ package l1infotree_test
 
 import (
 	"context"
-	"log"
 	"math/big"
 	"testing"
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/l1infotree"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/erigon/zk/syncer/mocks"
+	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
-
-// to be removed
-func GetDbTx() (tx kv.RwTx, cleanup func()) {
-	dbi, err := mdbx.NewTemporaryMdbx(context.Background(), "")
-	if err != nil {
-		panic(err)
-	}
-	tx, err = dbi.BeginRw(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	err = hermez_db.CreateHermezBuckets(tx)
-	if err != nil {
-		panic(err)
-	}
-
-	return tx, func() {
-		tx.Rollback()
-		dbi.Close()
-	}
-}
-
-func TestNewHermezDb(t *testing.T) {
-	tx, cleanup := GetDbTx()
-	defer cleanup()
-	db := hermez_db.NewHermezDb(tx)
-	assert.NotNil(t, db)
-}
 
 func TestNewUpdater(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,7 +37,7 @@ func TestNewUpdater(t *testing.T) {
 	assert.NotNil(t, updater)
 }
 
-func TestUpdater_WarmUp(t *testing.T) {
+func TestUpdater_WarmUp_GetProgress_GetLatestUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -107,57 +77,24 @@ func TestUpdater_WarmUp(t *testing.T) {
 
 	updater := l1infotree.NewUpdater(cfg, l1InfoTreeSyncer)
 
-	tx, cleanup := GetDbTx()
-	defer cleanup()
+	_, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
+	db := hermez_db.NewHermezDb(tx)
+
+	tree := &zktypes.L1InfoTreeUpdate{
+		BlockNumber: 1,
+	}
+	db.WriteL1InfoTreeUpdate(tree)
 
 	err := updater.WarmUp(tx)
 
-	assert.Equal(t, uint64(0), updater.GetProgress())
-	// log error
-	log.Println(err)
-	assert.NoError(t, err)
-}
-
-func TestUpdater_GetProgress(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cfg := &ethconfig.Zk{}
-
-	l1InfoTreeSyncer := syncer.NewL1Syncer(
-		ctx,
-		nil, nil, nil,
-		cfg.L1BlockRange,
-		cfg.L1QueryDelay,
-		cfg.L1HighestBlockType,
-	)
-
-	updater := l1infotree.NewUpdater(cfg, l1InfoTreeSyncer)
-	assert.NotNil(t, updater)
-
 	progress := updater.GetProgress()
 	assert.Equal(t, uint64(0), progress)
-}
-
-func TestUpdater_GetLatestUpdate(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cfg := &ethconfig.Zk{}
-
-	l1InfoTreeSyncer := syncer.NewL1Syncer(
-		ctx,
-		nil, nil, nil,
-		cfg.L1BlockRange,
-		cfg.L1QueryDelay,
-		cfg.L1HighestBlockType,
-	)
-
-	updater := l1infotree.NewUpdater(cfg, l1InfoTreeSyncer)
-	assert.NotNil(t, updater)
 
 	latestUpdate := updater.GetLatestUpdate()
-	assert.Nil(t, latestUpdate)
+	// log.Println(latestUpdate)
+	assert.Equal(t, tree, latestUpdate)
+	assert.NoError(t, err)
 }
 
 func TestUpdater_CheckForInfoTreeUpdates(t *testing.T) {
@@ -202,8 +139,8 @@ func TestUpdater_CheckForInfoTreeUpdates(t *testing.T) {
 
 	updater := l1infotree.NewUpdater(cfg, l1InfoTreeSyncer)
 
-	tx, cleanup := GetDbTx()
-	defer cleanup()
+	ctx, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
 
 	err := updater.WarmUp(tx)
 	assert.NoError(t, err)

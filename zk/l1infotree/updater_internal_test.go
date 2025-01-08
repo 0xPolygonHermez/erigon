@@ -7,34 +7,11 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/stretchr/testify/assert"
 )
-
-// to be removed
-func GetDbTx() (tx kv.RwTx, cleanup func()) {
-	dbi, err := mdbx.NewTemporaryMdbx(context.Background(), "")
-	if err != nil {
-		panic(err)
-	}
-	tx, err = dbi.BeginRw(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	err = hermez_db.CreateHermezBuckets(tx)
-	if err != nil {
-		panic(err)
-	}
-
-	return tx, func() {
-		tx.Rollback()
-		dbi.Close()
-	}
-}
 
 func TestUpdater_chunkLogs(t *testing.T) {
 	logs := []types.Log{
@@ -67,8 +44,9 @@ func TestUpdater_chunkLogs(t *testing.T) {
 }
 
 func TestUpdater_initialiseL1InfoTree(t *testing.T) {
-	tx, cleanup := GetDbTx()
-	defer cleanup()
+
+	_, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
 	db := hermez_db.NewHermezDb(tx)
 	assert.NotNil(t, db)
 
@@ -81,8 +59,8 @@ func TestUpdater_initialiseL1InfoTree(t *testing.T) {
 }
 
 func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
-	tx, cleanup := GetDbTx()
-	defer cleanup()
+	_, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
 	db := hermez_db.NewHermezDb(tx)
 	assert.NotNil(t, db)
 
@@ -128,8 +106,8 @@ func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
 }
 
 func TestUpdater_handleL1InfoTreeUpdate(t *testing.T) {
-	tx, cleanup := GetDbTx()
-	defer cleanup()
+	_, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
 	db := hermez_db.NewHermezDb(tx)
 	assert.NotNil(t, db)
 
