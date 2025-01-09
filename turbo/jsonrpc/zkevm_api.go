@@ -16,12 +16,15 @@ import (
 
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
+	"math"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -45,8 +48,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	"github.com/ledgerwatch/erigon/core/systemcontracts"
-	"math"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -1021,6 +1022,7 @@ func (api *ZkEvmAPIImpl) buildGenerator(ctx context.Context, tx kv.Tx, witnessMo
 		api.config.Zk,
 		api.ethApi._engine,
 		api.config.WitnessContractInclusion,
+		api.config.WitnessUnwindLimit,
 	)
 
 	fullWitness := false
