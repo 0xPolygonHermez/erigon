@@ -56,6 +56,8 @@ func TestUpdater_initialiseL1InfoTree(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, l1infotree)
 
+	assert.Equal(t, l1infotree.currentRoot, common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757"))
+
 }
 
 func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
