@@ -457,7 +457,7 @@ func tryHaltSequencer(batchContext *BatchContext, batchState *BatchState, stream
 			log.Info(fmt.Sprintf("[%s] Halt sequencer on batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
 			time.Sleep(5 * time.Second) //nolint:gomnd
 			haltedCount++
-			if haltedCount > 10 {
+			if haltedCount > 3 {
 				return false, true, nil
 			}
 		}

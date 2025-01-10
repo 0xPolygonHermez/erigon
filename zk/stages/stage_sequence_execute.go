@@ -167,7 +167,9 @@ func sequencingBatchStep(
 		return err
 	}
 	if exitStage {
-		return nil
+		log.Info(fmt.Sprintf("[%s] Exiting stage during halted sequencer", logPrefix))
+		// commit the tx so any updates to the stream etc are persisted
+		return sdb.tx.Commit()
 	}
 
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {

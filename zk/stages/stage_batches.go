@@ -5,28 +5,28 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync/atomic"
-	"time"
 	"os"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 
+	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/core/state"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
-	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/core/state"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -201,6 +201,7 @@ func SpawnStageBatches(
 
 	var highestDSL2Block uint64
 	newBlockCheckStartTIme := time.Now()
+	newBlockCheckCounter := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -227,6 +228,11 @@ func SpawnStageBatches(
 		if time.Since(newBlockCheckStartTIme) > 10*time.Second {
 			log.Info(fmt.Sprintf("[%s] Waiting for at least one new block in datastream", logPrefix), "datastreamBlock", highestDSL2Block, "last processed block", stageProgressBlockNo)
 			newBlockCheckStartTIme = time.Now()
+			newBlockCheckCounter++
+			if newBlockCheckCounter > 3 {
+				log.Info(fmt.Sprintf("[%s] No new blocks in datastream, entering stage loop", logPrefix))
+				return nil
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
