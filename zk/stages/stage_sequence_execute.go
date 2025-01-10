@@ -443,7 +443,15 @@ func SpawnSequencingStage(
 		// we do not want to commit this block if it has no transactions and we detected an overflow - essentially the batch is too
 		// full to get any more transactions in it and we don't want to commit an empty block
 		if emptyBlockOverflow {
-			log.Info(fmt.Sprintf("[%s] Overflow: block %d overflow detected with no transactions added, skipping block for next batch", logPrefix, blockNumber))
+			log.Info(fmt.Sprintf("[%s] Skipping block: overflow in block %d detected with no transactions added, skipping block for next batch", logPrefix, blockNumber))
+			break
+		}
+
+		// if we had some transactions yielded but didn't mine any in this block then we shouldn't commit it and move on.
+		// this could happen if there were lots of nonce issues from transaction in the pool due to a failed tx processing or similar and
+		// there wasn't much time left in the batch to mine any transactions
+		if len(batchState.blockState.transactionsForInclusion) > 0 && len(batchState.blockState.builtBlockElements.transactions) == 0 {
+			log.Info(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
 			break
 		}
 
