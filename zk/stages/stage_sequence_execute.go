@@ -162,9 +162,12 @@ func sequencingBatchStep(
 		shouldCheckForExecutionAndDataStreamAlignment = false
 	}
 
-	needsUnwind, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt)
+	needsUnwind, exitStage, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt)
 	if needsUnwind || err != nil {
 		return err
+	}
+	if exitStage {
+		return nil
 	}
 
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
