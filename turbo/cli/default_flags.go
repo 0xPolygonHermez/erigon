@@ -302,4 +302,6 @@ var DefaultFlags = []cli.Flag{
 	&utils.GasPriceHistoryCount,
 	&utils.RejectLowGasPriceTransactions,
 	&utils.RejectLowGasPriceTolerance,
+
+	&utils.ZKGenesisConfigPathFlag,
 }

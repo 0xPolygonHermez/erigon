@@ -5,6 +5,7 @@ package types
 import (
 	"encoding/json"
 	"errors"
+
 	"math/big"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"

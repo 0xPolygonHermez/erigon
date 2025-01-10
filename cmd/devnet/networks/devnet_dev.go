@@ -1,6 +1,7 @@
 package networks
 
 import (
+	"github.com/ledgerwatch/erigon/core/types"
 	"strconv"
 
 	"github.com/ledgerwatch/erigon-lib/chain/networkname"
@@ -8,7 +9,6 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/devnet/args"
 	"github.com/ledgerwatch/erigon/cmd/devnet/devnet"
 	account_services "github.com/ledgerwatch/erigon/cmd/devnet/services/accounts"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/log/v3"
 )
 

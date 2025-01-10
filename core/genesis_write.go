@@ -89,9 +89,9 @@ func CommitGenesisBlockWithOverride(db kv.RwDB, genesis *types.Genesis, override
 	return c, b, nil
 }
 
-func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *big.Int, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
+func WriteGenesisBlock(tx kv.RwTx, gen *types.Genesis, overridePragueTime *big.Int, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
 	var storedBlock *types.Block
-	if genesis != nil && genesis.Config == nil {
+	if gen != nil && gen.Config == nil {
 		return params.AllProtocolChanges, nil, types.ErrGenesisNoConfig
 	}
 	// Just commit the new block if there is no stored genesis block.
@@ -108,40 +108,40 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *b
 
 	if (storedHash == libcommon.Hash{}) {
 		custom := true
-		if genesis == nil {
+		if gen == nil {
 			logger.Info("Writing main-net genesis block")
-			genesis = MainnetGenesisBlock()
+			gen = MainnetGenesisBlock()
 			custom = false
 		}
 		// clear tmpDir
 		if tmpDir != "" {
 			if err := os.RemoveAll(tmpDir); err != nil {
-				return genesis.Config, nil, err
+				return gen.Config, nil, err
 			}
 			if err := os.MkdirAll(tmpDir, 0755); err != nil {
-				return genesis.Config, nil, err
+				return gen.Config, nil, err
 			}
 		}
-		applyOverrides(genesis.Config)
-		block, _, _, err1 := write(tx, genesis, tmpDir, logger)
+		applyOverrides(gen.Config)
+		block, _, _, err1 := write(tx, gen, tmpDir, logger)
 		if err1 != nil {
-			return genesis.Config, nil, err1
+			return gen.Config, nil, err1
 		}
 		if custom {
 			logger.Info("Writing custom genesis block", "hash", block.Hash().String())
 		}
-		return genesis.Config, block, nil
+		return gen.Config, block, nil
 	}
 
 	// Check whether the genesis block is already written.
-	if genesis != nil {
-		block, _, _, err1 := GenesisToBlock(genesis, tmpDir, logger)
+	if gen != nil {
+		block, _, _, err1 := GenesisToBlock(gen, tmpDir, logger)
 		if err1 != nil {
-			return genesis.Config, nil, err1
+			return gen.Config, nil, err1
 		}
 		hash := block.Hash()
 		if hash != storedHash {
-			return genesis.Config, block, &GenesisMismatchError{Stored: storedHash, New: hash}
+			return gen.Config, block, &GenesisMismatchError{Stored: storedHash, New: hash}
 		}
 	}
 	number := rawdb.ReadHeaderNumber(tx, storedHash)
@@ -149,11 +149,11 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *b
 		var err error
 		storedBlock, _, err = rawdb.ReadBlockWithSenders(tx, storedHash, *number)
 		if err != nil {
-			return genesis.Config, nil, err
+			return gen.Config, nil, err
 		}
 	}
 	// Get the existing chain configuration.
-	newCfg := ConfigOrDefault(genesis, storedHash)
+	newCfg := ConfigOrDefault(gen, storedHash)
 	applyOverrides(newCfg)
 	if err := newCfg.CheckConfigForkOrder(); err != nil {
 		return newCfg, nil, err
@@ -173,7 +173,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *b
 	// Special case: don't change the existing config of a private chain if no new
 	// config is supplied. This is useful, for example, to preserve DB config created by erigon init.
 	// In that case, only apply the overrides.
-	if genesis == nil && params.ChainConfigByGenesisHash(storedHash) == nil {
+	if gen == nil && params.ChainConfigByGenesisHash(storedHash) == nil {
 		newCfg = storedCfg
 		applyOverrides(newCfg)
 	}

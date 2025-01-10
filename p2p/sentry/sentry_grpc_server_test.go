@@ -5,6 +5,7 @@ package sentry
 
 import (
 	"context"
+	"github.com/ledgerwatch/erigon/core/types"
 	"math/big"
 	"testing"
 	"time"
@@ -23,7 +24,6 @@ import (
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/forkid"
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/p2p"
 	"github.com/ledgerwatch/log/v3"
 )

@@ -2,9 +2,9 @@ package app
 
 import (
 	"encoding/json"
+	"github.com/ledgerwatch/erigon/core/types"
 	"os"
 
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/turbo/debug"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/urfave/cli/v2"

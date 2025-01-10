@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 )
 
+var ZkConfigPath string
 var DynamicChainConfigPath string
 
 type DynamicConfig struct {
@@ -28,6 +29,9 @@ type ZKConfig struct {
 
 func NewZKConfig(ch string) *ZKConfig {
 	unionPath := path.Join(DynamicChainConfigPath, ch+"-cfg.json")
+	if ZkConfigPath != "" || len(ZkConfigPath) != 0 {
+		unionPath = ZkConfigPath
+	}
 	if dynamicUnionConfigExists(unionPath) {
 		return zkUnionConfig(ch)
 	} else {
@@ -45,7 +49,11 @@ func zkUnionConfig(ch string) *ZKConfig {
 
 func unionChain(ch string) *chain.Config {
 	var chainCfg chain.Config
-	union := unmarshalUnionConfig(path.Join(DynamicChainConfigPath, ch+"-cfg.json"))
+	p := path.Join(DynamicChainConfigPath, ch+"-cfg.json")
+	if ZkConfigPath != "" || len(ZkConfigPath) != 0 {
+		p = ZkConfigPath
+	}
+	union := UnmarshalUnionConfig(p)
 	if err := json.Unmarshal(union["chainspec"], &chainCfg); err != nil {
 		panic(fmt.Sprintf("could not parse chain for %s: %v", ch, err))
 	}
@@ -54,7 +62,11 @@ func unionChain(ch string) *chain.Config {
 
 func unionDynamic(ch string) DynamicConfig {
 	var dyn DynamicConfig
-	union := unmarshalUnionConfig(path.Join(DynamicChainConfigPath, ch+"-cfg.json"))
+	p := path.Join(DynamicChainConfigPath, ch+"-cfg.json")
+	if ZkConfigPath != "" || len(ZkConfigPath) != 0 {
+		p = ZkConfigPath
+	}
+	union := UnmarshalUnionConfig(p)
 	if err := json.Unmarshal(union["conf"], &dyn); err != nil {
 		panic(fmt.Sprintf("could not parse conf for %s: %v", ch, err))
 	}
@@ -63,7 +75,11 @@ func unionDynamic(ch string) DynamicConfig {
 
 func unionAlloc(ch string) types.GenesisAlloc {
 	var alloc types.GenesisAlloc
-	union := unmarshalUnionConfig(path.Join(DynamicChainConfigPath, ch+"-cfg.json"))
+	p := path.Join(DynamicChainConfigPath, ch+"-cfg.json")
+	if ZkConfigPath != "" || len(ZkConfigPath) != 0 {
+		p = ZkConfigPath
+	}
+	union := UnmarshalUnionConfig(p)
 	if err := json.Unmarshal(union["allocs"], &alloc); err != nil {
 		panic(fmt.Sprintf("could not parse alloc for %s: %v", ch, err))
 	}
@@ -84,7 +100,7 @@ func dynamicUnionConfigExists(filename string) bool {
 	return true
 }
 
-func unmarshalUnionConfig(filename string) map[string]json.RawMessage {
+func UnmarshalUnionConfig(filename string) map[string]json.RawMessage {
 	file, err := os.Open(filename)
 	if err != nil {
 		panic(fmt.Sprintf("could not open union config for %s: %v", filename, err))

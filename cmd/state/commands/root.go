@@ -3,12 +3,12 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	genesis2 "github.com/ledgerwatch/erigon/core/types"
 	"os"
 	"path/filepath"
 
 	chain2 "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/spf13/cobra"
 
 	"github.com/ledgerwatch/erigon/turbo/debug"
@@ -21,7 +21,7 @@ import (
 
 var (
 	genesisPath string
-	genesis     *types.Genesis
+	genesis     *genesis2.Genesis
 	chainConfig *chain2.Config
 )
 
@@ -52,21 +52,21 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func genesisFromFile(genesisPath string) *types.Genesis {
+func genesisFromFile(genesisPath string) *genesis2.Genesis {
 	file, err := os.Open(genesisPath)
 	if err != nil {
 		utils.Fatalf("Failed to read genesis file: %v", err)
 	}
 	defer file.Close()
 
-	genesis := new(types.Genesis)
+	genesis := new(genesis2.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
 	}
 	return genesis
 }
 
-func getChainGenesisAndConfig() (genesis *types.Genesis, chainConfig *chain2.Config) {
+func getChainGenesisAndConfig() (genesis *genesis2.Genesis, chainConfig *chain2.Config) {
 	if chain == "" {
 		genesis, chainConfig = core.MainnetGenesisBlock(), params.MainnetChainConfig
 	} else {

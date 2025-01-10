@@ -21,6 +21,7 @@ package core_test
 
 import (
 	"context"
+	"github.com/ledgerwatch/erigon/core/types"
 	"testing"
 
 	"github.com/ledgerwatch/log/v3"
@@ -29,7 +30,6 @@ import (
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
 	"github.com/ledgerwatch/erigon/core"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/stages/mock"

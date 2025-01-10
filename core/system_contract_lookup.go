@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/ledgerwatch/erigon/core/types"
 	"strconv"
 
 	"github.com/ledgerwatch/erigon-lib/chain/networkname"
@@ -10,7 +11,6 @@ import (
 	"github.com/ledgerwatch/erigon/polygon/bor/borcfg"
 
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
 )
 

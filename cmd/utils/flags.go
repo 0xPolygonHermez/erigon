@@ -1497,6 +1497,10 @@ var (
 		Usage: "transaction count fetched from txpool each time",
 		Value: 1000,
 	}
+	ZKGenesisConfigPathFlag = cli.StringFlag{
+		Name:  "zkevm.genesis-config-path",
+		Usage: "file path for the zk config containing allocs chaonspec and other zk specific configurations.",
+	}
 )
 
 var MetricFlags = []cli.Flag{&MetricsEnabledFlag, &MetricsHTTPFlag, &MetricsPortFlag, &DiagDisabledFlag, &DiagEndpointAddrFlag, &DiagEndpointPortFlag, &DiagSpeedTestFlag}
@@ -2320,6 +2324,10 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		configFilePath := ctx.String(ConfigFlag.Name)
 		if configFilePath == "" {
 			Fatalf("Config file is required for dynamic chain")
+		}
+
+		if ctx.IsSet(ZKGenesisConfigPathFlag.Name) {
+			config.ZkConfigPath = ctx.String(ZKGenesisConfigPathFlag.Name)
 		}
 
 		// Be sure to set this first

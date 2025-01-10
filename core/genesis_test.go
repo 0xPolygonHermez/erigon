@@ -5,6 +5,7 @@ package core_test
 
 import (
 	"context"
+	"github.com/ledgerwatch/erigon/core/types"
 	"math/big"
 	"testing"
 
@@ -21,7 +22,6 @@ import (
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/state"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/log/v3"
 )

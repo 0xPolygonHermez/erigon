@@ -1,6 +1,7 @@
 package networks
 
 import (
+	"github.com/ledgerwatch/erigon/core/types"
 	"strconv"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	account_services "github.com/ledgerwatch/erigon/cmd/devnet/services/accounts"
 	"github.com/ledgerwatch/erigon/cmd/devnet/services/polygon"
 	"github.com/ledgerwatch/erigon/cmd/utils"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/polygon/bor/borcfg"
 )

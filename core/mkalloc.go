@@ -27,12 +27,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ledgerwatch/erigon/core/types"
 	"math/big"
 	"os"
 	"sort"
 	"strconv"
 
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rlp"
 )
 
