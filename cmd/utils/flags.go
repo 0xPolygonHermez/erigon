@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"github.com/ledgerwatch/erigon/zk/config"
 	"math/big"
 	"os"
 	"path"
@@ -2128,13 +2129,6 @@ func setWhitelist(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
-type DynamicConfig struct {
-	Root       string `json:"root"`
-	Timestamp  uint64 `json:"timestamp"`
-	GasLimit   uint64 `json:"gasLimit"`
-	Difficulty int64  `json:"difficulty"`
-}
-
 func setBeaconAPI(ctx *cli.Context, cfg *ethconfig.Config) error {
 	allowed := ctx.StringSlice(BeaconAPIFlag.Name)
 	if err := cfg.BeaconRouter.UnwrapEndpointsList(allowed); err != nil {
@@ -2329,12 +2323,12 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		}
 
 		// Be sure to set this first
-		params.DynamicChainConfigPath = filepath.Dir(configFilePath)
-		filename := path.Join(params.DynamicChainConfigPath, chain+"-conf.json")
+		config.DynamicChainConfigPath = filepath.Dir(configFilePath)
+		filename := path.Join(config.DynamicChainConfigPath, chain+"-conf.json")
 
 		genesis := core.GenesisBlockByChainName(chain)
 
-		dConf := DynamicConfig{}
+		dConf := config.DynamicConfig{}
 
 		if _, err := os.Stat(filename); err == nil {
 			dConfBytes, err := os.ReadFile(filename)

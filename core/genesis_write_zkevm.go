@@ -1,17 +1,13 @@
 package core
 
 import (
-	"encoding/json"
-	"fmt"
-	"math/big"
-	"os"
-	"path"
-
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
+	"github.com/ledgerwatch/erigon/zk/config"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"math/big"
 )
 
 func HermezMainnetGenesisBlock() *types.Genesis {
@@ -137,28 +133,12 @@ func processAccount(s *smt.SMT, root *big.Int, a *types.GenesisAccount, addr lib
 }
 
 func DynamicGenesisBlock(chain string) *types.Genesis {
+	zkCfg := config.NewZKConfig(chain)
 	return &types.Genesis{
-		Config:     params.DynamicChainConfig(chain),
-		Timestamp:  params.DynamicChainTimestamp(chain),
+		Config:     zkCfg.ChainCfg,
+		Timestamp:  zkCfg.DynamicCfg.Timestamp,
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
-		Alloc:      dynamicPrealloc(chain),
+		Alloc:      zkCfg.AllocCfg,
 	}
-}
-
-func dynamicPrealloc(ch string) types.GenesisAlloc {
-	filename := path.Join(params.DynamicChainConfigPath, ch+"-allocs.json")
-
-	f, err := os.Open(filename)
-	if err != nil {
-		panic(fmt.Sprintf("could not open alloc for %s: %v", filename, err))
-	}
-	defer f.Close()
-	decoder := json.NewDecoder(f)
-	alloc := make(types.GenesisAlloc)
-	err = decoder.Decode(&alloc)
-	if err != nil {
-		panic(fmt.Sprintf("could not parse alloc for %s: %v", filename, err))
-	}
-	return alloc
 }

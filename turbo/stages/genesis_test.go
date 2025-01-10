@@ -102,7 +102,7 @@ func TestSetupGenesis(t *testing.T) {
 				core.MustCommitGenesis(&customg, db, tmpdir, logger)
 				return core.CommitGenesisBlock(db, core.SepoliaGenesisBlock(), tmpdir, logger)
 			},
-			wantErr:    &types.GenesisMismatchError{Stored: customghash, New: params.SepoliaGenesisHash},
+			wantErr:    &core.GenesisMismatchError{Stored: customghash, New: params.SepoliaGenesisHash},
 			wantHash:   params.SepoliaGenesisHash,
 			wantConfig: params.SepoliaChainConfig,
 		},
@@ -112,7 +112,7 @@ func TestSetupGenesis(t *testing.T) {
 				core.MustCommitGenesis(&customg, db, tmpdir, logger)
 				return core.CommitGenesisBlock(db, core.BorMainnetGenesisBlock(), tmpdir, logger)
 			},
-			wantErr:    &types.GenesisMismatchError{Stored: customghash, New: params.BorMainnetGenesisHash},
+			wantErr:    &core.GenesisMismatchError{Stored: customghash, New: params.BorMainnetGenesisHash},
 			wantHash:   params.BorMainnetGenesisHash,
 			wantConfig: params.BorMainnetChainConfig,
 		},
@@ -122,7 +122,7 @@ func TestSetupGenesis(t *testing.T) {
 				core.MustCommitGenesis(&customg, db, tmpdir, logger)
 				return core.CommitGenesisBlock(db, core.MumbaiGenesisBlock(), tmpdir, logger)
 			},
-			wantErr:    &types.GenesisMismatchError{Stored: customghash, New: params.MumbaiGenesisHash},
+			wantErr:    &core.GenesisMismatchError{Stored: customghash, New: params.MumbaiGenesisHash},
 			wantHash:   params.MumbaiGenesisHash,
 			wantConfig: params.MumbaiChainConfig,
 		},
@@ -132,7 +132,7 @@ func TestSetupGenesis(t *testing.T) {
 				core.MustCommitGenesis(&customg, db, tmpdir, logger)
 				return core.CommitGenesisBlock(db, core.AmoyGenesisBlock(), tmpdir, logger)
 			},
-			wantErr:    &types.GenesisMismatchError{Stored: customghash, New: params.AmoyGenesisHash},
+			wantErr:    &core.GenesisMismatchError{Stored: customghash, New: params.AmoyGenesisHash},
 			wantHash:   params.AmoyGenesisHash,
 			wantConfig: params.AmoyChainConfig,
 		},

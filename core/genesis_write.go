@@ -141,7 +141,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *b
 		}
 		hash := block.Hash()
 		if hash != storedHash {
-			return genesis.Config, block, &types.GenesisMismatchError{Stored: storedHash, New: hash}
+			return genesis.Config, block, &GenesisMismatchError{Stored: storedHash, New: hash}
 		}
 	}
 	number := rawdb.ReadHeaderNumber(tx, storedHash)
@@ -153,7 +153,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *b
 		}
 	}
 	// Get the existing chain configuration.
-	newCfg := genesis.ConfigOrDefault(storedHash)
+	newCfg := ConfigOrDefault(genesis, storedHash)
 	applyOverrides(newCfg)
 	if err := newCfg.CheckConfigForkOrder(); err != nil {
 		return newCfg, nil, err

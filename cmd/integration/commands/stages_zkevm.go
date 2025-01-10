@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	zkConfig "github.com/ledgerwatch/erigon/zk/config"
 	"math/big"
 	"os"
 	"path"
@@ -15,7 +16,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/kvcfg"
 	"github.com/ledgerwatch/erigon/cmd/hack/tool/fromdb"
-	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -24,7 +24,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/p2p/sentry"
 	"github.com/ledgerwatch/erigon/p2p/sentry/sentry_multi_client"
-	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	stages2 "github.com/ledgerwatch/erigon/turbo/stages"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
@@ -44,11 +43,11 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 			panic("Config file is required for dynamic chain")
 		}
 
-		params.DynamicChainConfigPath = filepath.Dir(config)
+		zkConfig.DynamicChainConfigPath = filepath.Dir(config)
 		genesis = core.GenesisBlockByChainName(chain)
-		filename := path.Join(params.DynamicChainConfigPath, chain+"-conf.json")
+		filename := path.Join(zkConfig.DynamicChainConfigPath, chain+"-conf.json")
 
-		dConf := utils.DynamicConfig{}
+		dConf := zkConfig.DynamicConfig{}
 
 		if _, err := os.Stat(filename); err == nil {
 			dConfBytes, err := os.ReadFile(filename)
