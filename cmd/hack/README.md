@@ -2,6 +2,20 @@
 
 Hack is a set of developer-focused tools for dealing with the node and its data.
 
+## Tools
+
+link to other tools READMEs
+
+- [Hack](#hackgo)
+- [Allocs](allocs/README.md)
+- [RPC Cache](rpc_cache/README.md)
+- [RPC Checker](rpc_checker/README.md)
+- [Scripts](scripts/README.md) collection of scripts.
+- 
+
+## Developer Flags
+- [Debug Flags](debug/README.md) - for limiting the node block height
+
 ## Hack.go
 This program is a command-line tool for various blockchain-related operations. It supports multiple actions that can be specified via command-line flags. Below is a list of supported actions and their descriptions:
 
@@ -92,8 +106,3 @@ hack [flags]
 .cmd/hack —action=buckets —chaindata="/Users/afa/Code/gateway/erigon-data/bali-2"
 ```
 
-## Tools
-- [RPC Cache](rpc_cache/README.md)
-
-## Developer Flags
-- [Debug Flags](debug/README.md) - for limiting the node block height
