@@ -11,7 +11,7 @@ link to other tools READMEs
 - [RPC Cache](rpc_cache/README.md)
 - [RPC Checker](rpc_checker/README.md)
 - [Scripts](scripts/README.md) collection of scripts.
-- 
+- [Zk Debug Tools](../../zk/debug_tools/README.md) another set of tools in this repository.
 
 ## Developer Flags
 - [Debug Flags](debug/README.md) - for limiting the node block height

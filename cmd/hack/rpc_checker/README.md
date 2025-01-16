@@ -34,3 +34,7 @@ This starts comparing from block 3816916, incrementing by 1, and compares receip
 
 - Ensure nodes are accessible.
 - The tool reports the first block with a mismatch.
+
+## Workflow
+
+RPC Cache is used by github workflow in the docker-composes of zk/tests/nightly-l1-recovery
