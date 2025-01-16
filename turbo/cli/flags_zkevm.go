@@ -224,6 +224,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SealBatchImmediatelyOnOverflow:         ctx.Bool(utils.SealBatchImmediatelyOnOverflow.Name),
 		MockWitnessGeneration:                  ctx.Bool(utils.MockWitnessGeneration.Name),
 		WitnessContractInclusion:               witnessInclusion,
+		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

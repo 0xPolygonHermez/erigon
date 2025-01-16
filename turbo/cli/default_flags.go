@@ -293,4 +293,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.SealBatchImmediatelyOnOverflow,
 	&utils.MockWitnessGeneration,
 	&utils.WitnessContractInclusion,
+	&utils.BadTxAllowance,
 }

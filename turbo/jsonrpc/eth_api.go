@@ -376,6 +376,7 @@ type APIImpl struct {
 	logger                        log.Logger
 	VirtualCountersSmtReduction   float64
 	RejectLowGasPriceTransactions bool
+	BadTxAllowance                uint64
 }
 
 // NewEthAPI returns APIImpl instance
@@ -409,6 +410,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		logger:                        logger,
 		VirtualCountersSmtReduction:   ethCfg.VirtualCountersSmtReduction,
 		RejectLowGasPriceTransactions: ethCfg.RejectLowGasPriceTransactions,
+		BadTxAllowance:                ethCfg.BadTxAllowance,
 	}
 }
 
