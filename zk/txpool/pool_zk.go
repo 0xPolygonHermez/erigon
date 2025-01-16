@@ -3,7 +3,6 @@ package txpool
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"fmt"
 
 	mapset "github.com/deckarep/golang-set/v2"
@@ -304,8 +303,7 @@ func (p *TxPool) RemoveMinedTransactions(ids []common.Hash) {
 // deletes the discarded txs from the overflowZkCounters
 func (p *TxPool) discardOverflowZkCountersFromPending(pending *PendingPool, discard func(*metaTx, DiscardReason), sendersWithChangedState map[uint64]struct{}) {
 	for _, mt := range p.overflowZkCounters {
-		friendlyHash := hex.EncodeToString(mt.Tx.IDHash[:])
-		log.Info("[tx_pool] Removing TX from pending due to counter overflow", "tx", friendlyHash)
+		log.Info("[tx_pool] Removing TX from pending due to counter overflow", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
 		pending.Remove(mt)
 		discard(mt, OverflowZkCounters)
 		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
