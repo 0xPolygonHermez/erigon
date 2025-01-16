@@ -231,6 +231,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		MockWitnessGeneration:                  ctx.Bool(utils.MockWitnessGeneration.Name),
 		WitnessCacheLimit:                      witnessCacheLimit,
 		WitnessContractInclusion:               witnessInclusion,
+		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

@@ -296,4 +296,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.WitnessCacheEnable,
 	&utils.WitnessCacheLimit,
 	&utils.WitnessContractInclusion,
+	&utils.BadTxAllowance,
 }

@@ -99,6 +99,7 @@ type Zk struct {
 	WitnessCacheEnabled            bool
 	WitnessCacheLimit              uint64
 	WitnessContractInclusion       []common.Address
+	BadTxAllowance                 uint64
 }
 
 var DefaultZkConfig = &Zk{}
