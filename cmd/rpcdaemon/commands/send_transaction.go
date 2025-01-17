@@ -50,6 +50,15 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 		return common.Hash{}, err
 	}
 
+	// now get the sender and put a lock in place for them
+	signer := types.MakeSigner(cc, chainId.Uint64())
+	sender, err := txn.Sender(*signer)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	api.SenderLocks.AddLock(sender)
+	defer api.SenderLocks.ReleaseLock(sender)
+
 	// check if the transaction price is lower than the current network price and
 	// reject the tx if it is
 	if api.RejectLowGasPriceTransactions && !api.BaseAPI.gasless {
