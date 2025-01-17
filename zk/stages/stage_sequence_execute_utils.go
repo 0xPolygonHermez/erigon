@@ -30,6 +30,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/l1infotree"
 	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/tx"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
@@ -37,7 +38,6 @@ import (
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
-	"github.com/ledgerwatch/erigon/zk/l1infotree"
 )
 
 const (
@@ -287,15 +287,6 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 	}
 
 	return
-}
-
-func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker) {
-	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
-	logTicker := time.NewTicker(10 * time.Second)
-	blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
-	infoTreeTicker := time.NewTicker(cfg.zk.InfoTreeUpdateInterval)
-
-	return batchTicker, logTicker, blockTicker, infoTreeTicker
 }
 
 // will be called at the start of every new block created within a batch to figure out if there is a new GER
