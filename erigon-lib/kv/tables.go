@@ -547,6 +547,7 @@ const (
 	TableHashKey                      = "HermezSmtHashKey"
 	TablePoolLimbo                    = "PoolLimbo"
 	BATCH_ENDS                        = "batch_ends"
+	BAD_TX_HASHES                     = "bad_tx_hashes"
 	//Diagnostics tables
 	DiagSystemInfo = "DiagSystemInfo"
 	DiagSyncStages = "DiagSyncStages"
@@ -791,6 +792,7 @@ var ChaindataTables = []string{
 	TableHashKey,
 	TablePoolLimbo,
 	BATCH_ENDS,
+	BAD_TX_HASHES,
 }
 
 const (
