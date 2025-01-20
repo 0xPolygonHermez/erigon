@@ -12,7 +12,7 @@ import (
 // get strange race behaviour where a nonce will come back too low if the pool is taking
 // a long time to process a transaction.
 type SenderLock struct {
-	mtx   sync.Mutex
+	mtx   sync.RWMutex
 	locks map[common.Address]uint64
 }
 
@@ -25,9 +25,6 @@ func NewSenderLock() *SenderLock {
 func (sl *SenderLock) GetLock(sender common.Address) uint64 {
 	sl.mtx.Lock()
 	defer sl.mtx.Unlock()
-	if _, ok := sl.locks[sender]; !ok {
-		return 0
-	}
 	return sl.locks[sender]
 }
 
@@ -35,12 +32,10 @@ func (sl *SenderLock) ReleaseLock(sender common.Address) {
 	sl.mtx.Lock()
 	defer sl.mtx.Unlock()
 	if current, ok := sl.locks[sender]; ok {
-		if current == 0 {
+		if current <= 1 {
 			delete(sl.locks, sender)
-		}
-		sl.locks[sender] = current - 1
-		if sl.locks[sender] == 0 {
-			delete(sl.locks, sender)
+		} else {
+			sl.locks[sender] = current - 1
 		}
 	}
 }
@@ -48,9 +43,5 @@ func (sl *SenderLock) ReleaseLock(sender common.Address) {
 func (sl *SenderLock) AddLock(sender common.Address) {
 	sl.mtx.Lock()
 	defer sl.mtx.Unlock()
-	if _, ok := sl.locks[sender]; !ok {
-		sl.locks[sender] = 1
-	} else {
-		sl.locks[sender] = sl.locks[sender] + 1
-	}
+	sl.locks[sender]++
 }
