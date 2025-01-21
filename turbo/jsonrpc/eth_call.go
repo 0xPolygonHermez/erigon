@@ -129,9 +129,8 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (
-		lo     = params.TxGas - 1
-		hi     uint64
-		gasCap uint64
+		lo = params.TxGas - 1
+		hi uint64
 	)
 	// Use zero address if sender unspecified.
 	if args.From == nil {
@@ -219,7 +218,6 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 		log.Debug("Caller gas above allowance, capping", "requested", hi, "cap", api.GasCap)
 		hi = api.GasCap
 	}
-	gasCap = hi
 
 	chainConfig, err := api.chainConfig(ctx, dbtx)
 	if err != nil {
