@@ -40,10 +40,10 @@ func TestSMTApplyTraces(t *testing.T) {
 		// 	name: "SC deployment full witness",
 		// 	file: "./testdata/zerotraces/full-witness-contract-deployment.json",
 		// },
-		// {
-		// 	name: "SC interaction full witness",
-		// 	file: "./testdata/zerotraces/full-witness-contract-interaction.json",
-		// },
+		{
+			name: "SC interaction full witness",
+			file: "./testdata/zerotraces/full-witness-contract-interaction.json",
+		},
 	}
 
 	for _, c := range cases {

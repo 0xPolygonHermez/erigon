@@ -4,11 +4,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math/big"
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
@@ -51,7 +49,7 @@ func (s *SMT) CreateContract(address common.Address) error {
 }
 
 // ApplyTraces applies a map of traces on the given SMT and returns new instance of SMT, without altering the original one.
-func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace, rd trie.RetainDecider) (*SMT, error) {
+func (s *SMT) ApplyTraces(traces map[common.Address]*types.TxnTrace, rd trie.RetainDecider) (*SMT, error) {
 	// result, err := s.Copy(context.Background(), rd)
 	// if err != nil {
 	// 	return nil, err
@@ -76,23 +74,18 @@ func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace, rd trie.
 		addrString := addr.Hex()
 
 		// Set account balance and nonce
-		balanceBig := big.NewInt(0)
 		if trace.Balance != nil {
-			balanceBig = trace.Balance.ToBig()
+			balanceBig := trace.Balance.ToBig()
+
+			if _, err := result.SetAccountBalance(addrString, balanceBig); err != nil {
+				return nil, err
+			}
 		}
 
-		nonceBig := big.NewInt(0)
 		if trace.Nonce != nil {
-			nonceBig = trace.Nonce.ToBig()
-		}
+			nonceBig := trace.Nonce.ToBig()
 
-		if _, err := result.SetAccountState(addrString, balanceBig, nonceBig); err != nil {
-			return nil, err
-		}
-
-		// Set account nonce
-		if trace.Nonce != nil {
-			if _, err := result.SetAccountNonce(addrString, trace.Nonce.ToBig()); err != nil {
+			if _, err := result.SetAccountNonce(addrString, nonceBig); err != nil {
 				return nil, err
 			}
 		}
@@ -112,8 +105,10 @@ func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace, rd trie.
 
 		// Set account bytecode
 		if trace.CodeUsage != nil {
-			if err := result.SetContractBytecode(addrString, hex.EncodeToString(trace.CodeUsage.Write)); err != nil {
-				return nil, err
+			if trace.CodeUsage.Write != nil {
+				if err := result.SetContractBytecode(addrString, hex.EncodeToString(trace.CodeUsage.Write)); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
