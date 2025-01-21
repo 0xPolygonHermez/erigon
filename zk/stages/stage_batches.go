@@ -26,8 +26,8 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/log/v3"
 	"github.com/ledgerwatch/erigon/zk/datastream/client"
+	"github.com/ledgerwatch/log/v3"
 )
 
 const (
@@ -811,13 +811,14 @@ func getHighestDSL2Block(ctx context.Context, batchCfg BatchesCfg, latestFork ui
 	if err == nil {
 		return highestBlock, nil
 	}
+	log.Warn("problem getting highest ds l2 block from sequencer rpc", "err", err)
 
 	// so something went wrong with the rpc call, let's try the older method,
 	// but we're going to open a new connection rather than use the one for syncing blocks.
 	// This is so we can keep the logic simple and just dispose of the connection when we're done
 	// greatly simplifying state juggling of the connection if it errors
 	dsClient := buildNewStreamClient(ctx, batchCfg, latestFork)
-	if err = dsClient.Start(); err != nil {
+	if err := dsClient.Start(); err != nil {
 		return 0, err
 	}
 	defer func() {
