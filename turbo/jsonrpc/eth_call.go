@@ -273,11 +273,14 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	// Execute the binary search and hone in on an executable gas limit
 	for lo+1 < hi {
 		mid := (hi + lo) / 2
-		failed, _, err := executable(mid)
+		failed, result, err := executable(mid)
 		// If the error is not nil(consensus error), it means the provided message
 		// call or transaction will never be accepted no matter how much gas it is
 		// assigened. Return the error directly, don't struggle any more.
 		if err != nil {
+			if result != nil && len(result.Revert()) > 0 {
+				return 0, ethapi2.NewRevertError(result)
+			}
 			return 0, err
 		}
 		if failed {
