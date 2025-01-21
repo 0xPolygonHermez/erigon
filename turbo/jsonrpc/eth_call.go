@@ -263,24 +263,34 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 				// Special case, raise gas limit
 				return true, nil, nil
 			}
-
 			// Bail out
 			return true, nil, err
 		}
+
 		return result.Failed(), result, nil
+	}
+
+	// We first execute the transaction at the highest allowable gas limit, since if this fails we
+	// can return error immediately.
+	failed, result, err := executable(hi)
+	if err != nil {
+		return 0, err
+	}
+	if failed {
+		if result != nil && !errors.Is(result.Err, vm.ErrOutOfGas) {
+			return 0, ethapi2.NewRevertError(result)
+		}
+		return 0, fmt.Errorf("gas required exceeds allowance (%d)", hi)
 	}
 
 	// Execute the binary search and hone in on an executable gas limit
 	for lo+1 < hi {
 		mid := (hi + lo) / 2
-		failed, result, err := executable(mid)
+		failed, _, err := executable(mid)
 		// If the error is not nil(consensus error), it means the provided message
 		// call or transaction will never be accepted no matter how much gas it is
 		// assigened. Return the error directly, don't struggle any more.
 		if err != nil {
-			if result != nil && len(result.Revert()) > 0 {
-				return 0, ethapi2.NewRevertError(result)
-			}
 			return 0, err
 		}
 		if failed {
@@ -290,23 +300,6 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 		}
 	}
 
-	// Reject the transaction as invalid if it still fails at the highest allowance
-	if hi == gasCap {
-		failed, result, err := executable(hi)
-		if err != nil {
-			return 0, err
-		}
-		if failed {
-			if result != nil && !errors.Is(result.Err, vm.ErrOutOfGas) {
-				if len(result.Revert()) > 0 {
-					return 0, ethapi2.NewRevertError(result)
-				}
-				return 0, result.Err
-			}
-			// Otherwise, the specified gas cap is too low
-			return 0, fmt.Errorf("gas required exceeds allowance (%d)", gasCap)
-		}
-	}
 	return hexutil.Uint64(hi), nil
 }
 
