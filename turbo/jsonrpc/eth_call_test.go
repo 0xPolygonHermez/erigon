@@ -65,15 +65,19 @@ func TestEstimateGas(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		from        libcommon.Address
-		to          libcommon.Address
+		argsOrNil *ethapi2.CallArgs,
+		blockNrOrHash *rpc.BlockNumberOrHas
 		expected    uint64
 		expectedErr string
 	}{
 		{
 			name:        "case1",
-			from:        libcommon.HexToAddress("0x71562b71999873db5b286df957af199ec94617f7"),
-			to:          libcommon.HexToAddress("0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e"),
+			argsOrNil: &ethapi.CallArgs{
+				From: libcommon.HexToAddress("0x71562b71999873db5b286df957af199ec94617f7"),
+				To:    libcommon.HexToAddress("0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e"),
+			},
+			// blockNrOrHash: rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber),
+			blockNrOrHash: nil,
 			expected:    21000, // Replace with the expected gas value
 			expectedErr: "",
 		},
@@ -82,10 +86,7 @@ func TestEstimateGas(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gas, err := api.EstimateGas(context.Background(), &ethapi.CallArgs{
-				From: &tt.from,
-				To:   &tt.to,
-			}, nil)
+			gas, err := api.EstimateGas(context.Background(), tt.argsOrNil, tt.blockNrOrHash)
 			if tt.expectedErr != "" {
 				if err == nil || err.Error() != tt.expectedErr {
 					t.Errorf("expected error %v, got %v", tt.expectedErr, err)
