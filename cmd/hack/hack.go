@@ -63,19 +63,18 @@ import (
 )
 
 var (
-	action     = flag.String("action", "", "action to execute")
-	cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
-	block      = flag.Int("block", 1, "specifies a block number for operation")
-	blockTotal = flag.Int("blocktotal", 1, "specifies a total amount of blocks to process (will offset from head block if <= 0)")
-	account    = flag.String("account", "0x", "specifies account to investigate")
-	name       = flag.String("name", "", "name to add to the file names")
-	chaindata  = flag.String("chaindata", "chaindata", "path to the chaindata database file")
-	bucket     = flag.String("bucket", "", "bucket in the database")
-	hash       = flag.String("hash", "0x00", "image for preimage or state root for testBlockHashes action")
-	output     = flag.String("output", "", "output path")
-	allocs     = flag.String("allocs", "", "path to the dynamic allocs file")
-	chainspec  = flag.String("chainspec", "", "path to the dynamic chainspec file")
-	conf       = flag.String("conf", "", "path to the dynamic config file")
+	action      = flag.String("action", "", "action to execute")
+	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile `file`")
+	block       = flag.Int("block", 1, "specifies a block number for operation")
+	blockTotal  = flag.Int("blocktotal", 1, "specifies a total amount of blocks to process (will offset from head block if <= 0)")
+	account     = flag.String("account", "0x", "specifies account to investigate")
+	name        = flag.String("name", "", "name to add to the file names")
+	chaindata   = flag.String("chaindata", "chaindata", "path to the chaindata database file")
+	bucket      = flag.String("bucket", "", "bucket in the database")
+	hash        = flag.String("hash", "0x00", "image for preimage or state root for testBlockHashes action")
+	output      = flag.String("output", "", "output path")
+	cfglocation = flag.String("cfglocation", "", "where the dynamic config files are located")
+	chain       = flag.String("chain", "", "name of chain used for zkcfgmerge")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -1420,12 +1419,11 @@ func dumpState(chaindata string) error {
 	return nil
 }
 
-func mergeZkConfig(allocs, chainspec, conf, output string) error {
+func mergeZkConfig(cfglocation, chain, output string) error {
 	flags := map[string]string{
-		allocs:    "allocs",
-		chainspec: "chainspec",
-		conf:      "conf",
-		output:    "output",
+		cfglocation: "cfglocation",
+		chain:       "chain",
+		output:      "output",
 	}
 	for f, n := range flags {
 		if f == "" {
@@ -1433,9 +1431,9 @@ func mergeZkConfig(allocs, chainspec, conf, output string) error {
 		}
 	}
 	files := map[string]string{
-		allocs:    "allocs",
-		chainspec: "chainspec",
-		conf:      "conf",
+		path.Join(cfglocation, "dynamic-"+chain+"-allocs.json"):    "allocs",
+		path.Join(cfglocation, "dynamic-"+chain+"-chainspec.json"): "chainspec",
+		path.Join(cfglocation, "dynamic-"+chain+"-conf.json"):      "conf",
 	}
 	combined := make(map[string]interface{})
 	for file, fileName := range files {
@@ -1611,7 +1609,7 @@ func main() {
 	case "dumpAll":
 		err = dumpAll(*chaindata, *output)
 	case "zkCfgMerge":
-		err = mergeZkConfig(*allocs, *chainspec, *conf, *output)
+		err = mergeZkConfig(*cfglocation, *chain, *output)
 	}
 
 	if err != nil {

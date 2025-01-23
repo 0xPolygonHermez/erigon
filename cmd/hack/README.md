@@ -29,21 +29,20 @@ hack [flags]
 
 ### Flags
 
-| Flag          | Description                                                                                               |
-|---------------|-----------------------------------------------------------------------------------------------------------|
-| `-action`     | Specifies the action to perform. Supported actions are listed below.                                      |
-| `-cpuprofile` | Specifies the file to write proof CPU profile data to.                                                    |
-| `-chaindata`  | Specifies the path to the chain data. ( this is not datadir root, you have to specify chaindata folder ). |
-| `-output`     | Specifies the output file.                                                                                |
-| `-block`      | Specifies the block number.                                                                               |
-| `-blockTotal` | Specifies the total number of blocks.                                                                     |
-| `-hash`       | Specifies the hash value.                                                                                 |
-| `-account`    | Specifies the account address.                                                                            |
-| `-bucket`     | Specifies the bucket name.                                                                                |
-| `-name`       | Specifies the name.                                                                                       |
-| `-allocs`     | Specifies the location to the dynamic allocs file for zkCfgMerge.                                         |
-| `-chainspec`  | Specifies the location to the dynamic chainspec file for zkCfgMerge.                                      |
-| `-conf`       | Specifies the location to the dynamic conf file for zkCfgMerge.                                           |
+| Flag           | Description                                                                                               |
+|----------------|-----------------------------------------------------------------------------------------------------------|
+| `-action`      | Specifies the action to perform. Supported actions are listed below.                                      |
+| `-cpuprofile`  | Specifies the file to write proof CPU profile data to.                                                    |
+| `-chaindata`   | Specifies the path to the chain data. ( this is not datadir root, you have to specify chaindata folder ). |
+| `-output`      | Specifies the output file.                                                                                |
+| `-block`       | Specifies the block number.                                                                               |
+| `-blockTotal`  | Specifies the total number of blocks.                                                                     |
+| `-hash`        | Specifies the hash value.                                                                                 |
+| `-account`     | Specifies the account address.                                                                            |
+| `-bucket`      | Specifies the bucket name.                                                                                |
+| `-name`        | Specifies the name.                                                                                       |
+| `-cfglocation` | Specifies the location where the dynamic config lies for zkCfgMerge.                                      |
+| `-chain`       | Specifies the chain name for zkCfgMerge. Should the on the filenames of the dynamic config.               |
 
 ### Supported Actions
 
@@ -100,7 +99,7 @@ hack [flags]
 .cmd/hack -action=readAccount -chaindata=/path/to/chaindata -account=0xabc...
 .cmd/hack -action=extractHeaders -chaindata=/path/to/chaindata -block=12345 -blockTotal=100
 .cmd/hack -action=dumpAll -chaindata=/path/to/chaindata -output=/path/to/output
-.cmd/hack -action=zkCfgMerge -allocs=/path/to/allocs -allocs=/path/to/allocs.json -chainspec=/path/to/chainspec.json -conf=/path/to/conf.json -output=/path/to/output.json
+.cmd/hack -action=zkCfgMerge -cfglocation=/config/location -chain=mychain-testnet -output=/path/to/output.json
 ```
 
 ### Note
