@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec
@@ -72,6 +73,9 @@ var (
 	bucket     = flag.String("bucket", "", "bucket in the database")
 	hash       = flag.String("hash", "0x00", "image for preimage or state root for testBlockHashes action")
 	output     = flag.String("output", "", "output path")
+	allocs     = flag.String("allocs", "", "path to the dynamic allocs file")
+	chainspec  = flag.String("chainspec", "", "path to the dynamic chainspec file")
+	conf       = flag.String("conf", "", "path to the dynamic config file")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -1416,6 +1420,53 @@ func dumpState(chaindata string) error {
 	return nil
 }
 
+func mergeZkConfig(allocs, chainspec, conf, output string) error {
+	flags := map[string]string{
+		allocs:    "allocs",
+		chainspec: "chainspec",
+		conf:      "conf",
+		output:    "output",
+	}
+	for f, n := range flags {
+		if f == "" {
+			return fmt.Errorf("missing flag %s", n)
+		}
+	}
+	files := map[string]string{
+		allocs:    "allocs",
+		chainspec: "chainspec",
+		conf:      "conf",
+	}
+	combined := make(map[string]interface{})
+	for file, fileName := range files {
+		f, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+
+		data, err := io.ReadAll(f)
+		if err != nil {
+			return err
+		}
+
+		var jsonData interface{}
+		if err = json.Unmarshal(data, &jsonData); err != nil {
+			return err
+		}
+
+		fmt.Printf("Combining %s\n", fileName)
+		combined[fileName] = jsonData
+		f.Close()
+	}
+	outputData, err := json.MarshalIndent(combined, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Writing output to %s\n", output)
+	return os.WriteFile(output, outputData, 0644)
+}
+
 func main() {
 	debug.RaiseFdLimit()
 	flag.Parse()
@@ -1559,6 +1610,8 @@ func main() {
 		err = getOldAccInputHash(uint64(*block))
 	case "dumpAll":
 		err = dumpAll(*chaindata, *output)
+	case "zkCfgMerge":
+		err = mergeZkConfig(*allocs, *chainspec, *conf, *output)
 	}
 
 	if err != nil {
