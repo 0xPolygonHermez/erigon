@@ -47,59 +47,14 @@ func TestEstimateGas(t *testing.T) {
 	ctx, conn := rpcdaemontest.CreateTestGrpcConn(t, mock.Mock(t))
 	mining := txpool.NewMiningClient(conn)
 	ff := rpchelper.New(ctx, nil, nil, mining, func() {}, m.Log)
-
-	api := NewEthAPI(
-		NewBaseApi(ff, stateCache, m.BlockReader, agg, false, rpccfg.DefaultEvmCallTimeout, m.Engine, m.Dirs),
-		m.DB,
-		nil,
-		nil,
-		nil,
-		5000000,
-		1e18,
-		100_000,
-		false,
-		100_000,
-		128,
-		log.New(),
-	)
-
-	tests := []struct {
-		name        string
-		argsOrNil *ethapi2.CallArgs,
-		blockNrOrHash *rpc.BlockNumberOrHas
-		expected    uint64
-		expectedErr string
-	}{
-		{
-			name:        "case1",
-			argsOrNil: &ethapi.CallArgs{
-				From: libcommon.HexToAddress("0x71562b71999873db5b286df957af199ec94617f7"),
-				To:    libcommon.HexToAddress("0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e"),
-			},
-			// blockNrOrHash: rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber),
-			blockNrOrHash: nil,
-			expected:    21000, // Replace with the expected gas value
-			expectedErr: "",
-		},
-		// Add more cases here if needed
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gas, err := api.EstimateGas(context.Background(), tt.argsOrNil, tt.blockNrOrHash)
-			if tt.expectedErr != "" {
-				if err == nil || err.Error() != tt.expectedErr {
-					t.Errorf("expected error %v, got %v", tt.expectedErr, err)
-				}
-				return
-			}
-			if err != nil {
-				t.Errorf("calling EstimateGas: %v", err)
-			}
-			if gas != tt.expected {
-				t.Errorf("expected gas %d, got %d", tt.expected, gas)
-			}
-		})
+	api := NewEthAPI(NewBaseApi(ff, stateCache, m.BlockReader, agg, false, rpccfg.DefaultEvmCallTimeout, m.Engine, m.Dirs), m.DB, nil, nil, nil, 5000000, 1e18, 100_000, false, 100_000, 128, log.New())
+	var from = libcommon.HexToAddress("0x71562b71999873db5b286df957af199ec94617f7")
+	var to = libcommon.HexToAddress("0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e")
+	if _, err := api.EstimateGas(context.Background(), &ethapi.CallArgs{
+		From: &from,
+		To:   &to,
+	}, nil); err != nil {
+		t.Errorf("calling EstimateGas: %v", err)
 	}
 }
 
