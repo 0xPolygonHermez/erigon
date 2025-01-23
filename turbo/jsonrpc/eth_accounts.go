@@ -65,21 +65,7 @@ func (api *APIImpl) GetTransactionCount(ctx context.Context, address libcommon.A
 	}
 
 	if blockNrOrHash.BlockNumber != nil && *blockNrOrHash.BlockNumber == rpc.PendingBlockNumber {
-		// first lets check for any locks on this account before continuing - but don't wait too long
-		waits := 0
-		for {
-			lock := api.SenderLocks.GetLock(address)
-			if lock > 0 {
-				time.Sleep(2 * time.Millisecond)
-				waits++
-				if waits > 250 {
-					log.Debug("waiting too long for transaction processing, returning default behaviour for nonce", "address", address.String())
-					break
-				}
-				continue
-			}
-			break
-		}
+		api.waitForSenderLockToRelease(address)
 
 		reply, err := api.txPool.Nonce(ctx, &txpool_proto.NonceRequest{
 			Address: gointerfaces.ConvertAddressToH160(address),
@@ -195,4 +181,21 @@ func (api *APIImpl) Exist(ctx context.Context, address libcommon.Address, blockN
 	}
 
 	return true, nil
+}
+
+func (api *APIImpl) waitForSenderLockToRelease(address libcommon.Address) {
+	waits := 0
+	for {
+		lock := api.SenderLocks.GetLock(address)
+		if lock > 0 {
+			time.Sleep(2 * time.Millisecond)
+			waits++
+			if waits > 250 {
+				log.Debug("waiting too long for transaction processing, returning default behaviour for nonce", "address", address.String())
+				break
+			}
+			continue
+		}
+		break
+	}
 }
