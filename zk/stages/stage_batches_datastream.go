@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync/atomic"
+	"unicode"
 
 	"github.com/ledgerwatch/log/v3"
 	"time"
@@ -43,11 +44,29 @@ func (r *DatastreamClientRunner) StartRead(errorChan chan struct{}) error {
 		if err := r.dsClient.ReadAllEntriesToChannel(); err != nil {
 			time.Sleep(1 * time.Second)
 			errorChan <- struct{}{}
-			log.Warn(fmt.Sprintf("[%s] Error downloading blocks from datastream", r.logPrefix), "error", err)
+			log.Warn(fmt.Sprintf("[%s] Error downloading blocks from datastream", r.logPrefix), "error", maskBinaryInError(err))
 		}
 	}()
 
 	return nil
+}
+
+// maskBinaryInError is a temporary work-around to deal with non-printable characters in the error response from the datastream. These values can disrupt the logs. We'll replace non-printable characters with � for now
+func maskBinaryInError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	errStr := err.Error()
+	maskedStr := ""
+	for _, r := range errStr {
+		if r == unicode.ReplacementChar || !unicode.IsPrint(r) {
+			maskedStr += "�" // Replace non-printable characters with a placeholder
+		} else {
+			maskedStr += string(r)
+		}
+	}
+	return maskedStr
 }
 
 func (r *DatastreamClientRunner) StopRead() {
