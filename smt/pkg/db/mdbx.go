@@ -81,16 +81,16 @@ func NewEriDb(tx kv.RwTx) *EriDb {
 	logger := log.New()
 
 	// make etls for holding account data and key sources
-	accountCollector := etl.NewCollector("", "./account_collector", etl.NewAppendBuffer(etl.BufferOptimalSize), logger)
+	accountCollector := etl.NewCollector("", "./account_collector", etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
 	accountCollector.LogLvl(log.LvlTrace)
 
-	keySourceCollector := etl.NewCollector("", "./key_source_collector", etl.NewAppendBuffer(etl.BufferOptimalSize), logger)
+	keySourceCollector := etl.NewCollector("", "./key_source_collector", etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
 	keySourceCollector.LogLvl(log.LvlTrace)
 
-	hashKeyCollector := etl.NewCollector("", "./hash_key_collector", etl.NewAppendBuffer(etl.BufferOptimalSize), logger)
+	hashKeyCollector := etl.NewCollector("", "./hash_key_collector", etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
 	hashKeyCollector.LogLvl(log.LvlTrace)
 
-	smtCollector := etl.NewCollector("", "./smt_collector", etl.NewAppendBuffer(etl.BufferOptimalSize), logger)
+	smtCollector := etl.NewCollector("", "./smt_collector", etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
 	smtCollector.LogLvl(log.LvlTrace)
 
 	return &EriDb{
@@ -187,9 +187,6 @@ func NewRoEriDb(tx kv.Getter) *EriRoDb {
 
 func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 	batch := membatch.NewHashBatch(m.kvTx, quitCh, "./tempdb", log.New())
-	defer func() {
-		batch.Close()
-	}()
 	m.tx = batch
 	m.kvTxRo = batch
 }
