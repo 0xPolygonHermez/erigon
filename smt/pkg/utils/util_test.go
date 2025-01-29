@@ -162,6 +162,31 @@ func TestScalarToArrayBig(t *testing.T) {
 	}
 }
 
+func TestScalarToArrayUint64(t *testing.T) {
+	scalar := big.NewInt(0x1234567890ABCDEF)
+
+	expected := [8]uint64{
+		0x90ABCDEF,
+		0x12345678,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}
+
+	result, err := ScalarToArrayUint64(scalar)
+
+	if err != nil {
+		t.Errorf("ScalarToArray = %v; want %v", result, expected)
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("ScalarToArray = %v; want %v", result, expected)
+	}
+}
+
 func BenchmarkScalarToArrayBig(b *testing.B) {
 	scalar := big.NewInt(0x1234567890ABCDEF)
 	for i := 0; i < b.N; i++ {
@@ -818,6 +843,33 @@ func TestKeyContractStorage(t *testing.T) {
 			t.Fatal(err)
 		}
 		if result != test.output {
+			t.Errorf("expected %v but got %v", test.output, result)
+		}
+	}
+}
+
+func TestKeyBig(t *testing.T) {
+	tests := []struct {
+		input  *big.Int
+		output NodeKey
+	}{
+		{
+			input: big.NewInt(1092034958475866),
+			output: NodeKey{
+				11593000745318970063,
+				7942385326937081179,
+				13970824778267919554,
+				7405798476109204467,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		result, err := KeyBig(test.input, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *result != test.output {
 			t.Errorf("expected %v but got %v", test.output, result)
 		}
 	}

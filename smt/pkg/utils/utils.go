@@ -312,6 +312,10 @@ func ConvertHexToUint64Array(hexStr string) ([8]uint64, error) {
 	// Remove 0x prefix if present
 	hexStr = strings.TrimPrefix(hexStr, "0x")
 
+	if len(hexStr)%2 != 0 {
+		hexStr = "0" + hexStr // Pad with leading zero if odd length
+	}
+
 	// Convert hex string to bytes
 	bytes, err := hex.DecodeString(hexStr)
 	if err != nil {
@@ -591,6 +595,10 @@ func ScalarToArrayBig(scalar *big.Int) []*big.Int {
 	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7}
 }
 
+func ScalarToArrayUint64(scalar *big.Int) ([8]uint64, error) {
+	return ConvertHexToUint64Array(scalar.Text(16))
+}
+
 func ArrayBigToScalar(arr []*big.Int) *big.Int {
 	scalar := new(big.Int)
 	for i := len(arr) - 1; i >= 0; i-- {
@@ -680,11 +688,16 @@ func KeyBig(k *big.Int, c int) (*NodeKey, error) {
 	if k == nil {
 		return nil, errors.New("nil key")
 	}
-	add := ScalarToArrayBig(k)
 
-	key1 := NodeValue8{add[0], add[1], add[2], add[3], add[4], add[5], big.NewInt(int64(c)), big.NewInt(0)}
+	add, err := ScalarToArrayUint64(k)
+	if err != nil {
+		return nil, err
+	}
 
-	hk0 := Hash(key1.ToUintArray(), PoseidonAllZeroesHash)
+	key1 := [8]uint64{add[0], add[1], add[2], add[3], add[4], add[5], uint64(c), 0}
+
+	hk0 := Hash(key1, PoseidonAllZeroesHash)
+
 	return &NodeKey{hk0[0], hk0[1], hk0[2], hk0[3]}, nil
 }
 
