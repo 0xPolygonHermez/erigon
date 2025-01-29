@@ -115,6 +115,8 @@ type Zk struct {
 	BadTxAllowance                 uint64
 	BadTxStoreValue                uint64
 	BadTxPurge                     bool
+	L2InfoTreeUpdatesBatchSize     uint64
+	L2InfoTreeUpdatesEnabled       bool
 }
 
 var DefaultZkConfig = &Zk{}
