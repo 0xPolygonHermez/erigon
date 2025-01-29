@@ -533,15 +533,15 @@ func insertContractBytecodeToKV(db smt.DB, keys []utils.NodeKey, ethAddr string,
 }
 
 func insertContractStorageToKV(db smt.DB, keys []utils.NodeKey, ethAddr string, storage map[string]string) ([]utils.NodeKey, error) {
-	a := utils.ConvertHexToBigInt(ethAddr)
-	add := utils.ScalarToArrayBig(a)
-
 	for k, v := range storage {
 		if v == "" {
 			continue
 		}
 
-		keyStoragePosition := utils.KeyContractStorage(add, k)
+		keyStoragePosition, err := utils.KeyContractStorage(ethAddr, k)
+		if err != nil {
+			return []utils.NodeKey{}, err
+		}
 
 		base := 10
 		if strings.HasPrefix(v, "0x") {

@@ -771,3 +771,54 @@ func TestNodeKeyFromPath(t *testing.T) {
 		}
 	}
 }
+
+func Test_Key(t *testing.T) {
+	tests := []struct {
+		input  string
+		output NodeKey
+	}{
+		{
+			input: "0xe859276098f208D003ca6904C6cC26629Ee364Ce",
+			output: NodeKey{
+				9755015262748197613,
+				11140630475045976694,
+				14930209430661078379,
+				6319951756608990063,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		result := Key(test.input, 1)
+		if result != test.output {
+			t.Errorf("expected %v but got %v", test.output, result)
+		}
+	}
+}
+
+func TestKeyContractStorage(t *testing.T) {
+	tests := []struct {
+		input  string
+		output NodeKey
+	}{
+		{
+			input: "0xe859276098f208D003ca6904C6cC26629Ee364Ce",
+			output: NodeKey{
+				9485388526025222793,
+				2844922146222416636,
+				12800508867551015356,
+				9480521524011931274,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		result, err := KeyContractStorage(test.input, "0x1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result != test.output {
+			t.Errorf("expected %v but got %v", test.output, result)
+		}
+	}
+}

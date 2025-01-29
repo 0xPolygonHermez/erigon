@@ -321,12 +321,12 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			return nil, nil, fmt.Errorf("[%s] Context done", logPrefix)
 		default:
 		}
-		ethAddr := addr.String()
-		ethAddrBigInt := utils.ConvertHexToBigInt(ethAddr)
-		ethAddrBigIngArray := utils.ScalarToArrayBig(ethAddrBigInt)
 
 		for k, v := range storage {
-			keyStoragePosition := utils.KeyContractStorage(ethAddrBigIngArray, k)
+			keyStoragePosition, err := utils.KeyContractStorage(addr.String(), k)
+			if err != nil {
+				return nil, nil, err
+			}
 			valueBigInt := convertStringToBigInt(v)
 			keysBatchStorage = append(keysBatchStorage, &keyStoragePosition)
 			if valuesBatchStorage, isDelete, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, valueBigInt); err != nil {
