@@ -87,7 +87,11 @@ func (m *MemDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 
 	values := utils.NodeValue12{}
 	for i, v := range m.Db[k] {
-		values[i] = utils.ConvertHexToBigInt(v)
+		asUint64, err := utils.ConvertHexToUint64(v)
+		if err != nil {
+			return utils.NodeValue12{}, err
+		}
+		values[i] = asUint64
 	}
 
 	return values, nil
@@ -102,7 +106,7 @@ func (m *MemDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 
 	values := make([]string, 12)
 	for i, v := range value {
-		values[i] = utils.ConvertBigIntToHex(v)
+		values[i] = utils.ConvertUint64ToHex(v)
 	}
 
 	m.Db[k] = values

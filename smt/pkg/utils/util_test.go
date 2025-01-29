@@ -322,36 +322,36 @@ func TestNodeValueIsZero(t *testing.T) {
 		{
 			name: "Zero Key",
 			value: NodeValue12{
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
 			},
 			want: true,
 		},
 		{
 			name: "Non-Zero Key",
 			value: NodeValue12{
-				big.NewInt(1),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
-				big.NewInt(0),
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
 			},
 			want: false,
 		},
@@ -415,17 +415,12 @@ func TestIsFinalNode(t *testing.T) {
 	}{
 		{
 			name:  "Final Node",
-			value: NodeValue12{big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(1), big.NewInt(0), big.NewInt(0), big.NewInt(0)},
+			value: NodeValue12{0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
 			want:  true,
 		},
 		{
 			name:  "Not a Final Node",
-			value: NodeValue12{big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)},
-			want:  false,
-		},
-		{
-			name:  "Nil value at 9th element",
-			value: NodeValue12{big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, big.NewInt(0), big.NewInt(0), big.NewInt(0)},
+			value: NodeValue12{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 			want:  false,
 		},
 	}
@@ -495,12 +490,8 @@ func TestNodeValueFromBigIntArray(t *testing.T) {
 				big.NewInt(11),
 				big.NewInt(12),
 			},
-			expected: &NodeValue12{
-				big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(4),
-				big.NewInt(5), big.NewInt(6), big.NewInt(7), big.NewInt(8),
-				big.NewInt(9), big.NewInt(10), big.NewInt(11), big.NewInt(12),
-			},
-			err: nil,
+			expected: &NodeValue12{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+			err:      nil,
 		},
 		{
 			input: []*big.Int{
@@ -622,26 +613,26 @@ func TestScalarToNodeKey(t *testing.T) {
 
 func TestScalarToNodeValue(t *testing.T) {
 	// Define the array of original values
-	originalValues := [12]*big.Int{
-		big.NewInt(1),
-		big.NewInt(2),
-		big.NewInt(3),
-		big.NewInt(4),
-		big.NewInt(5),
-		big.NewInt(6),
-		big.NewInt(7),
-		big.NewInt(8),
-		big.NewInt(9),
-		big.NewInt(10),
-		big.NewInt(11),
-		big.NewInt(12),
+	originalValues := [12]uint64{
+		1,
+		2,
+		3,
+		4,
+		5,
+		6,
+		7,
+		8,
+		9,
+		10,
+		11,
+		12,
 	}
 
 	// Create a big scalar that is the concatenation of the 12 original values
 	scalar := new(big.Int)
 	for i := 11; i >= 0; i-- {
 		scalar.Lsh(scalar, 64)
-		scalar.Or(scalar, originalValues[i])
+		scalar.Or(scalar, big.NewInt(int64(originalValues[i])))
 	}
 
 	// Call the function to test
@@ -649,8 +640,8 @@ func TestScalarToNodeValue(t *testing.T) {
 
 	// Check that each element of the result matches the corresponding original value
 	for i := range originalValues {
-		if result[i].Cmp(originalValues[i]) != 0 {
-			t.Errorf("Element %d: expected %s, got %s", i, originalValues[i], result[i])
+		if result[i] != originalValues[i] {
+			t.Errorf("Element %d: expected %v, got %v", i, originalValues[i], result[i])
 		}
 	}
 }
@@ -954,6 +945,23 @@ func Test_CompareBigAndUint64ToHex(t *testing.T) {
 
 		if bigResult != test.output {
 			t.Errorf("big doesn't match hex for %v, expected %v but got %v", test.input, test.output, bigResult)
+		}
+	}
+}
+
+func Test_NodeValue12ToHex(t *testing.T) {
+	tests := []struct {
+		input  NodeValue12
+		output string
+	}{
+		{input: NodeValue12{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+			output: "000000000000000c000000000000000b000000000000000a000000000000000900000000000000080000000000000007000000000000000600000000000000050000000000000004000000000000000300000000000000020000000000000001"},
+	}
+
+	for _, test := range tests {
+		result := test.input.ToHex()
+		if result != test.output {
+			t.Errorf("expected %v but got %v", test.output, result)
 		}
 	}
 }
