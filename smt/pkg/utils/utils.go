@@ -39,7 +39,7 @@ var (
 	PoseidonAllZeroesHash [4]uint64
 )
 
-type NodeValue8 [8]*big.Int
+type NodeValue8 [8]uint64
 type NodeValue12 [12]*big.Int
 type NodeKey [4]uint64
 
@@ -106,7 +106,7 @@ func (nv *NodeValue8) IsZero() bool {
 	}
 
 	for i := 0; i < 8; i++ {
-		if nv[i] == nil || nv[i].Uint64() != 0 {
+		if nv[i] != 0 {
 			return false
 		}
 	}
@@ -122,9 +122,7 @@ func (nv *NodeValue8) SetHalfValue(values [4]uint64, part int) error {
 
 	partI := part * 4
 	for i, v := range values {
-		nlh := big.Int{}
-		nlh.SetUint64(v)
-		nv[i+partI] = &nlh
+		nv[i+partI] = v
 	}
 
 	return nil
@@ -135,10 +133,7 @@ func (nv *NodeValue8) ToUintArray() [8]uint64 {
 
 	if nv != nil {
 		for i := 0; i < 8; i++ {
-			if nv[i] != nil {
-				result[i] = nv[i].Uint64()
-			}
-			// if nv[i] is nil, result[i] will remain as its zero value (0)
+			result[i] = nv[i]
 		}
 	}
 	// if nv is nil, result will be an array of 8 zeros
@@ -151,10 +146,7 @@ func (nv *NodeValue8) ToUintArrayByPointer() *[8]uint64 {
 
 	if nv != nil {
 		for i := 0; i < 8; i++ {
-			if nv[i] != nil {
-				result[i] = nv[i].Uint64()
-			}
-			// if nv[i] is nil, result[i] will remain as its zero value (0)
+			result[i] = nv[i]
 		}
 	}
 	// if nv is nil, result will be an array of 8 zeros
@@ -163,7 +155,12 @@ func (nv *NodeValue8) ToUintArrayByPointer() *[8]uint64 {
 }
 
 func (nv *NodeValue8) ToHex() string {
-	return BigIntArrayToHex(nv[:])
+	bytes := make([]byte, 64)
+	for i := 0; i < 8; i++ {
+		// Write in reverse order: start from the end and work backwards
+		binary.BigEndian.PutUint64(bytes[(7-i)*8:], nv[i])
+	}
+	return hex.EncodeToString(bytes)
 }
 
 func (nv *NodeValue12) StripCapacity() [8]uint64 {
@@ -181,7 +178,7 @@ func (nv *NodeValue12) Get4to8() *NodeKey {
 }
 
 func (nv *NodeValue12) GetNodeValue8() *NodeValue8 {
-	return &NodeValue8{nv[0], nv[1], nv[2], nv[3], nv[4], nv[5], nv[6], nv[7]}
+	return &NodeValue8{nv[0].Uint64(), nv[1].Uint64(), nv[2].Uint64(), nv[3].Uint64(), nv[4].Uint64(), nv[5].Uint64(), nv[6].Uint64(), nv[7].Uint64()}
 }
 
 func (nv *NodeValue12) Get0to8() [8]uint64 {
@@ -234,8 +231,10 @@ func IsArrayUint64Empty(arr []uint64) bool {
 }
 
 func Value8FromBigIntArray(arr []*big.Int) NodeValue8 {
-	nv := [8]*big.Int{}
-	copy(nv[:], arr)
+	nv := [8]uint64{}
+	for i, v := range arr {
+		nv[i] = v.Uint64()
+	}
 	return nv
 }
 
@@ -263,15 +262,17 @@ func NodeValue8FromBigIntArray(arr []*big.Int) (*NodeValue8, error) {
 		return &NodeValue8{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue8{}
-	copy(nv[:], arr)
+	for i, v := range arr {
+		nv[i] = v.Uint64()
+	}
 	return &nv, nil
 }
 
 func BigIntArrayFromNodeValue8(nv *NodeValue8) []*big.Int {
 	arr := make([]*big.Int, 8)
-
-	copy(arr, nv[:])
-
+	for i, v := range nv {
+		arr[i] = big.NewInt(int64(v))
+	}
 	return arr
 }
 
@@ -300,10 +301,19 @@ func ConvertBigIntToHex(n *big.Int) string {
 	return "0x" + n.Text(16)
 }
 
+func ConvertUint64ToHex(n uint64) string {
+	return "0x" + strconv.FormatUint(n, 16)
+}
+
 func ConvertHexToBigInt(hex string) *big.Int {
 	hex = strings.TrimPrefix(hex, "0x")
 	n, _ := new(big.Int).SetString(hex, 16)
 	return n
+}
+
+func ConvertHexToUint64(hex string) (uint64, error) {
+	hex = strings.TrimPrefix(hex, "0x")
+	return strconv.ParseUint(hex, 16, 64)
 }
 
 // ConvertHexToUint64s converts a hex string into an array of uint64s - designed to offer the same functionality
@@ -426,13 +436,13 @@ func ScalarToNodeValue(scalarIn *big.Int) NodeValue12 {
 }
 
 func ScalarToNodeValue8(scalarIn *big.Int) NodeValue8 {
-	out := [8]*big.Int{}
+	out := [8]uint64{}
 	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
 	scalar := new(big.Int).Set(scalarIn)
 
 	for i := 0; i < 8; i++ {
 		value := new(big.Int).And(scalar, mask)
-		out[i] = value
+		out[i] = value.Uint64()
 		scalar.Rsh(scalar, 64)
 	}
 	return out

@@ -137,7 +137,11 @@ func (m *MemDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 
 	values := utils.NodeValue8{}
 	for i, v := range m.DbAccVal[k] {
-		values[i] = utils.ConvertHexToBigInt(v)
+		asUint64, err := utils.ConvertHexToUint64(v)
+		if err != nil {
+			return utils.NodeValue8{}, err
+		}
+		values[i] = asUint64
 	}
 
 	return values, nil
@@ -152,7 +156,7 @@ func (m *MemDb) InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) er
 
 	values := make([]string, 8)
 	for i, v := range value {
-		values[i] = utils.ConvertBigIntToHex(v)
+		values[i] = utils.ConvertUint64ToHex(v)
 	}
 
 	m.DbAccVal[k] = values
