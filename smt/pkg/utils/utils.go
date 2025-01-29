@@ -337,11 +337,6 @@ func ConvertHexToUint64Array(hexStr string) ([8]uint64, error) {
 	return result, nil
 }
 
-func ConvertHexToAddress(hex string) common.Address {
-	bigInt := ConvertHexToBigInt(hex)
-	return common.BigToAddress(bigInt)
-}
-
 func ArrayToScalar(array []uint64) *big.Int {
 	scalar := new(big.Int)
 	for i := len(array) - 1; i >= 0; i-- {

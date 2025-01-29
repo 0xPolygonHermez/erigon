@@ -185,7 +185,7 @@ func (s *SMT) InsertStorage(ethAddr string, storage *map[string]string, chm *map
 
 		sp, _ := utils.StrValToBigInt(k)
 
-		ks := utils.EncodeKeySource(utils.SC_STORAGE, utils.ConvertHexToAddress(ethAddr), common.BigToHash(sp))
+		ks := utils.EncodeKeySource(utils.SC_STORAGE, common.HexToAddress(ethAddr), common.BigToHash(sp))
 		err = s.Db.InsertKeySource(keyStoragePosition, ks)
 
 		if err != nil {
