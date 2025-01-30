@@ -265,8 +265,12 @@ func NodeValue12FromBigIntArray(arr []*big.Int) (*NodeValue12, error) {
 }
 
 func NodeValue8FromBigInt(value *big.Int) (*NodeValue8, error) {
-	x := ScalarToArrayBig(value)
-	return NodeValue8FromBigIntArray(x)
+	arr, err := ScalarToArrayUint64(value)
+	if err != nil {
+		return nil, err
+	}
+
+	return &NodeValue8{arr[0], arr[1], arr[2], arr[3], arr[4], arr[5], arr[6], arr[7]}, nil
 }
 
 func NodeValue8ToBigInt(value *NodeValue8) *big.Int {
@@ -587,33 +591,6 @@ func RemoveKeyBits(k NodeKey, nBits int) NodeKey {
 
 var mask = big.NewInt(4294967295)
 
-func ScalarToArrayBig(scalar *big.Int) []*big.Int {
-	r0 := new(big.Int).And(scalar, mask)
-
-	r1 := new(big.Int).Rsh(scalar, 32)
-	r1.And(r1, mask)
-
-	r2 := new(big.Int).Rsh(scalar, 64)
-	r2.And(r2, mask)
-
-	r3 := new(big.Int).Rsh(scalar, 96)
-	r3.And(r3, mask)
-
-	r4 := new(big.Int).Rsh(scalar, 128)
-	r4.And(r4, mask)
-
-	r5 := new(big.Int).Rsh(scalar, 160)
-	r5.And(r5, mask)
-
-	r6 := new(big.Int).Rsh(scalar, 192)
-	r6.And(r6, mask)
-
-	r7 := new(big.Int).Rsh(scalar, 224)
-	r7.And(r7, mask)
-
-	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7}
-}
-
 func ScalarToArrayUint64(scalar *big.Int) ([8]uint64, error) {
 	return ConvertHexToUint64Array(scalar.Text(16))
 }
@@ -730,7 +707,7 @@ func StrValToBigInt(v string) (*big.Int, bool) {
 
 func KeyContractStorage(ethAddr string, storagePosition string) (NodeKey, error) {
 	sp, _ := StrValToBigInt(storagePosition)
-	spArray, err := NodeValue8FromBigIntArray(ScalarToArrayBig(sp))
+	spArray, err := NodeValue8FromBigInt(sp)
 	if err != nil {
 		return NodeKey{}, err
 	}

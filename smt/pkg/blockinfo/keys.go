@@ -61,14 +61,24 @@ func KeyTxLogs(txIndex, logIndex *big.Int) (*utils.NodeKey, error) {
 		0,
 	}
 
-	logIndexArray := utils.ScalarToArrayBig(logIndex)
-	lia, err := utils.NodeValue8FromBigIntArray(logIndexArray)
+	liaArr, err := utils.ScalarToArrayUint64(logIndex)
 	if err != nil {
 		return nil, err
 	}
 
-	hk0 := utils.Hash(lia.ToUintArray(), utils.BranchCapacity)
-	hkRes := utils.Hash(key1.ToUintArray(), hk0)
+	lia := utils.NodeValue8{
+		liaArr[0],
+		liaArr[1],
+		liaArr[2],
+		liaArr[3],
+		liaArr[4],
+		liaArr[5],
+		liaArr[6],
+		liaArr[7],
+	}
+
+	hk0 := utils.Hash(lia, utils.BranchCapacity)
+	hkRes := utils.Hash(key1, hk0)
 
 	return &utils.NodeKey{hkRes[0], hkRes[1], hkRes[2], hkRes[3]}, nil
 }

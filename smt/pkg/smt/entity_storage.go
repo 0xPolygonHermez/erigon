@@ -366,8 +366,7 @@ func (s *SMT) DeleteKeySource(nodeKey *utils.NodeKey) error {
 func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
 	val := convertStringToBigInt(v)
 
-	x := utils.ScalarToArrayBig(val)
-	value, err := utils.NodeValue8FromBigIntArray(x)
+	value, err := utils.NodeValue8FromBigInt(val)
 	if err != nil {
 		return nil, [4]uint64{}, err
 	}

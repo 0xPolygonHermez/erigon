@@ -144,27 +144,6 @@ func TestConvertHexToBigInt(t *testing.T) {
 	}
 }
 
-func TestScalarToArrayBig(t *testing.T) {
-	scalar := big.NewInt(0x1234567890ABCDEF)
-
-	expected := []*big.Int{
-		big.NewInt(0x90ABCDEF),
-		big.NewInt(0x12345678),
-		big.NewInt(0),
-		big.NewInt(0),
-		big.NewInt(0),
-		big.NewInt(0),
-		big.NewInt(0),
-		big.NewInt(0),
-	}
-
-	result := ScalarToArrayBig(scalar)
-
-	if !reflect.DeepEqual(result, expected) {
-		t.Errorf("ScalarToArray = %v; want %v", result, expected)
-	}
-}
-
 func TestScalarToArrayUint64(t *testing.T) {
 	scalar := big.NewInt(0x1234567890ABCDEF)
 
@@ -187,23 +166,6 @@ func TestScalarToArrayUint64(t *testing.T) {
 
 	if !reflect.DeepEqual(result, expected) {
 		t.Errorf("ScalarToArray = %v; want %v", result, expected)
-	}
-}
-
-func BenchmarkScalarToArrayBig(b *testing.B) {
-	scalar := big.NewInt(0x1234567890ABCDEF)
-	for i := 0; i < b.N; i++ {
-		ScalarToArrayBig(scalar)
-	}
-}
-
-func TestArrayBigToScalar(t *testing.T) {
-	scalar := big.NewInt(0x1234567890ABCDEF)
-
-	result := ArrayBigToScalar(ScalarToArrayBig(scalar))
-
-	if !reflect.DeepEqual(result, scalar) {
-		t.Errorf("ScalarToArray = %v; want %v", result, scalar)
 	}
 }
 

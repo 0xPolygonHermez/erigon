@@ -179,13 +179,12 @@ func VerifyAndGetVal(stateRoot utils.NodeKey, proof []hexutility.Bytes, key util
 	}
 
 	v := new(big.Int).SetBytes(proof[len(proof)-1])
-	x := utils.ScalarToArrayBig(v)
-	nodeValue, err := utils.NodeValue8FromBigIntArray(x)
+	nodeValue, err := utils.NodeValue8FromBigInt(v)
 	if err != nil {
 		return nil, err
 	}
 
-	h := utils.Hash(nodeValue.ToUintArray(), utils.BranchCapacity)
+	h := utils.Hash(*nodeValue, utils.BranchCapacity)
 	if h != curRoot {
 		return nil, fmt.Errorf("root mismatch at level %d, expected %d, got %d", len(proof)-1, curRoot, h)
 	}

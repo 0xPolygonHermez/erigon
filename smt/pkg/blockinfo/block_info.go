@@ -201,13 +201,12 @@ func generateL1BlockHash(blockHash *common.Hash) (key *utils.NodeKey, value *uti
 }
 
 func bigInt2NodeVal8(val *big.Int) (*utils.NodeValue8, error) {
-	x := utils.ScalarToArrayBig(val)
-	v, err := utils.NodeValue8FromBigIntArray(x)
+	arr, err := utils.ScalarToArrayUint64(val)
 	if err != nil {
 		return nil, err
 	}
 
-	return v, nil
+	return &utils.NodeValue8{arr[0], arr[1], arr[2], arr[3], arr[4], arr[5], arr[6], arr[7]}, nil
 }
 
 func generateL2TxHash(txIndex *big.Int, l2TxHash *big.Int) (key *utils.NodeKey, value *utils.NodeValue8, err error) {

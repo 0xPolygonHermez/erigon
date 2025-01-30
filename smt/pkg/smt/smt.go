@@ -148,8 +148,7 @@ func (s *SMT) InsertBI(key *big.Int, value *big.Int) (*SMTResponse, error) {
 }
 
 func (s *SMT) InsertKA(key utils.NodeKey, value *big.Int) (*SMTResponse, error) {
-	x := utils.ScalarToArrayBig(value)
-	v, err := utils.NodeValue8FromBigIntArray(x)
+	v, err := utils.NodeValue8FromBigInt(value)
 	if err != nil {
 		return nil, err
 	}

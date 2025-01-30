@@ -42,8 +42,7 @@ func TestBatchSimpleInsert(t *testing.T) {
 
 	for i := range keysRaw {
 		k := utils.ScalarToNodeKey(keysRaw[i])
-		vArray := utils.ScalarToArrayBig(valuesRaw[i])
-		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+		v, _ := utils.NodeValue8FromBigInt(valuesRaw[i])
 
 		keyPointers = append(keyPointers, &k)
 		valuePointers = append(valuePointers, v)
@@ -91,8 +90,7 @@ func TestBatchRawInsert(t *testing.T) {
 		rawValue := big.NewInt(rand.Int63())
 
 		k := utils.ScalarToNodeKey(rawKey)
-		vArray := utils.ScalarToArrayBig(rawValue)
-		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+		v, _ := utils.NodeValue8FromBigInt(rawValue)
 
 		keysForBatch = append(keysForBatch, &k)
 		valuesForBatch = append(valuesForBatch, v)
@@ -131,8 +129,7 @@ func TestBatchRawInsert(t *testing.T) {
 	sizeToDelete := 1 << 14
 	for i := 0; i < sizeToDelete; i++ {
 		rawValue := big.NewInt(0)
-		vArray := utils.ScalarToArrayBig(rawValue)
-		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+		v, _ := utils.NodeValue8FromBigInt(rawValue)
 
 		deleteIndex := rand.Intn(size)
 
@@ -256,8 +253,7 @@ func batchInsert(tree *smt.SMT, key, val []*big.Int) {
 
 	for i := range key {
 		k := utils.ScalarToNodeKey(key[i])
-		vArray := utils.ScalarToArrayBig(val[i])
-		v, _ := utils.NodeValue8FromBigIntArray(vArray)
+		v, _ := utils.NodeValue8FromBigInt(val[i])
 
 		keyPointers = append(keyPointers, &k)
 		valuePointers = append(valuePointers, v)
