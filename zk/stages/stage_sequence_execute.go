@@ -281,7 +281,11 @@ func sequencingBatchStep(
 			if !batchState.resequenceBatchJob.HasMoreBlockToProcess() {
 				for {
 					if pending, _ := streamWriter.legacyVerifier.HasPendingVerifications(); pending {
-						streamWriter.CommitNewUpdates()
+						_, _, err = streamWriter.CommitNewUpdates()
+						if err != nil {
+							log.Error(fmt.Sprintf("[%s] Error committing new updates", logPrefix), "error", err)
+						}
+
 						time.Sleep(1 * time.Second)
 					} else {
 						break

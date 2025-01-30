@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
+
 	"math/big"
 	"net/http"
 	"strconv"
@@ -13,11 +15,11 @@ import (
 	"net/url"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	jsonClient "github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
 	jsonTypes "github.com/ledgerwatch/erigon/zkevm/jsonrpc/types"
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 )
 
 const (
@@ -58,7 +60,7 @@ func RpcStateRootByTxNo(rpcUrl string, txNo *big.Int) (*common.Hash, error) {
 
 	defer response.Body.Close()
 
-	responseBytes, err := ioutil.ReadAll(response.Body)
+	responseBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +92,7 @@ func DumpDb(eridb *db2.EriDb) {
 		fmt.Println(err)
 	}
 	// write to file
-	if err := ioutil.WriteFile("db.json", op, 0600); err != nil {
+	if err := os.WriteFile("db.json", op, 0600); err != nil {
 		fmt.Println(err)
 	}
 }
@@ -120,10 +122,13 @@ func RpcGetHighestTxNo(rpcEndpoint string) (uint64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
 
 	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err = json.Unmarshal(body, &result); err != nil {
 		return 0, err
 	}
 

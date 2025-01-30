@@ -14,10 +14,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/types"
 )
 
-const (
-	logCountPolicyTransactions = "log_count_output" // config variable name
-)
-
 // Operation
 type Operation byte
 
@@ -575,26 +571,28 @@ func ListContentAtACL(ctx context.Context, db kv.RwDB) ([]string, error) {
 		buffer.WriteString(fmt.Sprint(key, config, "\n"))
 	}
 
-	err := db.View(ctx, func(tx kv.Tx) error {
+	var err error
+	if err = db.View(ctx, func(tx kv.Tx) error {
 		// Config table
 		buffer.WriteString("\nConfig\n")
-		err := tx.ForEach(Config, nil, func(k, v []byte) error {
+		if err = tx.ForEach(Config, nil, func(k, v []byte) error {
 			buffer.WriteString(fmt.Sprintf("Key: %s, Value: %s\n", string(k), string(v)))
 			bufferConfig.WriteString(fmt.Sprintf("Key: %s, Value: %s\n", string(k), string(v)))
 			return nil
-		})
+		}); err != nil {
+			return err
+		}
 
 		// BlockList table
 		var BlockListContent strings.Builder
-		err = tx.ForEach(BlockList, nil, func(k, v []byte) error {
+		if err = tx.ForEach(BlockList, nil, func(k, v []byte) error {
 			BlockListContent.WriteString(fmt.Sprintf(
 				"Key: %s, Value: {\n%s\n}\n",
 				hex.EncodeToString(k),
 				policyMapping(v, policiesList),
 			))
 			return nil
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		if BlockListContent.String() != "" {
@@ -612,15 +610,14 @@ func ListContentAtACL(ctx context.Context, db kv.RwDB) ([]string, error) {
 		}
 		// Allowlist table
 		var AllowlistContent strings.Builder
-		err = tx.ForEach(Allowlist, nil, func(k, v []byte) error {
+		if err = tx.ForEach(Allowlist, nil, func(k, v []byte) error {
 			AllowlistContent.WriteString(fmt.Sprintf(
 				"Key: %s, Value: {\n%s\n}\n",
 				hex.EncodeToString(k),
 				policyMapping(v, policiesList),
 			))
 			return nil
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		if AllowlistContent.String() != "" {
@@ -638,7 +635,9 @@ func ListContentAtACL(ctx context.Context, db kv.RwDB) ([]string, error) {
 		}
 
 		return err
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	combinedBuffers = append(combinedBuffers, buffer.String())
 	combinedBuffers = append(combinedBuffers, bufferConfig.String())
@@ -656,7 +655,10 @@ func SetMode(ctx context.Context, aclDB kv.RwDB, mode string) error {
 	}
 
 	return aclDB.Update(ctx, func(tx kv.RwTx) error {
-		err := tx.Put(Config, []byte(modeKey), []byte(m))
+		err = tx.Put(Config, []byte(modeKey), []byte(m))
+		if err != nil {
+			return err
+		}
 
 		// Timestamp bytes + single byte.
 		mb := ResolveACLTypeToBinary(mode)

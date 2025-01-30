@@ -201,7 +201,9 @@ func handleRequest(db kv.RwDB) http.HandlerFunc {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("X-Cache-Status", "HIT")
 				w.Write(cachedResponse)
-				tx.Commit()
+				if err = tx.Commit(); err != nil {
+					return
+				}
 				return
 			}
 			tx.Rollback()
@@ -250,11 +252,13 @@ func handleRequest(db kv.RwDB) http.HandlerFunc {
 							return
 						}
 						defer tx.Rollback()
-						if err := saveToCache(tx, cacheKey, responseBody, cacheDuration); err != nil {
+						if err = saveToCache(tx, cacheKey, responseBody, cacheDuration); err != nil {
 							http.Error(w, "Failed to save to cache", http.StatusInternalServerError)
 							return
 						}
-						tx.Commit()
+						if err = tx.Commit(); err != nil {
+							return
+						}
 					}
 				}
 			} else {

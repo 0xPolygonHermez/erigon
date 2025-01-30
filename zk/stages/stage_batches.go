@@ -157,10 +157,13 @@ func SpawnStageBatches(
 	if cfg.zkCfg.DebugLimit > 0 {
 		finishProg, err := stages.GetStageProgress(tx, stages.Finish)
 		if err != nil {
+			return err
 		}
 		if finishProg >= cfg.zkCfg.DebugLimit {
 			log.Info(fmt.Sprintf("[%s] Debug limit reached", logPrefix), "finishProg", finishProg, "debugLimit", cfg.zkCfg.DebugLimit)
-			syscall.Kill(os.Getpid(), syscall.SIGINT)
+			if err = syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+				return err
+			}
 		}
 
 		if stageProgressBlockNo >= cfg.zkCfg.DebugLimit {
@@ -655,13 +658,15 @@ func PruneBatchesStage(s *stagedsync.PruneState, tx kv.RwTx, cfg BatchesCfg, ctx
 		return fmt.Errorf("TruncateBlocks: %w", err)
 	}
 
-	if err := hermezDb.DeleteForkIds(0, toBlock); err != nil {
+	if err = hermezDb.DeleteForkIds(0, toBlock); err != nil {
 		return fmt.Errorf("DeleteForkIds: %w", err)
 	}
-	if err := hermezDb.DeleteBlockBatches(0, toBlock); err != nil {
+
+	if err = hermezDb.DeleteBlockBatches(0, toBlock); err != nil {
 		return fmt.Errorf("DeleteBlockBatches: %w", err)
 	}
-	if hermezDb.DeleteBlockGlobalExitRoots(0, toBlock); err != nil {
+
+	if err = hermezDb.DeleteBlockGlobalExitRoots(0, toBlock); err != nil {
 		return fmt.Errorf("DeleteBlockGlobalExitRoots: %w", err)
 	}
 

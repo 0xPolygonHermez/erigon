@@ -153,7 +153,8 @@ func store(t *testing.T, dbPath string) *TxPool {
 	cacheView, err := pTarget._stateCache.View(context.Background(), tx)
 	assert.NilError(t, err)
 
-	tx.CreateBucket(TablePoolLimbo)
+	err = tx.CreateBucket(TablePoolLimbo)
+	assert.NilError(t, err)
 	err = pTarget.fromDBLimbo(context.Background(), tx, cacheView)
 	assert.NilError(t, err)
 	err = pTarget.fromDBLimbo(context.Background(), tx, cacheView)

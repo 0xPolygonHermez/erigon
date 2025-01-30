@@ -54,7 +54,7 @@ func TestStreamClientReadHeaderEntry(t *testing.T) {
 			c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
 			server, conn := net.Pipe()
 			defer server.Close()
-			defer c.Stop()
+			defer require.NoError(t, c.Stop())
 
 			c.conn = conn
 			go func() {
@@ -121,7 +121,7 @@ func TestStreamClientReadResultEntry(t *testing.T) {
 			c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
 			server, conn := net.Pipe()
 			defer server.Close()
-			defer c.Stop()
+			defer require.NoError(t, c.Stop())
 
 			c.conn = conn
 			go func() {
@@ -193,7 +193,7 @@ func TestStreamClientReadFileEntry(t *testing.T) {
 			c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
 			server, conn := net.Pipe()
 			defer server.Close()
-			defer c.Stop()
+			defer require.NoError(t, c.Stop())
 
 			c.conn = conn
 			go func() {

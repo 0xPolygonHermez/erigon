@@ -1193,10 +1193,10 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 	if found != nil {
 		tipThreshold := uint256.NewInt(0)
 		tipThreshold = tipThreshold.Mul(&found.Tx.Tip, uint256.NewInt(100+p.cfg.PriceBump))
-		tipThreshold.Div(tipThreshold, u256.N100)
+		tipThreshold.Div(tipThreshold, (*uint256.Int)(u256.N100))
 		feecapThreshold := uint256.NewInt(0)
 		feecapThreshold.Mul(&found.Tx.FeeCap, uint256.NewInt(100+p.cfg.PriceBump))
-		feecapThreshold.Div(feecapThreshold, u256.N100)
+		feecapThreshold.Div(feecapThreshold, (*uint256.Int)(u256.N100))
 		if mt.Tx.Tip.Cmp(tipThreshold) < 0 || mt.Tx.FeeCap.Cmp(feecapThreshold) < 0 {
 			// Both tip and feecap need to be larger than previously to replace the transaction
 			// In case if the transation is stuck, "poke" it to rebroadcast
@@ -1335,7 +1335,7 @@ func removeMined(byNonce *BySenderAndNonce, minedTxs []*types.TxSlot, pending *P
 // promote reasserts invariants of the subpool and returns the list of transactions that ended up
 // being promoted to the pending or basefee pool, for re-broadcasting
 func promote(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint64, discard func(*metaTx, DiscardReason), announcements *types.Announcements) {
-	// Demote worst transactions that do not qualify for pending sub pool anymore, to other sub pools, or discard
+	// Demote the worst transactions that do not qualify for pending sub pool anymore, to other sub pools, or discard
 	for worst := pending.Worst(); pending.Len() > 0 && (worst.subPool < BaseFeePoolBits || worst.minFeeCap.Cmp(uint256.NewInt(pendingBaseFee)) < 0); worst = pending.Worst() {
 		if worst.subPool >= BaseFeePoolBits {
 			tx := pending.PopWorst()
@@ -1348,14 +1348,14 @@ func promote(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint
 		}
 	}
 
-	// Promote best transactions from base fee pool to pending pool while they qualify
+	// Promote the best transactions from base fee pool to pending pool while they qualify
 	for best := baseFee.Best(); baseFee.Len() > 0 && best.subPool >= BaseFeePoolBits && best.minFeeCap.Cmp(uint256.NewInt(pendingBaseFee)) >= 0; best = baseFee.Best() {
 		tx := baseFee.PopBest()
 		announcements.Append(tx.Tx.Type, tx.Tx.Size, tx.Tx.IDHash[:])
 		pending.Add(tx)
 	}
 
-	// Demote worst transactions that do not qualify for base fee pool anymore, to queued sub pool, or discard
+	// Demote the worst transactions that do not qualify for base fee pool anymore, to queued sub pool, or discard
 	for worst := baseFee.Worst(); baseFee.Len() > 0 && worst.subPool < BaseFeePoolBits; worst = baseFee.Worst() {
 		if worst.subPool >= QueuedPoolBits {
 			queued.Add(baseFee.PopWorst())
@@ -1364,7 +1364,7 @@ func promote(pending *PendingPool, baseFee, queued *SubPool, pendingBaseFee uint
 		}
 	}
 
-	// Promote best transactions from the queued pool to either pending or base fee pool, while they qualify
+	// Promote the best transactions from the queued pool to either pending or base fee pool, while they qualify
 	for best := queued.Best(); queued.Len() > 0 && best.subPool >= BaseFeePoolBits; best = queued.Best() {
 		if best.minFeeCap.Cmp(uint256.NewInt(pendingBaseFee)) >= 0 {
 			tx := queued.PopBest()
@@ -1499,7 +1499,7 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 							continue
 						}
 
-						// Empty rlp can happen if a transaction we want to broadcase has just been mined, for example
+						// Empty rlp can happen if a transaction we want to broadcast has just been mined, for example
 						slotsRlp = append(slotsRlp, slotRlp)
 						if p.IsLocal(hash) {
 							localTxTypes = append(localTxTypes, t)
@@ -1581,7 +1581,6 @@ func (p *TxPool) flushLocked(tx kv.RwTx) (err error) {
 				delete(p.senders.senderIDs, addr)
 			}
 		}
-		//fmt.Printf("del:%d,%d,%d\n", mt.Tx.senderID, mt.Tx.nonce, mt.Tx.tip)
 		has, err := tx.Has(kv.PoolTransaction, idHash)
 		if err != nil {
 			return err
@@ -2481,11 +2480,11 @@ func (mt *metaTx) worse(than *metaTx, pendingBaseFee uint256.Int) bool {
 	return mt.timestamp > than.timestamp
 }
 
-func (p BestQueue) Len() int { return len(p.ms) }
-func (p BestQueue) Less(i, j int) bool {
+func (p *BestQueue) Len() int { return len(p.ms) }
+func (p *BestQueue) Less(i, j int) bool {
 	return p.ms[i].better(p.ms[j], *uint256.NewInt(p.pendingBastFee))
 }
-func (p BestQueue) Swap(i, j int) {
+func (p *BestQueue) Swap(i, j int) {
 	p.ms[i], p.ms[j] = p.ms[j], p.ms[i]
 	p.ms[i].bestIndex = i
 	p.ms[j].bestIndex = j
@@ -2513,11 +2512,11 @@ type WorstQueue struct {
 	pendingBaseFee uint64
 }
 
-func (p WorstQueue) Len() int { return len(p.ms) }
-func (p WorstQueue) Less(i, j int) bool {
+func (p *WorstQueue) Len() int { return len(p.ms) }
+func (p *WorstQueue) Less(i, j int) bool {
 	return p.ms[i].worse(p.ms[j], *uint256.NewInt(p.pendingBaseFee))
 }
-func (p WorstQueue) Swap(i, j int) {
+func (p *WorstQueue) Swap(i, j int) {
 	p.ms[i], p.ms[j] = p.ms[j], p.ms[i]
 	p.ms[i].worstIndex = i
 	p.ms[j].worstIndex = j
