@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	poseidon "github.com/gateway-fm/vectorized-poseidon-gold/src/vectorizedposeidongold"
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
 	"golang.org/x/exp/slices"
@@ -334,9 +335,13 @@ func ConvertArrayToHex(arr []uint64) string {
 }
 
 func ConvertHexToBigInt(hex string) *big.Int {
-	hex = strings.TrimPrefix(hex, "0x")
-	n, _ := new(big.Int).SetString(hex, 16)
-	return n
+	// hex = strings.TrimPrefix(hex, "0x")
+	if !strings.HasPrefix(hex, "0x") {
+		hex = "0x" + hex
+	}
+	result := uint256.NewInt(0)
+	result.SetFromHex(hex)
+	return result.ToBig()
 }
 
 func ConvertHexToUint64(hex string) (uint64, error) {
@@ -417,22 +422,21 @@ func ArrayToBytes(array []uint64) []byte {
 }
 
 func ScalarToArray(scalar *big.Int) []uint64 {
-	scalar = new(big.Int).Set(scalar)
-	mask := new(big.Int)
-	mask.SetString("FFFFFFFFFFFFFFFF", 16)
+	// Convert input big.Int to uint256
+	u256 := uint256.NewInt(0)
+	u256.SetFromBig(scalar)
 
-	r0 := new(big.Int).And(scalar, mask)
+	// Create result array
+	result := make([]uint64, 4)
 
-	r1 := new(big.Int).Rsh(scalar, 64)
-	r1 = new(big.Int).And(r1, mask)
+	// Extract each 64-bit chunk directly from uint256
+	// No need for masking since Uint64() only returns the lowest 64 bits
+	for i := 0; i < 4; i++ {
+		result[i] = u256.Uint64()
+		u256.Rsh(u256, 64)
+	}
 
-	r2 := new(big.Int).Rsh(scalar, 128)
-	r2 = new(big.Int).And(r2, mask)
-
-	r3 := new(big.Int).Rsh(scalar, 192)
-	r3 = new(big.Int).And(r3, mask)
-
-	return []uint64{r0.Uint64(), r1.Uint64(), r2.Uint64(), r3.Uint64()}
+	return result
 }
 
 func ScalarToNodeKey(s *big.Int) NodeKey {
@@ -698,11 +702,24 @@ func KeyBig(k *big.Int, c int) (*NodeKey, error) {
 }
 
 func StrValToBigInt(v string) (*big.Int, bool) {
+	u256 := uint256.NewInt(0)
+	var err error
+
 	if strings.HasPrefix(v, "0x") {
-		return new(big.Int).SetString(v[2:], 16)
+		v = strings.TrimLeft(v[2:], "0")
+		if v == "" {
+			v = "0" // Handle case where input was all zeros
+		}
+		err = u256.SetFromHex("0x" + v)
+	} else {
+		err = u256.SetFromDecimal(v)
 	}
 
-	return new(big.Int).SetString(v, 10)
+	if err != nil {
+		return nil, false
+	}
+
+	return u256.ToBig(), true
 }
 
 func KeyContractStorage(ethAddr string, storagePosition string) (NodeKey, error) {
@@ -759,8 +776,6 @@ func HashContractBytecodeBigInt(bc string) *big.Int {
 	var elementsToHash []uint64
 	var in [8]uint64
 	var capacity [4]uint64
-	scalar := new(big.Int)
-	tmpScalar := new(big.Int)
 	var byteToAdd string
 	for i := 0; i < numHashes; i++ {
 		elementsToHash = tmpHash[:]
@@ -781,8 +796,14 @@ func HashContractBytecodeBigInt(bc string) *big.Int {
 			counter += 1
 
 			if counter == BYTECODE_BYTES_ELEMENT {
-				tmpScalar, _ = scalar.SetString(tmpElem, 16)
-				elementsToHash = append(elementsToHash, tmpScalar.Uint64())
+				tmpElem = strings.TrimLeft(tmpElem, "0")
+				if tmpElem == "" {
+					tmpElem = "0"
+				}
+				val := hexStringToUint64(tmpElem)
+
+				elementsToHash = append(elementsToHash, val)
+
 				tmpElem = ""
 				counter = 0
 			}
@@ -814,6 +835,24 @@ func binaryStringToUint64(binary string) (uint64, error) {
 		return 0, err
 	}
 	return num, nil
+}
+
+// hexStringToUint64 converts a hex string to a uint64 - designed to be faster than strconv.ParseUint for known hex strings
+func hexStringToUint64(hex string) uint64 {
+	var val uint64
+	for i := 0; i < len(hex); i++ {
+		val *= 16
+		c := hex[i]
+		switch {
+		case c >= '0' && c <= '9':
+			val += uint64(c - '0')
+		case c >= 'a' && c <= 'f':
+			val += uint64(c - 'a' + 10)
+		case c >= 'A' && c <= 'F':
+			val += uint64(c - 'A' + 10)
+		}
+	}
+	return val
 }
 
 func SortNodeKeysBitwiseAsc(keys []NodeKey) {

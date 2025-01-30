@@ -978,3 +978,33 @@ func Test_ArrayToScalar_Hex(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkConvertHexToBigInt(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		ConvertHexToBigInt("0x1234567890ABCDEF")
+	}
+}
+
+func Test_StrValToBigInt(t *testing.T) {
+	tests := []struct {
+		input  string
+		output *big.Int
+	}{
+		{input: "0x1234567890ABCDEF", output: big.NewInt(0x1234567890ABCDEF)},
+		{input: "0x0000", output: big.NewInt(0)},
+		{input: "1234567890", output: big.NewInt(1234567890)},
+		{input: "0", output: big.NewInt(0)},
+		{input: "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", output: big.NewInt(0)},
+	}
+
+	for _, test := range tests {
+		result, ok := StrValToBigInt(test.input)
+		if !ok {
+			t.Errorf("expected %v but got %v", test.output, result)
+		}
+		if !bytes.Equal(result.Bytes(), test.output.Bytes()) {
+			t.Errorf("expected %v but got %v", test.output, result)
+		}
+	}
+}

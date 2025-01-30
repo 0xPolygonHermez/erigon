@@ -327,7 +327,10 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			if err != nil {
 				return nil, nil, err
 			}
-			valueBigInt := convertStringToBigInt(v)
+			valueBigInt, ok := utils.StrValToBigInt(v)
+			if !ok {
+				return nil, nil, fmt.Errorf("failed to convert string to big int")
+			}
 			keysBatchStorage = append(keysBatchStorage, &keyStoragePosition)
 			if valuesBatchStorage, isDelete, err = appendToValuesBatchStorageBigInt(valuesBatchStorage, valueBigInt); err != nil {
 				return nil, nil, err
@@ -364,7 +367,10 @@ func (s *SMT) DeleteKeySource(nodeKey *utils.NodeKey) error {
 }
 
 func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
-	val := convertStringToBigInt(v)
+	val, ok := utils.StrValToBigInt(v)
+	if !ok {
+		return nil, [4]uint64{}, fmt.Errorf("failed to convert string to big int")
+	}
 
 	value, err := utils.NodeValue8FromBigInt(val)
 	if err != nil {
@@ -374,17 +380,6 @@ func calcHashVal(v string) (*utils.NodeValue8, [4]uint64, error) {
 	h := utils.Hash(value.ToUintArray(), utils.BranchCapacity)
 
 	return value, h, nil
-}
-
-func convertStringToBigInt(v string) *big.Int {
-	base := 10
-	if strings.HasPrefix(v, "0x") {
-		v = strings.TrimPrefix(v, "0x")
-		base = 16
-	}
-
-	val, _ := new(big.Int).SetString(v, base)
-	return val
 }
 
 func appendToValuesBatchStorageBigInt(valuesBatchStorage []*utils.NodeValue8, value *big.Int) ([]*utils.NodeValue8, bool, error) {
