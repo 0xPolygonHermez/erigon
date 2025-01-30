@@ -322,6 +322,13 @@ func ConvertUint64ToHex(n uint64) string {
 	return "0x" + strconv.FormatUint(n, 16)
 }
 
+func ConvertArrayToHex(arr []uint64) string {
+	hexVal := hex.EncodeToString(ArrayToBytes(arr))
+	// big int .Text function trims leading zeros from the hex string
+	hexVal = strings.TrimPrefix(hexVal, "0")
+	return "0x" + hexVal
+}
+
 func ConvertHexToBigInt(hex string) *big.Int {
 	hex = strings.TrimPrefix(hex, "0x")
 	n, _ := new(big.Int).SetString(hex, 16)
@@ -375,6 +382,34 @@ func ArrayToScalar(array []uint64) *big.Int {
 		scalar.Add(scalar, new(big.Int).SetUint64(array[i]))
 	}
 	return scalar
+}
+
+// ArrayToBytes converts an array of uint64s to a byte array, matching the behavior of big.Int.Bytes()
+// and avoids the allocation headache of big.Int
+func ArrayToBytes(array []uint64) []byte {
+	// Each uint64 needs 8 bytes
+	buf := make([]byte, len(array)*8)
+
+	// Convert each uint64 to bytes in the same order as ArrayToScalar
+	for i := 0; i < len(array); i++ {
+		pos := (len(array) - 1 - i) * 8
+		binary.BigEndian.PutUint64(buf[pos:pos+8], array[i])
+	}
+
+	// Trim leading zeros to match big.Int.Bytes() behavior
+	for i := 0; i < len(buf); i++ {
+		if buf[i] != 0 {
+			return buf[i:]
+		}
+	}
+
+	// If all bytes are zero, return a single zero byte
+	// to match big.Int.Bytes() behavior
+	if len(buf) > 0 {
+		return []byte{0}
+	}
+
+	return buf
 }
 
 func ScalarToArray(scalar *big.Int) []uint64 {

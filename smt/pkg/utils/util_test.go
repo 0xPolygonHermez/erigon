@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -962,6 +963,56 @@ func Test_NodeValue12ToHex(t *testing.T) {
 		result := test.input.ToHex()
 		if result != test.output {
 			t.Errorf("expected %v but got %v", test.output, result)
+		}
+	}
+}
+
+func Test_ArrayToScalar_Bytes(t *testing.T) {
+	tests := []struct {
+		input  []uint64
+		output []byte
+	}{
+		{input: []uint64{1, 2, 3, 4}, output: []byte{4, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1}},
+	}
+
+	for _, test := range tests {
+		result := ArrayToScalar(test.input)
+		bigResult := result.Bytes()
+
+		bytesResult := ArrayToBytes(test.input)
+
+		if !bytes.Equal(bigResult, test.output) {
+			t.Errorf("expected %v but got %v", test.output, bigResult)
+		}
+
+		if !bytes.Equal(bytesResult, test.output) {
+			t.Errorf("expected %v but got %v", test.output, bytesResult)
+		}
+	}
+}
+
+func Test_ArrayToScalar_Hex(t *testing.T) {
+	tests := []struct {
+		input  []uint64
+		output string
+	}{
+		{input: []uint64{1, 2, 3, 4}, output: "0x4000000000000000300000000000000020000000000000001"},
+		{input: []uint64{1, 2, 3, 4, 5, 6, 7, 8}, output: "0x80000000000000007000000000000000600000000000000050000000000000004000000000000000300000000000000020000000000000001"},
+		{input: []uint64{1, 2, 3, 4, 5, 6, 7, 87654321}, output: "0x5397fb10000000000000007000000000000000600000000000000050000000000000004000000000000000300000000000000020000000000000001"},
+	}
+
+	for _, test := range tests {
+		result := ArrayToScalar(test.input)
+		bigHex := ConvertBigIntToHex(result)
+
+		uintHex := ConvertArrayToHex(test.input)
+
+		if bigHex != test.output {
+			t.Errorf("big hex expected %v but got %v", test.output, bigHex)
+		}
+
+		if uintHex != test.output {
+			t.Errorf("uint hex expected %v but got %v", test.output, uintHex)
 		}
 	}
 }

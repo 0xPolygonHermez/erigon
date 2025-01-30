@@ -83,9 +83,8 @@ func assertHashToKeyDbStrcture(t *testing.T, smtBatch *smt.SMT, nodeHash utils.N
 		assert.Equal(t, found, true)
 
 		if testMetadata {
-			keyConc = utils.ArrayToScalar(nodeKey[:])
-
-			_, found = memDb.DbKeySource[keyConc.String()]
+			k := utils.ConvertArrayToHex(nodeKey[:])
+			_, found = memDb.DbKeySource[k]
 			assert.Equal(t, found, true)
 		}
 		return 1

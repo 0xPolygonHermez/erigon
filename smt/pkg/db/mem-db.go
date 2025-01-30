@@ -81,9 +81,7 @@ func (m *MemDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 
 	values := utils.NodeValue12{}
 	for i, v := range m.Db[k] {
@@ -101,8 +99,7 @@ func (m *MemDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	m.lock.Lock()         // Lock for writing
 	defer m.lock.Unlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 
 	values := make([]string, 12)
 	for i, v := range value {
@@ -125,8 +122,7 @@ func (m *MemDb) DeleteByNodeKey(key utils.NodeKey) error {
 	m.lock.Lock()         // Lock for writing
 	defer m.lock.Unlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 	delete(m.Db, k)
 	return nil
 }
@@ -135,9 +131,7 @@ func (m *MemDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 
 	values := utils.NodeValue8{}
 	for i, v := range m.DbAccVal[k] {
@@ -155,8 +149,7 @@ func (m *MemDb) InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) er
 	m.lock.Lock()         // Lock for writing
 	defer m.lock.Unlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 
 	values := make([]string, 8)
 	for i, v := range value {
@@ -171,9 +164,9 @@ func (m *MemDb) InsertKeySource(key utils.NodeKey, value []byte) error {
 	m.lock.Lock()         // Lock for writing
 	defer m.lock.Unlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertArrayToHex(key[:])
 
-	m.DbKeySource[keyConc.String()] = value
+	m.DbKeySource[k] = value
 	return nil
 }
 
@@ -181,9 +174,9 @@ func (m *MemDb) DeleteKeySource(key utils.NodeKey) error {
 	m.lock.Lock()         // Lock for writing
 	defer m.lock.Unlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertArrayToHex(key[:])
 
-	delete(m.DbKeySource, keyConc.String())
+	delete(m.DbKeySource, k)
 	return nil
 }
 
@@ -191,9 +184,9 @@ func (m *MemDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
+	k := utils.ConvertArrayToHex(key[:])
 
-	s, ok := m.DbKeySource[keyConc.String()]
+	s, ok := m.DbKeySource[k]
 
 	if !ok {
 		return nil, ErrNotFound
@@ -206,12 +199,11 @@ func (m *MemDb) InsertHashKey(key utils.NodeKey, value utils.NodeKey) error {
 	m.lock.Lock()         // Lock for writing
 	defer m.lock.Unlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 
-	valConc := utils.ArrayToScalar(value[:])
+	valBytes := utils.ArrayToBytes(value[:])
 
-	m.DbHashKey[k] = valConc.Bytes()
+	m.DbHashKey[k] = valBytes
 	return nil
 }
 
@@ -219,8 +211,7 @@ func (m *MemDb) DeleteHashKey(key utils.NodeKey) error {
 	m.lock.Lock()         // Lock for writing
 	defer m.lock.Unlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 
 	delete(m.DbHashKey, k)
 	return nil
@@ -230,8 +221,7 @@ func (m *MemDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
 	m.lock.RLock()         // Lock for reading
 	defer m.lock.RUnlock() // Make sure to unlock when done
 
-	keyConc := utils.ArrayToScalar(key[:])
-	k := utils.ConvertBigIntToHex(keyConc)
+	k := utils.ConvertArrayToHex(key[:])
 
 	s, ok := m.DbHashKey[k]
 
