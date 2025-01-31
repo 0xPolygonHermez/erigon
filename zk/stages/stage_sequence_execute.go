@@ -288,6 +288,7 @@ func SpawnSequencingStage(
 				badTxHashes := make([]common.Hash, 0)
 				minedTxHashes := make([]common.Hash, 0)
 
+				badTxIndexes := make([]int, 0)
 			InnerLoopTransactions:
 				for i, transaction := range batchState.blockState.transactionsForInclusion {
 					// quick check if we should stop handling transactions
@@ -326,6 +327,7 @@ func SpawnSequencingStage(
 						// we mark it for being discarded
 						log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
 						badTxHashes = append(badTxHashes, txHash)
+						badTxIndexes = append(badTxIndexes, i)
 						batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
 					}
 
@@ -406,6 +408,12 @@ func SpawnSequencingStage(
 					}
 
 					break OuterLoopTransactions
+				}
+
+				// remove transactions that have been marked for removal
+				for i := len(badTxIndexes) - 1; i >= 0; i-- {
+					idx := badTxIndexes[i]
+					batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion[:idx], batchState.blockState.transactionsForInclusion[idx+1:]...)
 				}
 
 				if batchState.isLimboRecovery() {
