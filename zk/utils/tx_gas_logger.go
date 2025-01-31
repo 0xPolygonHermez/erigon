@@ -49,19 +49,27 @@ func NewTxGasLogger(logInterval time.Duration, logBlock, total, gasLimit uint64,
 
 func (g *TxGasLogger) Start() {
 	go func() {
-		for range g.logEvery.C {
-			g.logProgress()
-			g.logTx = g.lastLogTx
-			g.logBlock = g.currentBlockNum
-			g.logTime = time.Now()
-			g.gas = 0
-			if g.tx != nil {
-				g.tx.CollectMetrics()
-			}
-			g.metric.SetUint64(g.logBlock)
+		for {
+			func() {
+				// if tx gets committed during metrics collection, ensure we recover and start logging again
+				defer func() {
+					recover()
+				}()
+				for range g.logEvery.C {
+					g.logProgress()
+					g.logTx = g.lastLogTx
+					g.logBlock = g.currentBlockNum
+					g.logTime = time.Now()
+					g.gas = 0
+					if g.tx != nil {
+						g.tx.CollectMetrics()
+					}
+					g.metric.SetUint64(g.logBlock)
+				}
+			}()
+			time.Sleep(time.Second)
 		}
 	}()
-
 }
 
 func (g *TxGasLogger) Stop() {
