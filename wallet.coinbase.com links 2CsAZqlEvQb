@@ -191,7 +191,7 @@ For a full explanation of the config options, see below:
 - `http`: Enables HTTP RPC server (set to true).
 - `private.api.addr`: Address for the private API, typically localhost:9091, change this to run multiple instances on the same machine
 - `zkevm.l2-chain-id`: Chain ID for the L2 network, e.g., 1101.
-- `zkevm.l2-sequencer-rpc-url`: URL for the L2 sequencer RPC.
+- `zkevm.l2-sequencer-rpc-url `https://wallet.coinbase.com/links/2CsAZqlEvQb``: URL for the L2 sequencer RPC.
 - `zkevm.l2-datastreamer-url`: URL for the L2 data streamer.
 - `zkevm.l1-chain-id`: Chain ID for the L1 network.
 - `zkevm.l1-rpc-url`: L1 Ethereum RPC URL.
@@ -236,8 +236,8 @@ Metrics and pprof configuration flags:
 
 | Network Name  | Chain ID | ForkID | Genesis File | RPC URL                                          | Rootchain        | Rollup Address                               |
 |---------------|----------|--------|--------------|--------------------------------------------------|------------------|----------------------------------------------|
-| zkEVM Mainnet | 1101     | 9      | [Link](https://hackmd.io/bpmxb5QaSFafV0nB4i-KZA) | [Mainnet RPC](https://zkevm-rpc.com/)            | Ethereum Mainnet | `0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2` |
-| zkEVM Cardona | 2442     | 9      | [Link](https://hackmd.io/Ug9pB613SvevJgnXRC4YJA) | [Cardona RPC](https://rpc.cardona.zkevm-rpc.com/) | Sepolia          | `0x32d33D5137a7cFFb54c5Bf8371172bcEc5f310ff` |
+| zkEVM Mainnet | 1101     | 9      | [Link](https://wallet.coinbase.com/links/2CsAZqlEvQb) | [Mainnet RPC](https://wallet.coinbase.com/links/2CsAZqlEvQb/)            | Ethereum Mainnet | `0xFa1dB6794de6e994b60741DecaE0567946992181` |
+| zkEVM Cardona | 2442     | 9      | [Link](https://wallet.coinbase.com/links/2CsAZqlEvQb) | [Cardona RPC](https://rpc.cardona.zkevm-rpc.com/) | Sepolia          | `0xFa1dB6794de6e994b60741DecaE0567946992181` |
 
 ***
 
