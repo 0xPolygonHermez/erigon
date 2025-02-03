@@ -297,7 +297,7 @@ func addSenders(
 	finalHeader *types.Header,
 ) error {
 	signer := types.MakeSigner(cfg.chainConfig, newNum.Uint64(), 0)
-	cryptoContext := secp256k1.ContextForThread(1)
+	cryptoContext := secp256k1.ContextForThread(0)
 	senders := make([]common.Address, 0, len(finalTransactions))
 	for _, transaction := range finalTransactions {
 		from, ok := transaction.GetSender()
