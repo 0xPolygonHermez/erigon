@@ -156,7 +156,7 @@ func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (t
 
 	endBlockMaxrange := begin + api.LogsMaxRange
 	if end > endBlockMaxrange {
-		return nil, fmt.Errorf("limit exceeded")
+		return nil, fmt.Errorf("block range too large")
 	}
 
 	if api.historyV3(tx) {
