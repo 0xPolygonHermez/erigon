@@ -11,6 +11,7 @@ import (
 	"github.com/ledgerwatch/log/v3"
 	"math/big"
 	"testing"
+	"fmt"
 )
 
 func TestGetLogsWithRange(t *testing.T) {
@@ -31,6 +32,7 @@ func TestGetLogsWithRange(t *testing.T) {
 		name          string
 		toBlock       uint64
 		expectedError bool
+		errorMessage  string
 	}{
 		{
 			name:          "GetLogs from 0 to 100",
@@ -41,6 +43,7 @@ func TestGetLogsWithRange(t *testing.T) {
 			name:          "GetLogs from 0 to 1100",
 			toBlock:       1100,
 			expectedError: true,
+			errorMessage:  fmt.Sprintf("block range too large, max range: %d", logsMaxRange),
 		},
 		{
 			name:          "GetLogs from 0 to 1000",
@@ -51,6 +54,7 @@ func TestGetLogsWithRange(t *testing.T) {
 			name:          "GetLogs from 0 to 1001",
 			toBlock:       1001,
 			expectedError: true,
+			errorMessage:  fmt.Sprintf("block range too large, max range: %d", logsMaxRange),
 		},
 	}
 
@@ -65,8 +69,8 @@ func TestGetLogsWithRange(t *testing.T) {
 				if !scenario.expectedError {
 					t.Errorf("calling GetLogs: %v", err)
 				}
-				if err.Error() != "block range too large" {
-					t.Errorf("expected error: block range too large, got: %v", err)
+				if err.Error() != scenario.errorMessage {
+					t.Errorf("expected error: %s, got: %v", scenario.errorMessage, err)
 				}
 			} else {
 				if scenario.expectedError {
