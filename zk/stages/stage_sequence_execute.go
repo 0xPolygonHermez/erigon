@@ -423,16 +423,10 @@ func sequencingBatchStep(
 				default:
 				}
 
-				sender, ok := transaction.GetSender()
-				if ok {
-					if _, found := sendersToSkip[sender]; found {
-						continue
-					}
-				}
-
 				txHash := transaction.Hash()
 
-				if _, ok := transaction.GetSender(); !ok {
+				txSender, ok := transaction.GetSender()
+				if !ok {
 					signer := types.MakeSigner(cfg.chainConfig, executionAt, 0)
 					sender, err := signer.Sender(transaction)
 					if err != nil {
@@ -445,6 +439,11 @@ func sequencingBatchStep(
 					}
 
 					transaction.SetSender(sender)
+					txSender = sender
+				}
+
+				if _, found := sendersToSkip[txSender]; found {
+					continue
 				}
 
 				effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
@@ -502,6 +501,11 @@ func sequencingBatchStep(
 					}
 
 					if !batchState.isL1Recovery() {
+						// we need to now skip any further transactions from the same sender in this batch as we will encounter nonce problems
+						if sender, ok := transaction.GetSender(); ok {
+							sendersToSkip[sender] = struct{}{}
+						}
+
 						/*
 							here we check if the transaction on it's own would overdflow the batch counters
 							by creating a new counter collector and priming it for a single block with just this transaction
@@ -511,11 +515,6 @@ func sequencingBatchStep(
 							If it does overflow then we mark the hash as a bad one and move on.  Calls to the RPC will
 							check if this hash has appeared too many times and stop allowing it through if required.
 						*/
-
-						// we need to now skip any further transactions from the same sender in this batch as we will encounter nonce problems
-						if sender, ok := transaction.GetSender(); ok {
-							sendersToSkip[sender] = struct{}{}
-						}
 
 						// now check if this transaction on it's own would overflow counters for the batch
 						tempCounters := prepareBatchCounters(batchContext, batchState)
