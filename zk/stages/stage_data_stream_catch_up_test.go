@@ -89,7 +89,7 @@ func TestSpawnStageDataStreamCatchup(t *testing.T) {
 
 	dataStreamServerMock.EXPECT().WriteBlocksToStreamConsecutively(ctx, s.LogPrefix(), tx1, hDBReaderMatcher, uint64(1), uint64(20)).Return(nil)
 
-	cfg := StageDataStreamCatchupCfg(dataStreamServerMock, db1, chainID, streamVersion, true)
+	cfg := StageDataStreamCatchupCfg(dataStreamServerMock, db1, chainID, streamVersion)
 
 	// Act
 	err = SpawnStageDataStreamCatchup(s, ctx, tx1, cfg)

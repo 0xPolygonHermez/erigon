@@ -49,6 +49,7 @@ type Zk struct {
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
+	ExecutorEnabled                        bool
 	DatastreamNewBlockTimeout              time.Duration
 	WitnessMemdbSize                       datasize.ByteSize
 	WitnessUnwindLimit                     uint64
@@ -111,6 +112,10 @@ func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
 
 func (c *Zk) HasExecutors() bool {
 	return len(c.ExecutorUrls) > 0 && c.ExecutorUrls[0] != ""
+}
+
+func (c *Zk) UseExecutors() bool {
+	return c.HasExecutors() && c.ExecutorEnabled
 }
 
 // ShouldImportInitialBatch returns true in case initial batch config file name is non-empty string.
