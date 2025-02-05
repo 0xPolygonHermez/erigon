@@ -643,10 +643,20 @@ func sequencingBatchStep(
 			return err
 		}
 
-		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, batchState.blockState.builtBlockElements.txSlots); err != nil {
-			return err
+		// add a check to the verifier and also check for responses
+		batchState.onBuiltBlock(blockNumber)
+
+		if !batchState.isL1Recovery() {
+			// commit block data here so it is accessible in other threads
+			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
+				return errCommitAndStart
+			}
+			defer sdb.tx.Rollback()
 		}
-		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, batchState.blockState.transactionsToDiscard); err != nil {
+
+		// remove mined transactions from the pool
+		toRemove := append(batchState.blockState.builtBlockElements.txSlots, batchState.blockState.transactionsToDiscard...)
+		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, toRemove); err != nil {
 			return err
 		}
 
@@ -667,17 +677,6 @@ func sequencingBatchStep(
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)), "info-tree-index", infoTreeIndexProgress, "taken", time.Since(startTime))
 		} else {
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions)), "info-tree-index", infoTreeIndexProgress, "taken", time.Since(startTime))
-		}
-
-		// add a check to the verifier and also check for responses
-		batchState.onBuiltBlock(blockNumber)
-
-		if !batchState.isL1Recovery() {
-			// commit block data here so it is accessible in other threads
-			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
-				return errCommitAndStart
-			}
-			defer sdb.tx.Rollback()
 		}
 
 		// do not use remote executor in l1recovery mode
