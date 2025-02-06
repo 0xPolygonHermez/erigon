@@ -10,12 +10,12 @@ import (
 	"github.com/ledgerwatch/erigon/rpc"
 )
 
-func checkBlockNumber(blockNumber rpc.BlockNumber, api EthAPI) error {
+func checkBlockNumber(ctx context.Context, blockNumber rpc.BlockNumber, api EthAPI) error {
 	if api == nil {
 		return fmt.Errorf("no connection to the Erigon server or `eth` namespace isn't enabled")
 	}
 	fullTx := false
-	data, err := api.GetBlockByNumber(context.TODO(), blockNumber, &fullTx)
+	data, err := api.GetBlockByNumber(ctx, blockNumber, &fullTx)
 	if err != nil {
 		return err
 	}
@@ -26,12 +26,12 @@ func checkBlockNumber(blockNumber rpc.BlockNumber, api EthAPI) error {
 	return nil
 }
 
-func checkBlockTime(api EthAPI) (*uint, error) {
+func checkBlockTime(ctx context.Context, api EthAPI) (*uint, error) {
 	if api == nil {
 		return nil, fmt.Errorf("no connection to the Erigon server or `eth` namespace isn't enabled")
 	}
 	fullTx := false
-	data, err := api.GetBlockByNumber(context.TODO(), -1, &fullTx)
+	data, err := api.GetBlockByNumber(ctx, -1, &fullTx)
 	if err != nil {
 		return nil, err
 	}
@@ -57,13 +57,16 @@ func checkBlockTime(api EthAPI) (*uint, error) {
 }
 
 func blockTimeStringOrError(err error, blockTime *uint) string {
-	if err == nil && blockTime != nil {
-		return fmt.Sprintf("last block was mined more than %v seconds ago", *blockTime)
+	if err != nil {
+		if errors.Is(err, errCheckDisabled) {
+			return "DISABLED"
+		}
+		return fmt.Sprintf("ERROR: %v", err)
 	}
 
-	if errors.Is(err, errCheckDisabled) {
-		return "DISABLED"
+	if blockTime == nil {
+		return "block time is nil"
 	}
 
-	return fmt.Sprintf("ERROR: %v", err)
+	return fmt.Sprintf("last block was mined more than %v seconds ago", *blockTime)
 }

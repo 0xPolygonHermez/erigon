@@ -3,10 +3,12 @@ package health
 import (
 	"context"
 	"fmt"
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/jsonrpc"
 )
 
-func checkTxPool(txApi TxPoolAPI, ethApi EthAPI) error {
+func checkTxPool(ctx context.Context, txApi TxPoolAPI, ethApi EthAPI) error {
 	if txApi == nil {
 		return fmt.Errorf("no connection to the Erigon server or `tx_pool` namespace isn't enabled")
 	}
@@ -17,7 +19,7 @@ func checkTxPool(txApi TxPoolAPI, ethApi EthAPI) error {
 
 	var err error
 
-	data, err := txApi.Content(context.TODO())
+	data, err := txApi.Content(ctx)
 	if err != nil {
 		return err
 	}
@@ -34,21 +36,40 @@ func checkTxPool(txApi TxPoolAPI, ethApi EthAPI) error {
 
 	if pendingData != nil && len(pendingData) > 0 {
 		// pending pool has transactions lets check last block if it was 0 tx
-		var blockData map[string]interface{}
+		var latestBlockData map[string]interface{}
 		fullTx := false
-		blockData, err = ethApi.GetBlockByNumber(context.TODO(), -1, &fullTx)
+		latestBlockData, err = ethApi.GetBlockByNumber(ctx, -1, &fullTx)
 		if err != nil {
 			return err
 		}
 
-		var transactions []interface{}
-		transactions, ok = blockData["transactions"].([]interface{})
+		var latestBlockNo *hexutil.Big
+		latestBlockNo, ok = latestBlockData["number"].(*hexutil.Big)
 		if !ok {
 			return nil
 		}
 
-		if len(transactions) == 0 {
-			return fmt.Errorf("found transactions in pending pool but last block has no transactions")
+		// check 5 blocks back from latest to see if any of them has transactions
+		var foundTransactions bool
+		for i := 0; i < 5; i++ {
+			blockToCheck := latestBlockNo.ToInt().Int64() - int64(i)
+			var prevBlockData map[string]interface{}
+			prevBlockData, err = ethApi.GetBlockByNumber(ctx, rpc.BlockNumber(blockToCheck), &fullTx)
+			if err != nil {
+				return err
+			}
+			var transactions []interface{}
+			transactions, ok = prevBlockData["transactions"].([]interface{})
+			if !ok {
+				return nil
+			}
+			if len(transactions) != 0 {
+				foundTransactions = true
+				break
+			}
+		}
+		if !foundTransactions {
+			return fmt.Errorf("found transactions in pending pool but last 5 blocks have no transactions")
 		}
 	}
 

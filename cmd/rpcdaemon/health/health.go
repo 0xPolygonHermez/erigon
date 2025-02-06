@@ -81,7 +81,7 @@ func processFromHeaders(headers []string, ethAPI EthAPI, netAPI NetAPI, txPoolAP
 				errCheckPeer = err
 				break
 			}
-			errCheckPeer = checkMinPeers(uint(peers), netAPI)
+			errCheckPeer = checkMinPeers(r.Context(), uint(peers), netAPI)
 		}
 		if strings.HasPrefix(lHeader, checkBlock) {
 			block, err := strconv.Atoi(strings.TrimPrefix(lHeader, checkBlock))
@@ -89,7 +89,7 @@ func processFromHeaders(headers []string, ethAPI EthAPI, netAPI NetAPI, txPoolAP
 				errCheckBlock = err
 				break
 			}
-			errCheckBlock = checkBlockNumber(rpc.BlockNumber(block), ethAPI)
+			errCheckBlock = checkBlockNumber(r.Context(), rpc.BlockNumber(block), ethAPI)
 		}
 		if strings.HasPrefix(lHeader, maxSecondsBehind) {
 			seconds, err := strconv.Atoi(strings.TrimPrefix(lHeader, maxSecondsBehind))
@@ -105,10 +105,10 @@ func processFromHeaders(headers []string, ethAPI EthAPI, netAPI NetAPI, txPoolAP
 			errCheckSeconds = checkTime(r, int(now)-seconds, ethAPI)
 		}
 		if lHeader == txPoolEnable {
-			errCheckTxPool = checkTxPool(txPoolAPI, ethAPI)
+			errCheckTxPool = checkTxPool(r.Context(), txPoolAPI, ethAPI)
 		}
 		if lHeader == lastBlockTime {
-			blockTime, errCheckLastBlockTime = checkBlockTime(ethAPI)
+			blockTime, errCheckLastBlockTime = checkBlockTime(r.Context(), ethAPI)
 		}
 	}
 
@@ -130,19 +130,19 @@ func processFromBody(w http.ResponseWriter, r *http.Request, netAPI NetAPI, ethA
 	} else {
 		// 1. net_peerCount
 		if body.MinPeerCount != nil {
-			errMinPeerCount = checkMinPeers(*body.MinPeerCount, netAPI)
+			errMinPeerCount = checkMinPeers(r.Context(), *body.MinPeerCount, netAPI)
 		}
 		// 2. custom query (shouldn't fail)
 		if body.BlockNumber != nil {
-			errCheckBlock = checkBlockNumber(*body.BlockNumber, ethAPI)
+			errCheckBlock = checkBlockNumber(r.Context(), *body.BlockNumber, ethAPI)
 		}
 		// 3. tx_pool pending pool
 		if body.TxPoolEnable == true {
-			errCheckTxPool = checkTxPool(txPoolAPI, ethAPI)
+			errCheckTxPool = checkTxPool(r.Context(), txPoolAPI, ethAPI)
 		}
 		// last block time
 		if body.LastBlockTime == true {
-			blockTime, errCheckLastBlockTime = checkBlockTime(ethAPI)
+			blockTime, errCheckLastBlockTime = checkBlockTime(r.Context(), ethAPI)
 		}
 	}
 
@@ -258,13 +258,12 @@ func shouldChangeStatusCode(err error) bool {
 }
 
 func errorStringOrOK(err error) string {
-	if err == nil {
-		return "HEALTHY"
+	if err != nil {
+		if errors.Is(err, errCheckDisabled) {
+			return "DISABLED"
+		}
+		return fmt.Sprintf("ERROR: %v", err)
 	}
 
-	if errors.Is(err, errCheckDisabled) {
-		return "DISABLED"
-	}
-
-	return fmt.Sprintf("ERROR: %v", err)
+	return "HEALTHY"
 }

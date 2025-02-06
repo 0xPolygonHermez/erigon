@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/ledgerwatch/erigon/turbo/jsonrpc"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -425,6 +426,7 @@ func TestProcessHealthcheckIfNeeded_HeadersTests(t *testing.T) {
 			netApiError:    nil,
 			ethApiBlockResult: map[string]interface{}{
 				"transactions": []interface{}{},
+				"number":       (*hexutil.Big)(big.NewInt(100)),
 			},
 			ethApiBlockError:    nil,
 			ethApiSyncingResult: false,
@@ -439,7 +441,7 @@ func TestProcessHealthcheckIfNeeded_HeadersTests(t *testing.T) {
 				minPeerCount:     "DISABLED",
 				checkBlock:       "DISABLED",
 				maxSecondsBehind: "DISABLED",
-				txPoolEnable:     "ERROR: found transactions in pending pool but last block has no transactions",
+				txPoolEnable:     "ERROR: found transactions in pending pool but last 5 blocks have no transactions",
 			},
 		},
 	}
