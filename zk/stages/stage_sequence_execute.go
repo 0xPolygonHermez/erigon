@@ -253,6 +253,10 @@ func sequencingBatchStep(
 	minedTxsToRemove := make([]common.Hash, 0)
 	var header *types.Header
 
+	// to avoid nonce problems when a transaction causes the batch to overflow we need to temporarily skip handling transactions from the same sender
+	// until the next batch starts
+	sendersToSkip := make(map[common.Address]struct{})
+
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
 		if batchTimedOut {
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
@@ -453,7 +457,8 @@ func sequencingBatchStep(
 
 				txHash := transaction.Hash()
 
-				if _, ok := transaction.GetSender(); !ok {
+				txSender, ok := transaction.GetSender()
+				if !ok {
 					signer := types.MakeSigner(cfg.chainConfig, executionAt, 0)
 					sender, err := signer.Sender(transaction)
 					if err != nil {
@@ -466,6 +471,11 @@ func sequencingBatchStep(
 					}
 
 					transaction.SetSender(sender)
+					txSender = sender
+				}
+
+				if _, found := sendersToSkip[txSender]; found {
+					continue
 				}
 
 				effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
@@ -506,7 +516,6 @@ func sequencingBatchStep(
 						// to the block
 						log.Warn(fmt.Sprintf("[%s] known error adding transaction to block, skipping for now: %v", logPrefix, err),
 							"hash", txHash)
-						badTxHashes = append(badTxHashes, txHash)
 					} else {
 						// if we have an error at this point something has gone wrong, either in the pool or otherwise
 						// to stop the pool growing and hampering further processing of good transactions here
@@ -519,15 +528,16 @@ func sequencingBatchStep(
 
 				switch anyOverflow {
 				case overflowCounters:
-					// as we know this has caused an overflow we need to make sure we don't keep it in the inclusion list and attempt to add it again in the
-					// next block
-					badTxHashes = append(badTxHashes, txHash)
-
 					if batchState.isLimboRecovery() {
 						panic("limbo transaction has already been executed once so they must not overflow counters while re-executing")
 					}
 
 					if !batchState.isL1Recovery() {
+						// we need to now skip any further transactions from the same sender in this batch as we will encounter nonce problems
+						if sender, ok := transaction.GetSender(); ok {
+							sendersToSkip[sender] = struct{}{}
+						}
+
 						/*
 							here we check if the transaction on it's own would overdflow the batch counters
 							by creating a new counter collector and priming it for a single block with just this transaction
@@ -559,6 +569,9 @@ func sequencingBatchStep(
 								return err
 							}
 							log.Info(fmt.Sprintf("[%s] single transaction %s cannot fit into batch - overflow", logPrefix, txHash), "context", ocs, "times_seen", counter)
+
+							// ensure this transaction is not attempted again in the next block
+							badTxHashes = append(badTxHashes, txHash)
 						} else {
 							batchState.newOverflowTransaction()
 							transactionNotAddedText := fmt.Sprintf("[%s] transaction %s was not included in this batch because it overflowed.", logPrefix, txHash)
