@@ -52,7 +52,7 @@ func SpawnL1InfoTreeStage(
 	if err != nil {
 		return err
 	}
-	// cfg.zkCfg.L2InfoTreeUpdatesEnabled must be enabled, this method uses an updated rpc method that uses to and from.
+	// L2InfoTreeUpdatesEnabled must be enabled, this method uses an updated rpc method that uses to and from.
 	if progress == 0 && !sequencer.IsSequencer() && cfg.zkCfg.L2InfoTreeUpdatesEnabled {
 		select {
 		default:
@@ -69,7 +69,7 @@ func SpawnL1InfoTreeStage(
 				latestIndex = latestUpdate.Index
 			}
 
-			log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(infoTrees), "latestIndex", latestIndex)
+			log.Info(fmt.Sprintf("[%s] Synced Info Tree updates from L2 Sequencer RPC", logPrefix), "count", len(infoTrees), "latestIndex", latestIndex)
 
 			if freshTx {
 				if funcErr = tx.Commit(); funcErr != nil {
@@ -81,7 +81,7 @@ func SpawnL1InfoTreeStage(
 		}
 	}
 
-	if err := cfg.updater.WarmUp(tx); err != nil {
+	if err = cfg.updater.WarmUp(tx); err != nil {
 		return fmt.Errorf("cfg.updater.WarmUp: %w", err)
 	}
 

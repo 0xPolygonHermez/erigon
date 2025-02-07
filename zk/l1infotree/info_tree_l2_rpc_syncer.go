@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	EXIT_ROOT_TABLE = "zkevm_getExitRootTable"
+	ExitRootTable = "zkevm_getExitRootTable"
 )
 
-type L2InfoTreeSyncer struct {
+// InfoTreeL2RpcSyncer is a struct that is used to sync the Info Tree from an L2 Sequencer RPC.
+type InfoTreeL2RpcSyncer struct {
 	ctx            context.Context
 	zkCfg          *ethconfig.Zk
 	isSyncStarted  atomic.Bool
@@ -23,27 +24,31 @@ type L2InfoTreeSyncer struct {
 	infoTreeChan   chan []zkTypes.L1InfoTreeUpdate
 }
 
-func NewL2InfoTreeSyncer(ctx context.Context, zkCfg *ethconfig.Zk) *L2InfoTreeSyncer {
-	return &L2InfoTreeSyncer{
+// NewInfoTreeL2RpcSyncer creates a new InfoTreeL2RpcSyncer.
+// It is used to sync the Info Tree from an L2 Sequencer RPC.
+// The sequencer must have the full Info Tree synced from the L1.
+func NewInfoTreeL2RpcSyncer(ctx context.Context, zkCfg *ethconfig.Zk) *InfoTreeL2RpcSyncer {
+	return &InfoTreeL2RpcSyncer{
 		ctx:          ctx,
 		zkCfg:        zkCfg,
 		infoTreeChan: make(chan []zkTypes.L1InfoTreeUpdate),
 	}
 }
 
-func (s *L2InfoTreeSyncer) IsSyncStarted() bool {
+func (s *InfoTreeL2RpcSyncer) IsSyncStarted() bool {
 	return s.isSyncStarted.Load()
 }
 
-func (s *L2InfoTreeSyncer) IsSyncFinished() bool {
+func (s *InfoTreeL2RpcSyncer) IsSyncFinished() bool {
 	return s.isSyncFinished.Load()
 }
 
-func (s *L2InfoTreeSyncer) GetInfoTreeChan() chan []zkTypes.L1InfoTreeUpdate {
+func (s *InfoTreeL2RpcSyncer) GetInfoTreeChan() chan []zkTypes.L1InfoTreeUpdate {
 	return s.infoTreeChan
 }
 
-func (s *L2InfoTreeSyncer) ConsumeInfoTree() {
+// ConsumeInfoTree consumes the Info Tree from the Info Tree chan.
+func (s *InfoTreeL2RpcSyncer) ConsumeInfoTree() {
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -58,7 +63,8 @@ func (s *L2InfoTreeSyncer) ConsumeInfoTree() {
 	}
 }
 
-func (s *L2InfoTreeSyncer) RunSyncInfoTree() {
+// RunSyncInfoTree runs the sync process for the Info Tree from an L2 Sequencer RPC and put the updates in the Info Tree chan.
+func (s *InfoTreeL2RpcSyncer) RunSyncInfoTree() {
 	if s.isSyncStarted.Load() {
 		return
 	}
@@ -108,7 +114,7 @@ type exitRootQuery struct {
 }
 
 func getExitRootTable(endpoint string, query exitRootQuery) ([]zkTypes.L1InfoTreeUpdate, error) {
-	res, err := jsonClient.JSONRPCCall(endpoint, EXIT_ROOT_TABLE, query)
+	res, err := jsonClient.JSONRPCCall(endpoint, ExitRootTable, query)
 	if err != nil {
 		return nil, err
 	}
