@@ -249,7 +249,6 @@ func sequencingBatchStep(
 	// once the batch ticker has ticked we need a signal to close the batch after the next block is done
 	batchTimedOut := false
 
-	minedTxsToRemove := make([]common.Hash, 0)
 	var header *types.Header
 
 	// to avoid nonce problems when a transaction causes the batch to overflow we need to temporarily skip handling transactions from the same sender
@@ -763,11 +762,7 @@ func sequencingBatchStep(
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
 
-	if err := sdb.tx.Commit(); err != nil {
-		return err
-	}
-
-	return removeMinedTransactionsFromPool(ctx, cfg, header.GasLimit, minedTxsToRemove, logPrefix)
+	return sdb.tx.Commit()
 }
 
 func removeInclusionTransaction(orig []types.Transaction, index int) []types.Transaction {
@@ -785,18 +780,4 @@ func handleBadTxHashCounter(hermezDb *hermez_db.HermezDb, txHash common.Hash) (u
 	newCounter := counter + 1
 	hermezDb.WriteBadTxHashCounter(txHash, newCounter)
 	return newCounter, nil
-}
-
-func removeMinedTransactionsFromPool(ctx context.Context, cfg SequenceBlockCfg, gasLimit uint64, minedTxsToRemove []common.Hash, logPrefix string) error {
-	roTx, err := cfg.db.BeginRo(ctx)
-	if err != nil {
-		return err
-	}
-	defer roTx.Rollback()
-
-	if err = cfg.txPool.RemoveMinedTransactions(ctx, roTx, gasLimit, minedTxsToRemove); err != nil {
-		return fmt.Errorf("[%s] removing mined transactions from pool: %w", logPrefix, err)
-	}
-
-	return nil
 }
