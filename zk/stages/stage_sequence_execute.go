@@ -661,20 +661,26 @@ func sequencingBatchStep(
 			}
 		}
 
-		// we do not want to commit this block if it has no transactions and we detected an overflow - essentially the batch is too
-		// full to get any more transactions in it and we don't want to commit an empty block
-		if emptyBlockOverflow {
-			log.Info(fmt.Sprintf("[%s] Block %d overflow detected with no transactions added, skipping block for next batch", logPrefix, blockNumber))
-			break
-		}
+		// block skipping logic:
+		// here we have two scenarios for skipping blocks, either an overflow caused a block to be empty with no transactions, or there were issues
+		// with the transactions that were yielded from the pool and none of them could be mined.
+		// BUT we only want to skip these blocks if we have at least one block in the batch otherwise we risk creating an empty batch.
+		if len(batchState.builtBlocks) > 0 {
+			// we do not want to commit this block if it has no transactions and we detected an overflow - essentially the batch is too
+			// full to get any more transactions in it and we don't want to commit an empty block
+			if emptyBlockOverflow {
+				log.Info(fmt.Sprintf("[%s] Block %d overflow detected with no transactions added, skipping block for next batch", logPrefix, blockNumber))
+				break
+			}
 
-		// 0 TX block handling:
-		// if we had some transactions yielded but didn't mine any in this block then we shouldn't commit it and move on.
-		// this could happen if there were lots of nonce issues from transaction in the pool due to a failed tx processing or similar and
-		// there wasn't much time left in the batch to mine any transactions
-		if len(batchState.blockState.transactionsForInclusion) > 0 && len(batchState.blockState.builtBlockElements.transactions) == 0 {
-			log.Info(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
-			break
+			// 0 TX block handling:
+			// if we had some transactions yielded but didn't mine any in this block then we shouldn't commit it and move on.
+			// this could happen if there were lots of nonce issues from transaction in the pool due to a failed tx processing or similar and
+			// there wasn't much time left in the batch to mine any transactions.
+			if len(batchState.blockState.transactionsForInclusion) > 0 && len(batchState.blockState.builtBlockElements.transactions) == 0 {
+				log.Info(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
+				break
+			}
 		}
 
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
