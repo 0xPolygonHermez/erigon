@@ -101,6 +101,7 @@ type Zk struct {
 
 	InitialBatchCfgFile            string
 	ACLPrintHistory                int
+	ACLJsonLocation                string
 	InfoTreeUpdateInterval         time.Duration
 	BadBatches                     []uint64
 	IgnoreBadBatchesCheck          bool

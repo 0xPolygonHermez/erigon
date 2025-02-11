@@ -697,3 +697,90 @@ func TestListContentAtACL(t *testing.T) {
 		})
 	}
 }
+
+func TestUpsertOrDeletePolicies(t *testing.T) {
+	db := newTestACLDB(t, "")
+	ctx := context.Background()
+	txP := &TxPool{aclDB: db}
+
+	var scenarios = map[string]struct {
+		aclType           string
+		firstAddrs        []common.Address
+		secondAddrs       []common.Address
+		policy            Policy
+		expectedAddresses []common.Address
+	}{
+		"UpsertOrDeletePolicies - Add Policy Single Address": {
+			aclType:           BlockList,
+			firstAddrs:        []common.Address{common.HexToAddress("0x1234567890abcdef")},
+			secondAddrs:       []common.Address{common.HexToAddress("0x0000000000000000")},
+			policy:            SendTx,
+			expectedAddresses: []common.Address{common.HexToAddress("0x0000000000000000")},
+		},
+		"UpsertOrDeletePolicies - First Multiple Second Single": {
+			aclType:           BlockList,
+			firstAddrs:        []common.Address{common.HexToAddress("0x1234567890abcdef"), common.HexToAddress("0xabcdef1234567890")},
+			secondAddrs:       []common.Address{common.HexToAddress("0x0000000000000000")},
+			policy:            SendTx,
+			expectedAddresses: []common.Address{common.HexToAddress("0x0000000000000000")},
+		},
+		"UpsertOrDeletePolicies - First Single Second Multiple": {
+			aclType:           BlockList,
+			firstAddrs:        []common.Address{common.HexToAddress("0x0000000000000000")},
+			secondAddrs:       []common.Address{common.HexToAddress("0x1234567890abcdef"), common.HexToAddress("0xabcdef1234567890")},
+			policy:            SendTx,
+			expectedAddresses: []common.Address{common.HexToAddress("0x1234567890abcdef"), common.HexToAddress("0xabcdef1234567890")},
+		},
+		"UpsertOrDeletePolicies - Update With The Same": {
+			aclType:           BlockList,
+			firstAddrs:        []common.Address{common.HexToAddress("0x0000000000000000")},
+			secondAddrs:       []common.Address{common.HexToAddress("0x0000000000000000")},
+			policy:            SendTx,
+			expectedAddresses: []common.Address{common.HexToAddress("0x0000000000000000")},
+		},
+	}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			err := SetMode(context.Background(), txP.aclDB, scenario.aclType)
+			require.NoError(t, err)
+
+			err = UpsertOrDeletePolicies(ctx, txP.aclDB, scenario.aclType, scenario.firstAddrs, scenario.policy)
+			require.NoError(t, err)
+
+			for _, addr := range scenario.firstAddrs {
+				// Check if the policy is added correctly
+				hasPolicy, err := DoesAccountHavePolicy(ctx, txP.aclDB, addr, scenario.policy)
+				require.NoError(t, err)
+				require.True(t, hasPolicy)
+
+				// Check if the action is allowed
+				allowed, err := txP.isActionAllowed(ctx, addr, scenario.policy)
+				require.NoError(t, err)
+				require.False(t, allowed)
+			}
+
+			err = UpsertOrDeletePolicies(ctx, txP.aclDB, scenario.aclType, scenario.secondAddrs, scenario.policy)
+			require.NoError(t, err)
+
+			for _, addr := range scenario.secondAddrs {
+				// Check if the policy is added correctly
+				hasPolicy, err := DoesAccountHavePolicy(ctx, txP.aclDB, addr, scenario.policy)
+				require.NoError(t, err)
+				require.True(t, hasPolicy)
+
+				// Check if the action is allowed
+				allowed, err := txP.isActionAllowed(ctx, addr, scenario.policy)
+				require.NoError(t, err)
+				require.False(t, allowed)
+			}
+
+			// Check if the expected addresses are present in the ACL
+			for _, addr := range scenario.expectedAddresses {
+				hasPolicy, err := DoesAccountHavePolicy(ctx, txP.aclDB, addr, scenario.policy)
+				require.NoError(t, err)
+				require.True(t, hasPolicy)
+			}
+		})
+	}
+}

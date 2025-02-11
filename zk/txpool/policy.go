@@ -726,3 +726,51 @@ func (p *TxPool) isActionAllowed(ctx context.Context, addr common.Address, polic
 		return hasPolicy, nil
 	}
 }
+
+// UpsertOrDeletePolicy upserts or deletes addresses for a given policy
+func UpsertOrDeletePolicies(ctx context.Context, aclDB kv.RwDB, aclType string, addrs []common.Address, policy Policy) error {
+	table, err := resolveTable(aclType)
+	if err != nil {
+		return err
+	}
+
+	existingAddresses := make([]common.Address, 0)
+	err = aclDB.View(ctx, func(tx kv.Tx) error {
+		err = tx.ForEach(table, nil, func(k, v []byte) error {
+			addr := common.BytesToAddress(k)
+			if containsPolicy(v, policy) {
+				existingAddresses = append(existingAddresses, addr)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	updatedAddresses := make(map[common.Address]struct{})
+	for _, addr := range addrs {
+		if err = AddPolicy(ctx, aclDB, aclType, addr, policy); err != nil {
+			return err
+		}
+		updatedAddresses[addr] = struct{}{}
+	}
+
+	if len(updatedAddresses) == 0 && len(existingAddresses) == 0 {
+		return nil
+	}
+
+	for _, addr := range existingAddresses {
+		if _, found := updatedAddresses[addr]; !found {
+			if err = RemovePolicy(ctx, aclDB, aclType, addr, policy); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}

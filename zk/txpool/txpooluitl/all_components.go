@@ -19,6 +19,7 @@ package txpooluitl
 import (
 	"context"
 	"fmt"
+	"github.com/ledgerwatch/erigon/zk/acl"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -127,6 +128,14 @@ func AllComponents(ctx context.Context, cfg txpoolcfg.Config, ethCfg *ethconfig.
 		}
 	}
 
+	// update acl records
+	if len(ethCfg.Zk.ACLJsonLocation) > 0 {
+		if err = UpdateAclRecords(aclDB, ethCfg.Zk.ACLJsonLocation); err != nil {
+			log.Error("Failed to update acl records", "err", err)
+			return nil, nil, nil, nil, nil, err
+		}
+	}
+
 	chainConfig, _, err := SaveChainConfigIfNeed(ctx, chainDB, txPoolDB, true)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
@@ -157,4 +166,33 @@ func AllComponents(ctx context.Context, cfg txpoolcfg.Config, ethCfg *ethconfig.
 	send := txpool.NewSend(ctx, sentryClients, txPool)
 	txpoolGrpcServer := txpool.NewGrpcServer(ctx, txPool, txPoolDB, *chainID)
 	return txPoolDB, txPool, fetch, send, txpoolGrpcServer, nil
+}
+
+func UpdateAclRecords(aclDB kv.RwDB, aclPath string) error {
+	newAcl, err := acl.UnmarshalAcl(aclPath)
+	if err != nil {
+		return err
+	}
+
+	if err = txpool.SetMode(context.Background(), aclDB, newAcl.RuleType().String()); err != nil {
+		return err
+	}
+
+	// Update allow list
+	if err = txpool.UpsertOrDeletePolicies(context.Background(), aclDB, txpool.Allowlist, newAcl.Allow.Deploy, txpool.Deploy); err != nil {
+		return err
+	}
+	if err = txpool.UpsertOrDeletePolicies(context.Background(), aclDB, txpool.Allowlist, newAcl.Allow.Send, txpool.SendTx); err != nil {
+		return err
+	}
+
+	// Update block list
+	if err = txpool.UpsertOrDeletePolicies(context.Background(), aclDB, txpool.BlockList, newAcl.Deny.Deploy, txpool.Deploy); err != nil {
+		return err
+	}
+	if err = txpool.UpsertOrDeletePolicies(context.Background(), aclDB, txpool.BlockList, newAcl.Deny.Send, txpool.SendTx); err != nil {
+		return err
+	}
+
+	return nil
 }
