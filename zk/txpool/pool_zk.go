@@ -335,6 +335,42 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 	return nil
 }
 
+func (p *TxPool) TriggerSenderStateChanges(ctx context.Context, tx kv.Tx, blockGasLimit uint64, senders map[common.Address]struct{}) error {
+	if len(senders) == 0 {
+		return nil
+	}
+
+	cache := p.cache()
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	sendersToUpdate := make(map[uint64]struct{})
+	for sender := range senders {
+		if id, ok := p.senders.senderIDs[sender]; ok {
+			sendersToUpdate[id] = struct{}{}
+		}
+	}
+
+	baseFee := p.pendingBaseFee.Load()
+
+	cacheView, err := cache.View(ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	for senderID := range sendersToUpdate {
+		nonce, balance, err := p.senders.info(cacheView, senderID)
+		if err != nil {
+			return err
+		}
+		p.onSenderStateChange(senderID, nonce, balance, p.all,
+			baseFee, blockGasLimit, p.pending, p.baseFee, p.queued, p.discardLocked)
+	}
+
+	return nil
+}
+
 // discards the transactions that are in overflowZkCoutners from pending
 // executes the discard function on them
 // deletes the tx from the sendersWithChangedState map
