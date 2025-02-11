@@ -34,7 +34,7 @@ cleanup() {
     echo "Total execution time: $SECONDS seconds"
 }
 
-trap cleanup EXIT
+# trap cleanup EXIT
 
 dataPath="./datadir"
 datastreamPath="zk/tests/unwinds/datastream"
