@@ -1665,7 +1665,7 @@ func (p *TxPool) fromDB(ctx context.Context, tx kv.Tx, coreTx kv.Tx) error {
 		return err
 	}
 
-	if err = p.fromDBLimbo(ctx, tx, cacheView); err != nil {
+	if err = p.fromDBLimbo(ctx, coreTx, cacheView); err != nil {
 		return err
 	}
 
