@@ -198,7 +198,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 			// remove ldn txs when not in london
 			toRemove = append(toRemove, mt)
 			toSkip.Add(mt.Tx.IDHash)
-			log.Trace("Removing London transaction in non-London environment", "txID", mt.Tx.IDHash)
+			log.Info("Removing London transaction in non-London environment", "txID", mt.Tx.IDHash)
 			continue
 		}
 
@@ -215,7 +215,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		}
 		if len(rlpTx) == 0 {
 			toRemove = append(toRemove, mt)
-			log.Trace("Removing transaction with empty RLP", "txID", mt.Tx.IDHash)
+			log.Info("Removing transaction with empty RLP", "txID", common.BytesToHash(mt.Tx.IDHash[:]))
 			continue
 		}
 
@@ -254,7 +254,8 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	if len(toRemove) > 0 {
 		for _, mt := range toRemove {
 			p.pending.Remove(mt)
-			log.Trace("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
+			p.discardLocked(mt, UnsupportedTx)
+			log.Debug("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
 		}
 	}
 	return true, count, nil
