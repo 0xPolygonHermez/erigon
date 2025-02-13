@@ -337,6 +337,23 @@ type TxPool struct {
 	limbo *Limbo
 
 	logLevel log.Lvl
+
+	// PoolMetrics contains metrics for tx/s in and out of the pool
+	// and a median wait time of tx/s waiting in the pool
+	metrics *PoolMetrics
+}
+
+type PoolMetrics struct {
+	in                uint64
+	out               uint64
+	announcements     []announcementMetric
+	lastAnnouncements uint64
+	lastPoolSize      uint64
+	medianWaitTime    string
+}
+
+type announcementMetric struct {
+	created time.Time
 }
 
 func CreateTxPoolBuckets(tx kv.RwTx) error {
@@ -397,7 +414,13 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		aclDB:                   aclDB,
 		limbo:                   newLimbo(),
 		logLevel:                logLevel,
+		metrics:                 &PoolMetrics{},
 	}, nil
+}
+
+func (p *TxPool) incrementAnnouncementToMetrics() {
+	announcement := announcementMetric{created: time.Now()}
+	p.metrics.announcements = append(p.metrics.announcements, announcement)
 }
 
 func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChangeBatch, unwindTxs, minedTxs types.TxSlots, tx kv.Tx) error {
@@ -1405,6 +1428,8 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 	defer logEvery.Stop()
 	purgeEvery := time.NewTicker(p.cfg.PurgeEvery)
 	defer purgeEvery.Stop()
+	txIoTicker := time.NewTicker(time.Minute * 1)
+	defer txIoTicker.Stop()
 
 	for {
 		select {
@@ -1422,6 +1447,8 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 			return
 		case <-logEvery.C:
 			p.logStats()
+		case <-txIoTicker.C:
+			p.calculateTxInOut()
 		case <-processRemoteTxsEvery.C:
 			if !p.Started() {
 				continue
@@ -1449,6 +1476,7 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 				log.Debug("[txpool] Commit", "written_kb", written/1024, "in", time.Since(t))
 			}
 		case announcements := <-newTxs:
+			p.incrementAnnouncementToMetrics()
 			go func() {
 				for i := 0; i < 16; i++ { // drain more events from channel, then merge and dedup them
 					select {
@@ -1820,6 +1848,9 @@ func (p *TxPool) logStats() {
 		"pending", p.pending.Len(),
 		"baseFee", p.baseFee.Len(),
 		"queued", p.queued.Len(),
+		"tx-in-1m", p.metrics.in,
+		"tx-out-1m", p.metrics.out,
+		"median-wait-time", p.metrics.medianWaitTime,
 	}
 	cacheKeys := p._stateCache.Len()
 	if cacheKeys > 0 {
@@ -1830,6 +1861,52 @@ func (p *TxPool) logStats() {
 	pendingSubCounter.Set(uint64(p.pending.Len()))
 	basefeeSubCounter.Set(uint64(p.baseFee.Len()))
 	queuedSubCounter.Set(uint64(p.queued.Len()))
+}
+
+func (p *TxPool) calculateTxInOut() {
+	announcements := uint64(len(p.metrics.announcements))
+	currentPoolSize := uint64(p.pending.Len() + p.baseFee.Len() + p.queued.Len())
+
+	p.metrics.in = announcements
+	out := int(p.metrics.lastPoolSize + p.metrics.in - currentPoolSize)
+	if out < 0 {
+		out = 0
+	}
+
+	p.metrics.out = uint64(out)
+
+	// gather all tx created times
+	var waitTimes []time.Duration
+	allPool := make([]*metaTx, 0)
+	p.all.ascendAll(func(mt *metaTx) bool {
+		allPool = append(allPool, mt)
+		return true
+	})
+	for _, mt := range allPool {
+		created := time.Unix(int64(mt.created), 0)
+		waitTimes = append(waitTimes, time.Since(created))
+	}
+
+	// calculate median wait time of all txs
+	if len(waitTimes) > 0 {
+		sort.Slice(waitTimes, func(i, j int) bool {
+			return waitTimes[i] < waitTimes[j]
+		})
+		mid := len(waitTimes) / 2
+		var median time.Duration
+		if len(waitTimes)%2 == 0 {
+			median = (waitTimes[mid-1] + waitTimes[mid]) / 2
+		} else {
+			median = waitTimes[mid]
+		}
+		p.metrics.medianWaitTime = fmt.Sprintf("%.0f/seconds", median.Seconds())
+	} else {
+		p.metrics.medianWaitTime = "0/seconds"
+	}
+
+	p.metrics.lastAnnouncements = announcements
+	p.metrics.lastPoolSize = currentPoolSize
+	p.metrics.announcements = p.metrics.announcements[:0]
 }
 
 // Deprecated need switch to streaming-like
