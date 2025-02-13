@@ -1,6 +1,8 @@
 package acl
 
 import (
+	"context"
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -45,31 +47,17 @@ func TestCheckDeny(t *testing.T) {
 	assert.False(t, a.AllowExists())
 }
 
-func TestRuleType(t *testing.T) {
-	aclBoth, err := UnmarshalAcl("./test_acl_json/test-acl.json")
+func TestRuleTypeBlockAll(t *testing.T) {
+	acl, err := UnmarshalAcl("./test_acl_json/test-acl.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedRuleBoth := AllowAll
 	assert.NoError(t, err)
-	assert.NotNil(t, aclBoth)
-	assert.Equal(t, expectedRuleBoth, aclBoth.RuleType())
+	assert.NotNil(t, acl)
 
-	aclDenyOnly, err := UnmarshalAcl("./test_acl_json/test-acl-deny-only.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedRuleDenyOnly := AllowAll
+	// Address is present in both so we should deny (deny trumps allow)
+	v := NewPolicyValidator(acl)
+	allowed, err := v.IsActionAllowed(context.TODO(), common.HexToAddress("0x0000000000000000000000000000000000000000"), 0)
 	assert.NoError(t, err)
-	assert.NotNil(t, aclDenyOnly)
-	assert.Equal(t, expectedRuleDenyOnly, aclDenyOnly.RuleType())
-
-	aclAllowOnly, err := UnmarshalAcl("./test_acl_json/test-acl-allow-only.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedRuleAllowOnly := BlockAll
-	assert.NoError(t, err)
-	assert.NotNil(t, aclAllowOnly)
-	assert.Equal(t, expectedRuleAllowOnly, aclAllowOnly.RuleType())
+	assert.False(t, allowed)
 }

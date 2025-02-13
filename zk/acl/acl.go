@@ -1,32 +1,14 @@
 package acl
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"io"
 	"os"
 )
-
-const (
-	AllowAll RuleType = iota
-	BlockAll
-	Disabled
-)
-
-type RuleType uint8
-
-func (r RuleType) String() string {
-	switch r {
-	case AllowAll:
-		return "allowlist"
-	case BlockAll:
-		return "blocklist"
-	case Disabled:
-		return "disabled"
-	default:
-		return "disabled"
-	}
-}
 
 type Acl struct {
 	Allow *Rules `json:"allow"`
@@ -72,15 +54,109 @@ func (a *Acl) DenyExists() bool {
 	return len(a.Deny.Deploy) > 0 || len(a.Deny.Send) > 0
 }
 
-func (a *Acl) RuleType() RuleType {
-	if a.AllowExists() && !a.DenyExists() {
-		return BlockAll
+type Policy byte
+
+const (
+	SendTx Policy = iota
+	Deploy
+)
+
+var errUnknownPolicy = errors.New("unknown policy")
+
+func resolvePolicyByte(policy byte) (Policy, error) {
+	switch policy {
+	case 0:
+		return SendTx, nil
+	case 1:
+		return Deploy, nil
+	default:
+		return SendTx, errUnknownPolicy
 	}
-	if !a.AllowExists() && a.DenyExists() {
-		return AllowAll
+}
+
+type Validator struct {
+	acl *Acl
+}
+
+func NewPolicyValidator(acl *Acl) *Validator {
+	return &Validator{acl: acl}
+}
+
+func (v *Validator) IsActionAllowed(ctx context.Context, addr common.Address, policy byte) (bool, error) {
+	p, err := resolvePolicyByte(policy)
+	if err != nil {
+		return false, err
 	}
-	if a.AllowExists() && a.DenyExists() {
-		return AllowAll
+
+	hasDenyPolicy, err := v.acl.AddressHasDenyPolicy(p, addr)
+	if err != nil {
+		return false, err
 	}
-	return Disabled
+
+	// if we have Deny policy, we should return false
+	// and not even check for Allow policy
+	if hasDenyPolicy {
+		return false, nil
+	}
+
+	hasAllowPolicy, err := v.acl.AddressHasAllowPolicy(p, addr)
+	if err != nil {
+		return false, err
+	}
+
+	if hasAllowPolicy {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (a *Acl) AddressHasDenyPolicy(policy Policy, addr common.Address) (bool, error) {
+	switch policy {
+	case SendTx:
+		if a.DenyExists() {
+			for _, allowed := range a.Deny.Send {
+				if allowed == addr {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	case Deploy:
+		if a.DenyExists() {
+			for _, allowed := range a.Deny.Deploy {
+				if allowed == addr {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid policy: %v", policy)
+	}
+}
+
+func (a *Acl) AddressHasAllowPolicy(policy Policy, addr common.Address) (bool, error) {
+	switch policy {
+	case SendTx:
+		if a.AllowExists() {
+			for _, allowed := range a.Allow.Send {
+				if allowed == addr {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	case Deploy:
+		if a.AllowExists() {
+			for _, allowed := range a.Allow.Deploy {
+				if allowed == addr {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid policy: %v", policy)
+	}
 }
