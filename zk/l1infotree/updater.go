@@ -145,8 +145,6 @@ LOOP:
 		if err != nil {
 			return nil, fmt.Errorf("InitialiseL1InfoTree: %w", err)
 		}
-	} else {
-		log.Debug(fmt.Sprintf("[%s] Checking for L1 info tree updates, no logs to process", logPrefix))
 	}
 
 	// process the logs in chunks
