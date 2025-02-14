@@ -61,6 +61,10 @@ const (
 	Deploy
 )
 
+func (p Policy) ToByte() byte {
+	return byte(p)
+}
+
 var errUnknownPolicy = errors.New("unknown policy")
 
 func resolvePolicyByte(policy byte) (Policy, error) {
@@ -97,6 +101,10 @@ func (v *Validator) IsActionAllowed(ctx context.Context, addr common.Address, po
 	// and not even check for Allow policy
 	if hasDenyPolicy {
 		return false, nil
+	}
+
+	if !v.acl.AllowExists() {
+		return true, nil
 	}
 
 	hasAllowPolicy, err := v.acl.AddressHasAllowPolicy(p, addr)
