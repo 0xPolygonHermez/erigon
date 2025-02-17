@@ -1,0 +1,143 @@
+package l1infotree
+
+import (
+	"context"
+	"math/big"
+	"testing"
+	"time"
+
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
+	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestUpdater_chunkLogs(t *testing.T) {
+	logs := []types.Log{
+		{
+			Address: common.Address{},
+			Topics:  []common.Hash{common.HexToHash("0x01")},
+			Data:    []byte{0x01},
+		},
+		{
+			Address: common.Address{},
+			Topics:  []common.Hash{common.HexToHash("0x02")},
+			Data:    []byte{0x02},
+		},
+		{
+			Address: common.Address{},
+			Topics:  []common.Hash{common.HexToHash("0x03")},
+			Data:    []byte{0x03},
+		},
+		{
+			Address: common.Address{},
+			Topics:  []common.Hash{common.HexToHash("0x04")},
+			Data:    []byte{0x04},
+		},
+	}
+
+	chunkedLogs := chunkLogs(logs, 2)
+	assert.Len(t, chunkedLogs, 2)
+	assert.Len(t, chunkedLogs[0], 2)
+	assert.Len(t, chunkedLogs[1], 2)
+}
+
+func TestUpdater_initialiseL1InfoTree(t *testing.T) {
+
+	_, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
+	db := hermez_db.NewHermezDb(tx)
+	assert.NotNil(t, db)
+
+	// updater := NewUpdater(db)
+	// func initialiseL1InfoTree(hermezDb *hermez_db.HermezDb) (*L1InfoTree, error) {
+	l1infotree, err := InitialiseL1InfoTree(db)
+	assert.NoError(t, err)
+	assert.NotNil(t, l1infotree)
+
+	assert.Equal(t, l1infotree.currentRoot, common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757"))
+
+}
+
+func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
+	_, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
+	db := hermez_db.NewHermezDb(tx)
+	assert.NotNil(t, db)
+
+	// func createL1InfoTreeUpdate(hermezDb *hermez_db.HermezDb, l1InfoTree *L1InfoTree) (*zkTypes.L1InfoTreeUpdate, error) {
+	l1infotree, err := InitialiseL1InfoTree(db)
+	assert.NoError(t, err)
+	assert.NotNil(t, l1infotree)
+
+	// Prepare a valid log with 3 topics
+	log := types.Log{
+		BlockNumber: 1,
+		Topics:      []common.Hash{common.HexToHash("0x01"), common.HexToHash("0x02"), common.HexToHash("0x03")},
+	}
+	header := &types.Header{Number: big.NewInt(1), Time: uint64(time.Now().Unix()), ParentHash: common.HexToHash("0x0")}
+
+	// func createL1InfoTreeUpdate(l types.Log, header *types.Header) (*zkTypes.L1InfoTreeUpdate, error) {
+	l1infotreeupdate, err := createL1InfoTreeUpdate(log, header)
+	assert.NoError(t, err)
+	assert.NotNil(t, l1infotreeupdate)
+	assert.Equal(t, log.Topics[1], l1infotreeupdate.MainnetExitRoot)
+	assert.Equal(t, log.Topics[2], l1infotreeupdate.RollupExitRoot)
+	assert.Equal(t, log.BlockNumber, l1infotreeupdate.BlockNumber)
+	assert.Equal(t, header.Time, l1infotreeupdate.Timestamp)
+	assert.Equal(t, header.ParentHash, l1infotreeupdate.ParentHash)
+
+	// Prepare a valid log with less than 3 topics
+	lessThen3Topics := types.Log{
+		BlockNumber: 1,
+		Topics:      []common.Hash{},
+	}
+
+	// func createL1InfoTreeUpdate(l types.Log, header *types.Header) (*zkTypes.L1InfoTreeUpdate, error) {
+	l1infotreeupdate2, err2 := createL1InfoTreeUpdate(lessThen3Topics, header)
+	assert.Error(t, err2)
+	assert.Nil(t, l1infotreeupdate2)
+
+	unmatchingHeader := &types.Header{Number: big.NewInt(2), Time: uint64(time.Now().Unix()), ParentHash: common.HexToHash("0x0")}
+
+	// func createL1InfoTreeUpdate(l types.Log, header *types.Header) (*zkTypes.L1InfoTreeUpdate, error) {
+	l1infotreeupdate3, err3 := createL1InfoTreeUpdate(lessThen3Topics, unmatchingHeader)
+	assert.Error(t, err3)
+	assert.Nil(t, l1infotreeupdate3)
+}
+
+func TestUpdater_handleL1InfoTreeUpdate(t *testing.T) {
+	_, db1 := context.Background(), memdb.NewTestDB(t)
+	tx := memdb.BeginRw(t, db1)
+	db := hermez_db.NewHermezDb(tx)
+	assert.NotNil(t, db)
+
+	// Prepare a valid log with 3 topics
+	log := types.Log{
+		BlockNumber: 1,
+		Topics:      []common.Hash{common.HexToHash("0x01"), common.HexToHash("0x02"), common.HexToHash("0x03")},
+	}
+	header := &types.Header{Number: big.NewInt(1), Time: uint64(time.Now().Unix()), ParentHash: common.HexToHash("0x0")}
+
+	// func createL1InfoTreeUpdate(l types.Log, header *types.Header) (*zkTypes.L1InfoTreeUpdate, error) {
+	l1infotreeupdate, err := createL1InfoTreeUpdate(log, header)
+	assert.NoError(t, err)
+
+	// func handleL1InfoTreeUpdate(hermezDb *hermez_db.HermezDb, update *zkTypes.L1InfoTreeUpdate) error {
+	err = handleL1InfoTreeUpdate(db, l1infotreeupdate)
+	assert.Nil(t, err)
+	assert.NoError(t, err)
+
+	// Fetch and assert data from the DB
+	// Verify WriteL1InfoTreeUpdate
+	retrievedUpdate, err := db.GetL1InfoTreeUpdate(l1infotreeupdate.Index)
+	assert.NoError(t, err)
+	assert.NotNil(t, retrievedUpdate)
+
+	// Verify WriteL1InfoTreeUpdateToGer
+	retrievedUpdateGer, err := db.GetL1InfoTreeUpdateByGer(l1infotreeupdate.GER)
+	assert.NoError(t, err)
+	assert.NotNil(t, retrievedUpdateGer)
+
+}
