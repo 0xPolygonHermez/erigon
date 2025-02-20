@@ -196,7 +196,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorMaxConcurrentRequests:          ctx.Int(utils.ExecutorMaxConcurrentRequests.Name),
 		Limbo:                                  ctx.Bool(utils.Limbo.Name),
 		AllowFreeTransactions:                  ctx.Bool(utils.AllowFreeTransactions.Name),
-		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
 		AllowPreEIP155Transactions:             ctx.Bool(utils.AllowPreEIP155Transactions.Name),
 		EffectiveGasPriceForEthTransfer:        uint8(math.Round(effectiveGasPriceForEthTransferVal * 255.0)),
 		EffectiveGasPriceForErc20Transfer:      uint8(math.Round(effectiveGasPriceForErc20TransferVal * 255.0)),
@@ -234,6 +233,10 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		WitnessCacheBatchBehindOffset:          ctx.Uint64(utils.WitnessCacheBatchBehindOffset.Name),
 		WitnessContractInclusion:               witnessInclusion,
 		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
+		GasPriceCheckFrequency:                 ctx.Duration(utils.GasPriceCheckFrequency.Name),
+		GasPriceHistoryCount:                   ctx.Uint64(utils.GasPriceHistoryCount.Name),
+		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
+		RejectLowGasPriceTolerance:             ctx.Float64(utils.RejectLowGasPriceTolerance.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)
