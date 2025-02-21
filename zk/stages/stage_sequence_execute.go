@@ -375,6 +375,14 @@ func sequencingBatchStep(
 			}
 
 			select {
+			case <-emptyBlockTimer.C:
+				if len(batchState.blockState.builtBlockElements.transactions) == 0 && !batchState.isAnyRecovery() {
+					break OuterLoopTransactions
+				}
+			default:
+			}
+
+			select {
 			case <-infoTreeTicker.C:
 				newLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
 				if err != nil {
