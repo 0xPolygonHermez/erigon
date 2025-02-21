@@ -3,18 +3,19 @@ package cli
 import (
 	"fmt"
 	"math"
-
-	"strings"
-
-	"time"
-
+	"net"
 	"strconv"
+	"strings"
+	"time"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	utils2 "github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
+
 	"github.com/urfave/cli/v2"
 )
 
@@ -65,6 +66,17 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 	}
 
+	verifyAddressFlag := func(name, value string) string {
+		if strings.Count(value, ":") == 0 {
+			return value
+		}
+		_, _, err := net.SplitHostPort(value)
+		if err != nil {
+			panic(fmt.Sprintf("invalid address for flag %s: %s", name, value))
+		}
+		return value
+	}
+
 	l2DataStreamTimeoutVal := ctx.String(utils.L2DataStreamerTimeout.Name)
 	l2DataStreamTimeout, err := time.ParseDuration(l2DataStreamTimeoutVal)
 	if err != nil {
@@ -77,6 +89,17 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	sequencerBlockSealTime, err := time.ParseDuration(sequencerBlockSealTimeVal)
 	if err != nil {
 		panic(fmt.Sprintf("could not parse sequencer block seal time timeout value %s", sequencerBlockSealTimeVal))
+	}
+
+	var sequencerEmptyBlockSealTime time.Duration
+	sequencerEmptyBlockSealTimeVal := ctx.String(utils.SequencerEmptyBlockSealTime.Name)
+	if sequencerEmptyBlockSealTimeVal == "" {
+		sequencerEmptyBlockSealTime = sequencerBlockSealTime
+	} else {
+		sequencerEmptyBlockSealTime, err = time.ParseDuration(sequencerEmptyBlockSealTimeVal)
+		if err != nil {
+			panic(fmt.Sprintf("could not parse sequencer empty block seal time timeout value %s", sequencerEmptyBlockSealTimeVal))
+		}
 	}
 
 	sequencerBatchSealTimeVal := ctx.String(utils.SequencerBatchSealTime.Name)
@@ -145,10 +168,20 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		witnessInclusion = append(witnessInclusion, libcommon.HexToAddress(s))
 	}
 
+	logLevel, lErr := logging.TryGetLogLevel(ctx.String(logging.LogConsoleVerbosityFlag.Name))
+	if lErr != nil {
+		// try verbosity flag
+		logLevel, lErr = logging.TryGetLogLevel(ctx.String(logging.LogVerbosityFlag.Name))
+		if lErr != nil {
+			logLevel = log.LvlInfo
+		}
+	}
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),
 		L2DataStreamerUrl:                      ctx.String(utils.L2DataStreamerUrlFlag.Name),
+		L2DataStreamerMaxEntryChan:             ctx.Uint64(utils.L2DataStreamerMaxEntryChanFlag.Name),
 		L2DataStreamerUseTLS:                   ctx.Bool(utils.L2DataStreamerUseTLSFlag.Name),
 		L2DataStreamerTimeout:                  l2DataStreamTimeout,
 		L2ShortCircuitToVerifiedBatch:          l2ShortCircuitToVerifiedBatchVal,
@@ -173,11 +206,11 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1ContractAddressCheck:                 ctx.Bool(utils.L1ContractAddressCheckFlag.Name),
 		L1ContractAddressRetrieve:              ctx.Bool(utils.L1ContractAddressRetrieveFlag.Name),
 		RpcGetBatchWitnessConcurrencyLimit:     ctx.Int(utils.RpcGetBatchWitnessConcurrencyLimitFlag.Name),
-		DatastreamVersion:                      ctx.Int(utils.DatastreamVersionFlag.Name),
 		RebuildTreeAfter:                       ctx.Uint64(utils.RebuildTreeAfterFlag.Name),
 		IncrementTreeAlways:                    ctx.Bool(utils.IncrementTreeAlways.Name),
 		SmtRegenerateInMemory:                  ctx.Bool(utils.SmtRegenerateInMemory.Name),
 		SequencerBlockSealTime:                 sequencerBlockSealTime,
+		SequencerEmptyBlockSealTime:            sequencerEmptyBlockSealTime,
 		SequencerBatchSealTime:                 sequencerBatchSealTime,
 		SequencerBatchVerificationTimeout:      sequencerBatchVerificationTimeout,
 		SequencerBatchVerificationRetries:      ctx.Int(utils.SequencerBatchVerificationRetries.Name),
@@ -196,7 +229,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorMaxConcurrentRequests:          ctx.Int(utils.ExecutorMaxConcurrentRequests.Name),
 		Limbo:                                  ctx.Bool(utils.Limbo.Name),
 		AllowFreeTransactions:                  ctx.Bool(utils.AllowFreeTransactions.Name),
-		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
 		AllowPreEIP155Transactions:             ctx.Bool(utils.AllowPreEIP155Transactions.Name),
 		EffectiveGasPriceForEthTransfer:        uint8(math.Round(effectiveGasPriceForEthTransferVal * 255.0)),
 		EffectiveGasPriceForErc20Transfer:      uint8(math.Round(effectiveGasPriceForErc20TransferVal * 255.0)),
@@ -207,6 +239,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		GasPriceFactor:                         ctx.Float64(utils.GasPriceFactor.Name),
 		WitnessFull:                            ctx.Bool(utils.WitnessFullFlag.Name),
 		SyncLimit:                              ctx.Uint64(utils.SyncLimit.Name),
+		SyncLimitVerifiedEnabled:               ctx.Bool(utils.SyncLimitVerifiedEnabled.Name),
+		SyncLimitUnverifiedCount:               ctx.Uint64(utils.SyncLimitUnverifiedCount.Name),
 		DebugTimers:                            ctx.Bool(utils.DebugTimers.Name),
 		DebugNoSync:                            ctx.Bool(utils.DebugNoSync.Name),
 		DebugLimit:                             ctx.Uint64(utils.DebugLimit.Name),
@@ -223,6 +257,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DataStreamInactivityTimeout:            ctx.Duration(utils.DataStreamInactivityTimeout.Name),
 		VirtualCountersSmtReduction:            ctx.Float64(utils.VirtualCountersSmtReduction.Name),
 		BadBatches:                             badBatches,
+		IgnoreBadBatchesCheck:                  ctx.Bool(utils.IgnoreBadBatchesCheck.Name),
 		InitialBatchCfgFile:                    ctx.String(utils.InitialBatchCfgFile.Name),
 		ACLPrintHistory:                        ctx.Int(utils.ACLPrintHistory.Name),
 		InfoTreeUpdateInterval:                 ctx.Duration(utils.InfoTreeUpdateInterval.Name),
@@ -233,7 +268,16 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		WitnessCacheBatchAheadOffset:           ctx.Uint64(utils.WitnessCacheBatchAheadOffset.Name),
 		WitnessCacheBatchBehindOffset:          ctx.Uint64(utils.WitnessCacheBatchBehindOffset.Name),
 		WitnessContractInclusion:               witnessInclusion,
+		GasPriceCheckFrequency:                 ctx.Duration(utils.GasPriceCheckFrequency.Name),
+		GasPriceHistoryCount:                   ctx.Uint64(utils.GasPriceHistoryCount.Name),
+		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
+		RejectLowGasPriceTolerance:             ctx.Float64(utils.RejectLowGasPriceTolerance.Name),
+		LogLevel:                               logLevel,
+		PanicOnReorg:                           ctx.Bool(utils.PanicOnReorg.Name),
+		ShadowSequencer:                        ctx.Bool(utils.ShadowSequencer.Name),
 		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
+		BadTxStoreValue:                        ctx.Uint64(utils.BadTxStoreValue.Name),
+		BadTxPurge:                             ctx.Bool(utils.BadTxPurge.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)
@@ -281,4 +325,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.TxPoolRejectSmartContractDeployments.Name, cfg.TxPoolRejectSmartContractDeployments)
 	checkFlag(utils.L1ContractAddressCheckFlag.Name, cfg.L1ContractAddressCheck)
 	checkFlag(utils.L1ContractAddressRetrieveFlag.Name, cfg.L1ContractAddressCheck)
+
+	verifyAddressFlag(utils.L2DataStreamerUrlFlag.Name, cfg.L2DataStreamerUrl)
 }

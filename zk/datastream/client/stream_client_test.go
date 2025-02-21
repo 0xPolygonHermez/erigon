@@ -45,21 +45,20 @@ func TestStreamClientReadHeaderEntry(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{20, 21, 22, 23, 24, 20},
 			expectedResult: nil,
-			expectedError:  "read header bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
+			expectedError:  "read header bytes: readBuffer: socket error: io.ReadFull: read pipe: i/o timeout",
 		},
 	}
 
 	for _, testCase := range testCases {
-		c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
-		server, conn := net.Pipe()
-		defer server.Close()
-		defer c.Stop()
-
-		c.conn = conn
 		t.Run(testCase.name, func(t *testing.T) {
+			c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
+			server, conn := net.Pipe()
+			defer server.Close()
+			defer c.Stop()
+
+			c.conn = conn
 			go func() {
 				server.Write(testCase.input)
-				server.Close()
 			}()
 
 			header, err := c.readHeaderEntry()
@@ -107,27 +106,26 @@ func TestStreamClientReadResultEntry(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{20, 21, 22, 23, 24, 20},
 			expectedResult: nil,
-			expectedError:  "read main result bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
+			expectedError:  "read main result bytes: readBuffer: socket error: io.ReadFull: read pipe: i/o timeout",
 		},
 		{
 			name:           "Invalid error length",
 			input:          []byte{0, 0, 0, 12, 0, 0, 0, 0, 20, 21},
 			expectedResult: nil,
-			expectedError:  "read result errStr bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
+			expectedError:  "read result errStr bytes: readBuffer: socket error: io.ReadFull: read pipe: i/o timeout",
 		},
 	}
 
 	for _, testCase := range testCases {
-		c := NewClient(context.Background(), "", false, 0, 2*time.Second, 0)
-		server, conn := net.Pipe()
-		defer server.Close()
-		defer c.Stop()
-
-		c.conn = conn
 		t.Run(testCase.name, func(t *testing.T) {
+			c := NewClient(context.Background(), "", false, 2*time.Second, 0, DefaultEntryChannelSize)
+			server, conn := net.Pipe()
+			defer server.Close()
+			defer c.Stop()
+
+			c.conn = conn
 			go func() {
 				server.Write(testCase.input)
-				server.Close()
 			}()
 
 			result, err := c.readResultEntry([]byte{1})
@@ -182,28 +180,28 @@ func TestStreamClientReadFileEntry(t *testing.T) {
 			name:           "Invalid byte array length",
 			input:          []byte{2, 21, 22, 23, 24, 20},
 			expectedResult: nil,
-			expectedError:  "reading file bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
+			expectedError:  "reading file bytes: readBuffer: socket error: io.ReadFull: read pipe: i/o timeout",
 		}, {
 			name:           "Invalid data length",
 			input:          []byte{2, 0, 0, 0, 31, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 45, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 64},
 			expectedResult: nil,
-			expectedError:  "reading file data bytes: readBuffer: socket error: io.ReadFull: unexpected EOF",
+			expectedError:  "reading file data bytes: readBuffer: socket error: io.ReadFull: read pipe: i/o timeout",
 		},
 	}
 	for _, testCase := range testCases {
-		c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
-		server, conn := net.Pipe()
-		defer c.Stop()
-		defer server.Close()
-
-		c.conn = conn
 		t.Run(testCase.name, func(t *testing.T) {
+			c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
+			server, conn := net.Pipe()
+			defer server.Close()
+			defer c.Stop()
+
+			c.conn = conn
 			go func() {
 				server.Write(testCase.input)
-				server.Close()
 			}()
 
 			result, err := c.NextFileEntry()
+
 			if testCase.expectedError != "" {
 				require.EqualError(t, err, testCase.expectedError)
 			} else {
@@ -215,7 +213,7 @@ func TestStreamClientReadFileEntry(t *testing.T) {
 }
 
 func TestStreamClientReadParsedProto(t *testing.T) {
-	c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+	c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
 	serverConn, clientConn := net.Pipe()
 	c.conn = clientConn
 	c.checkTimeout = 1 * time.Second
@@ -287,7 +285,7 @@ func TestStreamClientGetLatestL2Block(t *testing.T) {
 		clientConn.Close()
 	}()
 
-	c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+	c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
 	c.conn = clientConn
 	c.checkTimeout = 1 * time.Second
 	c.allowStops = false
@@ -401,7 +399,7 @@ func TestStreamClientGetL2BlockByNumber(t *testing.T) {
 		clientConn.Close()
 	}()
 
-	c := NewClient(context.Background(), "", false, 0, 500*time.Millisecond, 0)
+	c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
 	c.header = &types.HeaderEntry{
 		TotalEntries: 4,
 	}

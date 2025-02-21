@@ -17,14 +17,12 @@ import (
 type DataStreamCatchupCfg struct {
 	db               kv.RwDB
 	dataStreamServer server.DataStreamServer
-	streamVersion    int
 }
 
-func StageDataStreamCatchupCfg(dataStreamServer server.DataStreamServer, db kv.RwDB, chainId uint64, streamVersion int) DataStreamCatchupCfg {
+func StageDataStreamCatchupCfg(dataStreamServer server.DataStreamServer, db kv.RwDB, chainId uint64) DataStreamCatchupCfg {
 	return DataStreamCatchupCfg{
 		dataStreamServer: dataStreamServer,
 		db:               db,
-		streamVersion:    streamVersion,
 	}
 }
 

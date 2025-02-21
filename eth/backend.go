@@ -26,12 +26,15 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ledgerwatch/erigon-lib/metrics"
 
 	"github.com/ledgerwatch/erigon-lib/common/dir"
 	"github.com/ledgerwatch/erigon-lib/common/disk"
@@ -152,6 +155,7 @@ type Config = ethconfig.Config
 type PreStartTasks struct {
 	WarmUpDataStream  bool
 	PurgeWitnessCache bool
+	PurgeBadTxs       bool
 }
 
 // Ethereum implements the Ethereum full node service.
@@ -238,6 +242,7 @@ type Ethereum struct {
 
 	polygonSyncService polygonsync.Service
 	stopNode           func() error
+	gasTracker         *jsonrpc.RecurringL1GasPriceTracker
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
@@ -273,6 +278,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		return nil, err
 	}
 	latestBlockBuiltStore := builder.NewLatestBlockBuiltStore()
+
+	createClientVersionMetric()
 
 	if err := chainKv.Update(context.Background(), func(tx kv.RwTx) error {
 		if err = stages.UpdateMetrics(tx); err != nil {
@@ -971,6 +978,17 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	}
 
 	if backend.config.Zk != nil {
+		// setup the gas tracker and start it
+		backend.gasTracker = jsonrpc.NewRecurringL1GasPriceTracker(
+			backend.config.AllowFreeTransactions,
+			backend.config.GasPriceFactor,
+			backend.config.DefaultGasPrice,
+			backend.config.MaxGasPrice,
+			backend.config.L1RpcUrl,
+			backend.config.GasPriceCheckFrequency,
+			backend.config.GasPriceHistoryCount,
+		)
+
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init
 		// alongside the http server
 		httpCfg := stack.Config().Http
@@ -983,7 +1001,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			}
 
 			// todo [zkevm] read the stream version from config and figure out what system id is used for
-			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), uint8(backend.config.DatastreamVersion), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig)
+			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -999,6 +1017,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		}
 
 		backend.preStartTasks.PurgeWitnessCache = config.WitnessCachePurge
+		backend.preStartTasks.PurgeBadTxs = config.BadTxPurge
 
 		// entering ZK territory!
 		cfg := backend.config
@@ -1031,7 +1050,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		isSequencer := sequencer.IsSequencer()
 
 		// if the L1 block sync is set we're in recovery so can't run as a sequencer
-		if cfg.L1SyncStartBlock > 0 {
+		if cfg.IsL1Recovery() {
 			if !isSequencer {
 				panic("you cannot launch in l1 sync mode as an RPC node")
 			}
@@ -1039,8 +1058,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		}
 
 		seqAndVerifTopics := [][]libcommon.Hash{{
-			contracts.SequencedBatchTopicPreEtrog,
-			contracts.SequencedBatchTopicEtrog,
+			contracts.SequenceBatchesTopicPreEtrog,
+			contracts.SequenceBatchesTopicEtrog,
 			contracts.RollbackBatchesTopic,
 			contracts.VerificationTopicPreEtrog,
 			contracts.VerificationTopicEtrog,
@@ -1162,7 +1181,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				ethermanClients,
 				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
 				[][]libcommon.Hash{{
-					contracts.SequenceBatchesTopic,
+					contracts.SequenceBatchesTopicEtrog,
 				}},
 				cfg.L1BlockRange,
 				cfg.L1QueryDelay,
@@ -1294,7 +1313,7 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 
 // creates a datastream client with default parameters
 func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) *client.StreamClient {
-	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestForkId)
+	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.L2DataStreamerTimeout, latestForkId, cfg.L2DataStreamerMaxEntryChan)
 }
 
 func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig *chain.Config) error {
@@ -1347,7 +1366,7 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	if s.streamServer != nil {
 		dataStreamServer = dataStreamServerFactory.CreateDataStreamServer(s.streamServer, config.Zk.L2ChainId)
 	}
-	s.apiList = jsonrpc.APIList(chainKv, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, dataStreamServer)
+	s.apiList = jsonrpc.APIList(chainKv, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, dataStreamServer, s.gasTracker)
 
 	if config.SilkwormRpcDaemon && httpRpcCfg.Enabled {
 		interface_log_settings := silkworm.RpcInterfaceLogSettings{
@@ -1381,7 +1400,7 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	}
 
 	if chainConfig.Bor == nil {
-		go s.engineBackendRPC.Start(ctx, &httpRpcCfg, s.chainDB, s.blockReader, ff, stateCache, s.agg, s.engine, ethRpcClient, txPoolRpcClient, miningRpcClient)
+		go s.engineBackendRPC.Start(ctx, &httpRpcCfg, s.chainDB, s.blockReader, ff, stateCache, s.agg, s.engine, ethRpcClient, txPoolRpcClient, miningRpcClient, s.gasTracker)
 	}
 
 	go func() {
@@ -1440,6 +1459,22 @@ func (s *Ethereum) PreStart() error {
 		hermezDb := hermez_db.NewHermezDb(tx)
 		if err := hermezDb.PurgeWitnessCaches(); err != nil {
 			return fmt.Errorf("failed to purge witness caches: %w", err)
+		}
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("tx.Commit: %w", err)
+		}
+	}
+
+	if s.preStartTasks.PurgeBadTxs {
+		log.Warn("[PreStart] purge bad transactions cache enabled, purging...", "zkevm.bad-tx-purge", s.config.BadTxPurge)
+		tx, err := s.chainDB.BeginRw(context.Background())
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		hermezDb := hermez_db.NewHermezDb(tx)
+		if err = hermezDb.PurgeBadTxHashes(); err != nil {
+			return fmt.Errorf("failed to purge bad transactions: %w", err)
 		}
 		if err = tx.Commit(); err != nil {
 			return fmt.Errorf("tx.Commit: %w", err)
@@ -1924,6 +1959,8 @@ func (s *Ethereum) Start() error {
 		s.engine.(*bor.Bor).Start(s.chainDB)
 	}
 
+	s.gasTracker.Start()
+
 	// if s.silkwormRPCDaemonService != nil {
 	// 	if err := s.silkwormRPCDaemonService.Start(); err != nil {
 	// 		s.logger.Error("silkworm.StartRpcDaemon error", "err", err)
@@ -1979,6 +2016,8 @@ func (s *Ethereum) Stop() error {
 		s.agg.Close()
 	}
 	s.chainDB.Close()
+
+	s.gasTracker.Stop()
 
 	if s.silkwormRPCDaemonService != nil {
 		if err := s.silkwormRPCDaemonService.Stop(); err != nil {
@@ -2198,4 +2237,12 @@ func l1ContractAddressCheck(ctx context.Context, cfg *ethconfig.Zk, l1BlockSynce
 	log.Warn("🚨 zkevm.address-sequencer configuration parameter is deprecated and it will be removed in upcoming releases")
 
 	return true, nil
+}
+
+func createClientVersionMetric() {
+	metrics.GetOrCreateGauge(fmt.Sprintf(`web3_client_version{name="cdk-erigon"}`))
+	metrics.GetOrCreateGauge(fmt.Sprintf(`web3_client_version{version="%s"}`, utils.GetVersion()))
+	metrics.GetOrCreateGauge(fmt.Sprintf(`web3_client_version{os="%s"}`, runtime.GOOS))
+	metrics.GetOrCreateGauge(fmt.Sprintf(`web3_client_version{arch="%s"}`, runtime.GOARCH))
+	metrics.GetOrCreateGauge(fmt.Sprintf(`web3_client_version{go_version="%s"}`, runtime.Version()))
 }

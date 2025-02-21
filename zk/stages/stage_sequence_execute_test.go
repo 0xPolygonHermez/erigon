@@ -108,7 +108,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 
 	dataStreamServerMock.EXPECT().GetHighestBatchNumber().Return(latestBatchNumber, nil).AnyTimes()
 	dataStreamServerMock.EXPECT().GetHighestClosedBatch().Return(latestBatchNumber, nil).AnyTimes()
-	dataStreamServerMock.EXPECT().GetHighestBlockNumber().Return(latestL1BlockNumber.Uint64(), nil).AnyTimes()
+	dataStreamServerMock.EXPECT().GetHighestBlockNumber().Return(latestL2BlockNumber.Uint64(), nil).AnyTimes()
 	dataStreamServerMock.EXPECT().
 		WriteBlockWithBatchStartToStream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
@@ -143,10 +143,12 @@ func TestSpawnSequencingStage(t *testing.T) {
 		AnyTimes()
 
 	zkCfg := &ethconfig.Zk{
-		SequencerResequence:    false,
-		SequencerBatchSealTime: 3 * time.Millisecond, // normally it is greater that block seal time, allows one more block to be added to the batch
-		SequencerBlockSealTime: 2 * time.Millisecond,
-		InfoTreeUpdateInterval: 2 * time.Millisecond,
+		SequencerResequence: false,
+		// lower batch close time ensures only 1 block will be created on 1 turn, as the test expects
+		SequencerBatchSealTime:      3 * time.Millisecond, // normally it is greater that block seal time, allows one more block to be added to the batch
+		SequencerBlockSealTime:      2 * time.Millisecond,
+		SequencerEmptyBlockSealTime: 2 * time.Millisecond,
+		InfoTreeUpdateInterval:      2 * time.Millisecond,
 	}
 
 	legacyVerifier := verifier.NewLegacyExecutorVerifier(*zkCfg, nil, db1, nil, nil)
@@ -193,7 +195,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	// IncrementStateVersionByBlockNumberIfNeeded
 	blockNumber, stateVersion, err := rawdb.GetLatestStateVersion(tx)
 	require.NoError(t, err)
-	// batch/block sealing timeouts are small, so it could happen that an extra block is not added to the batch.
+	// batch/block sealing timeouts are small, so it could happen that an extra block is not added to the batch
 	// No requirement prevents adding and extra block to the batch or not adding it. For more specific cases, create a separate test.
 	assert.True(t, expectedBlockNum <= blockNumber && blockNumber <= expectedBlockNum+1, "value is not in range")
 	assert.Equal(t, uint64(1), stateVersion)

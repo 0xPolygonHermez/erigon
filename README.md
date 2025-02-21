@@ -12,7 +12,7 @@ cdk-erigon is a fork of Erigon, currently in Alpha, optimized for syncing with t
 
 ## Hardware requirements
 
-* A Linux-based OS (e.g., Ubuntu Server 22.04 LTS).
+* A Linux-based OS (e.g., Ubuntu Server 22.04 LTS), with g++ 12+ being necessary, meaning Ubuntu 22.04 LTS or a more recent version is required.
 * At least 32GB RAM with a 4-core CPU.
 * Both Apple Silicon and AMD64 are supported.
 
@@ -24,15 +24,21 @@ Current status of cdk-erigon's support for running various chains and fork ids:
 - CDK Chains - beta support (forkid.9 and above)
 
 ## Dynamic Chain Configuration
-To use chains other than the defaults above, a set of configuration files can be supplied to run any chain.
+To use chains other than the defaults above, a set of configuration files can be supplied to run any chain. There are 2 ways to do this:
 
+### Method 1 **(recommended)**:
 1. Ensure your chain name starts with the word `dynamic` e.g. `dynamic-mynetwork`
-3. Create 3 files for dynamic configs (examples for Cardona in `zk/examples/dynamic-configs`, edit as required)
+2. Create 1 files for dynamic configs (examples for Cardona in `zk/examples/dynamic-configs/unon-dynamic-config.json`, edit as required)
+3. Use `zkevm.genesis-config-path` to set the path to the config file e.g. `--zkevm.genesis-config-path="/dynamic-mynetwork/dynamic-mynetwork.json"`
+
+### Method 2:
+1. Ensure your chain name starts with the word `dynamic` e.g. `dynamic-mynetwork`
+2. Create 3 files for dynamic configs (examples for Cardona in `zk/examples/dynamic-configs`, edit as required)
    - `dynamic-{network}-allocs.json` - the allocs file
    - `dynamic-{network}-chainspec.json` - the chainspec file
    - `dynamic-{network}-conf.json` - an additional configuration file
    - `dynamic-{network}.yaml` - the run config file for erigon.  You can use any of the example yaml files at the root of the repo as a base and edit as required, but ensure the `chain` field is in the format `dynamic-{network}` and matches the names of the config files above.
-4. Place the erigon config file along with the other files in the directory of your choice, for example `dynamic-mynetwork`.
+3. Place the erigon config file along with the other files in the directory of your choice, for example `dynamic-mynetwork`.
 
 **Tip**: if you have allocs in the format from Polygon when originally launching the network you can save this file to the root of the cdk-erigon code
 base and run `go run cmd/hack/allocs/main.go [your-file-name]` to convert it to the format needed by erigon, this will form the `dynamic-{network}-allocs.json` file.
@@ -73,7 +79,7 @@ but can be controlled via the following flags:
 To transplant the cache between datadirs, the `l1cache` dir can be copied. To use an upstream cdk-erigon node's L1 cache, the zkevm.l1-cache-enabled can be set to false, and the node provided the endpoint of the cache,
 instead of a regular L1 URL. e.g. `zkevm.l1-rpc-url=http://myerigonnode:6969?endpoint=http%3A%2F%2Fsepolia-rpc.com&chainid=2440`. NB: this node must be syncing the same network for any benefit!
 
-## Sequencer (WIP)
+## Sequencer
 
 Enable Sequencer: `CDK_ERIGON_SEQUENCER=1 ./build/bin/cdk-erigon <flags>`
 [Golang version >= 1.21](https://golang.org/doc/install); GCC 10+ or Clang; On Linux: kernel > v4
@@ -85,6 +91,10 @@ on the L1 from the sequencer contract that contains the `sequenceBatches` event.
 the L1 data into the cdk-erigon database and use this during execution rather than waiting for transactions from the txpool, effectively
 rebuilding the chain from the L1 data.  This can be used in tandem with unwinding the chain, or using the `zkevm.sync-limit` flag
 to limit the chain to a certain block height before starting the L1 recovery (useful if you have an RPC node available to speed up the process).
+
+**Important Note:**
+**This mode is not supported for pre-forkid8 networks. In their case, the node should be synced up to forkid8 and then switch to sequencer recover mode.**
+
 
 **Important Note:**
 **If using the `zkevm.sync-limit` flag you need to go to the boundary of a batch+1 block so if batch 41 ends at block 99
@@ -192,7 +202,6 @@ For a full explanation of the config options, see below:
 - `zkevm.address-ger-manager`: The address for the GER manager contract
 - `zkevm.data-stream-port`: Port for the data stream.  This needs to be set to enable the datastream server
 - `zkevm.data-stream-host`: The host for the data stream i.e. `localhost`.  This must be set to enable the datastream server
-- `zkevm.datastream-version:` Version of the data stream protocol.
 - `http.api`: List of enabled HTTP API modules.
 
 Sequencer specific config:
@@ -200,13 +209,16 @@ Sequencer specific config:
 - `zkevm.executor-strict`: Defaulted to true, but can be set to false when running the sequencer without verifications (use with extreme caution)
 - `zkevm.witness-full`: Defaulted to false.  Controls whether the full or partial witness is used with the executor.
 - `zkevm.reject-smart-contract-deployments`: Defaulted to false.  Controls whether smart contract deployments are rejected by the TxPool.
+- `zkevm.ignore-bad-batches-check`: Defaulted to false.  Controls whether the sequencer will ignore bad batches and continue to the next batch. <strong style='color:red'>WARNING: this is a very specific and dangerous mode of operation!</strong>
 
 Resource Utilisation config:
 - `zkevm.smt-regenerate-in-memory`: As documented above, allows SMT regeneration in memory if machine has enough RAM, for a speedup in initial sync.
+- `zkevm.shadow-sequencer`: Defaulted to false. Allows the sequencer to lag behind the latest L1 batch. Used for local testing.
 
 Useful config entries:
 - `zkevm.sync-limit`: This will ensure the network only syncs to a given block height.
 - `debug.timers`: This will enable debug timers in the logs to help with performance tuning. Recording timings of witness generation, etc. at INFO level.
+- `zkevm.panic-on-reorg`: Useful when the state should be preserved on history reorg
 
 Metrics and pprof configuration flags:
 

@@ -19,16 +19,16 @@ package utils
 
 import (
 	"crypto/ecdsa"
-	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ledgerwatch/erigon/zk/zk_config"
+	"github.com/ledgerwatch/erigon/zk/zk_config/cfg_dynamic_genesis"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/log/v3"
@@ -415,6 +415,11 @@ var (
 		Usage: "L2 datastreamer endpoint",
 		Value: "",
 	}
+	L2DataStreamerMaxEntryChanFlag = cli.Uint64Flag{
+		Name:  "zkevm.l2-datastreamer-max-entrychan",
+		Usage: "L2 datastreamer max entry channel size",
+		Value: 1000000,
+	}
 	L2DataStreamerUseTLSFlag = cli.BoolFlag{
 		Name:  "zkevm.l2-datastreamer-use-tls",
 		Usage: "Use TLS connection to L2 datastreamer endpoint",
@@ -551,6 +556,11 @@ var (
 		Usage: "Block seal time. Defaults to 6s",
 		Value: "6s",
 	}
+	SequencerEmptyBlockSealTime = cli.StringFlag{
+		Name:  "zkevm.sequencer-empty-block-seal-time",
+		Usage: "Empty block seal time. Defaults to zkevm.sequencer-block-seal-time",
+		Value: "",
+	}
 	SequencerBatchSealTime = cli.StringFlag{
 		Name:  "zkevm.sequencer-batch-seal-time",
 		Usage: "Batch seal time. Defaults to 12s",
@@ -643,11 +653,6 @@ var (
 		Usage: "The maximum number of concurrent requests to the executor for getBatchWitness.",
 		Value: 1,
 	}
-	DatastreamVersionFlag = cli.IntFlag{
-		Name:  "zkevm.datastream-version",
-		Usage: "Stream version indicator 1: PreBigEndian, 2: BigEndian.",
-		Value: 2,
-	}
 	DataStreamPort = cli.UintFlag{
 		Name:  "zkevm.data-stream-port",
 		Usage: "Define the port used for the zkevm data stream",
@@ -688,6 +693,11 @@ var (
 		Usage: "Reject the sequencer to proceed transactions with low gas price",
 		Value: false,
 	}
+	RejectLowGasPriceTolerance = cli.Float64Flag{
+		Name:  "zkevm.reject-low-gas-price-tolerance",
+		Usage: "Value between 0 and 1 that defines the tolerance for low gas price transactions, this percentage will be removed from the lowest price to determine rejection",
+		Value: 0,
+	}
 	AllowPreEIP155Transactions = cli.BoolFlag{
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
@@ -727,6 +737,16 @@ var (
 	GasPriceFactor = cli.Float64Flag{
 		Name:  "zkevm.gas-price-factor",
 		Usage: "Apply factor to L1 gas price to calculate l2 gasPrice",
+		Value: 1,
+	}
+	GasPriceCheckFrequency = cli.DurationFlag{
+		Name:  "zkevm.gas-price-check-frequency",
+		Usage: "The frequency at which to check the L1 for the latest gas price",
+		Value: 0,
+	}
+	GasPriceHistoryCount = cli.Uint64Flag{
+		Name:  "zkevm.gas-price-history-count",
+		Usage: "The number of historical gas prices to keep",
 		Value: 1,
 	}
 	WitnessFullFlag = cli.BoolFlag{
@@ -774,6 +794,11 @@ var (
 		Usage: "A comma separated list of batch numbers that are known bad on the L1. These will automatically be marked as bad during L1 recovery",
 		Value: "",
 	}
+	IgnoreBadBatchesCheck = cli.BoolFlag{
+		Name:  "zkevm.ignore-bad-batches-check",
+		Usage: "Ignore bad batches",
+		Value: false,
+	}
 	InitialBatchCfgFile = cli.StringFlag{
 		Name:  "zkevm.initial-batch.config",
 		Usage: "The file that contains the initial (injected) batch data.",
@@ -819,10 +844,44 @@ var (
 		Usage: "Contracts that will have all of their storage added to the witness every time",
 		Value: "",
 	}
+	PanicOnReorg = cli.BoolFlag{
+		Name:  "zkevm.panic-on-reorg",
+		Usage: "Crash on reorg instead of attempting to recover",
+		Value: false,
+	}
+	ShadowSequencer = cli.BoolFlag{
+		Name:  "zkevm.shadow-sequencer",
+		Usage: "Shadow the main sequencer when run in sequencer mode. Used for local testing",
+		Value: false,
+	}
 	BadTxAllowance = cli.Uint64Flag{
 		Name:  "zkevm.bad-tx-allowance",
 		Usage: "The maximum number of times a transaction that consumes too many counters to fit into a batch will be attempted before it is rejected outright by eth_sendRawTransaction",
 		Value: 2,
+	}
+	BadTxStoreValue = cli.Uint64Flag{
+		Name:  "zkevm.bad-tx-store-value",
+		Usage: "The maximum number of bad transactions to store in the database. Default 200.",
+		Value: 200,
+	}
+	BadTxPurge = cli.BoolFlag{
+		Name:  "zkevm.bad-tx-purge",
+		Usage: "Purge the bad transactions from the database on startup. Default false.",
+		Value: false,
+	}
+	SyncLimitVerifiedEnabled = cli.BoolFlag{
+		Name:  "zkevm.sync-limit-verified-enabled",
+		Usage: "Enable sync to verified batch height.",
+		Value: false,
+	}
+	SyncLimitUnverifiedCount = cli.UintFlag{
+		Name:  "zkevm.sync-limit-unverified-count",
+		Usage: "The number of unverified batches to sync to past verified batch height. Used in combination with zkevm.sync-limit-verified-enabled. Default 5.",
+		Value: 5,
+	}
+	ZKGenesisConfigPathFlag = cli.StringFlag{
+		Name:  "zkevm.genesis-config-path",
+		Usage: "File path for the zk config containing allocs, chainspec, and other zk specific configurations.",
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
@@ -2129,13 +2188,6 @@ func setWhitelist(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 }
 
-type DynamicConfig struct {
-	Root       string `json:"root"`
-	Timestamp  uint64 `json:"timestamp"`
-	GasLimit   uint64 `json:"gasLimit"`
-	Difficulty int64  `json:"difficulty"`
-}
-
 func setBeaconAPI(ctx *cli.Context, cfg *ethconfig.Config) error {
 	allowed := ctx.StringSlice(BeaconAPIFlag.Name)
 	if err := cfg.BeaconRouter.UnwrapEndpointsList(allowed); err != nil {
@@ -2324,28 +2376,21 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	// Override any default configs for hard coded networks.
 	chain = ctx.String(ChainFlag.Name)
 	if strings.HasPrefix(chain, "dynamic") {
-		configFilePath := ctx.String(ConfigFlag.Name)
-		if configFilePath == "" {
+		dynamicConfigFilePath := ctx.String(ConfigFlag.Name)
+		if dynamicConfigFilePath == "" {
 			Fatalf("Config file is required for dynamic chain")
 		}
+		zk_config.ZKDynamicConfigPath = filepath.Dir(dynamicConfigFilePath)
 
-		// Be sure to set this first
-		params.DynamicChainConfigPath = filepath.Dir(configFilePath)
-		filename := path.Join(params.DynamicChainConfigPath, chain+"-conf.json")
+		// Union path is not needed if dynamic config is provided
+		unionConfigFilePath := ctx.String(ZKGenesisConfigPathFlag.Name)
+		if unionConfigFilePath != "" {
+			zk_config.ZkUnionConfigPath = unionConfigFilePath
+		}
 
 		genesis := core.GenesisBlockByChainName(chain)
 
-		dConf := DynamicConfig{}
-
-		if _, err := os.Stat(filename); err == nil {
-			dConfBytes, err := os.ReadFile(filename)
-			if err != nil {
-				panic(err)
-			}
-			if err := json.Unmarshal(dConfBytes, &dConf); err != nil {
-				panic(err)
-			}
-		}
+		dConf := cfg_dynamic_genesis.NewDynamicGenesisConfig(chain)
 
 		genesis.Timestamp = dConf.Timestamp
 		genesis.GasLimit = dConf.GasLimit

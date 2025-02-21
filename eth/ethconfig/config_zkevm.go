@@ -5,12 +5,14 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type Zk struct {
 	L2ChainId                              uint64
 	L2RpcUrl                               string
 	L2DataStreamerUrl                      string
+	L2DataStreamerMaxEntryChan             uint64
 	L2DataStreamerUseTLS                   bool
 	L2DataStreamerTimeout                  time.Duration
 	L2ShortCircuitToVerifiedBatch          bool
@@ -36,8 +38,8 @@ type Zk struct {
 	L1CachePort                            uint
 	RpcRateLimits                          int
 	RpcGetBatchWitnessConcurrencyLimit     int
-	DatastreamVersion                      int
 	SequencerBlockSealTime                 time.Duration
+	SequencerEmptyBlockSealTime            time.Duration
 	SequencerBatchSealTime                 time.Duration
 	SequencerBatchVerificationTimeout      time.Duration
 	SequencerBatchVerificationRetries      int
@@ -56,7 +58,6 @@ type Zk struct {
 	ExecutorMaxConcurrentRequests          int
 	Limbo                                  bool
 	AllowFreeTransactions                  bool
-	RejectLowGasPriceTransactions          bool
 	AllowPreEIP155Transactions             bool
 	EffectiveGasPriceForEthTransfer        uint8
 	EffectiveGasPriceForErc20Transfer      uint8
@@ -65,19 +66,25 @@ type Zk struct {
 	DefaultGasPrice                        uint64
 	MaxGasPrice                            uint64
 	GasPriceFactor                         float64
+	GasPriceCheckFrequency                 time.Duration
+	GasPriceHistoryCount                   uint64
 	DAUrl                                  string
 	DataStreamHost                         string
 	DataStreamPort                         uint
 	DataStreamWriteTimeout                 time.Duration
 	DataStreamInactivityTimeout            time.Duration
 	DataStreamInactivityCheckInterval      time.Duration
+	PanicOnReorg                           bool
+	ShadowSequencer                        bool
 
-	RebuildTreeAfter      uint64
-	IncrementTreeAlways   bool
-	SmtRegenerateInMemory bool
-	WitnessFull           bool
-	SyncLimit             uint64
-	Gasless               bool
+	RebuildTreeAfter         uint64
+	IncrementTreeAlways      bool
+	SmtRegenerateInMemory    bool
+	WitnessFull              bool
+	SyncLimit                uint64
+	SyncLimitVerifiedEnabled bool
+	SyncLimitUnverifiedCount uint64
+	Gasless                  bool
 
 	DebugTimers    bool
 	DebugNoSync    bool
@@ -96,6 +103,7 @@ type Zk struct {
 	ACLPrintHistory                int
 	InfoTreeUpdateInterval         time.Duration
 	BadBatches                     []uint64
+	IgnoreBadBatchesCheck          bool
 	SealBatchImmediatelyOnOverflow bool
 	MockWitnessGeneration          bool
 	WitnessCacheEnabled            bool
@@ -103,7 +111,12 @@ type Zk struct {
 	WitnessCacheBatchAheadOffset   uint64
 	WitnessCacheBatchBehindOffset  uint64
 	WitnessContractInclusion       []common.Address
+	RejectLowGasPriceTransactions  bool
+	RejectLowGasPriceTolerance     float64
+	LogLevel                       log.Lvl
 	BadTxAllowance                 uint64
+	BadTxStoreValue                uint64
+	BadTxPurge                     bool
 }
 
 var DefaultZkConfig = &Zk{}
@@ -123,4 +136,8 @@ func (c *Zk) UseExecutors() bool {
 // ShouldImportInitialBatch returns true in case initial batch config file name is non-empty string.
 func (c *Zk) ShouldImportInitialBatch() bool {
 	return c.InitialBatchCfgFile != ""
+}
+
+func (c *Zk) IsL1Recovery() bool {
+	return c.L1SyncStartBlock > 0
 }

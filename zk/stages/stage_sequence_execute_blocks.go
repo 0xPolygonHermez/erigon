@@ -130,6 +130,7 @@ func finaliseBlock(
 	}
 
 	txInfos := []blockinfo.ExecutedTxInfo{}
+	txHash2SenderCache := make(map[common.Hash]common.Address)
 	builtBlockElements := batchState.blockState.builtBlockElements
 	for i, tx := range builtBlockElements.transactions {
 		var from common.Address
@@ -151,6 +152,8 @@ func finaliseBlock(
 			Receipt:           localReceipt,
 			Signer:            &from,
 		})
+
+		txHash2SenderCache[tx.Hash()] = sender
 	}
 
 	if err := postBlockStateHandling(*batchContext.cfg, ibs, batchContext.sdb.hermezDb, newHeader, ger, l1BlockHash, parentBlock.Root(), txInfos); err != nil {
@@ -181,9 +184,16 @@ func finaliseBlock(
 		return nil, err
 	}
 
+	quit := batchContext.ctx.Done()
+	batchContext.sdb.eridb.OpenBatch(quit)
 	// this is actually the interhashes stage
 	newRoot, err := zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	if err != nil {
+		batchContext.sdb.eridb.RollbackBatch()
+		return nil, err
+	}
+
+	if err = batchContext.sdb.eridb.CommitBatch(); err != nil {
 		return nil, err
 	}
 
@@ -224,7 +234,7 @@ func finaliseBlock(
 	}
 
 	// now process the senders to avoid a stage by itself
-	if err := addSenders(*batchContext.cfg, newNum, finalTransactions, batchContext.sdb.tx, finalHeader); err != nil {
+	if err := addSenders(*batchContext.cfg, newNum, finalTransactions, batchContext.sdb.tx, finalHeader, txHash2SenderCache); err != nil {
 		return nil, err
 	}
 
@@ -295,22 +305,22 @@ func addSenders(
 	finalTransactions types.Transactions,
 	tx kv.RwTx,
 	finalHeader *types.Header,
+	txHash2SenderCache map[common.Hash]common.Address,
 ) error {
 	signer := types.MakeSigner(cfg.chainConfig, newNum.Uint64(), 0)
 	cryptoContext := secp256k1.ContextForThread(0)
 	senders := make([]common.Address, 0, len(finalTransactions))
+	var from common.Address
 	for _, transaction := range finalTransactions {
-		from, ok := transaction.GetSender()
-		if ok {
-			senders = append(senders, from)
-			continue
-		}
 
-		// shouldn't be hit as we preload this value before processing the transaction
-		// to look for errors in handling it.
-		from, err := signer.SenderWithContext(cryptoContext, transaction)
-		if err != nil {
-			return err
+		if val, ok := txHash2SenderCache[transaction.Hash()]; ok {
+			from = val
+		} else {
+			val, err := signer.SenderWithContext(cryptoContext, transaction)
+			if err != nil {
+				return err
+			}
+			from = val
 		}
 		senders = append(senders, from)
 	}

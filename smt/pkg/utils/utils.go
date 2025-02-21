@@ -1,32 +1,46 @@
 package utils
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
 	poseidon "github.com/okx/poseidongold/go"
+	"golang.org/x/exp/slices"
 )
+
+func init() {
+	const hashPoseidonAllZeroes = "0xc71603f33a1144ca7953db0ab48808f4c4055e3364a246c33c18a9786cb0b359"
+	var err error
+	PoseidonAllZeroesHash, err = StringToH4(hashPoseidonAllZeroes)
+	if err != nil {
+		panic(err)
+	}
+}
 
 const (
-	KEY_BALANCE              = 0
-	KEY_NONCE                = 1
-	SC_CODE                  = 2
-	SC_STORAGE               = 3
-	SC_LENGTH                = 4
-	HASH_POSEIDON_ALL_ZEROES = "0xc71603f33a1144ca7953db0ab48808f4c4055e3364a246c33c18a9786cb0b359"
-	BYTECODE_ELEMENTS_HASH   = 8
-	BYTECODE_BYTES_ELEMENT   = 7
+	KEY_BALANCE            = 0
+	KEY_NONCE              = 1
+	SC_CODE                = 2
+	SC_STORAGE             = 3
+	SC_LENGTH              = 4
+	BYTECODE_ELEMENTS_HASH = 8
+	BYTECODE_BYTES_ELEMENT = 7
 )
 
-type NodeValue8 [8]*big.Int
-type NodeValue12 [12]*big.Int
+var (
+	PoseidonAllZeroesHash [4]uint64
+)
+
+type NodeValue8 [8]uint64
+type NodeValue12 [12]uint64
 type NodeKey [4]uint64
 
 type NodeType int
@@ -77,13 +91,22 @@ func (nk *NodeKey) AsUint64Pointer() *[4]uint64 {
 	return (*[4]uint64)(nk)
 }
 
+func (nk *NodeKey) ToHex() string {
+	buf := make([]byte, 32) // 4 uint64s * 8 bytes each = 32 bytes
+	binary.BigEndian.PutUint64(buf[0:8], nk[0])
+	binary.BigEndian.PutUint64(buf[8:16], nk[1])
+	binary.BigEndian.PutUint64(buf[16:24], nk[2])
+	binary.BigEndian.PutUint64(buf[24:32], nk[3])
+	return hex.EncodeToString(buf)
+}
+
 func (nv *NodeValue8) IsZero() bool {
 	if nv == nil {
 		return true
 	}
 
 	for i := 0; i < 8; i++ {
-		if nv[i] == nil || nv[i].Uint64() != 0 {
+		if nv[i] != 0 {
 			return false
 		}
 	}
@@ -99,9 +122,7 @@ func (nv *NodeValue8) SetHalfValue(values [4]uint64, part int) error {
 
 	partI := part * 4
 	for i, v := range values {
-		nlh := big.Int{}
-		nlh.SetUint64(v)
-		nv[i+partI] = &nlh
+		nv[i+partI] = v
 	}
 
 	return nil
@@ -112,10 +133,7 @@ func (nv *NodeValue8) ToUintArray() [8]uint64 {
 
 	if nv != nil {
 		for i := 0; i < 8; i++ {
-			if nv[i] != nil {
-				result[i] = nv[i].Uint64()
-			}
-			// if nv[i] is nil, result[i] will remain as its zero value (0)
+			result[i] = nv[i]
 		}
 	}
 	// if nv is nil, result will be an array of 8 zeros
@@ -128,10 +146,7 @@ func (nv *NodeValue8) ToUintArrayByPointer() *[8]uint64 {
 
 	if nv != nil {
 		for i := 0; i < 8; i++ {
-			if nv[i] != nil {
-				result[i] = nv[i].Uint64()
-			}
-			// if nv[i] is nil, result[i] will remain as its zero value (0)
+			result[i] = nv[i]
 		}
 	}
 	// if nv is nil, result will be an array of 8 zeros
@@ -139,22 +154,27 @@ func (nv *NodeValue8) ToUintArrayByPointer() *[8]uint64 {
 	return &result
 }
 
-func (nv *NodeValue12) ToBigInt() *big.Int {
-	return ArrayToScalarBig(nv[:])
+func (nv *NodeValue8) ToHex() string {
+	bytes := make([]byte, 64)
+	for i := 0; i < 8; i++ {
+		// Write in reverse order: start from the end and work backwards
+		binary.BigEndian.PutUint64(bytes[(7-i)*8:], nv[i])
+	}
+	return hex.EncodeToString(bytes)
 }
 
 func (nv *NodeValue12) StripCapacity() [8]uint64 {
-	return [8]uint64{nv[0].Uint64(), nv[1].Uint64(), nv[2].Uint64(), nv[3].Uint64(), nv[4].Uint64(), nv[5].Uint64(), nv[6].Uint64(), nv[7].Uint64()}
+	return [8]uint64{nv[0], nv[1], nv[2], nv[3], nv[4], nv[5], nv[6], nv[7]}
 }
 
 func (nv *NodeValue12) Get0to4() *NodeKey {
 	// slice it 0-4
-	return &NodeKey{nv[0].Uint64(), nv[1].Uint64(), nv[2].Uint64(), nv[3].Uint64()}
+	return &NodeKey{nv[0], nv[1], nv[2], nv[3]}
 }
 
 func (nv *NodeValue12) Get4to8() *NodeKey {
 	// slice it 4-8
-	return &NodeKey{nv[4].Uint64(), nv[5].Uint64(), nv[6].Uint64(), nv[7].Uint64()}
+	return &NodeKey{nv[4], nv[5], nv[6], nv[7]}
 }
 
 func (nv *NodeValue12) GetNodeValue8() *NodeValue8 {
@@ -163,7 +183,7 @@ func (nv *NodeValue12) GetNodeValue8() *NodeValue8 {
 
 func (nv *NodeValue12) Get0to8() [8]uint64 {
 	// slice it from 0-8
-	return [8]uint64{nv[0].Uint64(), nv[1].Uint64(), nv[2].Uint64(), nv[3].Uint64(), nv[4].Uint64(), nv[5].Uint64(), nv[6].Uint64(), nv[7].Uint64()}
+	return [8]uint64{nv[0], nv[1], nv[2], nv[3], nv[4], nv[5], nv[6], nv[7]}
 }
 
 func (nv *NodeValue12) IsUniqueSibling() (int, error) {
@@ -172,7 +192,7 @@ func (nv *NodeValue12) IsUniqueSibling() (int, error) {
 	a := nv[:]
 
 	for i := 0; i < len(a); i += 4 {
-		k := NodeKeyFromBigIntArray(a[i : i+4])
+		k := NodeKeyFromUint64Array(a[i : i+4])
 		if !k.IsZero() {
 			count++
 			fnd = i / 4
@@ -182,6 +202,15 @@ func (nv *NodeValue12) IsUniqueSibling() (int, error) {
 		return fnd, nil
 	}
 	return -1, nil
+}
+
+func (nv *NodeValue12) ToHex() string {
+	bytes := make([]byte, 96)
+	for i := 0; i < 12; i++ {
+		// Write in reverse order: start from the end and work backwards
+		binary.BigEndian.PutUint64(bytes[(11-i)*8:], nv[i])
+	}
+	return hex.EncodeToString(bytes)
 }
 
 func NodeKeyFromBigIntArray(arr []*big.Int) NodeKey {
@@ -196,6 +225,10 @@ func NodeKeyFromBigIntArray(arr []*big.Int) NodeKey {
 	return nk
 }
 
+func NodeKeyFromUint64Array(arr []uint64) NodeKey {
+	return NodeKey{arr[0], arr[1], arr[2], arr[3]}
+}
+
 func IsArrayUint64Empty(arr []uint64) bool {
 	for _, v := range arr {
 		if v > 0 {
@@ -207,8 +240,16 @@ func IsArrayUint64Empty(arr []uint64) bool {
 }
 
 func Value8FromBigIntArray(arr []*big.Int) NodeValue8 {
-	nv := [8]*big.Int{}
-	copy(nv[:], arr)
+	nv := [8]uint64{}
+	for i, v := range arr {
+		nv[i] = v.Uint64()
+	}
+	return nv
+}
+
+func Value8FromUint64Array(arr []uint64) NodeValue8 {
+	nv := [8]uint64{}
+	copy(nv[:], arr[:8])
 	return nv
 }
 
@@ -217,7 +258,9 @@ func NodeValue12FromBigIntArray(arr []*big.Int) (*NodeValue12, error) {
 		return &NodeValue12{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue12{}
-	copy(nv[:], arr)
+	for i, v := range arr {
+		nv[i] = v.Uint64()
+	}
 	return &nv, nil
 }
 
@@ -236,22 +279,24 @@ func NodeValue8FromBigIntArray(arr []*big.Int) (*NodeValue8, error) {
 		return &NodeValue8{}, fmt.Errorf("invalid array length")
 	}
 	nv := NodeValue8{}
-	copy(nv[:], arr)
+	for i, v := range arr {
+		nv[i] = v.Uint64()
+	}
 	return &nv, nil
 }
 
 func BigIntArrayFromNodeValue8(nv *NodeValue8) []*big.Int {
 	arr := make([]*big.Int, 8)
-
-	copy(arr, nv[:])
-
+	for i, v := range nv {
+		arr[i] = big.NewInt(int64(v))
+	}
 	return arr
 }
 
 func (nv *NodeValue12) IsZero() bool {
 	zero := false
 	for _, v := range nv {
-		if v.Cmp(big.NewInt(0)) == 0 {
+		if v == 0 {
 			zero = true
 		} else {
 			zero = false
@@ -262,15 +307,26 @@ func (nv *NodeValue12) IsZero() bool {
 }
 
 func (nv *NodeValue12) IsFinalNode() bool {
-	if nv[8] == nil {
+	if nv[8] == 0 {
 		return false
 	}
-	return nv[8].Cmp(big.NewInt(1)) == 0
+	return nv[8] == 1
 }
 
 // 7 times more efficient than sprintf
 func ConvertBigIntToHex(n *big.Int) string {
 	return "0x" + n.Text(16)
+}
+
+func ConvertUint64ToHex(n uint64) string {
+	return "0x" + strconv.FormatUint(n, 16)
+}
+
+func ConvertArrayToHex(arr []uint64) string {
+	hexVal := hex.EncodeToString(ArrayToBytes(arr))
+	// big int .Text function trims leading zeros from the hex string
+	hexVal = strings.TrimPrefix(hexVal, "0")
+	return "0x" + hexVal
 }
 
 func ConvertHexToBigInt(hex string) *big.Int {
@@ -279,9 +335,44 @@ func ConvertHexToBigInt(hex string) *big.Int {
 	return n
 }
 
-func ConvertHexToAddress(hex string) common.Address {
-	bigInt := ConvertHexToBigInt(hex)
-	return common.BigToAddress(bigInt)
+func ConvertHexToUint64(hex string) (uint64, error) {
+	hex = strings.TrimPrefix(hex, "0x")
+	return strconv.ParseUint(hex, 16, 64)
+}
+
+// ConvertHexToUint64s converts a hex string into an array of uint64s - designed to offer the same functionality
+// as working with big ints but without the allocation headache
+func ConvertHexToUint64Array(hexStr string) ([8]uint64, error) {
+	// Remove 0x prefix if present
+	hexStr = strings.TrimPrefix(hexStr, "0x")
+
+	if len(hexStr)%2 != 0 {
+		hexStr = "0" + hexStr // Pad with leading zero if odd length
+	}
+
+	// Convert hex string to bytes
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return [8]uint64{}, fmt.Errorf("invalid hex string: %v", err)
+	}
+
+	// Pad to 32 bytes (256 bits)
+	paddedBytes := make([]byte, 32)
+	copy(paddedBytes[len(paddedBytes)-len(bytes):], bytes) // Right-align the bytes
+
+	// Convert to uint64s, taking 32 bits at a time
+	result := [8]uint64{
+		uint64(binary.BigEndian.Uint32(paddedBytes[28:32])), // r0: lowest 32 bits
+		uint64(binary.BigEndian.Uint32(paddedBytes[24:28])), // r1: bits 32-63
+		uint64(binary.BigEndian.Uint32(paddedBytes[20:24])), // r2: bits 64-95
+		uint64(binary.BigEndian.Uint32(paddedBytes[16:20])), // r3: bits 96-127
+		uint64(binary.BigEndian.Uint32(paddedBytes[12:16])), // r4: bits 128-159
+		uint64(binary.BigEndian.Uint32(paddedBytes[8:12])),  // r5: bits 160-191
+		uint64(binary.BigEndian.Uint32(paddedBytes[4:8])),   // r6: bits 192-223
+		uint64(binary.BigEndian.Uint32(paddedBytes[0:4])),   // r7: bits 224-255
+	}
+
+	return result, nil
 }
 
 func ArrayToScalar(array []uint64) *big.Int {
@@ -291,6 +382,34 @@ func ArrayToScalar(array []uint64) *big.Int {
 		scalar.Add(scalar, new(big.Int).SetUint64(array[i]))
 	}
 	return scalar
+}
+
+// ArrayToBytes converts an array of uint64s to a byte array, matching the behavior of big.Int.Bytes()
+// and avoids the allocation headache of big.Int
+func ArrayToBytes(array []uint64) []byte {
+	// Each uint64 needs 8 bytes
+	buf := make([]byte, len(array)*8)
+
+	// Convert each uint64 to bytes in the same order as ArrayToScalar
+	for i := 0; i < len(array); i++ {
+		pos := (len(array) - 1 - i) * 8
+		binary.BigEndian.PutUint64(buf[pos:pos+8], array[i])
+	}
+
+	// Trim leading zeros to match big.Int.Bytes() behavior
+	for i := 0; i < len(buf); i++ {
+		if buf[i] != 0 {
+			return buf[i:]
+		}
+	}
+
+	// If all bytes are zero, return a single zero byte
+	// to match big.Int.Bytes() behavior
+	if len(buf) > 0 {
+		return []byte{0}
+	}
+
+	return buf
 }
 
 func ScalarToArray(scalar *big.Int) []uint64 {
@@ -310,15 +429,6 @@ func ScalarToArray(scalar *big.Int) []uint64 {
 	r3 = new(big.Int).And(r3, mask)
 
 	return []uint64{r0.Uint64(), r1.Uint64(), r2.Uint64(), r3.Uint64()}
-}
-
-func ArrayToScalarBig(array []*big.Int) *big.Int {
-	scalar := new(big.Int)
-	for i := len(array) - 1; i >= 0; i-- {
-		scalar.Lsh(scalar, 64)
-		scalar.Add(scalar, array[i])
-	}
-	return scalar
 }
 
 func ScalarToNodeKey(s *big.Int) NodeKey {
@@ -365,26 +475,26 @@ func ScalarToRoot(s *big.Int) NodeKey {
 }
 
 func ScalarToNodeValue(scalarIn *big.Int) NodeValue12 {
-	out := [12]*big.Int{}
+	out := [12]uint64{}
 	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
 	scalar := new(big.Int).Set(scalarIn)
 
 	for i := 0; i < 12; i++ {
 		value := new(big.Int).And(scalar, mask)
-		out[i] = value
+		out[i] = value.Uint64()
 		scalar.Rsh(scalar, 64)
 	}
 	return out
 }
 
 func ScalarToNodeValue8(scalarIn *big.Int) NodeValue8 {
-	out := [8]*big.Int{}
+	out := [8]uint64{}
 	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
 	scalar := new(big.Int).Set(scalarIn)
 
 	for i := 0; i < 8; i++ {
 		value := new(big.Int).And(scalar, mask)
-		out[i] = value
+		out[i] = value.Uint64()
 		scalar.Rsh(scalar, 64)
 	}
 	return out
@@ -446,10 +556,10 @@ func ConcatArrays4ByPointers(a, b *[4]uint64) *[8]uint64 {
 func ConcatArrays8AndCapacityByPointers(in *[8]uint64, capacity *[4]uint64) *NodeValue12 {
 	v := NodeValue12{}
 	for i, val := range in {
-		v[i] = new(big.Int).SetUint64(val)
+		v[i] = val
 	}
 	for i, val := range capacity {
-		v[i+8] = new(big.Int).SetUint64(val)
+		v[i+8] = val
 	}
 
 	return &v
@@ -473,49 +583,6 @@ func RemoveKeyBits(k NodeKey, nBits int) NodeKey {
 	}
 
 	return auxk
-}
-
-func ScalarToArrayBig12(scalar *big.Int) []*big.Int {
-	scalar = new(big.Int).Set(scalar)
-	mask := new(big.Int)
-	mask.SetString("FFFFFFFF", 16)
-
-	r0 := new(big.Int).And(scalar, mask)
-
-	r1 := new(big.Int).Rsh(scalar, 32)
-	r1 = new(big.Int).And(r1, mask)
-
-	r2 := new(big.Int).Rsh(scalar, 64)
-	r2 = new(big.Int).And(r2, mask)
-
-	r3 := new(big.Int).Rsh(scalar, 96)
-	r3 = new(big.Int).And(r3, mask)
-
-	r4 := new(big.Int).Rsh(scalar, 128)
-	r4 = new(big.Int).And(r4, mask)
-
-	r5 := new(big.Int).Rsh(scalar, 160)
-	r5 = new(big.Int).And(r5, mask)
-
-	r6 := new(big.Int).Rsh(scalar, 192)
-	r6 = new(big.Int).And(r6, mask)
-
-	r7 := new(big.Int).Rsh(scalar, 224)
-	r7 = new(big.Int).And(r7, mask)
-
-	r8 := new(big.Int).Rsh(scalar, 256)
-	r8 = new(big.Int).And(r8, mask)
-
-	r9 := new(big.Int).Rsh(scalar, 288)
-	r9 = new(big.Int).And(r9, mask)
-
-	r10 := new(big.Int).Rsh(scalar, 320)
-	r10 = new(big.Int).And(r10, mask)
-
-	r11 := new(big.Int).Rsh(scalar, 352)
-	r11 = new(big.Int).And(r11, mask)
-
-	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11}
 }
 
 var mask = big.NewInt(4294967295)
@@ -545,6 +612,10 @@ func ScalarToArrayBig(scalar *big.Int) []*big.Int {
 	r7.And(r7, mask)
 
 	return []*big.Int{r0, r1, r2, r3, r4, r5, r6, r7}
+}
+
+func ScalarToArrayUint64(scalar *big.Int) ([8]uint64, error) {
+	return ConvertHexToUint64Array(scalar.Text(16))
 }
 
 func ArrayBigToScalar(arr []*big.Int) *big.Int {
@@ -622,31 +693,30 @@ func KeyContractLength(ethAddr string) NodeKey {
 }
 
 func Key(ethAddr string, c int) NodeKey {
-	a := ConvertHexToBigInt(ethAddr)
-	add := ScalarToArrayBig(a)
-
-	key1 := NodeValue8{add[0], add[1], add[2], add[3], add[4], add[5], big.NewInt(int64(c)), big.NewInt(0)}
-	key1Capacity, err := StringToH4(HASH_POSEIDON_ALL_ZEROES)
+	addressArray, err := ConvertHexToUint64Array(ethAddr)
 	if err != nil {
 		return NodeKey{}
 	}
 
-	return Hash(key1.ToUintArray(), key1Capacity)
+	key := [8]uint64{addressArray[0], addressArray[1], addressArray[2], addressArray[3], addressArray[4], addressArray[5], uint64(c), 0}
+
+	return Hash(key, PoseidonAllZeroesHash)
 }
 
 func KeyBig(k *big.Int, c int) (*NodeKey, error) {
 	if k == nil {
 		return nil, errors.New("nil key")
 	}
-	add := ScalarToArrayBig(k)
 
-	key1 := NodeValue8{add[0], add[1], add[2], add[3], add[4], add[5], big.NewInt(int64(c)), big.NewInt(0)}
-	key1Capacity, err := StringToH4(HASH_POSEIDON_ALL_ZEROES)
+	add, err := ScalarToArrayUint64(k)
 	if err != nil {
 		return nil, err
 	}
 
-	hk0 := Hash(key1.ToUintArray(), key1Capacity)
+	key1 := [8]uint64{add[0], add[1], add[2], add[3], add[4], add[5], uint64(c), 0}
+
+	hk0 := Hash(key1, PoseidonAllZeroesHash)
+
 	return &NodeKey{hk0[0], hk0[1], hk0[2], hk0[3]}, nil
 }
 
@@ -658,18 +728,23 @@ func StrValToBigInt(v string) (*big.Int, bool) {
 	return new(big.Int).SetString(v, 10)
 }
 
-func KeyContractStorage(ethAddr []*big.Int, storagePosition string) NodeKey {
+func KeyContractStorage(ethAddr string, storagePosition string) (NodeKey, error) {
 	sp, _ := StrValToBigInt(storagePosition)
 	spArray, err := NodeValue8FromBigIntArray(ScalarToArrayBig(sp))
 	if err != nil {
-		return NodeKey{}
+		return NodeKey{}, err
 	}
 
 	hk0 := Hash(spArray.ToUintArray(), [4]uint64{0, 0, 0, 0})
 
-	key1 := NodeValue8{ethAddr[0], ethAddr[1], ethAddr[2], ethAddr[3], ethAddr[4], ethAddr[5], big.NewInt(int64(SC_STORAGE)), big.NewInt(0)}
+	addrArray, err := ConvertHexToUint64Array(ethAddr)
+	if err != nil {
+		return NodeKey{}, err
+	}
 
-	return Hash(key1.ToUintArray(), hk0)
+	key := [8]uint64{addrArray[0], addrArray[1], addrArray[2], addrArray[3], addrArray[4], addrArray[5], uint64(SC_STORAGE), 0}
+
+	return Hash(key, hk0), nil
 }
 
 func HashContractBytecode(bc string) string {
@@ -848,25 +923,26 @@ func binaryStringToUint64(binary string) (uint64, error) {
 }
 
 func SortNodeKeysBitwiseAsc(keys []NodeKey) {
-	sort.Slice(keys, func(i, j int) bool {
-		aTmp := keys[i]
-		bTmp := keys[j]
-
+	slices.SortFunc(keys, func(i, j NodeKey) int {
 		for l := 0; l < 64; l++ {
 			for n := 0; n < 4; n++ {
-				aBit := aTmp[n] & 1
-				bBit := bTmp[n] & 1
+				aBit := i[n] & 1
+				bBit := j[n] & 1
 
-				aTmp[n] >>= 1 // Right shift the current part
-				bTmp[n] >>= 1 // Right shift the current part
+				i[n] >>= 1 // Right shift the current part
+				j[n] >>= 1 // Right shift the current part
 
 				if aBit != bBit {
-					return aBit < bBit
+					if aBit < bBit {
+						return -1
+					} else if aBit > bBit {
+						return 1
+					}
 				}
 			}
 		}
 
-		return true
+		return 0
 	})
 }
 
@@ -895,4 +971,21 @@ func DecodeKeySource(keySource []byte) (int, common.Address, common.Hash, error)
 		storagePosition = common.BytesToHash(keySource[length.Addr+1 : length.Addr+length.Hash+1])
 	}
 	return t, accountAddr, storagePosition, nil
+}
+
+func BigIntArrayToBytes(array []*big.Int) []byte {
+	// Each uint64 needs 8 bytes, so total bytes needed is len(array) * 8
+	buf := make([]byte, len(array)*8)
+
+	// Convert each big.Int to uint64 and write to buffer
+	for i := 0; i < len(array); i++ {
+		// Write to buffer in reverse order to match original ArrayToScalarBig behavior
+		pos := (len(array) - 1 - i) * 8
+		binary.BigEndian.PutUint64(buf[pos:pos+8], array[i].Uint64())
+	}
+	return buf
+}
+
+func BigIntArrayToHex(array []*big.Int) string {
+	return hex.EncodeToString(BigIntArrayToBytes(array))
 }

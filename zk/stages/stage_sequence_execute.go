@@ -37,9 +37,21 @@ func SpawnSequencingStage(
 	}
 	defer roTx.Rollback()
 
+	hermezDb := hermez_db.NewHermezDbReader(roTx)
+	lastSequence, err := hermezDb.GetLatestSequence()
+	if err != nil {
+		return fmt.Errorf("GetLatestSequence: %w", err)
+	}
+
 	lastBatch, err := stages.GetStageProgress(roTx, stages.HighestSeenBatchNumber)
 	if err != nil {
 		return err
+	}
+
+	if lastSequence != nil && lastBatch < lastSequence.BatchNo && !(cfg.zk.IsL1Recovery() || cfg.zk.SequencerResequence) {
+		if !cfg.zk.ShadowSequencer {
+			panic(fmt.Sprintf("lastBatch %d < lastSequence.BatchNo %d", lastBatch, lastSequence.BatchNo))
+		}
 	}
 
 	highestBatchInDs, err := cfg.dataStreamServer.GetHighestBatchNumber()
@@ -48,7 +60,13 @@ func SpawnSequencingStage(
 	}
 
 	if lastBatch < highestBatchInDs {
-		return resequence(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
+		if !cfg.zk.SequencerResequence {
+			if err = cfg.dataStreamServer.UnwindToBatchStart(lastBatch + 1); err != nil {
+				return err
+			}
+		} else {
+			return resequence(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
+		}
 	}
 
 	if cfg.zk.SequencerResequence {
@@ -73,7 +91,7 @@ func sequencingBatchStep(
 	defer log.Info(fmt.Sprintf("[%s] Finished sequencing stage", logPrefix))
 
 	// at this point of time the datastream could not be ahead of the executor
-	if err = validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
+	if err := validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
 		return err
 	}
 
@@ -83,7 +101,7 @@ func sequencingBatchStep(
 	}
 	defer sdb.tx.Rollback()
 
-	if err = cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
+	if err := cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
 		return err
 	}
 
@@ -109,7 +127,7 @@ func sequencingBatchStep(
 		return nil
 	}
 
-	batchNumberForStateInitialization, err := prepareBatchNumber(sdb, forkId, lastBatch, cfg.zk.L1SyncStartBlock > 0)
+	batchNumberForStateInitialization, err := prepareBatchNumber(sdb, forkId, lastBatch, cfg.zk.IsL1Recovery())
 	if err != nil {
 		return err
 	}
@@ -117,20 +135,20 @@ func sequencingBatchStep(
 	var block *types.Block
 	runLoopBlocks := true
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
-	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.UseExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool, resequenceBatchJob)
+	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.UseExecutors(), cfg.zk.IsL1Recovery(), cfg.txPool, resequenceBatchJob)
 	blockDataSizeChecker := NewBlockDataChecker(cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()))
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
 	// injected batch
 	if executionAt == 0 {
-		if err = processInjectedInitialBatch(batchContext, batchState); err != nil {
+		if err := processInjectedInitialBatch(batchContext, batchState); err != nil {
 			return err
 		}
 
-		if err = cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
+		if err := cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
 			return err
 		}
-		if err = stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
+		if err := stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
 			return err
 		}
 
@@ -151,8 +169,7 @@ func sequencingBatchStep(
 				return err
 			}
 			if isUnwinding {
-				err = sdb.tx.Commit()
-				if err != nil {
+				if err := sdb.tx.Commit(); err != nil {
 					// do not set shouldCheckForExecutionAndDataStreamAlighment=false because of the error
 					return err
 				}
@@ -173,7 +190,7 @@ func sequencingBatchStep(
 		return sdb.tx.Commit()
 	}
 
-	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
+	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix, cfg.zk.LogLevel == log.LvlTrace); err != nil {
 		return err
 	}
 
@@ -189,7 +206,7 @@ func sequencingBatchStep(
 		log.Info(fmt.Sprintf("[%s] L1 recovery beginning for batch", logPrefix), "batch", batchState.batchNumber)
 
 		// let's check if we have any L1 data to recover
-		if err = batchState.batchL1RecoveryData.loadBatchData(sdb); err != nil {
+		if err := batchState.batchL1RecoveryData.loadBatchData(sdb); err != nil {
 			return err
 		}
 
@@ -215,7 +232,8 @@ func sequencingBatchStep(
 			}
 		}
 
-		if bad {
+		// write bad batch details unless config dictates we ignore them
+		if bad && !cfg.zk.IgnoreBadBatchesCheck {
 			return writeBadBatchDetails(batchContext, batchState, executionAt)
 		}
 	}
@@ -232,6 +250,8 @@ func sequencingBatchStep(
 	// once the batch ticker has ticked we need a signal to close the batch after the next block is done
 	batchTimedOut := false
 
+	var header *types.Header
+
 	// to avoid nonce problems when a transaction causes the batch to overflow we need to temporarily skip handling transactions from the same sender
 	// until the next batch starts
 	sendersToSkip := make(map[common.Address]struct{})
@@ -245,6 +265,7 @@ func sequencingBatchStep(
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
 		logTicker.Reset(10 * time.Second)
 		blockTimer := time.NewTimer(cfg.zk.SequencerBlockSealTime)
+		emptyBlockTimer := time.NewTimer(cfg.zk.SequencerEmptyBlockSealTime)
 		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode per block
 
 		if batchState.isL1Recovery() {
@@ -276,7 +297,8 @@ func sequencingBatchStep(
 			}
 		}
 
-		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
+		var parentBlock *types.Block
+		header, parentBlock, err = prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
 		if err != nil {
 			return err
 		}
@@ -309,7 +331,7 @@ func sequencingBatchStep(
 		batchState.blockState.builtBlockElements.resetBlockBuildingArrays()
 
 		parentRoot := parentBlock.Root()
-		if err = handleStateForNewBlockStarting(batchContext, ibs, blockNumber, batchState.batchNumber, header.Time, &parentRoot, l1TreeUpdate, shouldWriteGerToContract); err != nil {
+		if err := handleStateForNewBlockStarting(batchContext, ibs, blockNumber, batchState.batchNumber, header.Time, &parentRoot, l1TreeUpdate, shouldWriteGerToContract); err != nil {
 			return err
 		}
 

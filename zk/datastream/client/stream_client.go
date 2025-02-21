@@ -28,9 +28,7 @@ type EntityDefinition struct {
 }
 
 const (
-	versionProto         = 2 // converted to proto
-	versionAddedBlockEnd = 3 // Added block end
-	entryChannelSize     = 100000
+	DefaultEntryChannelSize = 100000
 )
 
 var (
@@ -43,7 +41,6 @@ var (
 type StreamClient struct {
 	ctx          context.Context
 	server       string // Server address to connect IP:port
-	version      int
 	streamType   StreamType
 	conn         net.Conn
 	checkTimeout time.Duration // time to wait for data before reporting an error
@@ -58,7 +55,8 @@ type StreamClient struct {
 	stopReadingToChannel atomic.Bool
 
 	// Channels
-	entryChan chan interface{}
+	entryChan        chan interface{}
+	maxEntryChanSize uint64
 
 	// keeps track of the latest fork from the stream to assign to l2 blocks
 	currentFork uint64
@@ -89,19 +87,19 @@ const (
 
 // Creates a new client fo datastream
 // server must be in format "url:port"
-func NewClient(ctx context.Context, server string, useTLS bool, version int, checkTimeout time.Duration, latestDownloadedForkId uint16) *StreamClient {
+func NewClient(ctx context.Context, server string, useTLS bool, checkTimeout time.Duration, latestDownloadedForkId uint16, maxEntryChanSize uint64) *StreamClient {
 	c := &StreamClient{
-		ctx:          ctx,
-		checkTimeout: checkTimeout,
-		server:       server,
-		version:      version,
-		streamType:   StSequencer,
-		entryChan:    make(chan interface{}, 100000),
-		currentFork:  uint64(latestDownloadedForkId),
-		mtxStreaming: &sync.Mutex{},
-		useTLS:       useTLS,
-		tlsConfig:    &tls.Config{},
-		allowStops:   true,
+		ctx:              ctx,
+		checkTimeout:     checkTimeout,
+		server:           server,
+		streamType:       StSequencer,
+		entryChan:        make(chan interface{}, 100000),
+		maxEntryChanSize: maxEntryChanSize,
+		currentFork:      uint64(latestDownloadedForkId),
+		mtxStreaming:     &sync.Mutex{},
+		useTLS:           useTLS,
+		tlsConfig:        &tls.Config{},
+		allowStops:       true,
 	}
 
 	// Extract hostname from server address (removing port if present)
@@ -112,10 +110,6 @@ func NewClient(ctx context.Context, server string, useTLS bool, version int, che
 	c.tlsConfig.ServerName = host
 
 	return c
-}
-
-func (c *StreamClient) IsVersion3() bool {
-	return c.version >= versionAddedBlockEnd
 }
 
 func (c *StreamClient) GetEntryChan() *chan interface{} {
@@ -241,14 +235,6 @@ func (c *StreamClient) stopStreaming() error {
 		if _, err := c.readResultEntry(packet); err != nil {
 			log.Info("[Datastream client] Error reading result entry", "err", err)
 			return nil
-		}
-	}
-
-	// empty the socket buffer
-	for {
-		c.conn.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
-		if _, err := readBuffer(c.conn, 1000 /* arbitrary number*/); err != nil {
-			break
 		}
 	}
 
@@ -435,7 +421,14 @@ func (c *StreamClient) clearEntryCHannel() {
 // close old entry chan and read all elements before opening a new one
 func (c *StreamClient) RenewEntryChannel() {
 	c.clearEntryCHannel()
-	c.entryChan = make(chan interface{}, entryChannelSize)
+	c.entryChan = make(chan interface{}, DefaultEntryChannelSize)
+}
+
+// close old entry chan and read all elements before opening a new one
+func (c *StreamClient) RenewMaxEntryChannel() {
+	c.clearEntryCHannel()
+	log.Warn(fmt.Sprintf("[datastream_client] Renewing max entry channel:%v", c.maxEntryChanSize))
+	c.entryChan = make(chan interface{}, c.maxEntryChanSize)
 }
 
 func (c *StreamClient) ReadAllEntriesToChannel() (err error) {

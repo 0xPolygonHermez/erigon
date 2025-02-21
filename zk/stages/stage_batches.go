@@ -60,6 +60,7 @@ type HermezDb interface {
 
 type DatastreamClient interface {
 	RenewEntryChannel()
+	RenewMaxEntryChannel()
 	ReadAllEntriesToChannel() error
 	StopReadingToChannel()
 	GetEntryChan() *chan interface{}
@@ -174,10 +175,22 @@ func SpawnStageBatches(
 		return nil
 	}
 
+	reader := hermez_db.NewHermezDbReader(tx)
+	highestVerifiedBatch, err := reader.GetLatestVerification()
+	if err != nil {
+		return fmt.Errorf("GetLatestVerification: %w", err)
+	}
+
 	// get batch for batches progress
 	stageProgressBatchNo, err := hermezDb.GetBatchNoByL2Block(stageProgressBlockNo)
 	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
 		return fmt.Errorf("GetBatchNoByL2Block: %w", err)
+	}
+
+	if cfg.zkCfg.SyncLimitVerifiedEnabled && stageProgressBatchNo >= highestVerifiedBatch.BatchNo+cfg.zkCfg.SyncLimitUnverifiedCount {
+		log.Info(fmt.Sprintf("[%s] Verified batch sync limit reached", logPrefix), "highestVerifiedBatch", highestVerifiedBatch, "stageProgressBatchNo", stageProgressBatchNo)
+		time.Sleep(2 * time.Second)
+		return nil
 	}
 
 	startSyncTime := time.Now()
@@ -286,7 +299,10 @@ func SpawnStageBatches(
 	// start routine to download blocks and push them in a channel
 	errorChan := make(chan struct{})
 	dsClientRunner := NewDatastreamClientRunner(dsQueryClient, logPrefix)
-	dsClientRunner.StartRead(errorChan)
+	err = dsClientRunner.StartRead(errorChan, highestDSL2Block-stageProgressBlockNo)
+	if err != nil {
+		return fmt.Errorf("StartRead: %w", err)
+	}
 	defer dsClientRunner.StopRead()
 
 	entryChan := dsQueryClient.GetEntryChan()
@@ -307,6 +323,11 @@ func SpawnStageBatches(
 		case entry := <-*entryChan:
 			// DEBUG LIMIT - don't write more than we need to
 			if cfg.zkCfg.DebugLimit > 0 && batchProcessor.LastBlockHeight() >= cfg.zkCfg.DebugLimit {
+				endLoop = true
+				break
+			}
+			// Highest Verified Batch Limit + configurable amount of unverified batches
+			if cfg.zkCfg.SyncLimitVerifiedEnabled && batchProcessor.HighestSeenBatchNumber() >= batchProcessor.HighestVerifiedBatchNumber()+cfg.zkCfg.SyncLimitUnverifiedCount {
 				endLoop = true
 				break
 			}
@@ -695,6 +716,11 @@ func rollback(
 	if err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, batchNum-1); err != nil {
 		return 0, fmt.Errorf("SaveStageProgress: %w", err)
 	}
+
+	if cfg.zkCfg.PanicOnReorg {
+		panic(fmt.Sprintf("Reorg detected: Datastream block number: %d", latestDSBlockNum))
+	}
+
 	log.Warn(fmt.Sprintf("[%s] Unwinding to block %d (%s)", logPrefix, unwindBlockNum, unwindBlockHash))
 
 	u.UnwindTo(unwindBlockNum, stagedsync.BadBlock(unwindBlockHash, fmt.Errorf("unwind to block %d", unwindBlockNum)))
@@ -833,13 +859,14 @@ func getHighestDSL2Block(ctx context.Context, batchCfg BatchesCfg, latestFork ui
 	if err == nil {
 		return highestBlock, nil
 	}
+	log.Warn("problem getting highest ds l2 block from sequencer rpc", "err", err)
 
 	// so something went wrong with the rpc call, let's try the older method,
 	// but we're going to open a new connection rather than use the one for syncing blocks.
 	// This is so we can keep the logic simple and just dispose of the connection when we're done
 	// greatly simplifying state juggling of the connection if it errors
 	dsClient := buildNewStreamClient(ctx, batchCfg, latestFork)
-	if err = dsClient.Start(); err != nil {
+	if err := dsClient.Start(); err != nil {
 		return 0, err
 	}
 	defer func() {
@@ -857,5 +884,5 @@ func getHighestDSL2Block(ctx context.Context, batchCfg BatchesCfg, latestFork ui
 
 func buildNewStreamClient(ctx context.Context, batchesCfg BatchesCfg, latestFork uint16) *client.StreamClient {
 	cfg := batchesCfg.zkCfg
-	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestFork)
+	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.L2DataStreamerTimeout, latestFork, client.DefaultEntryChannelSize)
 }
